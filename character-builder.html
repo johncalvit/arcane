@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arcane Character Builder</title>
+<style>
+  :root {
+    --bg: #12100e;
+    --bg2: #1c1814;
+    --bg3: #26211a;
+    --border: #3d3328;
+    --gold: #c9a84c;
+    --gold2: #f0d080;
+    --red: #8b2020;
+    --green: #2d6b3a;
+    --text: #e8dcc8;
+    --text-dim: #9a8c7a;
+    --text-bright: #f5ead0;
+    --accent: #6b3fa0;
+    --accent2: #8b5cc8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Georgia', serif;
+    min-height: 100vh;
+  }
+  header {
+    background: linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);
+    border-bottom: 2px solid var(--gold);
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header h1 {
+    font-size: 1.8rem;
+    color: var(--gold2);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-shadow: 0 0 24px rgba(201,168,76,0.4);
+  }
+  header .subtitle { color: var(--text-dim); font-size: 0.85rem; font-style: italic; }
+
+  .app-layout {
+    display: grid;
+    grid-template-columns: 260px 1fr;
+    min-height: calc(100vh - 70px);
+  }
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    padding: 20px 0;
+  }
+  .nav-btn {
+    display: block;
+    width: 100%;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    text-align: left;
+    padding: 12px 24px;
+    font-family: 'Georgia', serif;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    border-left: 3px solid transparent;
+    letter-spacing: 0.05em;
+  }
+  .nav-btn:hover { background: var(--bg3); color: var(--text); }
+  .nav-btn.active { color: var(--gold2); border-left-color: var(--gold); background: var(--bg3); }
+  .nav-section { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; padding: 16px 24px 4px; }
+
+  .main-content { padding: 28px 36px; overflow-y: auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  h2 {
+    color: var(--gold2);
+    font-size: 1.25rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin-bottom: 22px;
+  }
+  h3 { color: var(--gold); font-size: 1rem; margin: 20px 0 12px; letter-spacing: 0.05em; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .field input[type="text"],
+  .field select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 9px 12px;
+    font-family: 'Georgia', serif;
+    font-size: 0.95rem;
+    border-radius: 4px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .field input[type="text"]:focus,
+  .field select:focus { border-color: var(--gold); }
+  .field select option { background: var(--bg3); }
+
+  /* Stat row */
+  .stat-row {
+    display: grid;
+    grid-template-columns: 160px 48px 1fr 60px;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .stat-name { font-size: 0.9rem; }
+  .stat-desc { font-size: 0.75rem; color: var(--text-dim); font-style: italic; }
+  .stat-value-display {
+    font-size: 1.3rem;
+    font-weight: bold;
+    color: var(--gold2);
+    text-align: center;
+  }
+  .stat-controls { display: flex; gap: 6px; align-items: center; }
+  .btn-sm {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.1rem;
+    line-height: 1;
+    transition: all 0.1s;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .btn-sm:hover { border-color: var(--gold); color: var(--gold2); }
+  .stat-input {
+    width: 50px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--gold2);
+    text-align: center;
+    padding: 4px;
+    font-family: 'Georgia', serif;
+    font-size: 1rem;
+    border-radius: 4px;
+    outline: none;
+  }
+  .points-bar {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 20px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .points-bar .label { color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; }
+  .points-bar .value { font-size: 1.6rem; color: var(--gold2); font-weight: bold; min-width: 40px; }
+  .points-bar .value.warn { color: #e05555; }
+  .points-bar .value.ok { color: #5cbb6e; }
+  .progress-track {
+    flex: 1;
+    height: 8px;
+    background: var(--bg);
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--gold));
+    transition: width 0.2s;
+    border-radius: 4px;
+  }
+  .progress-fill.over { background: linear-gradient(90deg, var(--gold), var(--red)); }
+
+  /* Attribute cards */
+  .attr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .attr-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .attr-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--gold);
+  }
+  .attr-card.sense::before { background: #5baacc; }
+  .attr-card.mental::before { background: var(--accent2); }
+  .attr-card.social::before { background: #c86b9a; }
+  .attr-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 4px; }
+  .attr-value { font-size: 1.8rem; color: var(--gold2); font-weight: bold; line-height: 1; }
+  .attr-desc { font-size: 0.7rem; color: var(--text-dim); font-style: italic; margin-top: 4px; line-height: 1.3; }
+
+  /* Summary cards */
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .summary-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .summary-card .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 4px; }
+  .summary-card .value { font-size: 1.2rem; color: var(--gold2); }
+
+  /* Features / Skills checkboxes */
+  .feature-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .feature-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .feature-item:hover { border-color: var(--gold); }
+  .feature-item input[type="checkbox"] { margin-top: 2px; accent-color: var(--gold); }
+  .feature-item .fi-name { font-size: 0.9rem; }
+  .feature-item .fi-type {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  .fi-type.Blessing { background: #1a3d20; color: #5cbb6e; }
+  .fi-type.Curse { background: #3d1a1a; color: #e05555; }
+  .feature-item .fi-desc { font-size: 0.74rem; color: var(--text-dim); margin-top: 3px; }
+
+  /* Skills */
+  .skill-filter { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-btn {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: 'Georgia', serif;
+    font-size: 0.82rem;
+    transition: all 0.15s;
+  }
+  .filter-btn.active, .filter-btn:hover { border-color: var(--gold); color: var(--gold2); background: var(--bg2); }
+  .skill-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .skill-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .skill-item:hover { border-color: var(--gold); }
+  .skill-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--gold); }
+  .skill-info .si-name { font-size: 0.88rem; }
+  .skill-info .si-type { font-size: 0.7rem; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.06em; }
+  .skill-info .si-req { font-size: 0.72rem; color: var(--text-dim); }
+
+  /* Loadout */
+  .loadout-section { margin-bottom: 28px; }
+  .loadout-add { display: flex; gap: 10px; margin-bottom: 14px; }
+  .loadout-add select { flex: 1; }
+  .btn {
+    background: var(--bg3);
+    border: 1px solid var(--gold);
+    color: var(--gold2);
+    padding: 8px 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'Georgia', serif;
+    font-size: 0.9rem;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: var(--gold); color: var(--bg); }
+  .btn.danger { border-color: var(--red); color: #e05555; }
+  .btn.danger:hover { background: var(--red); color: #fff; }
+  .loadout-table { width: 100%; border-collapse: collapse; }
+  .loadout-table th { text-align: left; color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; border-bottom: 1px solid var(--border); }
+  .loadout-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .loadout-table td:last-child { text-align: right; }
+  .loadout-table tr:hover td { background: var(--bg3); }
+  .remove-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.1rem; padding: 0 4px; }
+  .remove-btn:hover { color: #e05555; }
+  .weight-summary {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 20px;
+    margin-top: 12px;
+    display: flex;
+    gap: 28px;
+  }
+  .weight-summary .ws-item .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
+  .weight-summary .ws-item .value { font-size: 1.1rem; color: var(--gold2); }
+
+  /* Playsheet */
+  .playsheet { max-width: 720px; }
+  .ps-header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .ps-block {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .ps-block h4 { color: var(--gold); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .ps-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .ps-row:last-child { border-bottom: none; }
+  .ps-row .ps-label { color: var(--text-dim); }
+  .ps-row .ps-val { color: var(--text-bright); font-weight: bold; }
+
+  .ornament { color: var(--gold); opacity: 0.4; font-size: 1.2rem; margin: 0 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>⚔ Arcane Character Builder</h1>
+    <div class="subtitle">Design your character — traits, stats, skills &amp; loadout</div>
+  </div>
+</header>
+
+<div class="app-layout">
+  <nav class="sidebar">
+    <div class="nav-section">Character</div>
+    <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits &amp; Characteristics</button>
+    <button class="nav-btn" onclick="showPanel('stats')">⚡ Raw Stats</button>
+    <button class="nav-btn" onclick="showPanel('attributes')">📊 Final Attributes</button>
+    <div class="nav-section">Details</div>
+    <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
+    <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
+    <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
+    <div class="nav-section">Summary</div>
+    <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
+    <div class="nav-section">File</div>
+    <button class="nav-btn" onclick="exportCharacter()">💾 Export Character</button>
+    <button class="nav-btn" onclick="document.getElementById('import-file').click()">📂 Import Character</button>
+    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
+  </nav>
+
+  <main class="main-content">
+
+    <!-- OVERVIEW -->
+    <div id="panel-overview" class="panel active">
+      <h2>Traits &amp; Characteristics</h2>
+      <div class="field">
+        <label>Character Name</label>
+        <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
+      </div>
+      <div class="grid-2">
+        <div class="field">
+          <label>Race</label>
+          <select id="sel-race" onchange="recalc()">
+            <option>Human</option><option>Elf</option><option>Dwarf</option>
+            <option>Gnome</option><option>Ogre</option><option>Goblin</option><option>Giant</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Gender</label>
+          <select id="sel-gender" onchange="recalc()">
+            <option>Female</option><option>Male</option><option>Other</option><option>Genderless</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Age</label>
+          <select id="sel-age" onchange="recalc()">
+            <option>Young</option><option>Young adult</option><option>Adult</option>
+            <option>Middle aged</option><option>Old</option><option>Venerable</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Height</label>
+          <select id="sel-height" onchange="recalc()">
+            <option>Short</option><option>Medium</option><option>Tall</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Build</label>
+          <select id="sel-build" onchange="recalc()">
+            <option>Skinny</option><option>Medium</option><option>Stout</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Social Disposition</label>
+          <select id="sel-social" onchange="recalc()">
+            <option>Introvert</option><option>Balanced</option><option>Extrovert</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Mental Disposition</label>
+          <select id="sel-mental" onchange="recalc()">
+            <option>Logical</option><option>Balanced</option><option>Intuitive</option>
+          </select>
+        </div>
+      </div>
+      <h3>Computed Physical Overview</h3>
+      <div class="summary-grid">
+        <div class="summary-card"><div class="label">Height</div><div class="value" id="disp-height">—</div></div>
+        <div class="summary-card"><div class="label">Weight</div><div class="value" id="disp-weight">—</div></div>
+        <div class="summary-card"><div class="label">Speed</div><div class="value" id="disp-speed">—</div></div>
+        <div class="summary-card"><div class="label">Target Size</div><div class="value" id="disp-target">—</div></div>
+      </div>
+    </div>
+
+    <!-- RAW STATS -->
+    <div id="panel-stats" class="panel">
+      <h2>Raw Stats</h2>
+      <div class="points-bar">
+        <div class="label">Points Used</div>
+        <div class="value" id="points-used">0</div>
+        <div class="progress-track"><div class="progress-fill" id="points-bar-fill" style="width:0%"></div></div>
+        <div class="label">of 80</div>
+        <div class="value" id="points-left">80</div>
+        <div class="label">Left</div>
+      </div>
+
+      <div id="stat-rows"></div>
+    </div>
+
+    <!-- FINAL ATTRIBUTES -->
+    <div id="panel-attributes" class="panel">
+      <h2>Final Attributes</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:20px;font-style:italic;">
+        Calculated from raw stats × characteristic modifiers. These are the values used in play.
+      </p>
+      <h3>Physical</h3>
+      <div class="attr-grid" id="attrs-physical"></div>
+      <h3>Cognitive</h3>
+      <div class="attr-grid" id="attrs-cognitive"></div>
+      <h3>Senses</h3>
+      <div class="attr-grid" id="attrs-senses"></div>
+    </div>
+
+    <!-- FEATURES -->
+    <div id="panel-features" class="panel">
+      <h2>Features — Blessings &amp; Curses</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">Select traits that define your character's history and nature.</p>
+      <div class="feature-list" id="feature-list"></div>
+    </div>
+
+    <!-- SKILLS -->
+    <div id="panel-skills" class="panel">
+      <h2>Skills</h2>
+      <div class="skill-filter" id="skill-filters"></div>
+      <div class="skill-list" id="skill-list"></div>
+    </div>
+
+    <!-- LOADOUT -->
+    <div id="panel-loadout" class="panel">
+      <h2>Loadout</h2>
+      <div class="loadout-section">
+        <h3>Weapons</h3>
+        <div class="loadout-add">
+          <select id="weapon-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <button class="btn" onclick="addWeapon()">Add Weapon</button>
+        </div>
+        <table class="loadout-table">
+          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Weight (lbs)</th><th>Reach</th><th></th></tr></thead>
+          <tbody id="weapon-list"></tbody>
+        </table>
+      </div>
+      <div class="loadout-section">
+        <h3>Equipment</h3>
+        <div class="loadout-add">
+          <select id="equip-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <input type="number" id="equip-qty" value="1" min="1" style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:'Georgia',serif;">
+          <button class="btn" onclick="addEquip()">Add Item</button>
+        </div>
+        <table class="loadout-table">
+          <thead><tr><th>Item</th><th>Qty</th><th>Unit Weight</th><th>Total Weight</th><th></th></tr></thead>
+          <tbody id="equip-list"></tbody>
+        </table>
+      </div>
+      <div class="weight-summary" id="weight-summary">
+        <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
+        <div class="ws-item"><div class="label">Weapon Weight</div><div class="value" id="ws-weapons">0 lbs</div></div>
+        <div class="ws-item"><div class="label">Equipment Weight</div><div class="value" id="ws-equip">0 lbs</div></div>
+        <div class="ws-item"><div class="label">Total Carried</div><div class="value" id="ws-total">—</div></div>
+        <div class="ws-item"><div class="label">Can Deadlift</div><div class="value" id="ws-lift">—</div></div>
+      </div>
+    </div>
+
+    <!-- PLAYSHEET -->
+    <div id="panel-playsheet" class="panel playsheet">
+      <h2>Character Playsheet</h2>
+      <div class="ps-header">
+        <div class="ps-block">
+          <h4>Identity</h4>
+          <div class="ps-row"><span class="ps-label">Name</span><span class="ps-val" id="ps-name">—</span></div>
+          <div class="ps-row"><span class="ps-label">Race</span><span class="ps-val" id="ps-race">—</span></div>
+          <div class="ps-row"><span class="ps-label">Gender</span><span class="ps-val" id="ps-gender">—</span></div>
+          <div class="ps-row"><span class="ps-label">Age</span><span class="ps-val" id="ps-age">—</span></div>
+        </div>
+        <div class="ps-block">
+          <h4>Physical</h4>
+          <div class="ps-row"><span class="ps-label">Height</span><span class="ps-val" id="ps-height">—</span></div>
+          <div class="ps-row"><span class="ps-label">Weight</span><span class="ps-val" id="ps-weight">—</span></div>
+          <div class="ps-row"><span class="ps-label">Sprinting Speed</span><span class="ps-val" id="ps-speed">—</span></div>
+          <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
+        </div>
+      </div>
+      <div id="ps-attrs-grid" class="ps-block" style="margin-bottom:16px;">
+        <h4>Attributes</h4>
+        <div id="ps-attrs"></div>
+      </div>
+      <div class="ps-block" style="margin-bottom:16px;">
+        <h4>Selected Skills</h4>
+        <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+      </div>
+      <div class="ps-block">
+        <h4>Selected Features</h4>
+        <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+// ─── DATA TABLES ───────────────────────────────────────────────────────────
+
+const RACE_DATA = {
+  Human:   { Power:1,   Speed:1,    Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.2, Height:66,  Weight:1   },
+  Elf:     { Power:0.8, Speed:1.05, Toughness:0.8, Stamina:1,   ManualDex:1.1, PhysNimble:1.2, Knowledge:1.5, SocialSkills:0.9, Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:0.5, Height:55,  Weight:0.9 },
+  Dwarf:   { Power:1.1, Speed:0.6,  Toughness:1.2, Stamina:1.2, ManualDex:1.1, PhysNimble:0.8, Knowledge:1,   SocialSkills:0.7, Intellect:1,   Intuition:0.8, Quintessence:0.7, DayVision:0.8, Hearing:0.8, Smell:0.8, Taste:1,   NightVision:1,   Height:50,  Weight:1.1 },
+  Gnome:   { Power:0.5, Speed:0.4,  Toughness:0.7, Stamina:1.5, ManualDex:1.3, PhysNimble:1.3, Knowledge:1.3, SocialSkills:1,   Intellect:1.5, Intuition:1.5, Quintessence:1,   DayVision:0.9, Hearing:1.3, Smell:1.1, Taste:1,   NightVision:0.8, Height:40,  Weight:1   },
+  Ogre:    { Power:2.5, Speed:1,    Toughness:2,   Stamina:0.8, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.3, SocialSkills:0.3, Intellect:0.4, Intuition:0.5, Quintessence:0.3, DayVision:0.5, Hearing:1.1, Smell:1.5, Taste:0.8, NightVision:0.5, Height:100, Weight:1.2 },
+  Goblin:  { Power:0.8, Speed:1,    Toughness:1.2, Stamina:1.1, ManualDex:0.8, PhysNimble:1.3, Knowledge:0.4, SocialSkills:0.5, Intellect:0.8, Intuition:1.2, Quintessence:0.5, DayVision:0.5, Hearing:1.3, Smell:1.1, Taste:0.9, NightVision:1.5, Height:48,  Weight:0.9 },
+  Giant:   { Power:4,   Speed:1.2,  Toughness:3,   Stamina:1,   ManualDex:0.7, PhysNimble:0.6, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:0.8, Quintessence:0.2, DayVision:1,   Hearing:1,   Smell:1.4, Taste:1,   NightVision:0.2, Height:144, Weight:1.1 },
+};
+
+const GENDER_DATA = {
+  Female:    { Power:1,   Speed:1,    Toughness:1.1, Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:0.95 },
+  Male:      { Power:1.1, Speed:1.05, Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1.07, Weight:1    },
+  Other:     { Power:1,   Speed:1,    Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1.1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:0.95 },
+  Genderless:{ Power:1,   Speed:1,    Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:1    },
+};
+
+const AGE_DATA = {
+  Young:       { Power:0.6, Speed:1,   Toughness:0.8, Stamina:1.2, ManualDex:0.8, PhysNimble:1.1, Knowledge:0.5, SocialSkills:0.8, Intellect:0.7, Intuition:0.7, Quintessence:1,   DayVision:1,   Hearing:1.1, Smell:1, Taste:1, NightVision:1,   Height:0.8,  Weight:0.9  },
+  'Young adult':{ Power:1,  Speed:1,   Toughness:0.9, Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:0.7, SocialSkills:0.9, Intellect:0.8, Intuition:0.8, Quintessence:1,   DayVision:1,   Hearing:1,   Smell:1, Taste:1, NightVision:1,   Height:0.95, Weight:0.95 },
+  Adult:       { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:0.9, Intuition:0.9, Quintessence:1,   DayVision:1,   Hearing:1,   Smell:1, Taste:1, NightVision:0.9, Height:1,    Weight:1    },
+  'Middle aged':{ Power:0.9, Speed:0.9, Toughness:1,  Stamina:0.9, ManualDex:1,   PhysNimble:0.9, Knowledge:2,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1.1, DayVision:0.9, Hearing:0.9, Smell:1, Taste:1, NightVision:0.8, Height:1,    Weight:1.1  },
+  Old:         { Power:0.8, Speed:0.8, Toughness:0.9, Stamina:0.8, ManualDex:0.8, PhysNimble:0.8, Knowledge:3,   SocialSkills:1.2, Intellect:0.9, Intuition:1.1, Quintessence:1.2, DayVision:0.8, Hearing:0.7, Smell:1, Taste:1, NightVision:0.7, Height:0.95, Weight:1.1  },
+  Venerable:   { Power:0.7, Speed:0.7, Toughness:0.8, Stamina:0.6, ManualDex:0.6, PhysNimble:0.6, Knowledge:4,   SocialSkills:1.3, Intellect:0.8, Intuition:1.2, Quintessence:1.3, DayVision:0.7, Hearing:0.5, Smell:1, Taste:1, NightVision:0.5, Height:0.9,  Weight:0.95 },
+};
+
+const HEIGHT_DATA = {
+  Short:  { Power:0.9, Speed:0.9, Toughness:1, Stamina:1.1, ManualDex:1.1, PhysNimble:1.2, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:0.8 },
+  Medium: { Power:1,   Speed:1,   Toughness:1, Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1   },
+  Tall:   { Power:1.1, Speed:1.1, Toughness:1, Stamina:0.9, ManualDex:0.9, PhysNimble:0.8, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1.1 },
+};
+
+const BUILD_DATA = {
+  Skinny: { Power:0.8, Speed:1.1, Toughness:0.7, Stamina:1.1, ManualDex:1, PhysNimble:1.1, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:0.8, Weight:0.8 },
+  Medium: { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1, PhysNimble:1,   Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:1,   Weight:1   },
+  Stout:  { Power:1.2, Speed:0.9, Toughness:1.3, Stamina:0.9, ManualDex:1, PhysNimble:0.9, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:1.2, Weight:1.3 },
+};
+
+const SOCIAL_DATA = {
+  Introvert: { Knowledge:1.5, SocialSkills:0.5 },
+  Balanced:  { Knowledge:1,   SocialSkills:1   },
+  Extrovert: { Knowledge:0.5, SocialSkills:1.5 },
+};
+
+const MENTAL_DATA = {
+  Logical:   { Knowledge:1.2, Intellect:1.5, Intuition:0.5, Quintessence:0.8 },
+  Balanced:  { Knowledge:1,   Intellect:1,   Intuition:1,   Quintessence:1   },
+  Intuitive: { Knowledge:0.8, Intellect:0.5, Intuition:1.5, Quintessence:1.2 },
+};
+
+// Weight base curve: [height_inches, base_weight_lbs]
+const WEIGHT_CURVE = [[30,17.04],[40,39.88],[50,72.76],[60,115.68],[70,168.64],[80,231.64],[108,461.45]];
+
+function baseWeightFromHeight(h) {
+  if (h <= WEIGHT_CURVE[0][0]) return WEIGHT_CURVE[0][1];
+  if (h >= WEIGHT_CURVE[WEIGHT_CURVE.length-1][0]) return WEIGHT_CURVE[WEIGHT_CURVE.length-1][1];
+  for (let i = 0; i < WEIGHT_CURVE.length-1; i++) {
+    const [h1,w1] = WEIGHT_CURVE[i];
+    const [h2,w2] = WEIGHT_CURVE[i+1];
+    if (h >= h1 && h <= h2) {
+      return w1 + (h - h1) / (h2 - h1) * (w2 - w1);
+    }
+  }
+  return 150;
+}
+
+function inchesToFeetStr(inches) {
+  const ft = Math.floor(inches / 12);
+  const inv = Math.round(inches % 12);
+  return `${ft}ft ${inv}in`;
+}
+
+// Raw stat definitions
+const RAW_STATS = [
+  { key:'Strength',    label:'Strength',    desc:'Affects power and speed',                         min:1 },
+  { key:'Endurance',   label:'Endurance',   desc:'Affects toughness and stamina',                   min:1 },
+  { key:'Agility',     label:'Agility',     desc:'Affects manual dexterity and physical coordination', min:1 },
+  { key:'Memory',      label:'Memory',      desc:'Affects knowledge and skills',                    min:1 },
+  { key:'Intellect',   label:'Intellect',   desc:'Affects logic and intuition',                     min:1 },
+  { key:'Senses',      label:'Senses',      desc:'Affects vision, hearing, smell, taste, nightvision', min:1 },
+  { key:'Quintessence',label:'Quintessence',desc:'Magic affinity and power',                        min:0 },
+];
+
+const TOTAL_POINTS = 80;
+let statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+
+// Attribute definitions: { key, label, rawStat, raceKey, desc, group, cssClass }
+const ATTRIBUTES = [
+  { key:'Power',          label:'Power',               rawStat:'Strength',    raceKey:'Power',        desc:'Damage & lifting. Can deadlift 10× Power.',          group:'physical' },
+  { key:'Speed',          label:'Speed',               rawStat:'Strength',    raceKey:'Speed',        desc:'Movement speed in feet per second.',                  group:'physical' },
+  { key:'Toughness',      label:'Toughness',           rawStat:'Endurance',   raceKey:'Toughness',    desc:'Absorb & withstand physical damage, ability to heal.',group:'physical' },
+  { key:'Stamina',        label:'Stamina',             rawStat:'Endurance',   raceKey:'Stamina',      desc:'Energy for physical activity.',                       group:'physical' },
+  { key:'ManualDex',      label:'Manual Dexterity',    rawStat:'Agility',     raceKey:'ManualDex',    desc:'Fine motor skills with hands.',                       group:'physical' },
+  { key:'PhysCoord',      label:'Physical Coordination',rawStat:'Agility',   raceKey:'PhysNimble',   desc:'Dodging, acrobatics, precise movement.',              group:'physical' },
+  { key:'Knowledge',      label:'Knowledge',           rawStat:'Memory',      raceKey:'Knowledge',    desc:'Memory capacity and learning ability.',               group:'cognitive' },
+  { key:'SocialSkills',   label:'Social Skills',       rawStat:'Memory',      raceKey:'SocialSkills', desc:'Reading social cues and navigating situations.',      group:'cognitive' },
+  { key:'Logic',          label:'Logic',               rawStat:'Intellect',   raceKey:'Intellect',    desc:'Analyze complex patterns and relationships.',         group:'cognitive' },
+  { key:'Intuition',      label:'Intuition',           rawStat:'Intellect',   raceKey:'Intuition',    desc:'Subconscious harmonization with environment.',        group:'cognitive', cssClass:'mental' },
+  { key:'Quintessence',   label:'Quintessence',        rawStat:'Quintessence',raceKey:'Quintessence', desc:'Stored magical force for spells and abilities.',      group:'cognitive', cssClass:'mental' },
+  { key:'DayVision',      label:'Day Vision',          rawStat:'Senses',      raceKey:'DayVision',    desc:'Sight in limited to full light.',                     group:'senses',   cssClass:'sense' },
+  { key:'Hearing',        label:'Hearing',             rawStat:'Senses',      raceKey:'Hearing',      desc:'Detecting sounds.',                                   group:'senses',   cssClass:'sense' },
+  { key:'Smell',          label:'Smell',               rawStat:'Senses',      raceKey:'Smell',        desc:'Detecting scents.',                                   group:'senses',   cssClass:'sense' },
+  { key:'Taste',          label:'Taste',               rawStat:'Senses',      raceKey:'Taste',        desc:'Identifying substances by taste.',                    group:'senses',   cssClass:'sense' },
+  { key:'NightVision',    label:'Night Vision',        rawStat:'Senses',      raceKey:'NightVision',  desc:'Seeing in low light.',                                group:'senses',   cssClass:'sense' },
+];
+
+function getModifier(table, key, attrKey) {
+  const row = table[key];
+  if (!row) return 1;
+  // Map attribute key to the right column
+  const colMap = {
+    Power:'Power', Speed:'Speed', Toughness:'Toughness', Stamina:'Stamina',
+    ManualDex:'ManualDex', PhysCoord:'PhysNimble',
+    Knowledge:'Knowledge', SocialSkills:'SocialSkills',
+    Logic:'Intellect', Intuition:'Intuition', Quintessence:'Quintessence',
+    DayVision:'DayVision', Hearing:'Hearing', Smell:'Smell', Taste:'Taste', NightVision:'NightVision',
+  };
+  const col = colMap[attrKey];
+  if (!col) return 1;
+  // For social and mental, only some keys exist
+  return row[col] !== undefined ? row[col] : 1;
+}
+
+function calcAttributes() {
+  const race   = document.getElementById('sel-race').value;
+  const gender = document.getElementById('sel-gender').value;
+  const age    = document.getElementById('sel-age').value;
+  const height = document.getElementById('sel-height').value;
+  const build  = document.getElementById('sel-build').value;
+  const social = document.getElementById('sel-social').value;
+  const mental = document.getElementById('sel-mental').value;
+
+  const results = {};
+  for (const attr of ATTRIBUTES) {
+    const rawVal = statValues[attr.rawStat] || 0;
+    const rM = (RACE_DATA[race]   || {})[attr.raceKey]  || 1;
+    const gM = getModifier(GENDER_DATA, gender, attr.key);
+    const aM = getModifier(AGE_DATA,    age,    attr.key);
+    const hM = getModifier(HEIGHT_DATA, height, attr.key);
+    const bM = getModifier(BUILD_DATA,  build,  attr.key);
+    const sM = getModifier({Introvert:SOCIAL_DATA.Introvert, Balanced:SOCIAL_DATA.Balanced, Extrovert:SOCIAL_DATA.Extrovert}, social, attr.key);
+    const mM = getModifier({Logical:MENTAL_DATA.Logical, Balanced:MENTAL_DATA.Balanced, Intuitive:MENTAL_DATA.Intuitive}, mental, attr.key);
+    results[attr.key] = rawVal * rM * gM * aM * hM * bM * sM * mM;
+  }
+
+  // Height
+  const raceH = (RACE_DATA[race] || {}).Height || 66;
+  const gH    = (GENDER_DATA[gender] || {}).Height || 1;
+  const aH    = (AGE_DATA[age] || {}).Height || 1;
+  const hH    = (HEIGHT_DATA[height] || {}).Height || 1;
+  results._heightInches = raceH * gH * aH * hH;
+
+  // Weight
+  const baseW = baseWeightFromHeight(results._heightInches);
+  const rW  = (RACE_DATA[race] || {}).Weight || 1;
+  const gW  = (GENDER_DATA[gender] || {}).Weight || 1;
+  const aW  = (AGE_DATA[age] || {}).Weight || 1;
+  const bW  = (BUILD_DATA[build] || {}).Weight || 1;
+  results._weight = baseW * rW * gW * aW * bW;
+
+  // Target size
+  const buildTA = (BUILD_DATA[build] || {}).TargetAdj || 1;
+  results._targetAdj = Math.round(results._heightInches / 12 * buildTA);
+
+  return results;
+}
+
+function recalc() {
+  const attrs = calcAttributes();
+
+  // Points
+  const used = Object.values(statValues).reduce((a,b)=>a+b,0);
+  const left = TOTAL_POINTS - used;
+  document.getElementById('points-used').textContent = used;
+  document.getElementById('points-left').textContent = left;
+  const pct = Math.min(used / TOTAL_POINTS * 100, 100);
+  const fill = document.getElementById('points-bar-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'progress-fill' + (used > TOTAL_POINTS ? ' over' : '');
+  document.getElementById('points-left').className = 'value' + (left < 0 ? ' warn' : left === 0 ? ' ok' : '');
+
+  // Overview summary
+  document.getElementById('disp-height').textContent = inchesToFeetStr(attrs._heightInches);
+  document.getElementById('disp-weight').textContent = attrs._weight.toFixed(1) + ' lbs';
+  document.getElementById('disp-speed').textContent  = attrs.Speed.toFixed(2) + ' ft/s';
+  document.getElementById('disp-target').textContent = attrs._targetAdj;
+
+  // Attribute cards
+  for (const group of ['physical','cognitive','senses']) {
+    const container = document.getElementById('attrs-' + (group === 'physical' ? 'physical' : group === 'cognitive' ? 'cognitive' : 'senses'));
+    if (!container) continue;
+    container.innerHTML = '';
+    for (const attr of ATTRIBUTES.filter(a=>a.group===group)) {
+      const val = attrs[attr.key];
+      const card = document.createElement('div');
+      card.className = 'attr-card ' + (attr.cssClass||'');
+      card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${val.toFixed(val%1===0?0:2)}</div><div class="attr-desc">${attr.desc}</div>`;
+      container.appendChild(card);
+    }
+  }
+
+  // Weight loadout summary
+  updateWeightSummary(attrs);
+
+  // Playsheet
+  updatePlaysheet(attrs);
+}
+
+function updateWeightSummary(attrs) {
+  document.getElementById('ws-body').textContent = attrs ? attrs._weight.toFixed(1)+' lbs' : '—';
+  let wW = 0, wE = 0;
+  document.querySelectorAll('#weapon-list tr').forEach(tr => { wW += parseFloat(tr.dataset.wt||0); });
+  document.querySelectorAll('#equip-list tr').forEach(tr => { wE += parseFloat(tr.dataset.wt||0); });
+  document.getElementById('ws-weapons').textContent = wW.toFixed(1)+' lbs';
+  document.getElementById('ws-equip').textContent   = wE.toFixed(1)+' lbs';
+  document.getElementById('ws-total').textContent   = attrs ? (attrs._weight + wW + wE).toFixed(1)+' lbs' : '—';
+  const power = attrs ? calcAttributes().Power : 0;
+  document.getElementById('ws-lift').textContent = (power * 10).toFixed(0)+' lbs';
+}
+
+function updatePlaysheet(attrs) {
+  const name = document.getElementById('char-name').value || '(Unnamed)';
+  document.getElementById('ps-name').textContent   = name;
+  document.getElementById('ps-race').textContent   = document.getElementById('sel-race').value;
+  document.getElementById('ps-gender').textContent = document.getElementById('sel-gender').value;
+  document.getElementById('ps-age').textContent    = document.getElementById('sel-age').value;
+  document.getElementById('ps-height').textContent = inchesToFeetStr(attrs._heightInches);
+  document.getElementById('ps-weight').textContent = attrs._weight.toFixed(1)+' lbs';
+  document.getElementById('ps-speed').textContent  = attrs.Speed.toFixed(2)+' ft/s';
+  document.getElementById('ps-target').textContent = attrs._targetAdj;
+
+  const psAttrs = document.getElementById('ps-attrs');
+  psAttrs.innerHTML = '';
+  for (const attr of ATTRIBUTES) {
+    const val = attrs[attr.key];
+    const row = document.createElement('div');
+    row.className = 'ps-row';
+    row.innerHTML = `<span class="ps-label">${attr.label}</span><span class="ps-val">${val.toFixed(val%1===0?0:2)}</span>`;
+    psAttrs.appendChild(row);
+  }
+
+  // Skills
+  const checkedSkills = [...document.querySelectorAll('#skill-list input:checked')].map(cb=>cb.dataset.name);
+  document.getElementById('ps-skills').innerHTML = checkedSkills.length
+    ? checkedSkills.map(s=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${s}</div>`).join('')
+    : '<span style="color:var(--text-dim)">None selected.</span>';
+
+  // Features
+  const checkedFeatures = [...document.querySelectorAll('#feature-list input:checked')].map(cb=>cb.dataset.name);
+  document.getElementById('ps-features').innerHTML = checkedFeatures.length
+    ? checkedFeatures.map(f=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${f}</div>`).join('')
+    : '<span style="color:var(--text-dim)">None selected.</span>';
+}
+
+// ─── STAT ROWS ──────────────────────────────────────────────────────────────
+function buildStatRows() {
+  const container = document.getElementById('stat-rows');
+  container.innerHTML = '';
+  for (const stat of RAW_STATS) {
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    row.innerHTML = `
+      <div>
+        <div class="stat-name">${stat.label}</div>
+        <div class="stat-desc">${stat.desc}</div>
+      </div>
+      <div class="stat-value-display" id="sv-${stat.key}">${statValues[stat.key]}</div>
+      <div class="stat-controls">
+        <button class="btn-sm" onclick="adjustStat('${stat.key}',-1)">−</button>
+        <input type="number" class="stat-input" id="si-${stat.key}" value="${statValues[stat.key]}" min="${stat.min}" onchange="setStat('${stat.key}',this.value)">
+        <button class="btn-sm" onclick="adjustStat('${stat.key}',1)">+</button>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">
+        Raw<br><span style="color:var(--gold2);font-size:1rem;">${statValues[stat.key]}</span>
+      </div>`;
+    container.appendChild(row);
+  }
+}
+
+function adjustStat(key, delta) {
+  const stat = RAW_STATS.find(s=>s.key===key);
+  const newVal = (statValues[key]||0) + delta;
+  if (newVal < (stat ? stat.min : 0)) return;
+  statValues[key] = newVal;
+  document.getElementById('sv-'+key).textContent = newVal;
+  document.getElementById('si-'+key).value = newVal;
+  recalc();
+}
+
+function setStat(key, val) {
+  const stat = RAW_STATS.find(s=>s.key===key);
+  const n = Math.max(parseInt(val)||0, stat ? stat.min : 0);
+  statValues[key] = n;
+  document.getElementById('sv-'+key).textContent = n;
+  recalc();
+}
+
+// ─── FEATURES ───────────────────────────────────────────────────────────────
+const FEATURES = [
+  { name:'7th Son/Daughter',     type:'Blessing', subtype:'Arcane',     desc:'Extraordinary Luck' },
+  { name:'Beautiful/Handsome',   type:'Blessing', subtype:'Social',     desc:'Attractive — advantageous in social situations' },
+  { name:'Strikingly Beautiful', type:'Blessing', subtype:'Social',     desc:'Extremely attractive — strongly advantageous socially' },
+  { name:'Loyal Pet',            type:'Blessing', subtype:'Social',     desc:'A loyal animal companion' },
+  { name:'Echo Location',        type:'Blessing', subtype:'Physical',   desc:'Sense objects with reflected sound waves' },
+  { name:'Noble',                type:'Blessing', subtype:'Background', desc:'Additional skill, noble lineage' },
+  { name:'Near Sighted',         type:'Curse',    subtype:'Physical',   desc:'Reduced Day Vision' },
+  { name:'Fugitive',             type:'Curse',    subtype:'Social',     desc:'Actively pursued criminal or deserter' },
+  { name:'Untouchable',          type:'Curse',    subtype:'Social',     desc:'Despised tribe or lineage. Impacts most social interactions' },
+  { name:'Homely',               type:'Curse',    subtype:'Social',     desc:'Unattractive — disadvantageous socially' },
+  { name:'Ugly',                 type:'Curse',    subtype:'Social',     desc:'Clearly unattractive' },
+  { name:'Repellent',            type:'Curse',    subtype:'Social',     desc:'Severe penalties on social interactions' },
+  { name:'Corrupted',            type:'Curse',    subtype:'Arcane',     desc:'Physically marked with signs of corruption' },
+  { name:'Addiction',            type:'Curse',    subtype:'Mental',     desc:'A dangerous dependency' },
+  { name:'Mute',                 type:'Curse',    subtype:'Physical',   desc:'Cannot speak' },
+  { name:'Honor Bound',          type:'Curse',    subtype:'Social',     desc:'Bound by a strict code of honor' },
+  { name:'Blind',                type:'Curse',    subtype:'Physical',   desc:'Day Vision & Night Vision = 0' },
+  { name:'Deaf',                 type:'Curse',    subtype:'Physical',   desc:'Hearing = 0' },
+  { name:'Deformity',            type:'Curse',    subtype:'Physical',   desc:'Obvious physical deformity, affects some social interactions' },
+  { name:'Gods Cursed',          type:'Curse',    subtype:'Arcane',     desc:'Extreme misfortune but effectively immortal' },
+  { name:'Limp/Pegleg',          type:'Curse',    subtype:'Physical',   desc:'50% reduction in Speed' },
+  { name:'Sickly',               type:'Curse',    subtype:'Physical',   desc:'50% reduction to disease/poison resistance' },
+  { name:'Urchin/Underclass',    type:'Curse',    subtype:'Background', desc:'No literacy skills, projects untrustworthy social cues' },
+];
+
+function buildFeatures() {
+  const container = document.getElementById('feature-list');
+  container.innerHTML = '';
+  for (const f of FEATURES) {
+    const item = document.createElement('label');
+    item.className = 'feature-item';
+    item.innerHTML = `
+      <input type="checkbox" data-name="${f.name}" onchange="recalc()">
+      <div>
+        <div class="fi-name">${f.name}</div>
+        <div class="fi-desc">${f.desc}</div>
+      </div>
+      <span class="fi-type ${f.type}">${f.type}</span>`;
+    container.appendChild(item);
+  }
+}
+
+// ─── SKILLS ─────────────────────────────────────────────────────────────────
+const SKILLS = [
+  { name:'Literacy of the Realm',         type:'Language',     req:'Logic 5+' },
+  { name:'Language, Ancients',            type:'Language',     req:'Logic 7+' },
+  { name:'Language & Literacy, Ancients', type:'Language',     req:'Logic 10+' },
+  { name:'Language, Demonic',             type:'Language',     req:'Logic 3+' },
+  { name:'Language & Literacy, Demonic',  type:'Language',     req:'Logic 10+' },
+  { name:'Language, New World',           type:'Language',     req:'Logic 5+' },
+  { name:'Language & Literacy, New World',type:'Language',     req:'Logic 6+' },
+  { name:'Language, Barbaric',            type:'Language',     req:'Logic 3+' },
+  { name:'Language, Sublime',             type:'Language',     req:'Logic 8+' },
+  { name:'Language & Literacy, Sublime',  type:'Language',     req:'Logic 11+' },
+  { name:'Lip Reading',                   type:'Language',     req:'' },
+  { name:'History of the Realm',          type:'History',      req:'Literacy (any)' },
+  { name:'History, Ancients',             type:'History',      req:'Literacy (any)' },
+  { name:'History, Demonic',              type:'History',      req:'Literacy (any)' },
+  { name:'History, Sublime',              type:'History',      req:'Literacy (any)' },
+  { name:'Swimming',                      type:'Survival',     req:'' },
+  { name:'Streetwise',                    type:'Survival',     req:'Intuition 6+' },
+  { name:'Wilderness Survival',           type:'Survival',     req:'Intuition 6+' },
+  { name:'Etiquette',                     type:'Social',       req:'' },
+  { name:'Gambling',                      type:'Recreational', req:'' },
+  { name:'Dancing',                       type:'Recreational', req:'Physical Coord 8+' },
+  { name:'Acrobatics',                    type:'Recreational', req:'' },
+  { name:'Climbing',                      type:'Recreational', req:'' },
+  { name:'Wrestling',                     type:'Recreational', req:'' },
+  { name:'Trade: Brewer',                 type:'Trade',        req:'' },
+  { name:'Trade: Merchant',               type:'Trade',        req:'Literacy (any)' },
+  { name:'Trade: Cook',                   type:'Trade',        req:'' },
+  { name:'Trade: Carpenter',              type:'Trade',        req:'' },
+  { name:'Trade: Counterfeiter',          type:'Trade',        req:'Literacy (any)' },
+  { name:'Trade: Healer',                 type:'Trade',        req:'Intuition 10+' },
+  { name:'Trade: Miner',                  type:'Trade',        req:'' },
+  { name:'Trade: Sailor',                 type:'Trade',        req:'' },
+  { name:'Trade: Tailor',                 type:'Trade',        req:'Intuition 6+' },
+  { name:'Trade: Blacksmith',             type:'Trade',        req:'' },
+  { name:'Trade: Shepherd',               type:'Trade',        req:'Intuition 6+' },
+  { name:'Trade: Artist',                 type:'Trade',        req:'Intuition 6+' },
+  { name:'Trade: Tinker',                 type:'Trade',        req:'Logic 10+' },
+  { name:'Trade: Farmer',                 type:'Trade',        req:'' },
+  { name:'Trade: Burglar',                type:'Trade',        req:'' },
+  { name:'Trade: Pickpocket',             type:'Trade',        req:'' },
+  { name:'Trade: Con Man',                type:'Trade',        req:'' },
+  { name:'Trade: Constable',              type:'Trade',        req:'' },
+  { name:'Trade: Physician',              type:'Trade',        req:'' },
+  { name:'Trade: Alchemist',              type:'Trade',        req:'' },
+  { name:'Trade: Herbalist',              type:'Trade',        req:'' },
+  { name:'Trade: Soldier',                type:'Trade',        req:'' },
+  { name:'Trade: Priest',                 type:'Trade',        req:'' },
+  { name:'Trade: Scholar',                type:'Trade',        req:'Literacy (any)' },
+  { name:'Trade: Courtesan',              type:'Trade',        req:'' },
+];
+
+let skillFilter = 'All';
+function buildSkillFilters() {
+  const types = ['All', ...new Set(SKILLS.map(s=>s.type))];
+  const container = document.getElementById('skill-filters');
+  container.innerHTML = '';
+  for (const t of types) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (t === skillFilter ? ' active' : '');
+    btn.textContent = t;
+    btn.onclick = () => { skillFilter = t; buildSkillList(); buildSkillFilters(); };
+    container.appendChild(btn);
+  }
+}
+function buildSkillList() {
+  const container = document.getElementById('skill-list');
+  container.innerHTML = '';
+  const filtered = skillFilter === 'All' ? SKILLS : SKILLS.filter(s=>s.type===skillFilter);
+  for (const s of filtered) {
+    const item = document.createElement('label');
+    item.className = 'skill-item';
+    item.innerHTML = `
+      <input type="checkbox" data-name="${s.name}" onchange="recalc()">
+      <div class="skill-info">
+        <div class="si-name">${s.name}</div>
+        <div class="si-type">${s.type}</div>
+        ${s.req ? `<div class="si-req">Requires: ${s.req}</div>` : ''}
+      </div>`;
+    container.appendChild(item);
+  }
+}
+
+// ─── WEAPONS ────────────────────────────────────────────────────────────────
+const WEAPONS = [
+  { name:'Axe, Hatchet',        damage:'Cut',    wt:2,   reach:'1 ft' },
+  { name:'Battleaxe',           damage:'Cut',    wt:4,   reach:'2 ft' },
+  { name:'Bow, Horse',          damage:'Stab',   wt:3,   reach:'ranged' },
+  { name:'Bow, Hunting',        damage:'Stab',   wt:4,   reach:'ranged' },
+  { name:'Bow, Light',          damage:'Stab',   wt:3,   reach:'ranged' },
+  { name:'Bow, War',            damage:'Stab',   wt:5,   reach:'ranged' },
+  { name:'Club',                damage:'Smash',  wt:2,   reach:'1 ft' },
+  { name:'Crossbow, Hand',      damage:'Stab',   wt:3,   reach:'ranged' },
+  { name:'Crossbow, Heavy',     damage:'Stab',   wt:18,  reach:'ranged' },
+  { name:'Crossbow, Light',     damage:'Stab',   wt:5,   reach:'ranged' },
+  { name:'Dart',                damage:'Stab',   wt:0.25,reach:'thrown' },
+  { name:'Flail',               damage:'Smash',  wt:2,   reach:'3 ft' },
+  { name:'Glaive',              damage:'Cut',    wt:6,   reach:'3 ft' },
+  { name:'Greataxe',            damage:'Cut',    wt:7,   reach:'3 ft' },
+  { name:'Greatclub',           damage:'Smash',  wt:10,  reach:'2 ft' },
+  { name:'Greatsword',          damage:'Cut',    wt:6,   reach:'4 ft' },
+  { name:'Halberd',             damage:'Cut',    wt:6,   reach:'4 ft' },
+  { name:"Hammer, Carpenter's", damage:'Smash',  wt:2,   reach:'1 ft' },
+  { name:'Hammer, War',         damage:'Smash',  wt:2,   reach:'1.5 ft' },
+  { name:'Javelin',             damage:'Stab',   wt:2,   reach:'thrown' },
+  { name:'Knife',               damage:'Stab',   wt:1,   reach:'0.5 ft' },
+  { name:'Lance, Heavy Cavalry',damage:'Stab',   wt:6,   reach:'6 ft' },
+  { name:'Mace',                damage:'Smash',  wt:4,   reach:'1.5 ft' },
+  { name:'Maul',                damage:'Smash',  wt:10,  reach:'2.5 ft' },
+  { name:'Morningstar',         damage:'Stab',   wt:4,   reach:'2 ft' },
+  { name:'Net',                 damage:'Entangle',wt:3,  reach:'thrown' },
+  { name:'Pike',                damage:'Stab',   wt:18,  reach:'8 ft' },
+  { name:'Rapier',              damage:'Stab',   wt:2,   reach:'2.5 ft' },
+  { name:'Scimitar',            damage:'Cut',    wt:3,   reach:'1.5 ft' },
+  { name:'Shortbow',            damage:'Stab',   wt:2,   reach:'ranged' },
+  { name:'Shortsword',          damage:'Stab',   wt:2,   reach:'1 ft' },
+  { name:'Sling Stone',         damage:'Smash',  wt:0,   reach:'thrown' },
+  { name:'Spear, Long',         damage:'Stab',   wt:3,   reach:'3 ft' },
+  { name:'Staff',               damage:'Smash',  wt:4,   reach:'2 ft' },
+  { name:'Sword, Long',         damage:'Cut',    wt:3,   reach:'2 ft' },
+  { name:'Sword, Short',        damage:'Cut',    wt:2,   reach:'1 ft' },
+  { name:'Trident',             damage:'Stab',   wt:4,   reach:'2 ft' },
+  { name:'Unarmed Strike',      damage:'Smash',  wt:0,   reach:'contact' },
+  { name:'Warpick',             damage:'Stab',   wt:2,   reach:'2 ft' },
+  { name:'Whip',                damage:'Cut',    wt:3,   reach:'6 ft' },
+];
+
+const EQUIPMENT = [
+  { name:'Nothing',             wt:0,    cost:0   },
+  { name:'Acid (Vial)',         wt:1,    cost:25  },
+  { name:'Greek Fire (Pot)',    wt:1,    cost:50  },
+  { name:'Arrow, War Bodkin',   wt:1,    cost:1   },
+  { name:'Arrow, War Broad',    wt:1,    cost:1   },
+  { name:'Arrow, Hunting',      wt:0.5,  cost:0.25},
+  { name:'Crossbow Bolt',       wt:0.5,  cost:0.25},
+  { name:'Sling Bullet, Lead',  wt:0.25, cost:0.1 },
+  { name:'Antitoxin (Vial)',    wt:0,    cost:50  },
+  { name:'Backpack',            wt:5,    cost:2   },
+  { name:'Bedroll',             wt:7,    cost:1   },
+  { name:'Bell',                wt:0,    cost:1   },
+  { name:'Blanket',             wt:3,    cost:0.5 },
+  { name:'Block and Tackle',    wt:5,    cost:1   },
+  { name:'Book',                wt:5,    cost:25  },
+  { name:'Bottle, Glass',       wt:2,    cost:2   },
+  { name:'Bucket',              wt:2,    cost:0.05},
+  { name:'Candle',              wt:0.05, cost:0.01},
+  { name:'Case, Map/Scroll',    wt:1,    cost:1   },
+  { name:'Chain (10 ft)',       wt:10,   cost:5   },
+  { name:'Chest',               wt:25,   cost:5   },
+  { name:"Climber's Kit",       wt:12,   cost:25  },
+  { name:'Clothes, Peasant',    wt:3,    cost:0.5 },
+  { name:'Clothes, Noble',      wt:6,    cost:15  },
+  { name:"Clothes, Traveler's", wt:4,    cost:2   },
+  { name:'Flask/Canteen',       wt:1,    cost:0.02},
+  { name:'Grappling Hook',      wt:4,    cost:2   },
+  { name:'Holy Water (Flask)',  wt:1,    cost:25  },
+  { name:'Hourglass',           wt:1,    cost:25  },
+  { name:'Spring Trap',         wt:25,   cost:5   },
+  { name:'Ink and Quill',       wt:0,    cost:10  },
+  { name:'Lamp, Oil',           wt:1,    cost:0.5 },
+  { name:'Lock',                wt:1,    cost:10  },
+  { name:'Magnifying Glass',    wt:0,    cost:100 },
+  { name:'Manacles',            wt:6,    cost:2   },
+  { name:'Mess Kit',            wt:1,    cost:0.2 },
+  { name:'Mirror, Steel',       wt:0.5,  cost:5   },
+  { name:'Flask of Oil',        wt:1,    cost:0.1 },
+  { name:'Parchment (1 sheet)', wt:0,    cost:0.1 },
+  { name:'Pickaxe',             wt:10,   cost:2   },
+  { name:'Rope, Hempen (50 ft)',wt:10,   cost:1   },
+  { name:'Shovel',              wt:5,    cost:2   },
+  { name:'Torch',               wt:1,    cost:0.01},
+  { name:'Poison (Flask)',      wt:0,    cost:100 },
+  { name:'Pole, 10-foot',       wt:7,    cost:0.5 },
+];
+
+function buildLoadoutSelects() {
+  const ws = document.getElementById('weapon-select');
+  WEAPONS.forEach(w => {
+    const o = document.createElement('option');
+    o.value = w.name; o.textContent = `${w.name} (${w.wt} lbs, ${w.damage})`;
+    ws.appendChild(o);
+  });
+  const es = document.getElementById('equip-select');
+  EQUIPMENT.forEach(e => {
+    const o = document.createElement('option');
+    o.value = e.name; o.textContent = `${e.name} (${e.wt} lbs)`;
+    es.appendChild(o);
+  });
+}
+
+function addWeapon() {
+  const sel = document.getElementById('weapon-select').value;
+  const w = WEAPONS.find(x=>x.name===sel);
+  if (!w) return;
+  const tbody = document.getElementById('weapon-list');
+  const tr = document.createElement('tr');
+  tr.dataset.wt = w.wt;
+  tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+  tbody.appendChild(tr);
+  recalc();
+}
+
+function addEquip() {
+  const sel = document.getElementById('equip-select').value;
+  const qty = parseInt(document.getElementById('equip-qty').value)||1;
+  const e = EQUIPMENT.find(x=>x.name===sel);
+  if (!e) return;
+  const tbody = document.getElementById('equip-list');
+  const tr = document.createElement('tr');
+  const total = e.wt * qty;
+  tr.dataset.wt = total;
+  tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${e.wt}</td><td>${total.toFixed(2)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+  tbody.appendChild(tr);
+  recalc();
+}
+
+// ─── NAV ────────────────────────────────────────────────────────────────────
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('panel-'+id).classList.add('active');
+  event.target.classList.add('active');
+  if (id === 'playsheet') recalc();
+}
+
+// ─── IMPORT / EXPORT ────────────────────────────────────────────────────────
+
+function gatherCharacterData() {
+  const weapons = [...document.querySelectorAll('#weapon-list tr')].map(tr => ({
+    name:   tr.cells[0].textContent,
+    damage: tr.cells[1].textContent,
+    wt:     parseFloat(tr.dataset.wt),
+    reach:  tr.cells[3].textContent,
+  }));
+  const equipment = [...document.querySelectorAll('#equip-list tr')].map(tr => ({
+    name: tr.cells[0].textContent,
+    qty:  parseInt(tr.cells[1].textContent),
+    unitWt: parseFloat(tr.cells[2].textContent),
+  }));
+  return {
+    _version: 1,
+    name:    document.getElementById('char-name').value,
+    race:    document.getElementById('sel-race').value,
+    gender:  document.getElementById('sel-gender').value,
+    age:     document.getElementById('sel-age').value,
+    height:  document.getElementById('sel-height').value,
+    build:   document.getElementById('sel-build').value,
+    social:  document.getElementById('sel-social').value,
+    mental:  document.getElementById('sel-mental').value,
+    stats:   { ...statValues },
+    features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
+    skills:   [...document.querySelectorAll('#skill-list input:checked')].map(cb => cb.dataset.name),
+    weapons,
+    equipment,
+  };
+}
+
+function exportCharacter() {
+  const data = gatherCharacterData();
+  const charName = (data.name || 'character').replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `${charName}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importCharacter(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      applyCharacterData(data);
+    } catch (err) {
+      alert('Failed to load character file: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+function applyCharacterData(data) {
+  // Basic fields
+  if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
+  if (data.race)   document.getElementById('sel-race').value   = data.race;
+  if (data.gender) document.getElementById('sel-gender').value = data.gender;
+  if (data.age)    document.getElementById('sel-age').value    = data.age;
+  if (data.height) document.getElementById('sel-height').value = data.height;
+  if (data.build)  document.getElementById('sel-build').value  = data.build;
+  if (data.social) document.getElementById('sel-social').value = data.social;
+  if (data.mental) document.getElementById('sel-mental').value = data.mental;
+
+  // Stats
+  if (data.stats) {
+    Object.assign(statValues, data.stats);
+    buildStatRows();
+  }
+
+  // Features
+  if (data.features) {
+    document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => {
+      cb.checked = data.features.includes(cb.dataset.name);
+    });
+  }
+
+  // Skills — rebuild list first so checkboxes exist, then check
+  if (data.skills) {
+    skillFilter = 'All';
+    buildSkillFilters();
+    buildSkillList();
+    document.querySelectorAll('#skill-list input[type="checkbox"]').forEach(cb => {
+      cb.checked = data.skills.includes(cb.dataset.name);
+    });
+  }
+
+  // Weapons
+  if (data.weapons) {
+    document.getElementById('weapon-list').innerHTML = '';
+    data.weapons.forEach(w => {
+      const tr = document.createElement('tr');
+      tr.dataset.wt = w.wt;
+      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      document.getElementById('weapon-list').appendChild(tr);
+    });
+  }
+
+  // Equipment
+  if (data.equipment) {
+    document.getElementById('equip-list').innerHTML = '';
+    data.equipment.forEach(eq => {
+      const total = eq.unitWt * eq.qty;
+      const tr = document.createElement('tr');
+      tr.dataset.wt = total;
+      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${total.toFixed(2)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      document.getElementById('equip-list').appendChild(tr);
+    });
+  }
+
+  recalc();
+}
+
+// ─── INIT ───────────────────────────────────────────────────────────────────
+buildStatRows();
+buildFeatures();
+buildSkillFilters();
+buildSkillList();
+buildLoadoutSelects();
+
+// Set defaults matching the spreadsheet example
+document.getElementById('sel-race').value   = 'Ogre';
+document.getElementById('sel-gender').value = 'Male';
+document.getElementById('sel-age').value    = 'Adult';
+document.getElementById('sel-height').value = 'Medium';
+document.getElementById('sel-build').value  = 'Stout';
+document.getElementById('sel-social').value = 'Introvert';
+document.getElementById('sel-mental').value = 'Balanced';
+statValues = { Strength:20, Endurance:15, Agility:11, Memory:9, Intellect:9, Senses:16, Quintessence:0 };
+buildStatRows();
+recalc();
+</script>
+</body>
+</html>
