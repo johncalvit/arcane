@@ -368,6 +368,8 @@
 
   h2.collapsible { cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
   h2.collapsible:hover { color: var(--gold2); }
+  h4.collapsible { cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+  h4.collapsible:hover { color: var(--gold2); }
   .collapse-arrow { font-size: 0.8rem; color: var(--text-dim); transition: transform 0.15s; }
   .collapse-arrow.collapsed { transform: rotate(-90deg); }
   .collapse-body { overflow: hidden; }
@@ -421,7 +423,7 @@
           <select id="sel-race" onchange="recalc()"></select>
         </div>
         <div class="field field-inline">
-          <label>Gender</label>
+          <label>Sex</label>
           <select id="sel-gender" onchange="recalc()"></select>
         </div>
         <div class="field field-inline">
@@ -559,11 +561,19 @@
     <!-- LOADOUT -->
     <div id="panel-loadout" class="panel">
       <h2>Loadout</h2>
+      <div class="weight-summary" id="weight-summary">
+        <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
+        <div class="ws-item"><div class="label">Weapon Weight</div><div class="value" id="ws-weapons">0 lbs</div></div>
+        <div class="ws-item"><div class="label">Equipment Weight</div><div class="value" id="ws-equip">0 lbs</div></div>
+        <div class="ws-item"><div class="label">Total Carried</div><div class="value" id="ws-total">—</div></div>
+        <div class="ws-item"><div class="label">Can Deadlift</div><div class="value" id="ws-lift">—</div></div>
+        <div class="ws-item"><div class="label">Maximum Speed</div><div class="value" id="ws-maxspeed">—</div></div>
+      </div>
       <div class="loadout-section">
         <h3>Weapons</h3>
         <div class="loadout-add">
-          <select id="weapon-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
-          <button class="btn" onclick="addWeapon()">Add Weapon</button>
+          <select id="weapon-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <button class="btn" onclick="addWeapon()">Add Selected Weapon(s)</button>
         </div>
         <table class="loadout-table">
           <thead><tr><th>Weapon</th><th>Damage Type</th><th>Weight (lbs)</th><th>Reach</th><th></th></tr></thead>
@@ -573,21 +583,14 @@
       <div class="loadout-section">
         <h3>Equipment</h3>
         <div class="loadout-add">
-          <select id="equip-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <select id="equip-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
           <input type="number" id="equip-qty" value="1" min="1" style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:'Georgia',serif;">
-          <button class="btn" onclick="addEquip()">Add Item</button>
+          <button class="btn" onclick="addEquip()">Add Selected Item(s)</button>
         </div>
         <table class="loadout-table">
           <thead><tr><th>Item</th><th>Qty</th><th>Unit Weight</th><th>Total Weight</th><th></th></tr></thead>
           <tbody id="equip-list"></tbody>
         </table>
-      </div>
-      <div class="weight-summary" id="weight-summary">
-        <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
-        <div class="ws-item"><div class="label">Weapon Weight</div><div class="value" id="ws-weapons">0 lbs</div></div>
-        <div class="ws-item"><div class="label">Equipment Weight</div><div class="value" id="ws-equip">0 lbs</div></div>
-        <div class="ws-item"><div class="label">Total Carried</div><div class="value" id="ws-total">—</div></div>
-        <div class="ws-item"><div class="label">Can Deadlift</div><div class="value" id="ws-lift">—</div></div>
       </div>
     </div>
 
@@ -599,7 +602,7 @@
           <h4>Identity</h4>
           <div class="ps-row"><span class="ps-label">Name</span><span class="ps-val" id="ps-name">—</span></div>
           <div class="ps-row"><span class="ps-label">Species</span><span class="ps-val" id="ps-race">—</span></div>
-          <div class="ps-row"><span class="ps-label">Gender</span><span class="ps-val" id="ps-gender">—</span></div>
+          <div class="ps-row"><span class="ps-label">Sex</span><span class="ps-val" id="ps-gender">—</span></div>
           <div class="ps-row"><span class="ps-label">Age</span><span class="ps-val" id="ps-age">—</span></div>
         </div>
         <div class="ps-block">
@@ -607,20 +610,39 @@
           <div class="ps-row"><span class="ps-label">Height</span><span class="ps-val" id="ps-height">—</span></div>
           <div class="ps-row"><span class="ps-label">Weight</span><span class="ps-val" id="ps-weight">—</span></div>
           <div class="ps-row"><span class="ps-label">Sprinting Speed</span><span class="ps-val" id="ps-speed">—</span></div>
+          <div class="ps-row"><span class="ps-label">Maximum Speed</span><span class="ps-val" id="ps-maxspeed">—</span></div>
           <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
         </div>
       </div>
+      <div id="ps-stats-grid" class="ps-block" style="margin-bottom:16px;">
+        <h4 class="collapsible" onclick="toggleCollapse('psstats')">Raw Stats<span class="collapse-arrow" id="arrow-psstats">▼</span></h4>
+        <div class="collapse-body" id="body-psstats">
+          <div id="ps-stats"></div>
+        </div>
+      </div>
       <div id="ps-attrs-grid" class="ps-block" style="margin-bottom:16px;">
-        <h4>Attributes</h4>
-        <div id="ps-attrs"></div>
+        <h4 class="collapsible" onclick="toggleCollapse('psattrs')">Final Attributes<span class="collapse-arrow" id="arrow-psattrs">▼</span></h4>
+        <div class="collapse-body" id="body-psattrs">
+          <div id="ps-attrs"></div>
+        </div>
       </div>
       <div class="ps-block" style="margin-bottom:16px;">
-        <h4>Selected Skills</h4>
-        <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        <h4 class="collapsible" onclick="toggleCollapse('psskills')">Selected Skills<span class="collapse-arrow" id="arrow-psskills">▼</span></h4>
+        <div class="collapse-body" id="body-psskills">
+          <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        </div>
+      </div>
+      <div class="ps-block" style="margin-bottom:16px;">
+        <h4 class="collapsible" onclick="toggleCollapse('psfeatures')">Selected Features<span class="collapse-arrow" id="arrow-psfeatures">▼</span></h4>
+        <div class="collapse-body" id="body-psfeatures">
+          <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        </div>
       </div>
       <div class="ps-block">
-        <h4>Selected Features</h4>
-        <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        <h4 class="collapsible" onclick="toggleCollapse('psloadout')">Loadout<span class="collapse-arrow" id="arrow-psloadout">▼</span></h4>
+        <div class="collapse-body" id="body-psloadout">
+          <div id="ps-loadout" style="color:var(--text-dim);font-size:0.85rem;">Nothing equipped.</div>
+        </div>
       </div>
     </div>
 
@@ -629,7 +651,7 @@
 
 <script>
 // ─── DATA TABLES ───────────────────────────────────────────────────────────
-// Race/Gender/Age/Height/Build/Social/Mental/Weapons/Equipment/Skills no longer live
+// Race/Sex/Age/Height/Build/Social/Mental/Weapons/Equipment/Skills no longer live
 // here — they're loaded at runtime from the config file (see CONFIG PERSISTENCE below).
 // These start empty and are populated by loadConfig() before the UI is built.
 
@@ -641,7 +663,7 @@ let BUILD_DATA = {};
 let SOCIAL_DATA = {};
 let MENTAL_DATA = {};
 
-// Populate the Race/Gender/Age/Height/Build/Social/Mental dropdowns from their data tables,
+// Populate the Race/Sex/Age/Height/Build/Social/Mental dropdowns from their data tables,
 // preserving the currently selected value when it still exists.
 function buildCharSelects() {
   const tables = [
@@ -795,8 +817,8 @@ function recalc() {
 
   // Overview summary
   document.getElementById('disp-height').textContent = inchesToFeetStr(attrs._heightInches);
-  document.getElementById('disp-weight').textContent = attrs._weight.toFixed(1) + ' lbs';
-  document.getElementById('disp-speed').textContent  = attrs.Speed.toFixed(2) + ' ft/s';
+  document.getElementById('disp-weight').textContent = Math.round(attrs._weight) + ' lbs';
+  document.getElementById('disp-speed').textContent  = Math.round(attrs.Speed) + ' ft/s';
   document.getElementById('disp-target').textContent = attrs._targetAdj;
 
   // Attribute cards
@@ -809,7 +831,7 @@ function recalc() {
       const card = document.createElement('div');
       card.className = 'attr-card ' + (attr.cssClass||'');
       card.title = attr.desc;
-      card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${val.toFixed(val%1===0?0:2)}</div>`;
+      card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${Math.round(val)}</div>`;
       container.appendChild(card);
     }
   }
@@ -824,16 +846,31 @@ function recalc() {
   updatePlaysheet(attrs);
 }
 
-function updateWeightSummary(attrs) {
-  document.getElementById('ws-body').textContent = attrs ? attrs._weight.toFixed(1)+' lbs' : '—';
+function getCarriedWeight(attrs) {
   let wW = 0, wE = 0;
   document.querySelectorAll('#weapon-list tr').forEach(tr => { wW += parseFloat(tr.dataset.wt||0); });
   document.querySelectorAll('#equip-list tr').forEach(tr => { wE += parseFloat(tr.dataset.wt||0); });
-  document.getElementById('ws-weapons').textContent = wW.toFixed(1)+' lbs';
-  document.getElementById('ws-equip').textContent   = wE.toFixed(1)+' lbs';
-  document.getElementById('ws-total').textContent   = attrs ? (attrs._weight + wW + wE).toFixed(1)+' lbs' : '—';
-  const power = attrs ? calcAttributes().Power : 0;
-  document.getElementById('ws-lift').textContent = (power * 10).toFixed(0)+' lbs';
+  return { wW, wE, total: attrs ? attrs._weight + wW + wE : 0 };
+}
+
+// Maximum Speed = Speed − (total carried weight ÷ (Power + Physical Coordination)), in ft/s.
+function calcMaxSpeed(attrs, totalCarried) {
+  if (!attrs) return null;
+  const divisor = attrs.Power + attrs.PhysCoord;
+  const penalty = divisor > 0 ? totalCarried / divisor : 0;
+  return Math.max(0, attrs.Speed - penalty);
+}
+
+function updateWeightSummary(attrs) {
+  document.getElementById('ws-body').textContent = attrs ? Math.round(attrs._weight)+' lbs' : '—';
+  const { wW, wE, total } = getCarriedWeight(attrs);
+  document.getElementById('ws-weapons').textContent = Math.round(wW)+' lbs';
+  document.getElementById('ws-equip').textContent   = Math.round(wE)+' lbs';
+  document.getElementById('ws-total').textContent = attrs ? Math.round(total)+' lbs' : '—';
+  document.getElementById('ws-lift').textContent = attrs ? Math.round(attrs.Power * 10)+' lbs' : '—';
+
+  const maxSpeed = calcMaxSpeed(attrs, total);
+  document.getElementById('ws-maxspeed').textContent = maxSpeed === null ? '—' : Math.round(maxSpeed)+' ft/s';
 }
 
 function updatePlaysheet(attrs) {
@@ -843,9 +880,21 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-gender').textContent = document.getElementById('sel-gender').value;
   document.getElementById('ps-age').textContent    = document.getElementById('sel-age').value;
   document.getElementById('ps-height').textContent = inchesToFeetStr(attrs._heightInches);
-  document.getElementById('ps-weight').textContent = attrs._weight.toFixed(1)+' lbs';
-  document.getElementById('ps-speed').textContent  = attrs.Speed.toFixed(2)+' ft/s';
+  document.getElementById('ps-weight').textContent = Math.round(attrs._weight)+' lbs';
+  document.getElementById('ps-speed').textContent  = Math.round(attrs.Speed)+' ft/s';
+  const { total: carriedTotal } = getCarriedWeight(attrs);
+  const maxSpeed = calcMaxSpeed(attrs, carriedTotal);
+  document.getElementById('ps-maxspeed').textContent = maxSpeed === null ? '—' : Math.round(maxSpeed)+' ft/s';
   document.getElementById('ps-target').textContent = attrs._targetAdj;
+
+  const psStats = document.getElementById('ps-stats');
+  psStats.innerHTML = '';
+  for (const stat of RAW_STATS) {
+    const row = document.createElement('div');
+    row.className = 'ps-row';
+    row.innerHTML = `<span class="ps-label">${stat.label}</span><span class="ps-val">${statValues[stat.key]}</span>`;
+    psStats.appendChild(row);
+  }
 
   const psAttrs = document.getElementById('ps-attrs');
   psAttrs.innerHTML = '';
@@ -853,7 +902,7 @@ function updatePlaysheet(attrs) {
     const val = attrs[attr.key];
     const row = document.createElement('div');
     row.className = 'ps-row';
-    row.innerHTML = `<span class="ps-label">${attr.label}</span><span class="ps-val">${val.toFixed(val%1===0?0:2)}</span>`;
+    row.innerHTML = `<span class="ps-label">${attr.label}</span><span class="ps-val">${Math.round(val)}</span>`;
     psAttrs.appendChild(row);
   }
 
@@ -874,6 +923,22 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-features').innerHTML = checkedFeatures.length
     ? checkedFeatures.map(f=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${f}</div>`).join('')
     : '<span style="color:var(--text-dim)">None selected.</span>';
+
+  // Loadout (weapons + equipment)
+  const weaponRows = [...document.querySelectorAll('#weapon-list tr')].map(tr =>
+    `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+      <span>${tr.cells[0].textContent} <span style="color:var(--text-dim);">(${tr.cells[1].textContent}, ${tr.cells[3].textContent})</span></span>
+      <span style="color:var(--gold2);">${tr.cells[2].textContent} lbs</span>
+    </div>`);
+  const equipRows = [...document.querySelectorAll('#equip-list tr')].map(tr =>
+    `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+      <span>${tr.cells[0].textContent} <span style="color:var(--text-dim);">×${tr.cells[1].textContent}</span></span>
+      <span style="color:var(--gold2);">${tr.cells[3].textContent} lbs</span>
+    </div>`);
+  const loadoutRows = [...weaponRows, ...equipRows];
+  document.getElementById('ps-loadout').innerHTML = loadoutRows.length
+    ? loadoutRows.join('')
+    : '<span style="color:var(--text-dim)">Nothing equipped.</span>';
 }
 
 // ─── STAT ROWS ──────────────────────────────────────────────────────────────
@@ -1170,28 +1235,38 @@ function buildLoadoutSelects() {
 }
 
 function addWeapon() {
-  const sel = document.getElementById('weapon-select').value;
-  const w = WEAPONS.find(x=>x.name===sel);
-  if (!w) return;
+  const select = document.getElementById('weapon-select');
+  const selected = [...select.selectedOptions].map(o => o.value);
+  if (!selected.length) return;
   const tbody = document.getElementById('weapon-list');
-  const tr = document.createElement('tr');
-  tr.dataset.wt = w.wt;
-  tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-  tbody.appendChild(tr);
+  for (const name of selected) {
+    const w = WEAPONS.find(x=>x.name===name);
+    if (!w) continue;
+    const tr = document.createElement('tr');
+    tr.dataset.wt = w.wt;
+    tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+    tbody.appendChild(tr);
+  }
+  select.selectedIndex = -1;
   recalc();
 }
 
 function addEquip() {
-  const sel = document.getElementById('equip-select').value;
+  const select = document.getElementById('equip-select');
+  const selected = [...select.selectedOptions].map(o => o.value);
+  if (!selected.length) return;
   const qty = parseInt(document.getElementById('equip-qty').value)||1;
-  const e = EQUIPMENT.find(x=>x.name===sel);
-  if (!e) return;
   const tbody = document.getElementById('equip-list');
-  const tr = document.createElement('tr');
-  const total = e.wt * qty;
-  tr.dataset.wt = total;
-  tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${e.wt}</td><td>${total.toFixed(2)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-  tbody.appendChild(tr);
+  for (const name of selected) {
+    const e = EQUIPMENT.find(x=>x.name===name);
+    if (!e) continue;
+    const tr = document.createElement('tr');
+    const total = e.wt * qty;
+    tr.dataset.wt = total;
+    tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${e.wt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+    tbody.appendChild(tr);
+  }
+  select.selectedIndex = -1;
   recalc();
 }
 
@@ -1228,7 +1303,7 @@ function gatherCharacterData() {
     _version: 1,
     name:    document.getElementById('char-name').value,
     race:    document.getElementById('sel-race').value,
-    gender:  document.getElementById('sel-gender').value,
+    sex:     document.getElementById('sel-gender').value,
     age:     document.getElementById('sel-age').value,
     height:  document.getElementById('sel-height').value,
     build:   document.getElementById('sel-build').value,
@@ -1271,12 +1346,12 @@ function importCharacter(input) {
   reader.readAsText(file);
 }
 
-// ─── GAME CONFIGURATION (races, genders, ages, heights, builds, dispositions, weapons, equipment, skills) ──
+// ─── GAME CONFIGURATION (species, sexes, ages, heights, builds, dispositions, weapons, equipment, skills) ──
 function gatherConfigData() {
   return {
     _version: 1,
-    races: RACE_DATA,
-    genders: GENDER_DATA,
+    species: RACE_DATA,
+    sexes: GENDER_DATA,
     ages: AGE_DATA,
     heights: HEIGHT_DATA,
     builds: BUILD_DATA,
@@ -1434,8 +1509,10 @@ async function loadConfigFromDisk() {
 
 function applyConfigData(data, opts) {
   opts = opts || {};
-  if (data.races)    replaceObjectContents(RACE_DATA, data.races);
-  if (data.genders)  replaceObjectContents(GENDER_DATA, data.genders);
+  const speciesData = data.species || data.races; // accept legacy "races" key from older config files
+  if (speciesData)   replaceObjectContents(RACE_DATA, speciesData);
+  const sexesData = data.sexes || data.genders; // accept legacy "genders" key from older config files
+  if (sexesData)     replaceObjectContents(GENDER_DATA, sexesData);
   if (data.ages)     replaceObjectContents(AGE_DATA, data.ages);
   if (data.heights)  replaceObjectContents(HEIGHT_DATA, data.heights);
   if (data.builds)   replaceObjectContents(BUILD_DATA, data.builds);
@@ -1478,7 +1555,8 @@ function applyCharacterData(data) {
   // Basic fields
   if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
   if (data.race)   document.getElementById('sel-race').value   = data.race;
-  if (data.gender) document.getElementById('sel-gender').value = data.gender;
+  const sexVal = data.sex || data.gender; // accept legacy "gender" key from older character files
+  if (sexVal)      document.getElementById('sel-gender').value = sexVal;
   if (data.age)    document.getElementById('sel-age').value    = data.age;
   if (data.height) document.getElementById('sel-height').value = data.height;
   if (data.build)  document.getElementById('sel-build').value  = data.build;
@@ -1526,7 +1604,7 @@ function applyCharacterData(data) {
       const total = eq.unitWt * eq.qty;
       const tr = document.createElement('tr');
       tr.dataset.wt = total;
-      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${total.toFixed(2)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
       document.getElementById('equip-list').appendChild(tr);
     });
   }

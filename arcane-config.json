@@ -1,6 +1,6 @@
 {
   "_version": 1,
-  "races": {
+  "species": {
     "Human":  { "Power":1,   "Speed":1,    "Toughness":1,   "Stamina":1,   "ManualDex":1,   "PhysNimble":1,   "Knowledge":1,   "SocialSkills":1,   "Intellect":1,   "Intuition":1,   "Quintessence":0.5, "DayVision":1,   "Hearing":1,   "Smell":1,   "Taste":1,   "NightVision":0.2, "Height":66,  "Weight":1 },
     "Elf":    { "Power":0.8, "Speed":1.05, "Toughness":0.8, "Stamina":1,   "ManualDex":1.1, "PhysNimble":1.2, "Knowledge":1.5, "SocialSkills":0.9, "Intellect":1,   "Intuition":1,   "Quintessence":1,   "DayVision":1,   "Hearing":1.2, "Smell":1,   "Taste":1,   "NightVision":0.5, "Height":55,  "Weight":0.9 },
     "Dwarf":  { "Power":1.1, "Speed":0.6,  "Toughness":1.2, "Stamina":1.2, "ManualDex":1.1, "PhysNimble":0.8, "Knowledge":1,   "SocialSkills":0.7, "Intellect":1,   "Intuition":0.8, "Quintessence":0.7, "DayVision":0.8, "Hearing":0.8, "Smell":0.8, "Taste":1,   "NightVision":1,   "Height":50,  "Weight":1.1 },
@@ -9,11 +9,11 @@
     "Goblin": { "Power":0.8, "Speed":1,    "Toughness":1.2, "Stamina":1.1, "ManualDex":0.8, "PhysNimble":1.3, "Knowledge":0.4, "SocialSkills":0.5, "Intellect":0.8, "Intuition":1.2, "Quintessence":0.5, "DayVision":0.5, "Hearing":1.3, "Smell":1.1, "Taste":0.9, "NightVision":1.5, "Height":48,  "Weight":0.9 },
     "Giant":  { "Power":4,   "Speed":1.2,  "Toughness":3,   "Stamina":1,   "ManualDex":0.7, "PhysNimble":0.6, "Knowledge":0.8, "SocialSkills":0.8, "Intellect":0.9, "Intuition":0.8, "Quintessence":0.2, "DayVision":1,   "Hearing":1,   "Smell":1.4, "Taste":1,   "NightVision":0.2, "Height":144, "Weight":1.1 }
   },
-  "genders": {
+  "sexes": {
     "Female":     { "Power":1,   "Speed":1,    "Toughness":1.1, "Stamina":1, "ManualDex":1, "PhysNimble":1, "Knowledge":1,   "SocialSkills":1.1, "Intellect":1, "Intuition":1, "Quintessence":1,   "DayVision":1, "Hearing":1, "Smell":1, "Taste":1, "NightVision":1, "Height":1,    "Weight":0.95 },
     "Male":       { "Power":1.1, "Speed":1.05, "Toughness":1,   "Stamina":1, "ManualDex":1, "PhysNimble":1, "Knowledge":1,   "SocialSkills":1,   "Intellect":1, "Intuition":1, "Quintessence":1,   "DayVision":1, "Hearing":1, "Smell":1, "Taste":1, "NightVision":1, "Height":1.07, "Weight":1 },
     "Other":      { "Power":1,   "Speed":1,    "Toughness":1,   "Stamina":1, "ManualDex":1, "PhysNimble":1, "Knowledge":1,   "SocialSkills":1.1, "Intellect":1, "Intuition":1, "Quintessence":1.1, "DayVision":1, "Hearing":1, "Smell":1, "Taste":1, "NightVision":1, "Height":1,    "Weight":0.95 },
-    "Genderless": { "Power":1,   "Speed":1,    "Toughness":1,   "Stamina":1, "ManualDex":1, "PhysNimble":1, "Knowledge":1,   "SocialSkills":1,   "Intellect":1, "Intuition":1, "Quintessence":1,   "DayVision":1, "Hearing":1, "Smell":1, "Taste":1, "NightVision":1, "Height":1,    "Weight":1 }
+    "None":       { "Power":1,   "Speed":1,    "Toughness":1,   "Stamina":1, "ManualDex":1, "PhysNimble":1, "Knowledge":1,   "SocialSkills":1,   "Intellect":1, "Intuition":1, "Quintessence":1,   "DayVision":1, "Hearing":1, "Smell":1, "Taste":1, "NightVision":1, "Height":1,    "Weight":1 }
   },
   "ages": {
     "Young":        { "Power":0.6, "Speed":1,   "Toughness":0.8, "Stamina":1.2, "ManualDex":0.8, "PhysNimble":1.1, "Knowledge":0.5, "SocialSkills":0.8, "Intellect":0.7, "Intuition":0.7, "Quintessence":1,   "DayVision":1,   "Hearing":1.1, "Smell":1, "Taste":1, "NightVision":1,   "Height":0.8,  "Weight":0.9 },
@@ -86,7 +86,6 @@
     { "name":"Whip",                "damage":"Cut",     "wt":3,    "reach":"6 ft" }
   ],
   "equipment": [
-    { "name":"Nothing",             "wt":0,    "cost":0 },
     { "name":"Acid (Vial)",         "wt":1,    "cost":25 },
     { "name":"Greek Fire (Pot)",    "wt":1,    "cost":50 },
     { "name":"Arrow, War Bodkin",   "wt":1,    "cost":1 },
