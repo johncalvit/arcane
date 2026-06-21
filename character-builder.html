@@ -26,33 +26,34 @@
     color: var(--text);
     font-family: 'Georgia', serif;
     min-height: 100vh;
+    font-size: 14px;
   }
   header {
     background: linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);
     border-bottom: 2px solid var(--gold);
-    padding: 18px 32px;
+    padding: 9px 24px;
     display: flex;
     align-items: center;
     gap: 16px;
   }
   header h1 {
-    font-size: 1.8rem;
+    font-size: 1.25rem;
     color: var(--gold2);
-    letter-spacing: 0.12em;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     text-shadow: 0 0 24px rgba(201,168,76,0.4);
   }
-  header .subtitle { color: var(--text-dim); font-size: 0.85rem; font-style: italic; }
+  header .subtitle { color: var(--text-dim); font-size: 0.76rem; font-style: italic; }
 
   .app-layout {
     display: grid;
-    grid-template-columns: 260px 1fr;
-    min-height: calc(100vh - 70px);
+    grid-template-columns: 195px 1fr;
+    min-height: calc(100vh - 46px);
   }
   .sidebar {
     background: var(--bg2);
     border-right: 1px solid var(--border);
-    padding: 20px 0;
+    padding: 8px 0;
   }
   .nav-btn {
     display: block;
@@ -61,44 +62,44 @@
     border: none;
     color: var(--text-dim);
     text-align: left;
-    padding: 12px 24px;
+    padding: 7px 18px;
     font-family: 'Georgia', serif;
-    font-size: 0.95rem;
+    font-size: 0.82rem;
     cursor: pointer;
     transition: all 0.15s;
     border-left: 3px solid transparent;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.03em;
   }
   .nav-btn:hover { background: var(--bg3); color: var(--text); }
   .nav-btn.active { color: var(--gold2); border-left-color: var(--gold); background: var(--bg3); }
-  .nav-section { color: var(--text-dim); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.2em; padding: 16px 24px 4px; }
+  .nav-section { color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 18px 2px; }
 
-  .main-content { padding: 28px 36px; overflow-y: auto; }
+  .main-content { padding: 14px 20px; overflow-y: auto; }
   .panel { display: none; }
   .panel.active { display: block; }
 
   h2 {
     color: var(--gold2);
-    font-size: 1.25rem;
-    letter-spacing: 0.08em;
+    font-size: 1.05rem;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     border-bottom: 1px solid var(--border);
-    padding-bottom: 10px;
-    margin-bottom: 22px;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
   }
-  h3 { color: var(--gold); font-size: 1rem; margin: 20px 0 12px; letter-spacing: 0.05em; }
+  h3 { color: var(--gold); font-size: 0.88rem; margin: 10px 0 6px; letter-spacing: 0.04em; }
 
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
 
-  .field { margin-bottom: 16px; }
+  .field { margin-bottom: 8px; }
   .field label {
     display: block;
-    font-size: 0.78rem;
+    font-size: 0.7rem;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     color: var(--text-dim);
-    margin-bottom: 6px;
+    margin-bottom: 3px;
   }
   .field input[type="text"],
   .field select {
@@ -106,9 +107,9 @@
     background: var(--bg3);
     border: 1px solid var(--border);
     color: var(--text);
-    padding: 9px 12px;
+    padding: 5px 9px;
     font-family: 'Georgia', serif;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
     border-radius: 4px;
     outline: none;
     transition: border-color 0.15s;
@@ -117,50 +118,58 @@
   .field select:focus { border-color: var(--gold); }
   .field select option { background: var(--bg3); }
 
+  .field-inline { display: flex; align-items: center; gap: 10px; }
+  .field-inline label {
+    margin-bottom: 0;
+    flex-shrink: 0;
+    width: 130px;
+    white-space: nowrap;
+  }
+  .field-inline select { flex: 1; }
+
   /* Stat row */
   .stat-row {
     display: grid;
-    grid-template-columns: 160px 48px 1fr 60px;
+    grid-template-columns: 1fr 36px auto;
     align-items: center;
-    gap: 12px;
-    margin-bottom: 14px;
+    gap: 10px;
+    margin-bottom: 4px;
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 4px 10px;
   }
-  .stat-name { font-size: 0.9rem; }
-  .stat-desc { font-size: 0.75rem; color: var(--text-dim); font-style: italic; }
+  .stat-name { font-size: 0.82rem; cursor: help; border-bottom: 1px dotted var(--text-dim); width: fit-content; }
   .stat-value-display {
-    font-size: 1.3rem;
+    font-size: 1.05rem;
     font-weight: bold;
     color: var(--gold2);
     text-align: center;
   }
-  .stat-controls { display: flex; gap: 6px; align-items: center; }
+  .stat-controls { display: flex; gap: 5px; align-items: center; }
   .btn-sm {
     background: var(--bg);
     border: 1px solid var(--border);
     color: var(--text);
-    width: 28px;
-    height: 28px;
+    width: 24px;
+    height: 24px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 1.1rem;
+    font-size: 1rem;
     line-height: 1;
     transition: all 0.1s;
     display: flex; align-items: center; justify-content: center;
   }
   .btn-sm:hover { border-color: var(--gold); color: var(--gold2); }
   .stat-input {
-    width: 50px;
+    width: 44px;
     background: var(--bg);
     border: 1px solid var(--border);
     color: var(--gold2);
     text-align: center;
-    padding: 4px;
+    padding: 3px;
     font-family: 'Georgia', serif;
-    font-size: 1rem;
+    font-size: 0.9rem;
     border-radius: 4px;
     outline: none;
   }
@@ -168,19 +177,19 @@
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 14px 20px;
-    margin-bottom: 24px;
+    padding: 8px 14px;
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
   }
-  .points-bar .label { color: var(--text-dim); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.1em; }
-  .points-bar .value { font-size: 1.6rem; color: var(--gold2); font-weight: bold; min-width: 40px; }
+  .points-bar .label { color: var(--text-dim); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .points-bar .value { font-size: 1.2rem; color: var(--gold2); font-weight: bold; min-width: 32px; }
   .points-bar .value.warn { color: #e05555; }
   .points-bar .value.ok { color: #5cbb6e; }
   .progress-track {
     flex: 1;
-    height: 8px;
+    height: 6px;
     background: var(--bg);
     border-radius: 4px;
     overflow: hidden;
@@ -197,17 +206,18 @@
   /* Attribute cards */
   .attr-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 12px;
-    margin-bottom: 24px;
+    grid-template-columns: repeat(auto-fill, minmax(115px, 1fr));
+    gap: 6px;
+    margin-bottom: 8px;
   }
   .attr-card {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 14px 16px;
+    padding: 5px 8px;
     position: relative;
     overflow: hidden;
+    cursor: help;
   }
   .attr-card::before {
     content: '';
@@ -219,47 +229,46 @@
   .attr-card.sense::before { background: #5baacc; }
   .attr-card.mental::before { background: var(--accent2); }
   .attr-card.social::before { background: #c86b9a; }
-  .attr-name { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); margin-bottom: 4px; }
-  .attr-value { font-size: 1.8rem; color: var(--gold2); font-weight: bold; line-height: 1; }
-  .attr-desc { font-size: 0.7rem; color: var(--text-dim); font-style: italic; margin-top: 4px; line-height: 1.3; }
+  .attr-name { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-dim); margin-bottom: 1px; }
+  .attr-value { font-size: 1.15rem; color: var(--gold2); font-weight: bold; line-height: 1; }
 
   /* Summary cards */
   .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 10px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 6px;
+    margin-bottom: 10px;
   }
   .summary-card {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 6px 10px;
     text-align: center;
   }
-  .summary-card .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 4px; }
-  .summary-card .value { font-size: 1.2rem; color: var(--gold2); }
+  .summary-card .label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 2px; }
+  .summary-card .value { font-size: 1.05rem; color: var(--gold2); }
 
   /* Features / Skills checkboxes */
-  .feature-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .feature-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; margin-bottom: 10px; }
   .feature-item {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 6px 10px;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
     transition: border-color 0.15s;
   }
   .feature-item:hover { border-color: var(--gold); }
   .feature-item input[type="checkbox"] { margin-top: 2px; accent-color: var(--gold); }
-  .feature-item .fi-name { font-size: 0.9rem; }
+  .feature-item .fi-name { font-size: 0.82rem; }
   .feature-item .fi-type {
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     padding: 1px 6px;
     border-radius: 3px;
     margin-left: auto;
@@ -267,93 +276,102 @@
   }
   .fi-type.Blessing { background: #1a3d20; color: #5cbb6e; }
   .fi-type.Curse { background: #3d1a1a; color: #e05555; }
-  .feature-item .fi-desc { font-size: 0.74rem; color: var(--text-dim); margin-top: 3px; }
+  .feature-item .fi-desc { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
 
   /* Skills */
-  .skill-filter { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .skill-filter { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
   .filter-btn {
     background: var(--bg3);
     border: 1px solid var(--border);
     color: var(--text-dim);
-    padding: 5px 14px;
+    padding: 3px 11px;
     border-radius: 20px;
     cursor: pointer;
     font-family: 'Georgia', serif;
-    font-size: 0.82rem;
+    font-size: 0.75rem;
     transition: all 0.15s;
   }
   .filter-btn.active, .filter-btn:hover { border-color: var(--gold); color: var(--gold2); background: var(--bg2); }
-  .skill-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .skill-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 6px; }
   .skill-item {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 10px 14px;
+    padding: 6px 10px;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 8px;
     cursor: pointer;
     transition: border-color 0.15s;
   }
   .skill-item:hover { border-color: var(--gold); }
   .skill-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--gold); }
-  .skill-info .si-name { font-size: 0.88rem; }
-  .skill-info .si-type { font-size: 0.7rem; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.06em; }
-  .skill-info .si-req { font-size: 0.72rem; color: var(--text-dim); }
+  .skill-info .si-name { font-size: 0.8rem; }
+  .skill-info .si-type { font-size: 0.64rem; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.05em; }
+  .skill-info .si-req { font-size: 0.66rem; color: var(--text-dim); }
+  .si-cost { margin-left: auto; flex-shrink: 0; font-size: 0.72rem; color: var(--gold2); white-space: nowrap; }
 
   /* Loadout */
-  .loadout-section { margin-bottom: 28px; }
-  .loadout-add { display: flex; gap: 10px; margin-bottom: 14px; }
+  .loadout-section { margin-bottom: 14px; }
+  .loadout-add { display: flex; gap: 8px; margin-bottom: 8px; }
   .loadout-add select { flex: 1; }
   .btn {
     background: var(--bg3);
     border: 1px solid var(--gold);
     color: var(--gold2);
-    padding: 8px 18px;
+    padding: 5px 14px;
     border-radius: 4px;
     cursor: pointer;
     font-family: 'Georgia', serif;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     transition: all 0.15s;
   }
   .btn:hover { background: var(--gold); color: var(--bg); }
   .btn.danger { border-color: var(--red); color: #e05555; }
   .btn.danger:hover { background: var(--red); color: #fff; }
   .loadout-table { width: 100%; border-collapse: collapse; }
-  .loadout-table th { text-align: left; color: var(--text-dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 12px; border-bottom: 1px solid var(--border); }
-  .loadout-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .loadout-table th { text-align: left; color: var(--text-dim); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; padding: 4px 10px; border-bottom: 1px solid var(--border); }
+  .loadout-table td { padding: 4px 10px; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
   .loadout-table td:last-child { text-align: right; }
   .loadout-table tr:hover td { background: var(--bg3); }
-  .remove-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1.1rem; padding: 0 4px; }
+  .remove-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 1rem; padding: 0 4px; }
   .remove-btn:hover { color: #e05555; }
   .weight-summary {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 14px 20px;
-    margin-top: 12px;
+    padding: 8px 14px;
+    margin-top: 8px;
     display: flex;
-    gap: 28px;
+    gap: 20px;
+    flex-wrap: wrap;
   }
-  .weight-summary .ws-item .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); }
-  .weight-summary .ws-item .value { font-size: 1.1rem; color: var(--gold2); }
+  .weight-summary .ws-item .label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); }
+  .weight-summary .ws-item .value { font-size: 0.95rem; color: var(--gold2); }
 
   /* Playsheet */
-  .playsheet { max-width: 720px; }
-  .ps-header { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .playsheet { max-width: 980px; }
+  .ps-header { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
   .ps-block {
     background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 8px;
-    padding: 16px;
+    padding: 10px 12px;
   }
-  .ps-block h4 { color: var(--gold); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-  .ps-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+  .ps-block h4 { color: var(--gold); font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .ps-row { display: flex; justify-content: space-between; align-items: center; padding: 2px 0; border-bottom: 1px solid var(--border); font-size: 0.8rem; }
   .ps-row:last-child { border-bottom: none; }
   .ps-row .ps-label { color: var(--text-dim); }
   .ps-row .ps-val { color: var(--text-bright); font-weight: bold; }
 
-  .ornament { color: var(--gold); opacity: 0.4; font-size: 1.2rem; margin: 0 8px; }
+  .ornament { color: var(--gold); opacity: 0.4; font-size: 1.1rem; margin: 0 6px; }
+
+  h2.collapsible { cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
+  h2.collapsible:hover { color: var(--gold2); }
+  .collapse-arrow { font-size: 0.8rem; color: var(--text-dim); transition: transform 0.15s; }
+  .collapse-arrow.collapsed { transform: rotate(-90deg); }
+  .collapse-body { overflow: hidden; }
+  .collapse-body.collapsed { display: none; }
 </style>
 </head>
 <body>
@@ -368,12 +386,11 @@
 <div class="app-layout">
   <nav class="sidebar">
     <div class="nav-section">Character</div>
-    <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits &amp; Characteristics</button>
-    <button class="nav-btn" onclick="showPanel('stats')">⚡ Raw Stats</button>
-    <button class="nav-btn" onclick="showPanel('attributes')">📊 Final Attributes</button>
+    <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
     <div class="nav-section">Details</div>
     <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
     <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
+    <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
     <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
     <div class="nav-section">Summary</div>
     <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
@@ -381,61 +398,51 @@
     <button class="nav-btn" onclick="exportCharacter()">💾 Export Character</button>
     <button class="nav-btn" onclick="document.getElementById('import-file').click()">📂 Import Character</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
+    <button class="nav-btn" onclick="connectConfigFile()">🔗 Connect Config File</button>
+    <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
+    <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
+    <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
+    <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;">Loading configuration…</div>
   </nav>
 
   <main class="main-content">
 
     <!-- OVERVIEW -->
     <div id="panel-overview" class="panel active">
-      <h2>Traits &amp; Characteristics</h2>
+      <h2 class="collapsible" onclick="toggleCollapse('overview')">Traits &amp; Characteristics<span class="collapse-arrow" id="arrow-overview">▼</span></h2>
+      <div class="collapse-body" id="body-overview">
       <div class="field">
         <label>Character Name</label>
         <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
       </div>
       <div class="grid-2">
-        <div class="field">
-          <label>Race</label>
-          <select id="sel-race" onchange="recalc()">
-            <option>Human</option><option>Elf</option><option>Dwarf</option>
-            <option>Gnome</option><option>Ogre</option><option>Goblin</option><option>Giant</option>
-          </select>
+        <div class="field field-inline">
+          <label>Species</label>
+          <select id="sel-race" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Gender</label>
-          <select id="sel-gender" onchange="recalc()">
-            <option>Female</option><option>Male</option><option>Other</option><option>Genderless</option>
-          </select>
+          <select id="sel-gender" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Age</label>
-          <select id="sel-age" onchange="recalc()">
-            <option>Young</option><option>Young adult</option><option>Adult</option>
-            <option>Middle aged</option><option>Old</option><option>Venerable</option>
-          </select>
+          <select id="sel-age" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Height</label>
-          <select id="sel-height" onchange="recalc()">
-            <option>Short</option><option>Medium</option><option>Tall</option>
-          </select>
+          <select id="sel-height" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Build</label>
-          <select id="sel-build" onchange="recalc()">
-            <option>Skinny</option><option>Medium</option><option>Stout</option>
-          </select>
+          <select id="sel-build" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Social Disposition</label>
-          <select id="sel-social" onchange="recalc()">
-            <option>Introvert</option><option>Balanced</option><option>Extrovert</option>
-          </select>
+          <select id="sel-social" onchange="recalc()"></select>
         </div>
-        <div class="field">
+        <div class="field field-inline">
           <label>Mental Disposition</label>
-          <select id="sel-mental" onchange="recalc()">
-            <option>Logical</option><option>Balanced</option><option>Intuitive</option>
-          </select>
+          <select id="sel-mental" onchange="recalc()"></select>
         </div>
       </div>
       <h3>Computed Physical Overview</h3>
@@ -445,11 +452,10 @@
         <div class="summary-card"><div class="label">Speed</div><div class="value" id="disp-speed">—</div></div>
         <div class="summary-card"><div class="label">Target Size</div><div class="value" id="disp-target">—</div></div>
       </div>
-    </div>
+      </div>
 
-    <!-- RAW STATS -->
-    <div id="panel-stats" class="panel">
-      <h2>Raw Stats</h2>
+      <h2 class="collapsible" onclick="toggleCollapse('stats')">Raw Stats<span class="collapse-arrow" id="arrow-stats">▼</span></h2>
+      <div class="collapse-body" id="body-stats">
       <div class="points-bar">
         <div class="label">Points Used</div>
         <div class="value" id="points-used">0</div>
@@ -460,11 +466,10 @@
       </div>
 
       <div id="stat-rows"></div>
-    </div>
+      </div>
 
-    <!-- FINAL ATTRIBUTES -->
-    <div id="panel-attributes" class="panel">
-      <h2>Final Attributes</h2>
+      <h2 class="collapsible" onclick="toggleCollapse('attributes')">Final Attributes<span class="collapse-arrow" id="arrow-attributes">▼</span></h2>
+      <div class="collapse-body" id="body-attributes">
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:20px;font-style:italic;">
         Calculated from raw stats × characteristic modifiers. These are the values used in play.
       </p>
@@ -474,6 +479,7 @@
       <div class="attr-grid" id="attrs-cognitive"></div>
       <h3>Senses</h3>
       <div class="attr-grid" id="attrs-senses"></div>
+      </div>
     </div>
 
     <!-- FEATURES -->
@@ -486,8 +492,68 @@
     <!-- SKILLS -->
     <div id="panel-skills" class="panel">
       <h2>Skills</h2>
+      <div class="points-bar">
+        <div class="label">Skill Points Used</div>
+        <div class="value" id="skill-points-used">0</div>
+        <div class="progress-track"><div class="progress-fill" id="skill-points-bar-fill" style="width:0%"></div></div>
+        <div class="label">of</div>
+        <div class="value" id="skill-points-total">0</div>
+        <div class="label">Left:</div>
+        <div class="value" id="skill-points-left">0</div>
+      </div>
       <div class="skill-filter" id="skill-filters"></div>
       <div class="skill-list" id="skill-list"></div>
+    </div>
+
+    <!-- SKILL MANAGER -->
+    <div id="panel-skillmgr" class="panel">
+      <h2>Skill Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define new skills or edit/delete existing ones. Success % is the sum of the chosen attributes' values, capped at 100%.
+        Set a count greater than 1 to add an attribute multiple times — e.g. Knowledge = 3 makes success = Knowledge × 3.
+      </p>
+      <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:16px;">+ Add New Skill</button>
+
+      <div id="skill-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="skill-form-title" style="margin-top:0;">New Skill</h3>
+        <div class="grid-2">
+          <div class="field">
+            <label>Skill Name</label>
+            <input type="text" id="sf-name">
+          </div>
+          <div class="field">
+            <label>Type / Category</label>
+            <input type="text" id="sf-type" placeholder="e.g. Trade, Language, Social...">
+          </div>
+          <div class="field">
+            <label>Skill Point Cost</label>
+            <input type="text" id="sf-cost" placeholder="3">
+          </div>
+          <div class="field">
+            <label>Required Attribute</label>
+            <select id="sf-reqattr">
+              <option value="">None</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Required Value</label>
+            <input type="text" id="sf-reqval" placeholder="e.g. 5">
+          </div>
+        </div>
+        <div class="field">
+          <label>Attributes Used for Success % Calculation (count = how many times added)</label>
+          <div class="feature-list" id="sf-success-attrs" style="grid-template-columns:1fr 1fr 1fr;"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveSkill()">Save Skill</button>
+          <button class="btn danger" onclick="closeSkillForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Skill</th><th>Type</th><th>Cost</th><th>Required Attr</th><th>Success Attrs</th><th></th></tr></thead>
+        <tbody id="skillmgr-list"></tbody>
+      </table>
     </div>
 
     <!-- LOADOUT -->
@@ -532,7 +598,7 @@
         <div class="ps-block">
           <h4>Identity</h4>
           <div class="ps-row"><span class="ps-label">Name</span><span class="ps-val" id="ps-name">—</span></div>
-          <div class="ps-row"><span class="ps-label">Race</span><span class="ps-val" id="ps-race">—</span></div>
+          <div class="ps-row"><span class="ps-label">Species</span><span class="ps-val" id="ps-race">—</span></div>
           <div class="ps-row"><span class="ps-label">Gender</span><span class="ps-val" id="ps-gender">—</span></div>
           <div class="ps-row"><span class="ps-label">Age</span><span class="ps-val" id="ps-age">—</span></div>
         </div>
@@ -563,56 +629,38 @@
 
 <script>
 // ─── DATA TABLES ───────────────────────────────────────────────────────────
+// Race/Gender/Age/Height/Build/Social/Mental/Weapons/Equipment/Skills no longer live
+// here — they're loaded at runtime from the config file (see CONFIG PERSISTENCE below).
+// These start empty and are populated by loadConfig() before the UI is built.
 
-const RACE_DATA = {
-  Human:   { Power:1,   Speed:1,    Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.2, Height:66,  Weight:1   },
-  Elf:     { Power:0.8, Speed:1.05, Toughness:0.8, Stamina:1,   ManualDex:1.1, PhysNimble:1.2, Knowledge:1.5, SocialSkills:0.9, Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:0.5, Height:55,  Weight:0.9 },
-  Dwarf:   { Power:1.1, Speed:0.6,  Toughness:1.2, Stamina:1.2, ManualDex:1.1, PhysNimble:0.8, Knowledge:1,   SocialSkills:0.7, Intellect:1,   Intuition:0.8, Quintessence:0.7, DayVision:0.8, Hearing:0.8, Smell:0.8, Taste:1,   NightVision:1,   Height:50,  Weight:1.1 },
-  Gnome:   { Power:0.5, Speed:0.4,  Toughness:0.7, Stamina:1.5, ManualDex:1.3, PhysNimble:1.3, Knowledge:1.3, SocialSkills:1,   Intellect:1.5, Intuition:1.5, Quintessence:1,   DayVision:0.9, Hearing:1.3, Smell:1.1, Taste:1,   NightVision:0.8, Height:40,  Weight:1   },
-  Ogre:    { Power:2.5, Speed:1,    Toughness:2,   Stamina:0.8, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.3, SocialSkills:0.3, Intellect:0.4, Intuition:0.5, Quintessence:0.3, DayVision:0.5, Hearing:1.1, Smell:1.5, Taste:0.8, NightVision:0.5, Height:100, Weight:1.2 },
-  Goblin:  { Power:0.8, Speed:1,    Toughness:1.2, Stamina:1.1, ManualDex:0.8, PhysNimble:1.3, Knowledge:0.4, SocialSkills:0.5, Intellect:0.8, Intuition:1.2, Quintessence:0.5, DayVision:0.5, Hearing:1.3, Smell:1.1, Taste:0.9, NightVision:1.5, Height:48,  Weight:0.9 },
-  Giant:   { Power:4,   Speed:1.2,  Toughness:3,   Stamina:1,   ManualDex:0.7, PhysNimble:0.6, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:0.8, Quintessence:0.2, DayVision:1,   Hearing:1,   Smell:1.4, Taste:1,   NightVision:0.2, Height:144, Weight:1.1 },
-};
+let RACE_DATA = {};
+let GENDER_DATA = {};
+let AGE_DATA = {};
+let HEIGHT_DATA = {};
+let BUILD_DATA = {};
+let SOCIAL_DATA = {};
+let MENTAL_DATA = {};
 
-const GENDER_DATA = {
-  Female:    { Power:1,   Speed:1,    Toughness:1.1, Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:0.95 },
-  Male:      { Power:1.1, Speed:1.05, Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1.07, Weight:1    },
-  Other:     { Power:1,   Speed:1,    Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1.1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:0.95 },
-  Genderless:{ Power:1,   Speed:1,    Toughness:1,   Stamina:1, ManualDex:1, PhysNimble:1, Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:1    },
-};
-
-const AGE_DATA = {
-  Young:       { Power:0.6, Speed:1,   Toughness:0.8, Stamina:1.2, ManualDex:0.8, PhysNimble:1.1, Knowledge:0.5, SocialSkills:0.8, Intellect:0.7, Intuition:0.7, Quintessence:1,   DayVision:1,   Hearing:1.1, Smell:1, Taste:1, NightVision:1,   Height:0.8,  Weight:0.9  },
-  'Young adult':{ Power:1,  Speed:1,   Toughness:0.9, Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:0.7, SocialSkills:0.9, Intellect:0.8, Intuition:0.8, Quintessence:1,   DayVision:1,   Hearing:1,   Smell:1, Taste:1, NightVision:1,   Height:0.95, Weight:0.95 },
-  Adult:       { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:0.9, Intuition:0.9, Quintessence:1,   DayVision:1,   Hearing:1,   Smell:1, Taste:1, NightVision:0.9, Height:1,    Weight:1    },
-  'Middle aged':{ Power:0.9, Speed:0.9, Toughness:1,  Stamina:0.9, ManualDex:1,   PhysNimble:0.9, Knowledge:2,   SocialSkills:1.1, Intellect:1,   Intuition:1,   Quintessence:1.1, DayVision:0.9, Hearing:0.9, Smell:1, Taste:1, NightVision:0.8, Height:1,    Weight:1.1  },
-  Old:         { Power:0.8, Speed:0.8, Toughness:0.9, Stamina:0.8, ManualDex:0.8, PhysNimble:0.8, Knowledge:3,   SocialSkills:1.2, Intellect:0.9, Intuition:1.1, Quintessence:1.2, DayVision:0.8, Hearing:0.7, Smell:1, Taste:1, NightVision:0.7, Height:0.95, Weight:1.1  },
-  Venerable:   { Power:0.7, Speed:0.7, Toughness:0.8, Stamina:0.6, ManualDex:0.6, PhysNimble:0.6, Knowledge:4,   SocialSkills:1.3, Intellect:0.8, Intuition:1.2, Quintessence:1.3, DayVision:0.7, Hearing:0.5, Smell:1, Taste:1, NightVision:0.5, Height:0.9,  Weight:0.95 },
-};
-
-const HEIGHT_DATA = {
-  Short:  { Power:0.9, Speed:0.9, Toughness:1, Stamina:1.1, ManualDex:1.1, PhysNimble:1.2, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:0.8 },
-  Medium: { Power:1,   Speed:1,   Toughness:1, Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1   },
-  Tall:   { Power:1.1, Speed:1.1, Toughness:1, Stamina:0.9, ManualDex:0.9, PhysNimble:0.8, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1.1 },
-};
-
-const BUILD_DATA = {
-  Skinny: { Power:0.8, Speed:1.1, Toughness:0.7, Stamina:1.1, ManualDex:1, PhysNimble:1.1, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:0.8, Weight:0.8 },
-  Medium: { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1, PhysNimble:1,   Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:1,   Weight:1   },
-  Stout:  { Power:1.2, Speed:0.9, Toughness:1.3, Stamina:0.9, ManualDex:1, PhysNimble:0.9, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, TargetAdj:1.2, Weight:1.3 },
-};
-
-const SOCIAL_DATA = {
-  Introvert: { Knowledge:1.5, SocialSkills:0.5 },
-  Balanced:  { Knowledge:1,   SocialSkills:1   },
-  Extrovert: { Knowledge:0.5, SocialSkills:1.5 },
-};
-
-const MENTAL_DATA = {
-  Logical:   { Knowledge:1.2, Intellect:1.5, Intuition:0.5, Quintessence:0.8 },
-  Balanced:  { Knowledge:1,   Intellect:1,   Intuition:1,   Quintessence:1   },
-  Intuitive: { Knowledge:0.8, Intellect:0.5, Intuition:1.5, Quintessence:1.2 },
-};
+// Populate the Race/Gender/Age/Height/Build/Social/Mental dropdowns from their data tables,
+// preserving the currently selected value when it still exists.
+function buildCharSelects() {
+  const tables = [
+    ['sel-race',   RACE_DATA],
+    ['sel-gender', GENDER_DATA],
+    ['sel-age',    AGE_DATA],
+    ['sel-height', HEIGHT_DATA],
+    ['sel-build',  BUILD_DATA],
+    ['sel-social', SOCIAL_DATA],
+    ['sel-mental', MENTAL_DATA],
+  ];
+  for (const [id, table] of tables) {
+    const sel = document.getElementById(id);
+    const prev = sel.value;
+    const keys = Object.keys(table);
+    sel.innerHTML = keys.map(k => `<option>${k}</option>`).join('');
+    sel.value = keys.includes(prev) ? prev : keys[0];
+  }
+}
 
 // Weight base curve: [height_inches, base_weight_lbs]
 const WEIGHT_CURVE = [[30,17.04],[40,39.88],[50,72.76],[60,115.68],[70,168.64],[80,231.64],[108,461.45]];
@@ -760,13 +808,17 @@ function recalc() {
       const val = attrs[attr.key];
       const card = document.createElement('div');
       card.className = 'attr-card ' + (attr.cssClass||'');
-      card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${val.toFixed(val%1===0?0:2)}</div><div class="attr-desc">${attr.desc}</div>`;
+      card.title = attr.desc;
+      card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${val.toFixed(val%1===0?0:2)}</div>`;
       container.appendChild(card);
     }
   }
 
   // Weight loadout summary
   updateWeightSummary(attrs);
+
+  // Skill points
+  updateSkillPoints(attrs);
 
   // Playsheet
   updatePlaysheet(attrs);
@@ -808,7 +860,13 @@ function updatePlaysheet(attrs) {
   // Skills
   const checkedSkills = [...document.querySelectorAll('#skill-list input:checked')].map(cb=>cb.dataset.name);
   document.getElementById('ps-skills').innerHTML = checkedSkills.length
-    ? checkedSkills.map(s=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${s}</div>`).join('')
+    ? checkedSkills.map(name => {
+        const skill = SKILLS.find(s=>s.name===name);
+        const pct = calcSkillSuccess(skill, attrs);
+        return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+          <span>${name}</span><span style="color:var(--gold2);font-weight:bold;">${pct === null ? '—' : pct+'%'}</span>
+        </div>`;
+      }).join('')
     : '<span style="color:var(--text-dim)">None selected.</span>';
 
   // Features
@@ -826,18 +884,12 @@ function buildStatRows() {
     const row = document.createElement('div');
     row.className = 'stat-row';
     row.innerHTML = `
-      <div>
-        <div class="stat-name">${stat.label}</div>
-        <div class="stat-desc">${stat.desc}</div>
-      </div>
+      <div class="stat-name" title="${stat.desc}">${stat.label}</div>
       <div class="stat-value-display" id="sv-${stat.key}">${statValues[stat.key]}</div>
       <div class="stat-controls">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',-1)">−</button>
         <input type="number" class="stat-input" id="si-${stat.key}" value="${statValues[stat.key]}" min="${stat.min}" onchange="setStat('${stat.key}',this.value)">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',1)">+</button>
-      </div>
-      <div style="font-size:0.72rem;color:var(--text-dim);text-align:right;">
-        Raw<br><span style="color:var(--gold2);font-size:1rem;">${statValues[stat.key]}</span>
       </div>`;
     container.appendChild(row);
   }
@@ -906,57 +958,8 @@ function buildFeatures() {
 }
 
 // ─── SKILLS ─────────────────────────────────────────────────────────────────
-const SKILLS = [
-  { name:'Literacy of the Realm',         type:'Language',     req:'Logic 5+' },
-  { name:'Language, Ancients',            type:'Language',     req:'Logic 7+' },
-  { name:'Language & Literacy, Ancients', type:'Language',     req:'Logic 10+' },
-  { name:'Language, Demonic',             type:'Language',     req:'Logic 3+' },
-  { name:'Language & Literacy, Demonic',  type:'Language',     req:'Logic 10+' },
-  { name:'Language, New World',           type:'Language',     req:'Logic 5+' },
-  { name:'Language & Literacy, New World',type:'Language',     req:'Logic 6+' },
-  { name:'Language, Barbaric',            type:'Language',     req:'Logic 3+' },
-  { name:'Language, Sublime',             type:'Language',     req:'Logic 8+' },
-  { name:'Language & Literacy, Sublime',  type:'Language',     req:'Logic 11+' },
-  { name:'Lip Reading',                   type:'Language',     req:'' },
-  { name:'History of the Realm',          type:'History',      req:'Literacy (any)' },
-  { name:'History, Ancients',             type:'History',      req:'Literacy (any)' },
-  { name:'History, Demonic',              type:'History',      req:'Literacy (any)' },
-  { name:'History, Sublime',              type:'History',      req:'Literacy (any)' },
-  { name:'Swimming',                      type:'Survival',     req:'' },
-  { name:'Streetwise',                    type:'Survival',     req:'Intuition 6+' },
-  { name:'Wilderness Survival',           type:'Survival',     req:'Intuition 6+' },
-  { name:'Etiquette',                     type:'Social',       req:'' },
-  { name:'Gambling',                      type:'Recreational', req:'' },
-  { name:'Dancing',                       type:'Recreational', req:'Physical Coord 8+' },
-  { name:'Acrobatics',                    type:'Recreational', req:'' },
-  { name:'Climbing',                      type:'Recreational', req:'' },
-  { name:'Wrestling',                     type:'Recreational', req:'' },
-  { name:'Trade: Brewer',                 type:'Trade',        req:'' },
-  { name:'Trade: Merchant',               type:'Trade',        req:'Literacy (any)' },
-  { name:'Trade: Cook',                   type:'Trade',        req:'' },
-  { name:'Trade: Carpenter',              type:'Trade',        req:'' },
-  { name:'Trade: Counterfeiter',          type:'Trade',        req:'Literacy (any)' },
-  { name:'Trade: Healer',                 type:'Trade',        req:'Intuition 10+' },
-  { name:'Trade: Miner',                  type:'Trade',        req:'' },
-  { name:'Trade: Sailor',                 type:'Trade',        req:'' },
-  { name:'Trade: Tailor',                 type:'Trade',        req:'Intuition 6+' },
-  { name:'Trade: Blacksmith',             type:'Trade',        req:'' },
-  { name:'Trade: Shepherd',               type:'Trade',        req:'Intuition 6+' },
-  { name:'Trade: Artist',                 type:'Trade',        req:'Intuition 6+' },
-  { name:'Trade: Tinker',                 type:'Trade',        req:'Logic 10+' },
-  { name:'Trade: Farmer',                 type:'Trade',        req:'' },
-  { name:'Trade: Burglar',                type:'Trade',        req:'' },
-  { name:'Trade: Pickpocket',             type:'Trade',        req:'' },
-  { name:'Trade: Con Man',                type:'Trade',        req:'' },
-  { name:'Trade: Constable',              type:'Trade',        req:'' },
-  { name:'Trade: Physician',              type:'Trade',        req:'' },
-  { name:'Trade: Alchemist',              type:'Trade',        req:'' },
-  { name:'Trade: Herbalist',              type:'Trade',        req:'' },
-  { name:'Trade: Soldier',                type:'Trade',        req:'' },
-  { name:'Trade: Priest',                 type:'Trade',        req:'' },
-  { name:'Trade: Scholar',                type:'Trade',        req:'Literacy (any)' },
-  { name:'Trade: Courtesan',              type:'Trade',        req:'' },
-];
+// SKILLS now loaded entirely from the config file (see CONFIG PERSISTENCE below).
+let SKILLS = [];
 
 let skillFilter = 'All';
 function buildSkillFilters() {
@@ -971,6 +974,44 @@ function buildSkillFilters() {
     container.appendChild(btn);
   }
 }
+function skillCost(s) {
+  return s.cost || 3;
+}
+
+// Backfill required-attribute / success-attribute data for the built-in skills
+// by parsing their existing free-text "req" string.
+function inferLegacyAttr(reqStr) {
+  if (!reqStr) return null;
+  const m = reqStr.match(/(Logic|Intuition|Physical Coord\w*)\s*(\d+)\+/i);
+  if (!m) return null;
+  const attrKey = /Logic/i.test(m[1]) ? 'Logic' : /Intuition/i.test(m[1]) ? 'Intuition' : 'PhysCoord';
+  return { attr: attrKey, val: parseInt(m[2]) };
+}
+
+function migrateSkills() {
+  for (const s of SKILLS) {
+    if (s.reqAttr === undefined) {
+      const inferred = inferLegacyAttr(s.req);
+      s.reqAttr = inferred ? inferred.attr : '';
+      s.reqVal  = inferred ? inferred.val : '';
+    }
+    if (s.successAttrs === undefined) {
+      // Repeat the legacy single attribute 5x so old skills keep the same
+      // success% magnitude under the new sum-based formula (below).
+      s.successAttrs = s.reqAttr ? Array(5).fill(s.reqAttr) : [];
+    }
+  }
+}
+
+// successAttrs is a flat list where an attribute can appear multiple times —
+// each occurrence adds that attribute's value again, e.g. ['Knowledge','Knowledge','Knowledge']
+// for a skill whose success is "Knowledge × 3".
+function calcSkillSuccess(skill, attrs) {
+  if (!skill || !skill.successAttrs || !skill.successAttrs.length || !attrs) return null;
+  const sum = skill.successAttrs.reduce((total,k) => total + (attrs[k] || 0), 0);
+  return Math.max(0, Math.min(100, Math.round(sum)));
+}
+
 function buildSkillList() {
   const container = document.getElementById('skill-list');
   container.innerHTML = '';
@@ -979,116 +1020,148 @@ function buildSkillList() {
     const item = document.createElement('label');
     item.className = 'skill-item';
     item.innerHTML = `
-      <input type="checkbox" data-name="${s.name}" onchange="recalc()">
+      <input type="checkbox" data-name="${s.name}" data-cost="${skillCost(s)}" onchange="recalc()">
       <div class="skill-info">
         <div class="si-name">${s.name}</div>
         <div class="si-type">${s.type}</div>
         ${s.req ? `<div class="si-req">Requires: ${s.req}</div>` : ''}
-      </div>`;
+      </div>
+      <div class="si-cost">${skillCost(s)} pts</div>`;
     container.appendChild(item);
   }
 }
 
-// ─── WEAPONS ────────────────────────────────────────────────────────────────
-const WEAPONS = [
-  { name:'Axe, Hatchet',        damage:'Cut',    wt:2,   reach:'1 ft' },
-  { name:'Battleaxe',           damage:'Cut',    wt:4,   reach:'2 ft' },
-  { name:'Bow, Horse',          damage:'Stab',   wt:3,   reach:'ranged' },
-  { name:'Bow, Hunting',        damage:'Stab',   wt:4,   reach:'ranged' },
-  { name:'Bow, Light',          damage:'Stab',   wt:3,   reach:'ranged' },
-  { name:'Bow, War',            damage:'Stab',   wt:5,   reach:'ranged' },
-  { name:'Club',                damage:'Smash',  wt:2,   reach:'1 ft' },
-  { name:'Crossbow, Hand',      damage:'Stab',   wt:3,   reach:'ranged' },
-  { name:'Crossbow, Heavy',     damage:'Stab',   wt:18,  reach:'ranged' },
-  { name:'Crossbow, Light',     damage:'Stab',   wt:5,   reach:'ranged' },
-  { name:'Dart',                damage:'Stab',   wt:0.25,reach:'thrown' },
-  { name:'Flail',               damage:'Smash',  wt:2,   reach:'3 ft' },
-  { name:'Glaive',              damage:'Cut',    wt:6,   reach:'3 ft' },
-  { name:'Greataxe',            damage:'Cut',    wt:7,   reach:'3 ft' },
-  { name:'Greatclub',           damage:'Smash',  wt:10,  reach:'2 ft' },
-  { name:'Greatsword',          damage:'Cut',    wt:6,   reach:'4 ft' },
-  { name:'Halberd',             damage:'Cut',    wt:6,   reach:'4 ft' },
-  { name:"Hammer, Carpenter's", damage:'Smash',  wt:2,   reach:'1 ft' },
-  { name:'Hammer, War',         damage:'Smash',  wt:2,   reach:'1.5 ft' },
-  { name:'Javelin',             damage:'Stab',   wt:2,   reach:'thrown' },
-  { name:'Knife',               damage:'Stab',   wt:1,   reach:'0.5 ft' },
-  { name:'Lance, Heavy Cavalry',damage:'Stab',   wt:6,   reach:'6 ft' },
-  { name:'Mace',                damage:'Smash',  wt:4,   reach:'1.5 ft' },
-  { name:'Maul',                damage:'Smash',  wt:10,  reach:'2.5 ft' },
-  { name:'Morningstar',         damage:'Stab',   wt:4,   reach:'2 ft' },
-  { name:'Net',                 damage:'Entangle',wt:3,  reach:'thrown' },
-  { name:'Pike',                damage:'Stab',   wt:18,  reach:'8 ft' },
-  { name:'Rapier',              damage:'Stab',   wt:2,   reach:'2.5 ft' },
-  { name:'Scimitar',            damage:'Cut',    wt:3,   reach:'1.5 ft' },
-  { name:'Shortbow',            damage:'Stab',   wt:2,   reach:'ranged' },
-  { name:'Shortsword',          damage:'Stab',   wt:2,   reach:'1 ft' },
-  { name:'Sling Stone',         damage:'Smash',  wt:0,   reach:'thrown' },
-  { name:'Spear, Long',         damage:'Stab',   wt:3,   reach:'3 ft' },
-  { name:'Staff',               damage:'Smash',  wt:4,   reach:'2 ft' },
-  { name:'Sword, Long',         damage:'Cut',    wt:3,   reach:'2 ft' },
-  { name:'Sword, Short',        damage:'Cut',    wt:2,   reach:'1 ft' },
-  { name:'Trident',             damage:'Stab',   wt:4,   reach:'2 ft' },
-  { name:'Unarmed Strike',      damage:'Smash',  wt:0,   reach:'contact' },
-  { name:'Warpick',             damage:'Stab',   wt:2,   reach:'2 ft' },
-  { name:'Whip',                damage:'Cut',    wt:3,   reach:'6 ft' },
-];
+// ─── SKILL MANAGER ──────────────────────────────────────────────────────────
+let editingSkillIndex = null;
 
-const EQUIPMENT = [
-  { name:'Nothing',             wt:0,    cost:0   },
-  { name:'Acid (Vial)',         wt:1,    cost:25  },
-  { name:'Greek Fire (Pot)',    wt:1,    cost:50  },
-  { name:'Arrow, War Bodkin',   wt:1,    cost:1   },
-  { name:'Arrow, War Broad',    wt:1,    cost:1   },
-  { name:'Arrow, Hunting',      wt:0.5,  cost:0.25},
-  { name:'Crossbow Bolt',       wt:0.5,  cost:0.25},
-  { name:'Sling Bullet, Lead',  wt:0.25, cost:0.1 },
-  { name:'Antitoxin (Vial)',    wt:0,    cost:50  },
-  { name:'Backpack',            wt:5,    cost:2   },
-  { name:'Bedroll',             wt:7,    cost:1   },
-  { name:'Bell',                wt:0,    cost:1   },
-  { name:'Blanket',             wt:3,    cost:0.5 },
-  { name:'Block and Tackle',    wt:5,    cost:1   },
-  { name:'Book',                wt:5,    cost:25  },
-  { name:'Bottle, Glass',       wt:2,    cost:2   },
-  { name:'Bucket',              wt:2,    cost:0.05},
-  { name:'Candle',              wt:0.05, cost:0.01},
-  { name:'Case, Map/Scroll',    wt:1,    cost:1   },
-  { name:'Chain (10 ft)',       wt:10,   cost:5   },
-  { name:'Chest',               wt:25,   cost:5   },
-  { name:"Climber's Kit",       wt:12,   cost:25  },
-  { name:'Clothes, Peasant',    wt:3,    cost:0.5 },
-  { name:'Clothes, Noble',      wt:6,    cost:15  },
-  { name:"Clothes, Traveler's", wt:4,    cost:2   },
-  { name:'Flask/Canteen',       wt:1,    cost:0.02},
-  { name:'Grappling Hook',      wt:4,    cost:2   },
-  { name:'Holy Water (Flask)',  wt:1,    cost:25  },
-  { name:'Hourglass',           wt:1,    cost:25  },
-  { name:'Spring Trap',         wt:25,   cost:5   },
-  { name:'Ink and Quill',       wt:0,    cost:10  },
-  { name:'Lamp, Oil',           wt:1,    cost:0.5 },
-  { name:'Lock',                wt:1,    cost:10  },
-  { name:'Magnifying Glass',    wt:0,    cost:100 },
-  { name:'Manacles',            wt:6,    cost:2   },
-  { name:'Mess Kit',            wt:1,    cost:0.2 },
-  { name:'Mirror, Steel',       wt:0.5,  cost:5   },
-  { name:'Flask of Oil',        wt:1,    cost:0.1 },
-  { name:'Parchment (1 sheet)', wt:0,    cost:0.1 },
-  { name:'Pickaxe',             wt:10,   cost:2   },
-  { name:'Rope, Hempen (50 ft)',wt:10,   cost:1   },
-  { name:'Shovel',              wt:5,    cost:2   },
-  { name:'Torch',               wt:1,    cost:0.01},
-  { name:'Poison (Flask)',      wt:0,    cost:100 },
-  { name:'Pole, 10-foot',       wt:7,    cost:0.5 },
-];
+function buildSkillFormAttrOptions() {
+  const sel = document.getElementById('sf-reqattr');
+  sel.innerHTML = '<option value="">None</option>' + ATTRIBUTES.map(a => `<option value="${a.key}">${a.label}</option>`).join('');
+
+  const container = document.getElementById('sf-success-attrs');
+  container.innerHTML = ATTRIBUTES.map(a => `
+    <label class="feature-item" style="padding:6px 10px;align-items:center;">
+      <div class="fi-name" style="font-size:0.82rem;flex:1;">${a.label}</div>
+      <input type="number" min="0" max="10" value="0" data-attr="${a.key}" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--gold2);text-align:center;padding:3px;border-radius:4px;font-family:'Georgia',serif;">
+    </label>`).join('');
+}
+
+// Build a count-per-attribute map from a flat successAttrs list (which may repeat keys).
+function countSuccessAttrs(successAttrs) {
+  const counts = {};
+  (successAttrs || []).forEach(k => { counts[k] = (counts[k] || 0) + 1; });
+  return counts;
+}
+
+function openSkillForm(index) {
+  editingSkillIndex = index;
+  buildSkillFormAttrOptions();
+  const skill = index !== null ? SKILLS[index] : null;
+  document.getElementById('skill-form-title').textContent = skill ? 'Edit Skill' : 'New Skill';
+  document.getElementById('sf-name').value   = skill ? skill.name : '';
+  document.getElementById('sf-type').value   = skill ? skill.type : '';
+  document.getElementById('sf-cost').value   = skill ? skillCost(skill) : 3;
+  document.getElementById('sf-reqattr').value = skill ? (skill.reqAttr || '') : '';
+  document.getElementById('sf-reqval').value  = skill ? (skill.reqVal || '') : '';
+  const counts = countSuccessAttrs(skill ? skill.successAttrs : []);
+  document.querySelectorAll('#sf-success-attrs input[type="number"]').forEach(inp => {
+    inp.value = counts[inp.dataset.attr] || 0;
+  });
+  document.getElementById('skill-form').style.display = 'block';
+}
+
+function closeSkillForm() {
+  editingSkillIndex = null;
+  document.getElementById('skill-form').style.display = 'none';
+}
+
+function saveSkill() {
+  const name = document.getElementById('sf-name').value.trim();
+  if (!name) { alert('Skill name is required.'); return; }
+  const type = document.getElementById('sf-type').value.trim() || 'Custom';
+  const cost = parseInt(document.getElementById('sf-cost').value) || 3;
+  const reqAttr = document.getElementById('sf-reqattr').value;
+  const reqVal  = document.getElementById('sf-reqval').value ? parseInt(document.getElementById('sf-reqval').value) : '';
+  const successAttrs = [];
+  document.querySelectorAll('#sf-success-attrs input[type="number"]').forEach(inp => {
+    const count = parseInt(inp.value) || 0;
+    for (let i = 0; i < count; i++) successAttrs.push(inp.dataset.attr);
+  });
+  const reqAttrLabel = reqAttr ? (ATTRIBUTES.find(a=>a.key===reqAttr)||{}).label : '';
+  const req = reqAttr ? `${reqAttrLabel} ${reqVal || 0}+` : '';
+
+  const skill = { name, type, cost, req, reqAttr, reqVal, successAttrs };
+  if (editingSkillIndex !== null) {
+    SKILLS[editingSkillIndex] = skill;
+  } else {
+    SKILLS.push(skill);
+  }
+  writeConfigToDisk();
+  closeSkillForm();
+  buildSkillFilters();
+  buildSkillList();
+  buildSkillManagerTable();
+  recalc();
+}
+
+function deleteSkill(index) {
+  if (!confirm(`Delete skill "${SKILLS[index].name}"?`)) return;
+  SKILLS.splice(index, 1);
+  writeConfigToDisk();
+  buildSkillFilters();
+  buildSkillList();
+  buildSkillManagerTable();
+  recalc();
+}
+
+function buildSkillManagerTable() {
+  const tbody = document.getElementById('skillmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  SKILLS.forEach((s, i) => {
+    const reqLabel = s.reqAttr ? (ATTRIBUTES.find(a=>a.key===s.reqAttr)||{}).label : '—';
+    const counts = countSuccessAttrs(s.successAttrs);
+    const successLabel = Object.keys(counts).length
+      ? Object.entries(counts).map(([k,n]) => `${(ATTRIBUTES.find(a=>a.key===k)||{}).label || k}${n>1 ? ' ×'+n : ''}`).join(', ')
+      : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${s.name}</td><td>${s.type}</td><td>${skillCost(s)}</td><td>${reqLabel}${s.reqVal ? ' '+s.reqVal+'+' : ''}</td><td>${successLabel}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSkillForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteSkill(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function updateSkillPoints(attrs) {
+  const knowledge = attrs ? Math.floor(attrs.Knowledge) : 0;
+  const used = [...document.querySelectorAll('#skill-list input:checked')]
+    .reduce((sum, cb) => sum + (parseFloat(cb.dataset.cost) || 3), 0);
+  const left = knowledge - used;
+  document.getElementById('skill-points-total').textContent = knowledge;
+  document.getElementById('skill-points-used').textContent = used;
+  document.getElementById('skill-points-left').textContent = left;
+  document.getElementById('skill-points-left').className = 'value' + (left < 0 ? ' warn' : left === 0 ? ' ok' : '');
+  const pct = knowledge > 0 ? Math.min(used / knowledge * 100, 100) : (used > 0 ? 100 : 0);
+  const fill = document.getElementById('skill-points-bar-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'progress-fill' + (used > knowledge ? ' over' : '');
+}
+
+// ─── WEAPONS ────────────────────────────────────────────────────────────────
+// WEAPONS and EQUIPMENT now loaded entirely from the config file (see CONFIG PERSISTENCE below).
+let WEAPONS = [];
+let EQUIPMENT = [];
 
 function buildLoadoutSelects() {
   const ws = document.getElementById('weapon-select');
+  ws.innerHTML = '';
   WEAPONS.forEach(w => {
     const o = document.createElement('option');
     o.value = w.name; o.textContent = `${w.name} (${w.wt} lbs, ${w.damage})`;
     ws.appendChild(o);
   });
   const es = document.getElementById('equip-select');
+  es.innerHTML = '';
   EQUIPMENT.forEach(e => {
     const o = document.createElement('option');
     o.value = e.name; o.textContent = `${e.name} (${e.wt} lbs)`;
@@ -1120,6 +1193,12 @@ function addEquip() {
   tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${e.wt}</td><td>${total.toFixed(2)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
   tbody.appendChild(tr);
   recalc();
+}
+
+// ─── COLLAPSIBLE SECTIONS ───────────────────────────────────────────────────
+function toggleCollapse(id) {
+  document.getElementById('body-'+id).classList.toggle('collapsed');
+  document.getElementById('arrow-'+id).classList.toggle('collapsed');
 }
 
 // ─── NAV ────────────────────────────────────────────────────────────────────
@@ -1192,6 +1271,209 @@ function importCharacter(input) {
   reader.readAsText(file);
 }
 
+// ─── GAME CONFIGURATION (races, genders, ages, heights, builds, dispositions, weapons, equipment, skills) ──
+function gatherConfigData() {
+  return {
+    _version: 1,
+    races: RACE_DATA,
+    genders: GENDER_DATA,
+    ages: AGE_DATA,
+    heights: HEIGHT_DATA,
+    builds: BUILD_DATA,
+    socials: SOCIAL_DATA,
+    mentals: MENTAL_DATA,
+    weapons: WEAPONS,
+    equipment: EQUIPMENT,
+    skills: SKILLS,
+  };
+}
+
+function replaceObjectContents(target, source) {
+  for (const k of Object.keys(target)) delete target[k];
+  Object.assign(target, source);
+}
+
+function replaceArrayContents(target, source) {
+  target.length = 0;
+  source.forEach(item => target.push(item));
+}
+
+function exportConfig() {
+  const json = JSON.stringify(gatherConfigData(), null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'arcane-config.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── CONFIG FILE PERSISTENCE (auto-save/auto-load via the File System Access API) ──
+// Lets the browser write configuration changes directly back to arcane-config.json
+// on disk, and silently reload it on startup, instead of relying on manual
+// export/import. Only Chromium browsers support this; everywhere else falls back
+// to the manual Export/Import Configuration buttons.
+const CONFIG_FILENAME = 'arcane-config.json';
+let configFileHandle = null;
+let configLinked = false;
+
+function idbOpen() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('arcaneBuilderDB', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('handles');
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(key) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const req = db.transaction('handles', 'readonly').objectStore('handles').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, val) {
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('handles', 'readwrite');
+    tx.objectStore('handles').put(val, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function verifyPermission(handle, mode) {
+  const opts = { mode };
+  try {
+    if ((await handle.queryPermission(opts)) === 'granted') return true;
+    if ((await handle.requestPermission(opts)) === 'granted') return true;
+  } catch (e) {}
+  return false;
+}
+
+function setConfigStatus(text, linked) {
+  const el = document.getElementById('config-status');
+  if (el) { el.textContent = text; el.style.color = linked ? 'var(--gold2)' : 'var(--text-dim)'; }
+}
+
+async function connectConfigFile() {
+  if (!window.showOpenFilePicker) {
+    alert('Your browser does not support linking a local file for auto-save. Use Export/Import Configuration instead.');
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: 'Arcane Config', accept: { 'application/json': ['.json'] } }],
+      suggestedName: CONFIG_FILENAME,
+    });
+    const ok = await verifyPermission(handle, 'readwrite');
+    if (!ok) { setConfigStatus('⚠ Permission denied', false); return; }
+    const file = await handle.getFile();
+    const data = JSON.parse(await file.text());
+    configFileHandle = handle;
+    configLinked = true;
+    await idbSet('configFileHandle', handle);
+    applyConfigData(data, { skipWrite: true });
+    setConfigStatus('🔗 Linked: ' + handle.name, true);
+  } catch (err) {
+    if (err.name !== 'AbortError') alert('Failed to link configuration file: ' + err.message);
+  }
+}
+
+async function writeConfigToDisk() {
+  if (!configFileHandle || !configLinked) return;
+  try {
+    const ok = await verifyPermission(configFileHandle, 'readwrite');
+    if (!ok) return;
+    const writable = await configFileHandle.createWritable();
+    await writable.write(JSON.stringify(gatherConfigData(), null, 2));
+    await writable.close();
+  } catch (err) {
+    console.warn('Could not auto-save configuration to disk:', err);
+  }
+}
+
+async function loadConfigFromDisk() {
+  // 1) Try a previously linked file handle (silent if permission is still granted).
+  try {
+    const handle = await idbGet('configFileHandle');
+    if (handle) {
+      const granted = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
+      if (granted) {
+        const file = await handle.getFile();
+        const data = JSON.parse(await file.text());
+        configFileHandle = handle;
+        configLinked = true;
+        applyConfigData(data, { skipWrite: true });
+        setConfigStatus('🔗 Linked: ' + handle.name, true);
+        return true;
+      }
+      configFileHandle = handle;
+      setConfigStatus('⚠ Click Connect to reload ' + handle.name, false);
+      return false;
+    }
+  } catch (err) { /* IndexedDB or File System Access unavailable */ }
+
+  // 2) Fall back to fetching a config file sitting next to this HTML file
+  // (works when served over http/https; usually blocked under plain file://).
+  try {
+    const res = await fetch(CONFIG_FILENAME, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      applyConfigData(data, { skipWrite: true });
+      setConfigStatus('📄 Loaded ' + CONFIG_FILENAME + ' (read-only — click Connect to enable auto-save)', false);
+      return true;
+    }
+  } catch (err) { /* blocked under file:// in most browsers */ }
+
+  setConfigStatus('⚠ No configuration loaded — click Connect or Import Configuration', false);
+  return false;
+}
+
+function applyConfigData(data, opts) {
+  opts = opts || {};
+  if (data.races)    replaceObjectContents(RACE_DATA, data.races);
+  if (data.genders)  replaceObjectContents(GENDER_DATA, data.genders);
+  if (data.ages)     replaceObjectContents(AGE_DATA, data.ages);
+  if (data.heights)  replaceObjectContents(HEIGHT_DATA, data.heights);
+  if (data.builds)   replaceObjectContents(BUILD_DATA, data.builds);
+  if (data.socials)  replaceObjectContents(SOCIAL_DATA, data.socials);
+  if (data.mentals)  replaceObjectContents(MENTAL_DATA, data.mentals);
+  if (data.weapons)  replaceArrayContents(WEAPONS, data.weapons);
+  if (data.equipment) replaceArrayContents(EQUIPMENT, data.equipment);
+  if (data.skills) {
+    replaceArrayContents(SKILLS, data.skills);
+    migrateSkills();
+  }
+
+  buildCharSelects();
+  buildLoadoutSelects();
+  buildSkillFilters();
+  buildSkillList();
+  buildSkillManagerTable();
+  recalc();
+
+  if (!opts.skipWrite) writeConfigToDisk();
+}
+
+function importConfig(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      applyConfigData(data);
+    } catch (err) {
+      alert('Failed to load configuration file: ' + err.message);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function applyCharacterData(data) {
   // Basic fields
   if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
@@ -1255,21 +1537,34 @@ function applyCharacterData(data) {
 // ─── INIT ───────────────────────────────────────────────────────────────────
 buildStatRows();
 buildFeatures();
-buildSkillFilters();
-buildSkillList();
-buildLoadoutSelects();
 
-// Set defaults matching the spreadsheet example
-document.getElementById('sel-race').value   = 'Ogre';
-document.getElementById('sel-gender').value = 'Male';
-document.getElementById('sel-age').value    = 'Adult';
-document.getElementById('sel-height').value = 'Medium';
-document.getElementById('sel-build').value  = 'Stout';
-document.getElementById('sel-social').value = 'Introvert';
-document.getElementById('sel-mental').value = 'Balanced';
-statValues = { Strength:20, Endurance:15, Agility:11, Memory:9, Intellect:9, Senses:16, Quintessence:0 };
-buildStatRows();
-recalc();
+(async () => {
+  await loadConfigFromDisk();
+
+  // Ensure UI reflects whatever config we ended up with, even if loading failed
+  // (RACE_DATA/SKILLS/etc. stay empty until the user connects/imports a config).
+  buildCharSelects();
+  buildLoadoutSelects();
+  buildSkillFilters();
+  buildSkillList();
+  buildSkillManagerTable();
+
+  // Set defaults matching the spreadsheet example, if the loaded config has them.
+  const trySelect = (id, val) => {
+    const el = document.getElementById(id);
+    if ([...el.options].some(o => o.value === val)) el.value = val;
+  };
+  trySelect('sel-race', 'Ogre');
+  trySelect('sel-gender', 'Male');
+  trySelect('sel-age', 'Adult');
+  trySelect('sel-height', 'Medium');
+  trySelect('sel-build', 'Stout');
+  trySelect('sel-social', 'Introvert');
+  trySelect('sel-mental', 'Balanced');
+  statValues = { Strength:20, Endurance:15, Agility:11, Memory:9, Intellect:9, Senses:16, Quintessence:0 };
+  buildStatRows();
+  recalc();
+})();
 </script>
 </body>
 </html>
