@@ -364,6 +364,16 @@
   .ps-row .ps-label { color: var(--text-dim); }
   .ps-row .ps-val { color: var(--text-bright); font-weight: bold; }
 
+  /* Compact rows for Raw Stats / Final Attributes — value sits right next to its label */
+  #ps-stats, #ps-attrs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 2px 16px;
+  }
+  .ps-row-compact { display: flex; align-items: center; gap: 6px; padding: 2px 0; font-size: 0.8rem; }
+  .ps-row-compact .ps-label { color: var(--text-dim); }
+  .ps-row-compact .ps-val { color: var(--text-bright); font-weight: bold; }
+
   .ornament { color: var(--gold); opacity: 0.4; font-size: 1.1rem; margin: 0 6px; }
 
   h2.collapsible { cursor: pointer; display: flex; align-items: center; justify-content: space-between; user-select: none; }
@@ -392,7 +402,6 @@
     <div class="nav-section">Details</div>
     <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
     <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
-    <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
     <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
     <div class="nav-section">Summary</div>
     <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
@@ -400,6 +409,9 @@
     <button class="nav-btn" onclick="exportCharacter()">💾 Export Character</button>
     <button class="nav-btn" onclick="document.getElementById('import-file').click()">📂 Import Character</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
+    <div class="nav-section">Game Configuration</div>
+    <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
+    <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
     <button class="nav-btn" onclick="connectConfigFile()">🔗 Connect Config File</button>
     <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
     <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
@@ -421,6 +433,13 @@
         <div class="field field-inline">
           <label>Species</label>
           <select id="sel-race" onchange="recalc()"></select>
+        </div>
+        <div class="field field-inline">
+          <label>Body Type</label>
+          <select id="sel-bodytype" onchange="recalc()">
+            <option>Humanoid</option>
+            <option>Modified Humanoid</option>
+          </select>
         </div>
         <div class="field field-inline">
           <label>Sex</label>
@@ -515,6 +534,7 @@
         Set a count greater than 1 to add an attribute multiple times — e.g. Knowledge = 3 makes success = Knowledge × 3.
       </p>
       <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:16px;">+ Add New Skill</button>
+      <div id="skill-form-anchor"></div>
 
       <div id="skill-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
         <h3 id="skill-form-title" style="margin-top:0;">New Skill</h3>
@@ -558,6 +578,42 @@
       </table>
     </div>
 
+    <!-- ARMOR MANAGER -->
+    <div id="panel-armormgr" class="panel">
+      <h2>Armor Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define new armor materials or edit/delete existing ones. Weight per piece = area weight ratio × target size × Weight/Mod.
+        Damage modifiers are typically negative (damage reduction); Quintessence can also be negative (interferes with magic).
+      </p>
+      <button class="btn" onclick="openArmorForm(null)" style="margin-bottom:16px;">+ Add New Armor Material</button>
+      <div id="armor-form-anchor"></div>
+
+      <div id="armor-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="armor-form-title" style="margin-top:0;">New Armor Material</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label>Material Name</label>
+            <input type="text" id="af-name">
+          </div>
+          <div class="field">
+            <label>Weight per Modifier</label>
+            <input type="text" id="af-weightpermod" placeholder="e.g. 1.25">
+          </div>
+        </div>
+        <h3>Damage Modifiers</h3>
+        <div class="grid-3" id="af-protection-fields"></div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveArmorMaterial()">Save Material</button>
+          <button class="btn danger" onclick="closeArmorForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Material</th><th>Wt/Mod</th><th>Slash</th><th>Stab</th><th>Smash/Bash</th><th>Burn</th><th>Shock</th><th>Freeze</th><th>Corrode</th><th>Quint.</th><th></th></tr></thead>
+        <tbody id="armormgr-list"></tbody>
+      </table>
+    </div>
+
     <!-- LOADOUT -->
     <div id="panel-loadout" class="panel">
       <h2>Loadout</h2>
@@ -565,6 +621,7 @@
         <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
         <div class="ws-item"><div class="label">Weapon Weight</div><div class="value" id="ws-weapons">0 lbs</div></div>
         <div class="ws-item"><div class="label">Equipment Weight</div><div class="value" id="ws-equip">0 lbs</div></div>
+        <div class="ws-item"><div class="label">Armor Weight</div><div class="value" id="ws-armor">0 lbs</div></div>
         <div class="ws-item"><div class="label">Total Carried</div><div class="value" id="ws-total">—</div></div>
         <div class="ws-item"><div class="label">Can Deadlift</div><div class="value" id="ws-lift">—</div></div>
         <div class="ws-item"><div class="label">Maximum Speed</div><div class="value" id="ws-maxspeed">—</div></div>
@@ -592,6 +649,11 @@
           <tbody id="equip-list"></tbody>
         </table>
       </div>
+      <div class="loadout-section">
+        <h3>Armor</h3>
+        <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Select armor coverage for each body area.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
+      </div>
     </div>
 
     <!-- PLAYSHEET -->
@@ -602,6 +664,7 @@
           <h4>Identity</h4>
           <div class="ps-row"><span class="ps-label">Name</span><span class="ps-val" id="ps-name">—</span></div>
           <div class="ps-row"><span class="ps-label">Species</span><span class="ps-val" id="ps-race">—</span></div>
+          <div class="ps-row"><span class="ps-label">Body Type</span><span class="ps-val" id="ps-bodytype">—</span></div>
           <div class="ps-row"><span class="ps-label">Sex</span><span class="ps-val" id="ps-gender">—</span></div>
           <div class="ps-row"><span class="ps-label">Age</span><span class="ps-val" id="ps-age">—</span></div>
         </div>
@@ -609,7 +672,7 @@
           <h4>Physical</h4>
           <div class="ps-row"><span class="ps-label">Height</span><span class="ps-val" id="ps-height">—</span></div>
           <div class="ps-row"><span class="ps-label">Weight</span><span class="ps-val" id="ps-weight">—</span></div>
-          <div class="ps-row"><span class="ps-label">Sprinting Speed</span><span class="ps-val" id="ps-speed">—</span></div>
+          <div class="ps-row"><span class="ps-label">Weight (with Equipment)</span><span class="ps-val" id="ps-weight-total">—</span></div>
           <div class="ps-row"><span class="ps-label">Maximum Speed</span><span class="ps-val" id="ps-maxspeed">—</span></div>
           <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
         </div>
@@ -638,10 +701,16 @@
           <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
         </div>
       </div>
-      <div class="ps-block">
+      <div class="ps-block" style="margin-bottom:16px;">
         <h4 class="collapsible" onclick="toggleCollapse('psloadout')">Loadout<span class="collapse-arrow" id="arrow-psloadout">▼</span></h4>
         <div class="collapse-body" id="body-psloadout">
           <div id="ps-loadout" style="color:var(--text-dim);font-size:0.85rem;">Nothing equipped.</div>
+        </div>
+      </div>
+      <div class="ps-block">
+        <h4 class="collapsible" onclick="toggleCollapse('psarmor')">Armor<span class="collapse-arrow" id="arrow-psarmor">▼</span></h4>
+        <div class="collapse-body" id="body-psarmor">
+          <div id="ps-armor" style="color:var(--text-dim);font-size:0.85rem;"></div>
         </div>
       </div>
     </div>
@@ -850,39 +919,44 @@ function getCarriedWeight(attrs) {
   let wW = 0, wE = 0;
   document.querySelectorAll('#weapon-list tr').forEach(tr => { wW += parseFloat(tr.dataset.wt||0); });
   document.querySelectorAll('#equip-list tr').forEach(tr => { wE += parseFloat(tr.dataset.wt||0); });
-  return { wW, wE, total: attrs ? attrs._weight + wW + wE : 0 };
+  const wA = calcArmorWeight(attrs).total;
+  return { wW, wE, wA, total: attrs ? attrs._weight + wW + wE + wA : 0 };
 }
 
 // Maximum Speed = Speed − (total carried weight ÷ (Power + Physical Coordination)), in ft/s.
 function calcMaxSpeed(attrs, totalCarried) {
   if (!attrs) return null;
-  const divisor = attrs.Power + attrs.PhysCoord;
+  const divisor = attrs.Power * 2 + attrs.PhysCoord;
   const penalty = divisor > 0 ? totalCarried / divisor : 0;
   return Math.max(0, attrs.Speed - penalty);
 }
 
 function updateWeightSummary(attrs) {
   document.getElementById('ws-body').textContent = attrs ? Math.round(attrs._weight)+' lbs' : '—';
-  const { wW, wE, total } = getCarriedWeight(attrs);
+  const { wW, wE, wA, total } = getCarriedWeight(attrs);
   document.getElementById('ws-weapons').textContent = Math.round(wW)+' lbs';
   document.getElementById('ws-equip').textContent   = Math.round(wE)+' lbs';
+  document.getElementById('ws-armor').textContent   = Math.round(wA)+' lbs';
   document.getElementById('ws-total').textContent = attrs ? Math.round(total)+' lbs' : '—';
   document.getElementById('ws-lift').textContent = attrs ? Math.round(attrs.Power * 10)+' lbs' : '—';
 
   const maxSpeed = calcMaxSpeed(attrs, total);
   document.getElementById('ws-maxspeed').textContent = maxSpeed === null ? '—' : Math.round(maxSpeed)+' ft/s';
+
+  updateArmorWeightDisplay(attrs);
 }
 
 function updatePlaysheet(attrs) {
   const name = document.getElementById('char-name').value || '(Unnamed)';
   document.getElementById('ps-name').textContent   = name;
   document.getElementById('ps-race').textContent   = document.getElementById('sel-race').value;
+  document.getElementById('ps-bodytype').textContent = document.getElementById('sel-bodytype').value;
   document.getElementById('ps-gender').textContent = document.getElementById('sel-gender').value;
   document.getElementById('ps-age').textContent    = document.getElementById('sel-age').value;
   document.getElementById('ps-height').textContent = inchesToFeetStr(attrs._heightInches);
   document.getElementById('ps-weight').textContent = Math.round(attrs._weight)+' lbs';
-  document.getElementById('ps-speed').textContent  = Math.round(attrs.Speed)+' ft/s';
   const { total: carriedTotal } = getCarriedWeight(attrs);
+  document.getElementById('ps-weight-total').textContent = Math.round(carriedTotal)+' lbs';
   const maxSpeed = calcMaxSpeed(attrs, carriedTotal);
   document.getElementById('ps-maxspeed').textContent = maxSpeed === null ? '—' : Math.round(maxSpeed)+' ft/s';
   document.getElementById('ps-target').textContent = attrs._targetAdj;
@@ -891,7 +965,7 @@ function updatePlaysheet(attrs) {
   psStats.innerHTML = '';
   for (const stat of RAW_STATS) {
     const row = document.createElement('div');
-    row.className = 'ps-row';
+    row.className = 'ps-row-compact';
     row.innerHTML = `<span class="ps-label">${stat.label}</span><span class="ps-val">${statValues[stat.key]}</span>`;
     psStats.appendChild(row);
   }
@@ -901,7 +975,7 @@ function updatePlaysheet(attrs) {
   for (const attr of ATTRIBUTES) {
     const val = attrs[attr.key];
     const row = document.createElement('div');
-    row.className = 'ps-row';
+    row.className = 'ps-row-compact';
     row.innerHTML = `<span class="ps-label">${attr.label}</span><span class="ps-val">${Math.round(val)}</span>`;
     psAttrs.appendChild(row);
   }
@@ -939,6 +1013,19 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-loadout').innerHTML = loadoutRows.length
     ? loadoutRows.join('')
     : '<span style="color:var(--text-dim)">Nothing equipped.</span>';
+
+  // Armor
+  const armor = getArmorSelections();
+  const armorWeights = calcArmorWeight(attrs);
+  const armorRows = ARMOR_AREAS.map(area => `
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+      <span>${area.label} <span style="color:var(--text-dim);">(${Math.round(armorWeights.breakdown[area.key]||0)} lbs)</span></span>
+      <span style="color:${armor[area.key]==='None' ? 'var(--text-dim)' : 'var(--gold2)'};">${armor[area.key]||'None'}</span>
+    </div>`).join('');
+  const armorTotalRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;">
+      <span>Total Armor Weight</span><span style="color:var(--gold2);">${Math.round(armorWeights.total)} lbs</span>
+    </div>`;
+  document.getElementById('ps-armor').innerHTML = armorRows + armorTotalRow;
 }
 
 // ─── STAT ROWS ──────────────────────────────────────────────────────────────
@@ -1118,8 +1205,32 @@ function countSuccessAttrs(successAttrs) {
   return counts;
 }
 
+// Moves the #skill-form element to wherever it should appear: inline right
+// after the row being edited, or back to its anchor above the table when
+// adding a new skill (or when closed).
+function positionSkillForm(index) {
+  const form = document.getElementById('skill-form');
+  const oldRow = document.getElementById('skill-form-row');
+  if (oldRow) oldRow.remove();
+
+  if (index !== null) {
+    const tbody = document.getElementById('skillmgr-list');
+    const targetRow = tbody.rows[index];
+    const row = document.createElement('tr');
+    row.id = 'skill-form-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 6;
+    row.appendChild(cell);
+    if (targetRow) targetRow.after(row); else tbody.appendChild(row);
+    cell.appendChild(form);
+  } else {
+    document.getElementById('skill-form-anchor').appendChild(form);
+  }
+}
+
 function openSkillForm(index) {
   editingSkillIndex = index;
+  positionSkillForm(index);
   buildSkillFormAttrOptions();
   const skill = index !== null ? SKILLS[index] : null;
   document.getElementById('skill-form-title').textContent = skill ? 'Edit Skill' : 'New Skill';
@@ -1138,6 +1249,7 @@ function openSkillForm(index) {
 function closeSkillForm() {
   editingSkillIndex = null;
   document.getElementById('skill-form').style.display = 'none';
+  positionSkillForm(null);
 }
 
 function saveSkill() {
@@ -1171,6 +1283,7 @@ function saveSkill() {
 
 function deleteSkill(index) {
   if (!confirm(`Delete skill "${SKILLS[index].name}"?`)) return;
+  closeSkillForm();
   SKILLS.splice(index, 1);
   writeConfigToDisk();
   buildSkillFilters();
@@ -1182,6 +1295,9 @@ function deleteSkill(index) {
 function buildSkillManagerTable() {
   const tbody = document.getElementById('skillmgr-list');
   if (!tbody) return;
+  // Move the form out of the table before wiping it, so an open edit form
+  // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
+  if (document.getElementById('skill-form-row')) closeSkillForm();
   tbody.innerHTML = '';
   SKILLS.forEach((s, i) => {
     const reqLabel = s.reqAttr ? (ATTRIBUTES.find(a=>a.key===s.reqAttr)||{}).label : '—';
@@ -1270,6 +1386,210 @@ function addEquip() {
   recalc();
 }
 
+// ─── ARMOR ──────────────────────────────────────────────────────────────────
+// Areas are fixed for now — applies to humanoid body types (Head/Neck, Torso,
+// both Arm/Hand pairs, both Leg/Foot pairs). Each area's weight ratio and each
+// armor material's protection/weight-per-modifier values are config-driven
+// (see CONFIG PERSISTENCE below) so they can be tuned without editing code.
+const ARMOR_AREAS = [
+  { key:'head',  label:'Head/Neck' },
+  { key:'torso', label:'Torso' },
+  { key:'rarm',  label:'Right Arm/Hand' },
+  { key:'larm',  label:'Left Arm/Hand' },
+  { key:'rleg',  label:'Right Leg/Foot' },
+  { key:'lleg',  label:'Left Leg/Foot' },
+];
+// Built-in fallback so the dropdowns are never blank, even if a linked/imported
+// config file predates the armor feature and doesn't define these tables.
+const DEFAULT_ARMOR_AREA_WEIGHTS = { head:1, torso:3, rarm:1, larm:1, rleg:2, lleg:2 };
+const DEFAULT_ARMOR_TYPE_DATA = {
+  'None':                 { protection: { Slash:0,   Stab:0,   SmashBash:0,  Burn:0,  Shock:0, Freeze:0, Corrode:0, Quintessence:0  }, weightPerMod: 0    },
+  'Leather/Hide':         { protection: { Slash:-1,  Stab:-1,  SmashBash:-1, Burn:-1, Shock:-2,Freeze:-1,Corrode:-2,Quintessence:0  }, weightPerMod: 0.25 },
+  'Reinforced Leather':   { protection: { Slash:-3,  Stab:-2,  SmashBash:-1, Burn:-2, Shock:-2,Freeze:-2,Corrode:-3,Quintessence:0  }, weightPerMod: 0.35 },
+  'Padded':               { protection: { Slash:-2,  Stab:-1,  SmashBash:-2, Burn:0,  Shock:0, Freeze:-3,Corrode:-2,Quintessence:0  }, weightPerMod: 0.2  },
+  'Bronze Scale':         { protection: { Slash:-4,  Stab:-2,  SmashBash:-2, Burn:-2, Shock:0, Freeze:-1,Corrode:-4,Quintessence:-1 }, weightPerMod: 1.25 },
+  'Bronze Plate':         { protection: { Slash:-5,  Stab:-2,  SmashBash:-3, Burn:-2, Shock:0, Freeze:-1,Corrode:-4,Quintessence:-1 }, weightPerMod: 1    },
+  'Iron Scale':           { protection: { Slash:-5,  Stab:-3,  SmashBash:-2, Burn:-2, Shock:0, Freeze:-1,Corrode:-2,Quintessence:-1 }, weightPerMod: 1.25 },
+  'Iron Chainmail':       { protection: { Slash:-6,  Stab:-4,  SmashBash:-2, Burn:-1, Shock:0, Freeze:0, Corrode:-1,Quintessence:-3 }, weightPerMod: 1    },
+  'Iron Plate':           { protection: { Slash:-6,  Stab:-6,  SmashBash:-5, Burn:-2, Shock:0, Freeze:-1,Corrode:-2,Quintessence:-3 }, weightPerMod: 1.25 },
+  'Steel Chainmail':      { protection: { Slash:-8,  Stab:-5,  SmashBash:-3, Burn:-1, Shock:0, Freeze:0, Corrode:-1,Quintessence:-4 }, weightPerMod: 1.25 },
+  'Steel Plate':          { protection: { Slash:-10, Stab:-9,  SmashBash:-8, Burn:-7, Shock:0, Freeze:-4,Corrode:-4,Quintessence:-5 }, weightPerMod: 1.3  },
+  'Tempered Steel Plate': { protection: { Slash:-12, Stab:-11, SmashBash:-8, Burn:-7, Shock:0, Freeze:-4,Corrode:-4,Quintessence:-5 }, weightPerMod: 1.5  },
+};
+let ARMOR_AREA_WEIGHTS = { ...DEFAULT_ARMOR_AREA_WEIGHTS };
+let ARMOR_TYPE_DATA = { ...DEFAULT_ARMOR_TYPE_DATA };
+
+function buildArmorFields() {
+  const prevSelections = getArmorSelections();
+  const types = Object.keys(ARMOR_TYPE_DATA).length ? Object.keys(ARMOR_TYPE_DATA) : Object.keys(DEFAULT_ARMOR_TYPE_DATA);
+  const container = document.getElementById('armor-fields');
+  container.innerHTML = ARMOR_AREAS.map(area => `
+    <div class="field">
+      <label>${area.label}</label>
+      <select id="armor-${area.key}" onchange="recalc()" style="width:100%;">
+        ${types.map(t => `<option>${t}</option>`).join('')}
+      </select>
+      <div id="armor-wt-${area.key}" style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">0 lbs</div>
+    </div>`).join('');
+  for (const area of ARMOR_AREAS) {
+    const el = document.getElementById('armor-'+area.key);
+    const prev = prevSelections[area.key];
+    if (prev && types.includes(prev)) el.value = prev;
+  }
+}
+
+function updateArmorWeightDisplay(attrs) {
+  const { breakdown } = calcArmorWeight(attrs);
+  for (const area of ARMOR_AREAS) {
+    const el = document.getElementById('armor-wt-'+area.key);
+    if (el) el.textContent = Math.round(breakdown[area.key]||0) + ' lbs';
+  }
+}
+
+function getArmorSelections() {
+  const result = {};
+  for (const area of ARMOR_AREAS) {
+    const el = document.getElementById('armor-'+area.key);
+    if (el) result[area.key] = el.value;
+  }
+  return result;
+}
+
+// Armor weight per piece = area weight ratio × target size × material's weight-per-modifier.
+function calcArmorWeight(attrs) {
+  const breakdown = {};
+  let total = 0;
+  if (!attrs) return { total, breakdown };
+  // Fall back to built-in defaults if the live tables are empty — e.g. an older
+  // linked config file saved before armor weights/types were corrupted to {}.
+  const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
+  const typeData     = Object.keys(ARMOR_TYPE_DATA).length    ? ARMOR_TYPE_DATA    : DEFAULT_ARMOR_TYPE_DATA;
+  const armor = getArmorSelections();
+  for (const area of ARMOR_AREAS) {
+    const material = armor[area.key];
+    const matData = typeData[material];
+    const areaWeight = areaWeights[area.key] || 0;
+    const wt = matData ? areaWeight * attrs._targetAdj * (matData.weightPerMod || 0) : 0;
+    breakdown[area.key] = wt;
+    total += wt;
+  }
+  return { total, breakdown };
+}
+
+// ─── ARMOR MANAGER ──────────────────────────────────────────────────────────
+const ARMOR_PROTECTION_KEYS = [
+  { key:'Slash',        label:'Slash' },
+  { key:'Stab',         label:'Stab' },
+  { key:'SmashBash',    label:'Smash/Bash' },
+  { key:'Burn',         label:'Burn' },
+  { key:'Shock',        label:'Shock' },
+  { key:'Freeze',       label:'Freeze' },
+  { key:'Corrode',      label:'Corrode' },
+  { key:'Quintessence', label:'Quintessence' },
+];
+let editingArmorName = null; // null = adding new; otherwise the original name being edited
+
+function buildArmorFormProtectionFields() {
+  const container = document.getElementById('af-protection-fields');
+  container.innerHTML = ARMOR_PROTECTION_KEYS.map(p => `
+    <div class="field">
+      <label>${p.label}</label>
+      <input type="text" data-protect="${p.key}" placeholder="0">
+    </div>`).join('');
+}
+
+// Moves the #armor-form element inline next to the row being edited, or back
+// to its anchor above the table when adding new (or when closed).
+function positionArmorForm(name) {
+  const form = document.getElementById('armor-form');
+  const oldRow = document.getElementById('armor-form-row');
+  if (oldRow) oldRow.remove();
+
+  if (name !== null) {
+    const tbody = document.getElementById('armormgr-list');
+    const targetRow = [...tbody.querySelectorAll('tr')].find(tr => tr.dataset.name === name);
+    const row = document.createElement('tr');
+    row.id = 'armor-form-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    row.appendChild(cell);
+    if (targetRow) targetRow.after(row); else tbody.appendChild(row);
+    cell.appendChild(form);
+  } else {
+    document.getElementById('armor-form-anchor').appendChild(form);
+  }
+}
+
+function openArmorForm(name) {
+  editingArmorName = name;
+  positionArmorForm(name);
+  buildArmorFormProtectionFields();
+  const mat = name !== null ? ARMOR_TYPE_DATA[name] : null;
+  document.getElementById('armor-form-title').textContent = mat ? 'Edit Armor Material' : 'New Armor Material';
+  document.getElementById('af-name').value = name !== null ? name : '';
+  document.getElementById('af-weightpermod').value = mat ? mat.weightPerMod : 0;
+  document.querySelectorAll('#af-protection-fields input').forEach(inp => {
+    inp.value = mat ? (mat.protection[inp.dataset.protect] || 0) : 0;
+  });
+  document.getElementById('armor-form').style.display = 'block';
+}
+
+function closeArmorForm() {
+  editingArmorName = null;
+  document.getElementById('armor-form').style.display = 'none';
+  positionArmorForm(null);
+}
+
+function saveArmorMaterial() {
+  const name = document.getElementById('af-name').value.trim();
+  if (!name) { alert('Material name is required.'); return; }
+  const weightPerMod = parseFloat(document.getElementById('af-weightpermod').value) || 0;
+  const protection = {};
+  document.querySelectorAll('#af-protection-fields input').forEach(inp => {
+    protection[inp.dataset.protect] = parseFloat(inp.value) || 0;
+  });
+
+  if (editingArmorName !== null && editingArmorName !== name) {
+    delete ARMOR_TYPE_DATA[editingArmorName];
+  }
+  ARMOR_TYPE_DATA[name] = { protection, weightPerMod };
+
+  writeConfigToDisk();
+  closeArmorForm();
+  buildArmorManagerTable();
+  buildArmorFields();
+  recalc();
+}
+
+function deleteArmorMaterial(name) {
+  if (name === 'None') { alert('"None" can\'t be deleted — it\'s the default/no-armor option.'); return; }
+  if (!confirm(`Delete armor material "${name}"?`)) return;
+  closeArmorForm();
+  delete ARMOR_TYPE_DATA[name];
+  writeConfigToDisk();
+  buildArmorManagerTable();
+  buildArmorFields();
+  recalc();
+}
+
+function buildArmorManagerTable() {
+  const tbody = document.getElementById('armormgr-list');
+  if (!tbody) return;
+  // Move the form out of the table before wiping it, so an open edit form
+  // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
+  if (document.getElementById('armor-form-row')) closeArmorForm();
+  tbody.innerHTML = '';
+  Object.entries(ARMOR_TYPE_DATA).forEach(([name, mat]) => {
+    const tr = document.createElement('tr');
+    tr.dataset.name = name;
+    const protectionCells = ARMOR_PROTECTION_KEYS.map(p => `<td>${mat.protection[p.key] || 0}</td>`).join('');
+    tr.innerHTML = `<td>${name}</td><td>${mat.weightPerMod}</td>${protectionCells}
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorForm('${name.replace(/'/g,"\\'")}')">Edit</button>
+      <button class="remove-btn" onclick="deleteArmorMaterial('${name.replace(/'/g,"\\'")}')">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 // ─── COLLAPSIBLE SECTIONS ───────────────────────────────────────────────────
 function toggleCollapse(id) {
   document.getElementById('body-'+id).classList.toggle('collapsed');
@@ -1303,6 +1623,7 @@ function gatherCharacterData() {
     _version: 1,
     name:    document.getElementById('char-name').value,
     race:    document.getElementById('sel-race').value,
+    bodyType: document.getElementById('sel-bodytype').value,
     sex:     document.getElementById('sel-gender').value,
     age:     document.getElementById('sel-age').value,
     height:  document.getElementById('sel-height').value,
@@ -1314,6 +1635,7 @@ function gatherCharacterData() {
     skills:   [...document.querySelectorAll('#skill-list input:checked')].map(cb => cb.dataset.name),
     weapons,
     equipment,
+    armor: getArmorSelections(),
   };
 }
 
@@ -1360,6 +1682,8 @@ function gatherConfigData() {
     weapons: WEAPONS,
     equipment: EQUIPMENT,
     skills: SKILLS,
+    armorAreaWeights: ARMOR_AREA_WEIGHTS,
+    armorTypes: ARMOR_TYPE_DATA,
   };
 }
 
@@ -1524,12 +1848,16 @@ function applyConfigData(data, opts) {
     replaceArrayContents(SKILLS, data.skills);
     migrateSkills();
   }
+  if (data.armorAreaWeights && Object.keys(data.armorAreaWeights).length) replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights);
+  if (data.armorTypes && Object.keys(data.armorTypes).length)             replaceObjectContents(ARMOR_TYPE_DATA, data.armorTypes);
 
   buildCharSelects();
   buildLoadoutSelects();
   buildSkillFilters();
   buildSkillList();
   buildSkillManagerTable();
+  buildArmorFields();
+  buildArmorManagerTable();
   recalc();
 
   if (!opts.skipWrite) writeConfigToDisk();
@@ -1555,6 +1883,7 @@ function applyCharacterData(data) {
   // Basic fields
   if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
   if (data.race)   document.getElementById('sel-race').value   = data.race;
+  if (data.bodyType) document.getElementById('sel-bodytype').value = data.bodyType;
   const sexVal = data.sex || data.gender; // accept legacy "gender" key from older character files
   if (sexVal)      document.getElementById('sel-gender').value = sexVal;
   if (data.age)    document.getElementById('sel-age').value    = data.age;
@@ -1609,12 +1938,21 @@ function applyCharacterData(data) {
     });
   }
 
+  // Armor
+  if (data.armor) {
+    for (const area of ARMOR_AREAS) {
+      const el = document.getElementById('armor-'+area.key);
+      if (el && data.armor[area.key]) el.value = data.armor[area.key];
+    }
+  }
+
   recalc();
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
 buildStatRows();
 buildFeatures();
+buildArmorFields();
 
 (async () => {
   await loadConfigFromDisk();
@@ -1626,6 +1964,8 @@ buildFeatures();
   buildSkillFilters();
   buildSkillList();
   buildSkillManagerTable();
+  buildArmorFields();
+  buildArmorManagerTable();
 
   // Set defaults matching the spreadsheet example, if the loaded config has them.
   const trySelect = (id, val) => {
@@ -1633,6 +1973,7 @@ buildFeatures();
     if ([...el.options].some(o => o.value === val)) el.value = val;
   };
   trySelect('sel-race', 'Ogre');
+  trySelect('sel-bodytype', 'Humanoid');
   trySelect('sel-gender', 'Male');
   trySelect('sel-age', 'Adult');
   trySelect('sel-height', 'Medium');
