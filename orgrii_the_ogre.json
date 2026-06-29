@@ -1,0 +1,56 @@
+{
+  "_version": 1,
+  "name": "Orgrii the Ogre",
+  "race": "Ogre",
+  "bodyType": "Humanoid",
+  "sex": "Female",
+  "age": "Adult",
+  "height": "Medium",
+  "build": "Stout",
+  "social": "Introvert",
+  "mental": "Intuitive",
+  "stats": {
+    "Strength": 18,
+    "Endurance": 16,
+    "Agility": 12,
+    "Memory": 12,
+    "Intellect": 12,
+    "Senses": 10,
+    "Quintessence": 0
+  },
+  "features": [],
+  "skills": [],
+  "weapons": [
+    {
+      "name": "Shield, Large",
+      "damage": "Smash",
+      "wt": 10,
+      "reach": "contact"
+    },
+    {
+      "name": "Greatclub",
+      "damage": "Smash",
+      "wt": 10,
+      "reach": "2 ft"
+    }
+  ],
+  "equipment": [
+    {
+      "name": "Arrow, Hunting",
+      "qty": 10,
+      "unitWt": 0.5
+    }
+  ],
+  "armor": {
+    "head": "Leather/Hide",
+    "torso": "Leather/Hide",
+    "rarm": "Leather/Hide",
+    "larm": "Leather/Hide",
+    "rleg": "Leather/Hide",
+    "lleg": "Leather/Hide"
+  },
+  "heldItems": {
+    "right": "Greatclub",
+    "left": "Shield, Large"
+  }
+}

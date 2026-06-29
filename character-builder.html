@@ -397,12 +397,13 @@
 
 <div class="app-layout">
   <nav class="sidebar">
-    <div class="nav-section">Character</div>
+    <div class="nav-section">Design</div>
     <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
-    <div class="nav-section">Details</div>
     <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
     <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
+    <div class="nav-section">Equipment</div>
     <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
+    <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
     <div class="nav-section">Summary</div>
     <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
     <div class="nav-section">File</div>
@@ -412,6 +413,8 @@
     <div class="nav-section">Game Configuration</div>
     <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
     <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
+    <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
+    <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
     <button class="nav-btn" onclick="connectConfigFile()">🔗 Connect Config File</button>
     <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
     <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
@@ -614,6 +617,131 @@
       </table>
     </div>
 
+    <!-- MELEE WEAPONS MANAGER -->
+    <div id="panel-meleemgr" class="panel">
+      <h2>Melee Weapons Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define new melee weapon actions or edit/delete existing ones. A single weapon (e.g. Battleaxe) typically has
+        multiple rows here — one per action it can perform (Slash, Smash, Parry, Hook, etc.) — since each action has
+        its own reach, hit formula, and damage.
+      </p>
+      <button class="btn" onclick="openMeleeWeaponForm(null)" style="margin-bottom:16px;">+ Add Weapon Action</button>
+      <div id="melee-form-anchor"></div>
+
+      <div id="melee-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="melee-form-title" style="margin-top:0;">New Weapon Action</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label>Weapon Name</label>
+            <input type="text" id="mf-weapon" placeholder="e.g. Battleaxe">
+          </div>
+          <div class="field">
+            <label>Action</label>
+            <input type="text" id="mf-action" placeholder="e.g. Slash, Smash, Parry...">
+          </div>
+          <div class="field">
+            <label>Material</label>
+            <input type="text" id="mf-material" placeholder="e.g. Steel; Iron; Bronze">
+          </div>
+          <div class="field">
+            <label>Min Reach (ft)</label>
+            <input type="text" id="mf-minreach" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Reach (ft)</label>
+            <input type="text" id="mf-reach" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Hit Formula</label>
+            <input type="text" id="mf-hitformula" placeholder="e.g. Physical Coordination + Manual Dexterity">
+          </div>
+          <div class="field">
+            <label>Min Power</label>
+            <input type="text" id="mf-minstr" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Damage Max</label>
+            <input type="text" id="mf-damagemax" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Max Power Modifier</label>
+            <input type="text" id="mf-maxpowermod" placeholder="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveMeleeWeapon()">Save Action</button>
+          <button class="btn danger" onclick="closeMeleeWeaponForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
+        <tbody id="meleemgr-list"></tbody>
+      </table>
+    </div>
+
+    <!-- RANGED WEAPONS MANAGER -->
+    <div id="panel-rangedmgr" class="panel">
+      <h2>Ranged Weapons Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define new ranged weapon actions or edit/delete existing ones. Range Increment is the distance unit used for
+        range-based penalties; Max Range is the absolute limit (leave blank for none).
+      </p>
+      <button class="btn" onclick="openRangedWeaponForm(null)" style="margin-bottom:16px;">+ Add Weapon Action</button>
+      <div id="ranged-form-anchor"></div>
+
+      <div id="ranged-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="ranged-form-title" style="margin-top:0;">New Weapon Action</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label>Weapon Name</label>
+            <input type="text" id="rf-weapon" placeholder="e.g. Bow, War">
+          </div>
+          <div class="field">
+            <label>Action</label>
+            <input type="text" id="rf-action" placeholder="e.g. Stab, Smash...">
+          </div>
+          <div class="field">
+            <label>Material</label>
+            <input type="text" id="rf-material" placeholder="e.g. Wood; Steel">
+          </div>
+          <div class="field">
+            <label>Range Increment (ft)</label>
+            <input type="text" id="rf-rangeincrement" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Max Range (ft)</label>
+            <input type="text" id="rf-maxrange" placeholder="(blank = none)">
+          </div>
+          <div class="field">
+            <label>Hit Formula</label>
+            <input type="text" id="rf-hitformula" placeholder="e.g. Physical Coordination + Day Vision">
+          </div>
+          <div class="field">
+            <label>Min Power</label>
+            <input type="text" id="rf-minstr" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Damage Max</label>
+            <input type="text" id="rf-damagemax" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Max Power Modifier</label>
+            <input type="text" id="rf-maxpowermod" placeholder="0">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveRangedWeapon()">Save Action</button>
+          <button class="btn danger" onclick="closeRangedWeaponForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
+        <tbody id="rangedmgr-list"></tbody>
+      </table>
+    </div>
+
     <!-- LOADOUT -->
     <div id="panel-loadout" class="panel">
       <h2>Loadout</h2>
@@ -649,11 +777,13 @@
           <tbody id="equip-list"></tbody>
         </table>
       </div>
-      <div class="loadout-section">
-        <h3>Armor</h3>
-        <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Select armor coverage for each body area.</p>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
-      </div>
+    </div>
+
+    <!-- ARMOR -->
+    <div id="panel-armor" class="panel">
+      <h2>Armor</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Select armor coverage for each body area.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
     </div>
 
     <!-- PLAYSHEET -->
@@ -690,15 +820,34 @@
         </div>
       </div>
       <div class="ps-block" style="margin-bottom:16px;">
-        <h4 class="collapsible" onclick="toggleCollapse('psskills')">Selected Skills<span class="collapse-arrow" id="arrow-psskills">▼</span></h4>
-        <div class="collapse-body" id="body-psskills">
-          <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        <h4 class="collapsible" onclick="toggleCollapse('pshands')">Held Items<span class="collapse-arrow" id="arrow-pshands">▼</span></h4>
+        <div class="collapse-body" id="body-pshands">
+          <div class="grid-2">
+            <div class="field">
+              <label>Right Hand</label>
+              <select id="ps-hand-right" onchange="recalc()"></select>
+            </div>
+            <div class="field">
+              <label>Left Hand</label>
+              <select id="ps-hand-left" onchange="recalc()"></select>
+            </div>
+          </div>
+          <div class="grid-2" style="margin-top:8px;">
+            <div>
+              <div style="color:var(--text-dim);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Available Actions</div>
+              <div id="ps-actions-right" style="font-size:0.85rem;"></div>
+            </div>
+            <div>
+              <div style="color:var(--text-dim);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Available Actions</div>
+              <div id="ps-actions-left" style="font-size:0.85rem;"></div>
+            </div>
+          </div>
         </div>
       </div>
       <div class="ps-block" style="margin-bottom:16px;">
-        <h4 class="collapsible" onclick="toggleCollapse('psfeatures')">Selected Features<span class="collapse-arrow" id="arrow-psfeatures">▼</span></h4>
-        <div class="collapse-body" id="body-psfeatures">
-          <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        <h4 class="collapsible" onclick="toggleCollapse('psarmor')">Armor<span class="collapse-arrow" id="arrow-psarmor">▼</span></h4>
+        <div class="collapse-body" id="body-psarmor">
+          <div id="ps-armor" style="color:var(--text-dim);font-size:0.85rem;"></div>
         </div>
       </div>
       <div class="ps-block" style="margin-bottom:16px;">
@@ -707,10 +856,16 @@
           <div id="ps-loadout" style="color:var(--text-dim);font-size:0.85rem;">Nothing equipped.</div>
         </div>
       </div>
+      <div class="ps-block" style="margin-bottom:16px;">
+        <h4 class="collapsible" onclick="toggleCollapse('psskills')">Selected Skills<span class="collapse-arrow" id="arrow-psskills">▼</span></h4>
+        <div class="collapse-body" id="body-psskills">
+          <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        </div>
+      </div>
       <div class="ps-block">
-        <h4 class="collapsible" onclick="toggleCollapse('psarmor')">Armor<span class="collapse-arrow" id="arrow-psarmor">▼</span></h4>
-        <div class="collapse-body" id="body-psarmor">
-          <div id="ps-armor" style="color:var(--text-dim);font-size:0.85rem;"></div>
+        <h4 class="collapsible" onclick="toggleCollapse('psfeatures')">Selected Features<span class="collapse-arrow" id="arrow-psfeatures">▼</span></h4>
+        <div class="collapse-body" id="body-psfeatures">
+          <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
         </div>
       </div>
     </div>
@@ -1026,6 +1181,67 @@ function updatePlaysheet(attrs) {
       <span>Total Armor Weight</span><span style="color:var(--gold2);">${Math.round(armorWeights.total)} lbs</span>
     </div>`;
   document.getElementById('ps-armor').innerHTML = armorRows + armorTotalRow;
+
+  // Held items (right/left hand)
+  buildHandSelectors();
+  renderHandActions('right');
+  renderHandActions('left');
+}
+
+// All loadout item names currently carried (weapons + equipment), for the hand selectors.
+function getLoadoutItemNames() {
+  const names = new Set();
+  document.querySelectorAll('#weapon-list tr').forEach(tr => names.add(tr.cells[0].textContent));
+  document.querySelectorAll('#equip-list tr').forEach(tr => names.add(tr.cells[0].textContent));
+  return [...names];
+}
+
+function buildHandSelectors() {
+  const items = getLoadoutItemNames();
+  for (const side of ['right', 'left']) {
+    const sel = document.getElementById('ps-hand-'+side);
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">Bare Handed</option>' + items.map(n => `<option>${n}</option>`).join('');
+    sel.value = items.includes(prev) ? prev : '';
+  }
+}
+
+// Actions available for a held item: looked up by exact weapon name in MELEE_WEAPONS.
+// No item selected (bare handed) falls back to "Unarmed Strike" actions.
+// Strips a trailing " (Thrown)" so e.g. "Club" and "Club (Thrown)" are
+// recognized as the same physical weapon when cross-checking melee vs ranged.
+function normalizeWeaponName(name) {
+  return (name || '').replace(/\s*\(Thrown\)\s*$/i, '').trim();
+}
+
+function getActionsForItem(itemName) {
+  const lookupName = itemName || 'Unarmed Strike';
+  const normalized = normalizeWeaponName(lookupName);
+  const meleeActions = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized).map(r => r.action);
+  const rangedActions = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized).map(r => r.action);
+  const actions = [...meleeActions, ...rangedActions];
+  // If the same weapon (by normalized name) appears on both lists, it can
+  // also be thrown — add that as an extra action alongside its other actions.
+  if (meleeActions.length && rangedActions.length && !actions.includes('Throw')) {
+    actions.push('Throw');
+  }
+  return [...new Set(actions)];
+}
+
+function renderHandActions(side) {
+  const sel = document.getElementById('ps-hand-'+side);
+  const actions = getActionsForItem(sel.value);
+  const container = document.getElementById('ps-actions-'+side);
+  container.innerHTML = actions.length
+    ? actions.map(a => `<span style="display:inline-block;background:var(--bg);border:1px solid var(--gold);color:var(--gold2);border-radius:12px;padding:2px 10px;margin:0 4px 4px 0;font-size:0.78rem;">${a}</span>`).join('')
+    : '<span style="color:var(--text-dim);">No actions.</span>';
+}
+
+function getHeldItems() {
+  return {
+    right: document.getElementById('ps-hand-right').value,
+    left: document.getElementById('ps-hand-left').value,
+  };
 }
 
 // ─── STAT ROWS ──────────────────────────────────────────────────────────────
@@ -1590,6 +1806,353 @@ function buildArmorManagerTable() {
   });
 }
 
+// ─── MELEE WEAPONS MANAGER ──────────────────────────────────────────────────
+// Flat list of weapon+action rows — a single weapon (e.g. Battleaxe) has one
+// row per action it supports (Slash, Smash, Parry, Hook...), since each action
+// has its own reach/hit-formula/damage. Config-driven, with a built-in fallback
+// transcribed from "Arcane Weapons and Tools.csv" so it's never empty.
+const DEFAULT_MELEE_WEAPONS = [
+  { weapon:"Axe, Hatchet",          action:"Slash",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:8,  damageMax:6,  maxPowerMod:0.5 },
+  { weapon:"Axe, Hatchet",          action:"Smash",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:8,  damageMax:6,  maxPowerMod:0.5 },
+  { weapon:"Axe, Hatchet",          action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:8,  damageMax:3,  maxPowerMod:0.3 },
+  { weapon:"Axe, Hatchet",          action:"Parry",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:8,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Axe, Hatchet",          action:"Hook",          minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:8,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Unarmed Strike",        action:"Smash",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:5,  maxPowerMod:0.3 },
+  { weapon:"Unarmed Strike",        action:"Grab",          minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Unarmed Strike",        action:"Crush",         minReach:0,   reach:0,    hitFormula:"Power",                                        material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:20, maxPowerMod:0.1 },
+
+  { weapon:"Battleaxe",             action:"Slash",         minReach:1,   reach:2,    hitFormula:"(Physical Coordination + Manual Dexterity)*.5",material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:14, maxPowerMod:0.8 },
+  { weapon:"Battleaxe",             action:"Smash",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:9,  maxPowerMod:0.6 },
+  { weapon:"Battleaxe",             action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:9,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Battleaxe",             action:"Parry",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:11, damageMax:0,  maxPowerMod:0   },
+  { weapon:"Battleaxe",             action:"Hook",          minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Club",                  action:"Smash",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination * 3",                   material:"Wood; Stone",                minStr:4,  damageMax:6,  maxPowerMod:0.4 },
+  { weapon:"Club",                  action:"Parry",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination",                       material:"Wood; Stone",                minStr:4,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Flail",                 action:"Smash",         minReach:2,   reach:3,    hitFormula:"Manual Dexterity * 2",                        material:"Steel; Iron; Bronze; Stone", minStr:10, damageMax:9,  maxPowerMod:0.7 },
+  { weapon:"Flail",                 action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:10, damageMax:4,  maxPowerMod:0.2 },
+
+  { weapon:"Glaive",                action:"Slash",         minReach:2,   reach:4,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Bronze",        minStr:16, damageMax:11, maxPowerMod:0.8 },
+  { weapon:"Glaive",                action:"Stab",          minReach:2,   reach:4,    hitFormula:"Manual Dexterity *2",                         material:"Steel; Iron; Bronze",        minStr:16, damageMax:8,  maxPowerMod:0.7 },
+  { weapon:"Glaive",                action:"Smash (Pommel)",minReach:0,   reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:16, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Glaive",                action:"Parry",         minReach:0,   reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:16, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Greataxe",              action:"Slash",         minReach:1.5, reach:2.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:30, damageMax:16, maxPowerMod:1   },
+  { weapon:"Greataxe",              action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:30, damageMax:4,  maxPowerMod:0.2 },
+  { weapon:"Greataxe",              action:"Parry",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:30, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Greatclub",             action:"Smash",         minReach:2,   reach:4,    hitFormula:"Physical Coordination * 3",                   material:"Steel; Iron; Bronze; Stone", minStr:18, damageMax:10, maxPowerMod:0.6 },
+  { weapon:"Greatclub",             action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Bronze; Stone", minStr:18, damageMax:5,  maxPowerMod:0.2 },
+  { weapon:"Greatclub",             action:"Parry",         minReach:1,   reach:4,    hitFormula:"Physical Coordination",                       material:"Steel; Iron; Bronze; Stone", minStr:18, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Greatsword",            action:"Slash",         minReach:2,   reach:4,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:24, damageMax:13, maxPowerMod:0.8 },
+  { weapon:"Greatsword",            action:"Stab",          minReach:3.5, reach:4,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:24, damageMax:9,  maxPowerMod:0.7 },
+  { weapon:"Greatsword",            action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:24, damageMax:4,  maxPowerMod:0.2 },
+  { weapon:"Greatsword",            action:"Parry",         minReach:1,   reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:24, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Halberd",               action:"Slash",         minReach:4.5, reach:6,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:18, damageMax:12, maxPowerMod:0.8 },
+  { weapon:"Halberd",               action:"Stab",          minReach:5,   reach:6,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:18, damageMax:9,  maxPowerMod:0.7 },
+  { weapon:"Halberd",               action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:18, damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Halberd",               action:"Parry",         minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:18, damageMax:0,  maxPowerMod:0   },
+  { weapon:"Halberd",               action:"Hook",          minReach:5,   reach:6,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:18, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Hammer, Carpenter's",   action:"Smash",         minReach:0.5, reach:1,    hitFormula:"Manual Dexterity * 2",                        material:"Steel",                      minStr:7,  damageMax:4,  maxPowerMod:0.4 },
+  { weapon:"Hammer, Carpenter's",   action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Manual Dexterity * 2",                        material:"Wood",                       minStr:7,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Hammer, Carpenter's",   action:"Parry",         minReach:0.5, reach:1,    hitFormula:"Manual Dexterity",                            material:"Wood",                       minStr:7,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Hammer, Carpenter's",   action:"Hook",          minReach:0.5, reach:1,    hitFormula:"Manual Dexterity * 2",                        material:"Steel",                      minStr:7,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Hammer, Sledge",        action:"Smash",         minReach:2,   reach:2.5,  hitFormula:"Physical Coordination * 2",                   material:"Steel",                      minStr:22, damageMax:7,  maxPowerMod:0.5 },
+  { weapon:"Hammer, Sledge",        action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Wood",                       minStr:22, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Hammer, Sledge",        action:"Parry",         minReach:0.5, reach:2,    hitFormula:"Physical Coordination",                       material:"Wood",                       minStr:22, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Hammer, War",           action:"Stab",          minReach:2,   reach:2.5,  hitFormula:"Physical Coordination * 2",                   material:"Steel",                      minStr:10, damageMax:6,  maxPowerMod:0.8 },
+  { weapon:"Hammer, War",           action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Wood",                       minStr:10, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Hammer, War",           action:"Parry",         minReach:0.5, reach:2,    hitFormula:"Physical Coordination",                       material:"Wood",                       minStr:10, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Javelin",               action:"Stab",          minReach:3.5, reach:4.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:12, damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Javelin",               action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:12, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Javelin",               action:"Parry",         minReach:0.5, reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:12, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Knife",                 action:"Stab",          minReach:0.5, reach:1,    hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:3,  maxPowerMod:0.4 },
+  { weapon:"Knife",                 action:"Slash",         minReach:0,   reach:0.5,  hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:5,  maxPowerMod:0.4 },
+  { weapon:"Knife",                 action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Knife",                 action:"Parry",         minReach:0,   reach:0.5,  hitFormula:"Manual Dexterity*2",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Lance, Heavy Cavalry",  action:"Stab",          minReach:8,   reach:9,    hitFormula:"Physical Coordination",                       material:"Steel",                      minStr:16, damageMax:12, maxPowerMod:0.7 },
+
+  { weapon:"Lance, Light Cavalry",  action:"Stab",          minReach:6,   reach:7,    hitFormula:"Physical Coordination",                       material:"Steel",                      minStr:11, damageMax:10, maxPowerMod:0.6 },
+  { weapon:"Lance, Light Cavalry",  action:"Smash (Pommel)",minReach:1,   reach:1,    hitFormula:"Physical Coordination * .7",                  material:"Wood",                       minStr:11, damageMax:3,  maxPowerMod:0.3 },
+
+  { weapon:"Mace",                  action:"Smash",         minReach:1.5, reach:2,    hitFormula:"Physical Coordination * 3",                   material:"Steel; Iron",                minStr:10, damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Mace",                  action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination",                       material:"Steel; Wood",                minStr:10, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Mace",                  action:"Parry",         minReach:0.5, reach:1.5,  hitFormula:"Physical Coordination * .5",                  material:"Steel; Wood",                minStr:10, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Morningstar",           action:"Smash",         minReach:2.5, reach:3,    hitFormula:"Manual Dexterity * 2",                        material:"Steel; Iron",                minStr:13, damageMax:8,  maxPowerMod:0.8 },
+
+  { weapon:"Net",                   action:"Entangle",      minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Chain; Rope",                minStr:14, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Pike",                  action:"Stab",          minReach:10,  reach:11,   hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Bronze",        minStr:24, damageMax:10, maxPowerMod:0.5 },
+
+  { weapon:"Rapier",                action:"Stab",          minReach:2,   reach:3,    hitFormula:"Manual Dexterity * 2",                        material:"Steel",                      minStr:8,  damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Rapier",                action:"Slash",         minReach:0,   reach:3,    hitFormula:"Manual Dexterity * 2",                        material:"Steel",                      minStr:8,  damageMax:5,  maxPowerMod:0.4 },
+  { weapon:"Rapier",                action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Manual Dexterity",                            material:"Steel",                      minStr:8,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Rapier",                action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Manual Dexterity * 2",                        material:"Steel",                      minStr:8,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Scimitar",              action:"Slash",         minReach:0,   reach:2.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel",                      minStr:9,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Scimitar",              action:"Stab",          minReach:2,   reach:2.5,  hitFormula:"Manual Dexterity",                            material:"Steel",                      minStr:9,  damageMax:4,  maxPowerMod:0.3 },
+  { weapon:"Scimitar",              action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination",                       material:"Steel",                      minStr:9,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Scimitar",              action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Manual Dexterity",                            material:"Steel",                      minStr:9,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Spear, Long",           action:"Stab",          minReach:5,   reach:6,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:16, damageMax:7,  maxPowerMod:0.5 },
+  { weapon:"Spear, Long",           action:"Smash (Pommel)",minReach:0,   reach:2,    hitFormula:"Physical Coordination",                       material:"Wood",                       minStr:16, damageMax:3,  maxPowerMod:0.3 },
+  { weapon:"Spear, Long",           action:"Parry",         minReach:1,   reach:4,    hitFormula:"Manual Dexterity * .6",                       material:"Steel; Iron; Bronze; Stone", minStr:16, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Staff",                 action:"Smash",         minReach:2,   reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:14, damageMax:5,  maxPowerMod:0.5 },
+  { weapon:"Staff",                 action:"Parry",         minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:14, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Sword, Long",           action:"Stab",          minReach:2.5, reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron",                minStr:12, damageMax:6,  maxPowerMod:0.5 },
+  { weapon:"Sword, Long",           action:"Slash",         minReach:0,   reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron",                minStr:12, damageMax:8,  maxPowerMod:0.7 },
+  { weapon:"Sword, Long",           action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination",                       material:"Steel; Iron",                minStr:12, damageMax:3,  maxPowerMod:0.2 },
+  { weapon:"Sword, Long",           action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron",                minStr:12, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Sword, Short",          action:"Stab",          minReach:1.5, reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Sword, Short",          action:"Slash",         minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Sword, Short",          action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:2,  maxPowerMod:0.3 },
+  { weapon:"Sword, Short",          action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Trident",               action:"Stab",          minReach:3,   reach:4,    hitFormula:"Manual Dexterity",                            material:"Steel",                      minStr:16, damageMax:9,  maxPowerMod:0.7 },
+  { weapon:"Trident",               action:"Smash (Pommel)",minReach:0,   reach:1,    hitFormula:"Physical Coordination",                       material:"Wood",                       minStr:16, damageMax:3,  maxPowerMod:0.3 },
+  { weapon:"Trident",               action:"Parry",         minReach:0,   reach:2,    hitFormula:"Manual Dexterity * .6",                       material:"Wood",                       minStr:16, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Whip",                  action:"Whip",          minReach:4,   reach:7,    hitFormula:"Manual Dexterity",                            material:"Leather",                    minStr:10, damageMax:3,  maxPowerMod:0.3 },
+
+  { weapon:"Shield, Small",         action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:9,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Shield, Small",         action:"Smash (Bash)",  minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:9,  damageMax:5,  maxPowerMod:0.5 },
+
+  { weapon:"Shield, Large",         action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:12, damageMax:0,  maxPowerMod:0   },
+  { weapon:"Shield, Large",         action:"Smash (Bash)",  minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:12, damageMax:6,  maxPowerMod:0.5 },
+
+  { weapon:"Shield, Buckler",       action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:6,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Shield, Buckler",       action:"Smash (Bash)",  minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:6,  damageMax:4,  maxPowerMod:0.5 },
+];
+let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
+let editingMeleeIndex = null;
+
+// Moves the #melee-form element inline next to the row being edited, or back
+// to its anchor above the table when adding new (or when closed).
+function positionMeleeWeaponForm(index) {
+  const form = document.getElementById('melee-form');
+  const oldRow = document.getElementById('melee-form-row');
+  if (oldRow) oldRow.remove();
+
+  if (index !== null) {
+    const tbody = document.getElementById('meleemgr-list');
+    const targetRow = tbody.rows[index];
+    const row = document.createElement('tr');
+    row.id = 'melee-form-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    row.appendChild(cell);
+    if (targetRow) targetRow.after(row); else tbody.appendChild(row);
+    cell.appendChild(form);
+  } else {
+    document.getElementById('melee-form-anchor').appendChild(form);
+  }
+}
+
+function openMeleeWeaponForm(index) {
+  editingMeleeIndex = index;
+  positionMeleeWeaponForm(index);
+  const row = index !== null ? MELEE_WEAPONS[index] : null;
+  document.getElementById('melee-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+  document.getElementById('mf-weapon').value      = row ? row.weapon : '';
+  document.getElementById('mf-action').value      = row ? row.action : '';
+  document.getElementById('mf-material').value    = row ? row.material : '';
+  document.getElementById('mf-minreach').value    = row ? row.minReach : 0;
+  document.getElementById('mf-reach').value       = row ? row.reach : 0;
+  document.getElementById('mf-hitformula').value  = row ? row.hitFormula : '';
+  document.getElementById('mf-minstr').value      = row ? row.minStr : 0;
+  document.getElementById('mf-damagemax').value   = row ? row.damageMax : 0;
+  document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
+  document.getElementById('melee-form').style.display = 'block';
+}
+
+function closeMeleeWeaponForm() {
+  editingMeleeIndex = null;
+  document.getElementById('melee-form').style.display = 'none';
+  positionMeleeWeaponForm(null);
+}
+
+function saveMeleeWeapon() {
+  const weapon = document.getElementById('mf-weapon').value.trim();
+  const action = document.getElementById('mf-action').value.trim();
+  if (!weapon || !action) { alert('Weapon name and action are required.'); return; }
+  const row = {
+    weapon, action,
+    minReach: parseFloat(document.getElementById('mf-minreach').value) || 0,
+    reach: parseFloat(document.getElementById('mf-reach').value) || 0,
+    hitFormula: document.getElementById('mf-hitformula').value.trim(),
+    material: document.getElementById('mf-material').value.trim(),
+    minStr: parseFloat(document.getElementById('mf-minstr').value) || 0,
+    damageMax: parseFloat(document.getElementById('mf-damagemax').value) || 0,
+    maxPowerMod: parseFloat(document.getElementById('mf-maxpowermod').value) || 0,
+  };
+  if (editingMeleeIndex !== null) {
+    MELEE_WEAPONS[editingMeleeIndex] = row;
+  } else {
+    MELEE_WEAPONS.push(row);
+  }
+  writeConfigToDisk();
+  closeMeleeWeaponForm();
+  buildMeleeWeaponsManagerTable();
+  recalc();
+}
+
+function deleteMeleeWeapon(index) {
+  const row = MELEE_WEAPONS[index];
+  if (!confirm(`Delete "${row.weapon} — ${row.action}"?`)) return;
+  closeMeleeWeaponForm();
+  MELEE_WEAPONS.splice(index, 1);
+  writeConfigToDisk();
+  buildMeleeWeaponsManagerTable();
+  recalc();
+}
+
+function buildMeleeWeaponsManagerTable() {
+  const tbody = document.getElementById('meleemgr-list');
+  if (!tbody) return;
+  // Move the form out of the table before wiping it, so an open edit form
+  // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
+  if (document.getElementById('melee-form-row')) closeMeleeWeaponForm();
+  tbody.innerHTML = '';
+  MELEE_WEAPONS.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─── RANGED WEAPONS MANAGER ─────────────────────────────────────────────────
+// Same flat weapon+action structure as melee weapons, but with a range
+// increment / max range instead of reach. Config-driven, with a built-in
+// fallback transcribed from "Arcane Ranged Weapons.csv" so it's never empty.
+const DEFAULT_RANGED_WEAPONS = [
+  { weapon:"Blowgun",               action:"Stab",  rangeIncrement:2,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:4,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Bow, Horse",            action:"Stab",  rangeIncrement:7,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Bow, Hunting",          action:"Stab",  rangeIncrement:10, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:12, damageMax:7,  maxPowerMod:0.8 },
+  { weapon:"Bow, Light",            action:"Stab",  rangeIncrement:8,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.6 },
+  { weapon:"Bow, War",              action:"Stab",  rangeIncrement:12, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:16, damageMax:9,  maxPowerMod:0.9 },
+  { weapon:"Club (Thrown)",         action:"Smash", rangeIncrement:3,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:7,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Axe, Hatchet (Thrown)", action:"Stab",  rangeIncrement:2,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:9,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Crossbow, Hand",        action:"Stab",  rangeIncrement:4,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:8,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Crossbow, Heavy",       action:"Stab",  rangeIncrement:15, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:10, maxPowerMod:0.6 },
+  { weapon:"Crossbow, Light",       action:"Stab",  rangeIncrement:12, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:8,  maxPowerMod:0.5 },
+  { weapon:"Dart",                  action:"Stab",  rangeIncrement:3,  maxRange:null, hitFormula:"Manual Dexterity * 2",                      material:"", minStr:6,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Sling Pellet",          action:"Smash", rangeIncrement:4,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
+  { weapon:"Javelin",               action:"Stab",  rangeIncrement:6,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
+];
+let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
+let editingRangedIndex = null;
+
+function positionRangedWeaponForm(index) {
+  const form = document.getElementById('ranged-form');
+  const oldRow = document.getElementById('ranged-form-row');
+  if (oldRow) oldRow.remove();
+
+  if (index !== null) {
+    const tbody = document.getElementById('rangedmgr-list');
+    const targetRow = tbody.rows[index];
+    const row = document.createElement('tr');
+    row.id = 'ranged-form-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 10;
+    row.appendChild(cell);
+    if (targetRow) targetRow.after(row); else tbody.appendChild(row);
+    cell.appendChild(form);
+  } else {
+    document.getElementById('ranged-form-anchor').appendChild(form);
+  }
+}
+
+function openRangedWeaponForm(index) {
+  editingRangedIndex = index;
+  positionRangedWeaponForm(index);
+  const row = index !== null ? RANGED_WEAPONS[index] : null;
+  document.getElementById('ranged-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+  document.getElementById('rf-weapon').value         = row ? row.weapon : '';
+  document.getElementById('rf-action').value         = row ? row.action : '';
+  document.getElementById('rf-material').value       = row ? row.material : '';
+  document.getElementById('rf-rangeincrement').value = row ? row.rangeIncrement : 0;
+  document.getElementById('rf-maxrange').value        = row && row.maxRange !== null && row.maxRange !== undefined ? row.maxRange : '';
+  document.getElementById('rf-hitformula').value     = row ? row.hitFormula : '';
+  document.getElementById('rf-minstr').value         = row ? row.minStr : 0;
+  document.getElementById('rf-damagemax').value      = row ? row.damageMax : 0;
+  document.getElementById('rf-maxpowermod').value    = row ? row.maxPowerMod : 0;
+  document.getElementById('ranged-form').style.display = 'block';
+}
+
+function closeRangedWeaponForm() {
+  editingRangedIndex = null;
+  document.getElementById('ranged-form').style.display = 'none';
+  positionRangedWeaponForm(null);
+}
+
+function saveRangedWeapon() {
+  const weapon = document.getElementById('rf-weapon').value.trim();
+  const action = document.getElementById('rf-action').value.trim();
+  if (!weapon || !action) { alert('Weapon name and action are required.'); return; }
+  const maxRangeRaw = document.getElementById('rf-maxrange').value.trim();
+  const row = {
+    weapon, action,
+    rangeIncrement: parseFloat(document.getElementById('rf-rangeincrement').value) || 0,
+    maxRange: maxRangeRaw === '' ? null : parseFloat(maxRangeRaw) || 0,
+    hitFormula: document.getElementById('rf-hitformula').value.trim(),
+    material: document.getElementById('rf-material').value.trim(),
+    minStr: parseFloat(document.getElementById('rf-minstr').value) || 0,
+    damageMax: parseFloat(document.getElementById('rf-damagemax').value) || 0,
+    maxPowerMod: parseFloat(document.getElementById('rf-maxpowermod').value) || 0,
+  };
+  if (editingRangedIndex !== null) {
+    RANGED_WEAPONS[editingRangedIndex] = row;
+  } else {
+    RANGED_WEAPONS.push(row);
+  }
+  writeConfigToDisk();
+  closeRangedWeaponForm();
+  buildRangedWeaponsManagerTable();
+  recalc();
+}
+
+function deleteRangedWeapon(index) {
+  const row = RANGED_WEAPONS[index];
+  if (!confirm(`Delete "${row.weapon} — ${row.action}"?`)) return;
+  closeRangedWeaponForm();
+  RANGED_WEAPONS.splice(index, 1);
+  writeConfigToDisk();
+  buildRangedWeaponsManagerTable();
+  recalc();
+}
+
+function buildRangedWeaponsManagerTable() {
+  const tbody = document.getElementById('rangedmgr-list');
+  if (!tbody) return;
+  if (document.getElementById('ranged-form-row')) closeRangedWeaponForm();
+  tbody.innerHTML = '';
+  RANGED_WEAPONS.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 // ─── COLLAPSIBLE SECTIONS ───────────────────────────────────────────────────
 function toggleCollapse(id) {
   document.getElementById('body-'+id).classList.toggle('collapsed');
@@ -1636,6 +2199,7 @@ function gatherCharacterData() {
     weapons,
     equipment,
     armor: getArmorSelections(),
+    heldItems: getHeldItems(),
   };
 }
 
@@ -1684,6 +2248,8 @@ function gatherConfigData() {
     skills: SKILLS,
     armorAreaWeights: ARMOR_AREA_WEIGHTS,
     armorTypes: ARMOR_TYPE_DATA,
+    meleeWeapons: MELEE_WEAPONS,
+    rangedWeapons: RANGED_WEAPONS,
   };
 }
 
@@ -1850,6 +2416,8 @@ function applyConfigData(data, opts) {
   }
   if (data.armorAreaWeights && Object.keys(data.armorAreaWeights).length) replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights);
   if (data.armorTypes && Object.keys(data.armorTypes).length)             replaceObjectContents(ARMOR_TYPE_DATA, data.armorTypes);
+  if (data.meleeWeapons && data.meleeWeapons.length) replaceArrayContents(MELEE_WEAPONS, data.meleeWeapons);
+  if (data.rangedWeapons && data.rangedWeapons.length) replaceArrayContents(RANGED_WEAPONS, data.rangedWeapons);
 
   buildCharSelects();
   buildLoadoutSelects();
@@ -1858,6 +2426,8 @@ function applyConfigData(data, opts) {
   buildSkillManagerTable();
   buildArmorFields();
   buildArmorManagerTable();
+  buildMeleeWeaponsManagerTable();
+  buildRangedWeaponsManagerTable();
   recalc();
 
   if (!opts.skipWrite) writeConfigToDisk();
@@ -1947,6 +2517,19 @@ function applyCharacterData(data) {
   }
 
   recalc();
+
+  // Held items — restore after recalc() so the hand selectors are already
+  // rebuilt from the just-loaded weapons/equipment, then re-render actions.
+  if (data.heldItems) {
+    buildHandSelectors();
+    for (const side of ['right', 'left']) {
+      const el = document.getElementById('ps-hand-'+side);
+      const val = data.heldItems[side];
+      if (val && [...el.options].some(o => o.value === val)) el.value = val;
+    }
+    renderHandActions('right');
+    renderHandActions('left');
+  }
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
@@ -1966,6 +2549,8 @@ buildArmorFields();
   buildSkillManagerTable();
   buildArmorFields();
   buildArmorManagerTable();
+  buildMeleeWeaponsManagerTable();
+  buildRangedWeaponsManagerTable();
 
   // Set defaults matching the spreadsheet example, if the loaded config has them.
   const trySelect = (id, val) => {

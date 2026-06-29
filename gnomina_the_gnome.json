@@ -1,0 +1,65 @@
+{
+  "_version": 1,
+  "name": "Gnomina the Gnome",
+  "race": "Gnome",
+  "bodyType": "Humanoid",
+  "sex": "Female",
+  "age": "Adult",
+  "height": "Medium",
+  "build": "Medium",
+  "social": "Extrovert",
+  "mental": "Logical",
+  "stats": {
+    "Strength": 14,
+    "Endurance": 13,
+    "Agility": 15,
+    "Memory": 15,
+    "Intellect": 13,
+    "Senses": 10,
+    "Quintessence": 0
+  },
+  "features": [],
+  "skills": [
+    "Trade: Pickpocket",
+    "Trade: Herbalist"
+  ],
+  "weapons": [
+    {
+      "name": "Axe, Hatchet",
+      "damage": "Cut",
+      "wt": 2,
+      "reach": "1 ft"
+    },
+    {
+      "name": "Bow, Hunting",
+      "damage": "Stab",
+      "wt": 4,
+      "reach": "ranged"
+    },
+    {
+      "name": "Shield, Small",
+      "damage": "Smash",
+      "wt": 6,
+      "reach": "contact"
+    }
+  ],
+  "equipment": [
+    {
+      "name": "Arrow, Hunting",
+      "qty": 10,
+      "unitWt": 0.5
+    }
+  ],
+  "armor": {
+    "head": "Reinforced Leather",
+    "torso": "Reinforced Leather",
+    "rarm": "Reinforced Leather",
+    "larm": "Reinforced Leather",
+    "rleg": "Reinforced Leather",
+    "lleg": "Reinforced Leather"
+  },
+  "heldItems": {
+    "right": "Axe, Hatchet",
+    "left": "Shield, Small"
+  }
+}
