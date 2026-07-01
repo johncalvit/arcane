@@ -1905,7 +1905,7 @@
       "reach": 1,
       "hitFormula": "Physical Coordination + Manual Dexterity",
       "material": "Steel; Iron; Bronze; Stone",
-      "minStr": 8,
+      "minStr": 6,
       "damageMax": 6,
       "maxPowerMod": 0.5
     },
@@ -1954,7 +1954,7 @@
       "maxPowerMod": 0
     },
     {
-      "weapon": "Unarmed Strike",
+      "weapon": "Bare Hand",
       "action": "Smash",
       "minReach": 0,
       "reach": 0,
@@ -1965,7 +1965,7 @@
       "maxPowerMod": 0.3
     },
     {
-      "weapon": "Unarmed Strike",
+      "weapon": "Bare Hand",
       "action": "Grab",
       "minReach": 0,
       "reach": 0,
@@ -1976,7 +1976,7 @@
       "maxPowerMod": 0
     },
     {
-      "weapon": "Unarmed Strike",
+      "weapon": "Bare Hand",
       "action": "Crush",
       "minReach": 0,
       "reach": 0,
@@ -2923,20 +2923,170 @@
     }
   ],
   "rangedWeapons": [
-    { "weapon":"Blowgun",                  "action":"Stab",  "rangeIncrement":2,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":4,  "damageMax":2,  "maxPowerMod":0.2 },
-    { "weapon":"Bow, Horse",               "action":"Stab",  "rangeIncrement":7,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":10, "damageMax":6,  "maxPowerMod":0.7 },
-    { "weapon":"Bow, Hunting",             "action":"Stab",  "rangeIncrement":10, "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":12, "damageMax":7,  "maxPowerMod":0.8 },
-    { "weapon":"Bow, Light",               "action":"Stab",  "rangeIncrement":8,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":7,  "damageMax":5,  "maxPowerMod":0.6 },
-    { "weapon":"Bow, War",                 "action":"Stab",  "rangeIncrement":12, "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":16, "damageMax":9,  "maxPowerMod":0.9 },
-    { "weapon":"Club (Thrown)",            "action":"Smash", "rangeIncrement":3,  "maxRange":null, "hitFormula":"Physical Coordination + Manual Dexterity",  "material":"", "minStr":7,  "damageMax":4,  "maxPowerMod":0.5 },
-    { "weapon":"Axe, Hatchet (Thrown)",    "action":"Stab",  "rangeIncrement":2,  "maxRange":null, "hitFormula":"Physical Coordination + Manual Dexterity",  "material":"", "minStr":9,  "damageMax":6,  "maxPowerMod":0.7 },
-    { "weapon":"Crossbow, Hand",           "action":"Stab",  "rangeIncrement":4,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":8,  "damageMax":4,  "maxPowerMod":0.5 },
-    { "weapon":"Crossbow, Heavy",          "action":"Stab",  "rangeIncrement":15, "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":10, "damageMax":10, "maxPowerMod":0.6 },
-    { "weapon":"Crossbow, Light",          "action":"Stab",  "rangeIncrement":12, "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":10, "damageMax":8,  "maxPowerMod":0.5 },
-    { "weapon":"Dart",                     "action":"Stab",  "rangeIncrement":3,  "maxRange":null, "hitFormula":"Manual Dexterity * 2",                       "material":"", "minStr":6,  "damageMax":2,  "maxPowerMod":0.2 },
-    { "weapon":"Sling Pellet",             "action":"Smash", "rangeIncrement":4,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":7,  "damageMax":6,  "maxPowerMod":0.6 },
-    { "weapon":"Sling Stone",              "action":"Smash", "rangeIncrement":3,  "maxRange":null, "hitFormula":"Physical Coordination + Day Vision",        "material":"", "minStr":7,  "damageMax":5,  "maxPowerMod":0.5 },
-    { "weapon":"Javelin",                  "action":"Stab",  "rangeIncrement":6,  "maxRange":null, "hitFormula":"Physical Coordination + Manual Dexterity",  "material":"", "minStr":10, "damageMax":6,  "maxPowerMod":0.6 },
-    { "weapon":"Spear, Short/Long",        "action":"Stab",  "rangeIncrement":5,  "maxRange":null, "hitFormula":"Physical Coordination + Manual Dexterity",  "material":"", "minStr":12, "damageMax":7,  "maxPowerMod":0.7 }
+    {
+      "weapon": "Blowgun",
+      "action": "Stab",
+      "rangeIncrement": 2,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 4,
+      "damageMax": 2,
+      "maxPowerMod": 0.2
+    },
+    {
+      "weapon": "Bow, Horse",
+      "action": "Stab",
+      "rangeIncrement": 7,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 10,
+      "damageMax": 6,
+      "maxPowerMod": 0.7
+    },
+    {
+      "weapon": "Bow, Hunting",
+      "action": "Stab",
+      "rangeIncrement": 10,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 12,
+      "damageMax": 7,
+      "maxPowerMod": 0.8
+    },
+    {
+      "weapon": "Bow, Light",
+      "action": "Stab",
+      "rangeIncrement": 8,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 7,
+      "damageMax": 5,
+      "maxPowerMod": 0.6
+    },
+    {
+      "weapon": "Bow, War",
+      "action": "Stab",
+      "rangeIncrement": 12,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 16,
+      "damageMax": 9,
+      "maxPowerMod": 0.9
+    },
+    {
+      "weapon": "Club (Thrown)",
+      "action": "Smash",
+      "rangeIncrement": 3,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Manual Dexterity",
+      "material": "",
+      "minStr": 7,
+      "damageMax": 4,
+      "maxPowerMod": 0.5
+    },
+    {
+      "weapon": "Axe, Hatchet (Thrown)",
+      "action": "Slash",
+      "rangeIncrement": 2,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Manual Dexterity",
+      "material": "",
+      "minStr": 9,
+      "damageMax": 6,
+      "maxPowerMod": 0.7
+    },
+    {
+      "weapon": "Crossbow, Hand",
+      "action": "Stab",
+      "rangeIncrement": 4,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 8,
+      "damageMax": 4,
+      "maxPowerMod": 0.5
+    },
+    {
+      "weapon": "Crossbow, Heavy",
+      "action": "Stab",
+      "rangeIncrement": 15,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 10,
+      "damageMax": 10,
+      "maxPowerMod": 0.6
+    },
+    {
+      "weapon": "Crossbow, Light",
+      "action": "Stab",
+      "rangeIncrement": 12,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 10,
+      "damageMax": 8,
+      "maxPowerMod": 0.5
+    },
+    {
+      "weapon": "Dart",
+      "action": "Stab",
+      "rangeIncrement": 3,
+      "maxRange": null,
+      "hitFormula": "Manual Dexterity * 2",
+      "material": "",
+      "minStr": 6,
+      "damageMax": 2,
+      "maxPowerMod": 0.2
+    },
+    {
+      "weapon": "Sling Pellet",
+      "action": "Smash",
+      "rangeIncrement": 4,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 7,
+      "damageMax": 6,
+      "maxPowerMod": 0.6
+    },
+    {
+      "weapon": "Sling Stone",
+      "action": "Smash",
+      "rangeIncrement": 3,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Day Vision",
+      "material": "",
+      "minStr": 7,
+      "damageMax": 5,
+      "maxPowerMod": 0.5
+    },
+    {
+      "weapon": "Javelin",
+      "action": "Stab",
+      "rangeIncrement": 6,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Manual Dexterity",
+      "material": "",
+      "minStr": 10,
+      "damageMax": 6,
+      "maxPowerMod": 0.6
+    },
+    {
+      "weapon": "Spear, Short/Long",
+      "action": "Stab",
+      "rangeIncrement": 5,
+      "maxRange": null,
+      "hitFormula": "Physical Coordination + Manual Dexterity",
+      "material": "",
+      "minStr": 12,
+      "damageMax": 7,
+      "maxPowerMod": 0.7
+    }
   ]
 }

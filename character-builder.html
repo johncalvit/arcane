@@ -826,10 +826,12 @@
             <div class="field">
               <label>Right Hand</label>
               <select id="ps-hand-right" onchange="recalc()"></select>
+              <div id="ps-hit-right" style="margin-top:4px;min-height:1.2em;"></div>
             </div>
             <div class="field">
               <label>Left Hand</label>
               <select id="ps-hand-left" onchange="recalc()"></select>
+              <div id="ps-hit-left" style="margin-top:4px;min-height:1.2em;"></div>
             </div>
           </div>
           <div class="grid-2" style="margin-top:8px;">
@@ -1184,16 +1186,33 @@ function updatePlaysheet(attrs) {
 
   // Held items (right/left hand)
   buildHandSelectors();
+  updateTwoHandedIndicator();
   renderHandActions('right');
   renderHandActions('left');
+  renderHandHit('right', attrs);
+  renderHandHit('left', attrs);
+}
+
+// How many of each loadout item are carried (weapons: one per row added;
+// equipment: summed by qty) — used to tell "one item held two-handed" apart
+// from "two separate items, one per hand".
+function getLoadoutItemCounts() {
+  const counts = {};
+  document.querySelectorAll('#weapon-list tr').forEach(tr => {
+    const name = tr.cells[0].textContent;
+    counts[name] = (counts[name] || 0) + 1;
+  });
+  document.querySelectorAll('#equip-list tr').forEach(tr => {
+    const name = tr.cells[0].textContent;
+    const qty = parseInt(tr.cells[1].textContent) || 1;
+    counts[name] = (counts[name] || 0) + qty;
+  });
+  return counts;
 }
 
 // All loadout item names currently carried (weapons + equipment), for the hand selectors.
 function getLoadoutItemNames() {
-  const names = new Set();
-  document.querySelectorAll('#weapon-list tr').forEach(tr => names.add(tr.cells[0].textContent));
-  document.querySelectorAll('#equip-list tr').forEach(tr => names.add(tr.cells[0].textContent));
-  return [...names];
+  return Object.keys(getLoadoutItemCounts());
 }
 
 function buildHandSelectors() {
@@ -1201,13 +1220,35 @@ function buildHandSelectors() {
   for (const side of ['right', 'left']) {
     const sel = document.getElementById('ps-hand-'+side);
     const prev = sel.value;
-    sel.innerHTML = '<option value="">Bare Handed</option>' + items.map(n => `<option>${n}</option>`).join('');
+    sel.innerHTML = '<option value="">Bare Handed</option>' + items.map(n => `<option value="${n}">${n}</option>`).join('');
     sel.value = items.includes(prev) ? prev : '';
   }
 }
 
+// If both hands hold the same item and the loadout only has one of it, it's
+// being held two-handed (not dual-wielded) — reflect that in the dropdown by
+// relabeling the currently-selected option in each select.
+function isTwoHandedGrip() {
+  const right = document.getElementById('ps-hand-right');
+  const left = document.getElementById('ps-hand-left');
+  const counts = getLoadoutItemCounts();
+  const sameItem = right.value && right.value === left.value;
+  return sameItem && (counts[right.value] || 0) < 2;
+}
+
+function updateTwoHandedIndicator() {
+  const right = document.getElementById('ps-hand-right');
+  const left = document.getElementById('ps-hand-left');
+  const twoHanded = isTwoHandedGrip();
+  for (const sel of [right, left]) {
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) continue;
+    opt.textContent = twoHanded ? `${opt.value} (Two-Handed)` : opt.value;
+  }
+}
+
 // Actions available for a held item: looked up by exact weapon name in MELEE_WEAPONS.
-// No item selected (bare handed) falls back to "Unarmed Strike" actions.
+// No item selected (bare handed) falls back to "Bare Handed" in MELEE_WEAPONS.
 // Strips a trailing " (Thrown)" so e.g. "Club" and "Club (Thrown)" are
 // recognized as the same physical weapon when cross-checking melee vs ranged.
 function normalizeWeaponName(name) {
@@ -1215,7 +1256,7 @@ function normalizeWeaponName(name) {
 }
 
 function getActionsForItem(itemName) {
-  const lookupName = itemName || 'Unarmed Strike';
+  const lookupName = itemName || 'Bare Hand';
   const normalized = normalizeWeaponName(lookupName);
   const meleeActions = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized).map(r => r.action);
   const rangedActions = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized).map(r => r.action);
@@ -1235,6 +1276,88 @@ function renderHandActions(side) {
   container.innerHTML = actions.length
     ? actions.map(a => `<span style="display:inline-block;background:var(--bg);border:1px solid var(--gold);color:var(--gold2);border-radius:12px;padding:2px 10px;margin:0 4px 4px 0;font-size:0.78rem;">${a}</span>`).join('')
     : '<span style="color:var(--text-dim);">No actions.</span>';
+}
+
+// Map formula attribute label strings to attrs keys (longest first to avoid partial matches)
+const HIT_ATTR_MAP = [
+  ['Physical Coordination', 'PhysCoord'],
+  ['Manual Dexterity',      'ManualDex'],
+  ['Social Skills',         'SocialSkills'],
+  ['Night Vision',          'NightVision'],
+  ['Day Vision',            'DayVision'],
+  ['Quintessence',          'Quintessence'],
+  ['Toughness',             'Toughness'],
+  ['Knowledge',             'Knowledge'],
+  ['Intuition',             'Intuition'],
+  ['Hearing',               'Hearing'],
+  ['Stamina',               'Stamina'],
+  ['Logic',                 'Logic'],
+  ['Speed',                 'Speed'],
+  ['Power',                 'Power'],
+  ['Smell',                 'Smell'],
+  ['Taste',                 'Taste'],
+];
+
+function calcHitValue(formula, attrs) {
+  if (!formula) return null;
+  let expr = formula;
+  for (const [label, key] of HIT_ATTR_MAP) {
+    expr = expr.replace(new RegExp(label, 'gi'), String(attrs[key] || 0));
+  }
+  try {
+    return Math.round(Function('"use strict"; return (' + expr + ')')());
+  } catch(e) { return null; }
+}
+
+// Returns unique hit values across all actions for the weapon, using current attrs.
+function getWeaponRows(itemName) {
+  const normalized = normalizeWeaponName(itemName || 'Bare Hand');
+  return [
+    ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized),
+    ...RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalized),
+  ];
+}
+
+function getHitValuesForWeapon(itemName, attrs) {
+  const values = [...new Set(getWeaponRows(itemName).map(r => calcHitValue(r.hitFormula, attrs)).filter(v => v !== null))];
+  return values.sort((a, b) => a - b);
+}
+
+function rangeDisplay(arr) {
+  if (!arr.length) return null;
+  const sorted = [...arr].sort((a, b) => a - b);
+  return sorted.length === 1 ? String(sorted[0]) : sorted[0] + '–' + sorted[sorted.length - 1];
+}
+
+function renderHandHit(side, attrs) {
+  const sel = document.getElementById('ps-hand-' + side);
+  const container = document.getElementById('ps-hit-' + side);
+  if (!container) return;
+  if (side === 'left' && isTwoHandedGrip()) { container.innerHTML = ''; return; }
+  const itemName = sel.value;
+  const rows = getWeaponRows(itemName);
+  if (!rows.length) { container.innerHTML = ''; return; }
+
+  const basePower = attrs.Power || 0;
+  const effectivePower = isTwoHandedGrip() ? basePower * 2 : basePower;
+
+  const col = (label, val) =>
+    `<span style="margin-right:10px;white-space:nowrap;">` +
+    `<span style="color:var(--text-dim);font-size:0.68rem;text-transform:uppercase;letter-spacing:0.05em;">${label} </span>` +
+    `<span style="color:var(--gold2);font-weight:bold;">${val ?? '—'}</span></span>`;
+
+  const actionRows = rows.map(r => {
+    const hit = calcHitValue(r.hitFormula, attrs);
+    const penalty = Math.max(0, (r.minStr || 0) - effectivePower);
+    const dmg = r.damageMax > 0 ? Math.max(0, r.damageMax - penalty) : null;
+    const pw = r.maxPowerMod > 0 ? Math.round(r.maxPowerMod * effectivePower) : null;
+    return `<div style="display:flex;align-items:baseline;gap:2px;padding:2px 0;border-bottom:1px solid var(--border);">
+      <span style="color:var(--text);font-size:0.82rem;min-width:120px;flex-shrink:0;">${r.action}</span>
+      ${col('Hit', hit)}${col('Max Dmg', dmg)}${col('Max Power', pw)}
+    </div>`;
+  }).join('');
+
+  container.innerHTML = actionRows || '';
 }
 
 function getHeldItems() {
@@ -2527,6 +2650,7 @@ function applyCharacterData(data) {
       const val = data.heldItems[side];
       if (val && [...el.options].some(o => o.value === val)) el.value = val;
     }
+    updateTwoHandedIndicator();
     renderHandActions('right');
     renderHandActions('left');
   }
