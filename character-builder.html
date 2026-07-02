@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Arcane Character Builder</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.css">
+<script src="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.js"></script>
 <style>
   :root {
     --bg: #12100e;
@@ -415,11 +418,14 @@
     <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
     <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
     <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
-    <button class="nav-btn" onclick="connectConfigFile()">🔗 Connect Config File</button>
     <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
     <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
     <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
-    <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;">Loading configuration…</div>
+    <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;"></div>
+    <div class="nav-section">Account</div>
+    <div id="nav-user" style="padding:6px 18px;font-size:0.76rem;color:var(--text-dim);"></div>
+    <div id="nav-campaign" style="padding:2px 18px 6px;font-size:0.72rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
+    <button class="nav-btn" onclick="submitSignOut()">Sign Out</button>
   </nav>
 
   <main class="main-content">
@@ -428,11 +434,24 @@
     <div id="panel-overview" class="panel active">
       <h2 class="collapsible" onclick="toggleCollapse('overview')">Traits &amp; Characteristics<span class="collapse-arrow" id="arrow-overview">▼</span></h2>
       <div class="collapse-body" id="body-overview">
-      <div class="field">
-        <label>Character Name</label>
-        <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
-      </div>
-      <div class="grid-2">
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:start;margin-bottom:10px;">
+        <div>
+          <div id="avatar-preview" onclick="openAvatarPicker()" title="Click to set avatar" style="
+            width:130px;height:160px;border:2px dashed var(--border);border-radius:4px;
+            background:var(--bg3);cursor:pointer;display:flex;align-items:center;
+            justify-content:center;overflow:hidden;transition:border-color 0.15s;"
+            onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor=avatarUrl?'var(--gold)':'var(--border)'">
+            <img id="avatar-img" src="" style="display:none;width:100%;height:100%;object-fit:cover;">
+            <span id="avatar-placeholder" style="color:var(--text-dim);font-size:0.72rem;text-align:center;padding:8px;line-height:1.5;">Click to<br>set avatar</span>
+          </div>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileSelected(this)">
+        </div>
+        <div>
+          <div class="field">
+            <label>Character Name</label>
+            <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
+          </div>
+          <div class="grid-2" style="margin-bottom:0">
         <div class="field field-inline">
           <label>Species</label>
           <select id="sel-race" onchange="recalc()"></select>
@@ -468,7 +487,9 @@
           <label>Mental Disposition</label>
           <select id="sel-mental" onchange="recalc()"></select>
         </div>
-      </div>
+        </div><!-- end grid-2 -->
+        </div><!-- end right column -->
+      </div><!-- end avatar+fields grid -->
       <h3>Computed Physical Overview</h3>
       <div class="summary-grid">
         <div class="summary-card"><div class="label">Height</div><div class="value" id="disp-height">—</div></div>
@@ -789,6 +810,12 @@
     <!-- PLAYSHEET -->
     <div id="panel-playsheet" class="panel playsheet">
       <h2>Character Playsheet</h2>
+      <div style="display:grid;grid-template-columns:120px 1fr;gap:12px;align-items:start;margin-bottom:10px;">
+        <div>
+          <img id="ps-avatar" src="" style="display:none;width:110px;height:135px;object-fit:cover;border-radius:4px;border:1px solid var(--gold);">
+          <div id="ps-avatar-placeholder" style="width:110px;height:135px;background:var(--bg3);border-radius:4px;border:1px solid var(--border);"></div>
+        </div>
+        <div>
       <div class="ps-header">
         <div class="ps-block">
           <h4>Identity</h4>
@@ -806,7 +833,9 @@
           <div class="ps-row"><span class="ps-label">Maximum Speed</span><span class="ps-val" id="ps-maxspeed">—</span></div>
           <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
         </div>
-      </div>
+      </div><!-- end ps-header -->
+        </div><!-- end right column -->
+      </div><!-- end avatar+header grid -->
       <div id="ps-stats-grid" class="ps-block" style="margin-bottom:16px;">
         <h4 class="collapsible" onclick="toggleCollapse('psstats')">Raw Stats<span class="collapse-arrow" id="arrow-psstats">▼</span></h4>
         <div class="collapse-body" id="body-psstats">
@@ -1106,6 +1135,7 @@ function updateWeightSummary(attrs) {
 function updatePlaysheet(attrs) {
   const name = document.getElementById('char-name').value || '(Unnamed)';
   document.getElementById('ps-name').textContent   = name;
+  setAvatarUrl(avatarUrl);
   document.getElementById('ps-race').textContent   = document.getElementById('sel-race').value;
   document.getElementById('ps-bodytype').textContent = document.getElementById('sel-bodytype').value;
   document.getElementById('ps-gender').textContent = document.getElementById('sel-gender').value;
@@ -1358,6 +1388,106 @@ function renderHandHit(side, attrs) {
   }).join('');
 
   container.innerHTML = actionRows || '';
+}
+
+// ─── AVATAR ──────────────────────────────────────────────────────────────────
+let avatarUrl         = '';  // data URL — used for display and export
+let avatarStoragePath = '';  // Supabase storage path — for future character persistence
+let cropper           = null;
+
+function openAvatarPicker() {
+  document.getElementById('avatar-file-input').click();
+}
+
+function onAvatarFileSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const modal = document.getElementById('modal-avatar');
+    const img   = document.getElementById('avatar-crop-img');
+    modal.style.display = 'flex';
+    img.src = e.target.result;
+    if (cropper) { cropper.destroy(); cropper = null; }
+    img.onload = () => {
+      cropper = new Cropper(img, {
+        aspectRatio: 13 / 16,   // portrait — matches the 130×160 preview
+        viewMode: 1,
+        dragMode: 'move',
+        autoCropArea: 0.9,
+        restore: false,
+        guides: true,
+        center: true,
+        highlight: false,
+        cropBoxMovable: false,
+        cropBoxResizable: false,
+        toggleDragModeOnDblclick: false,
+      });
+    };
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function closeAvatarModal() {
+  document.getElementById('modal-avatar').style.display = 'none';
+  if (cropper) { cropper.destroy(); cropper = null; }
+}
+
+async function confirmCrop() {
+  if (!cropper) return;
+  const btn = document.getElementById('avatar-confirm-btn');
+  const status = document.getElementById('avatar-upload-status');
+  btn.disabled = true;
+  status.textContent = 'Uploading…';
+
+  const canvas = cropper.getCroppedCanvas({ width: 260, height: 320 });
+  // Display immediately from the local canvas — no network wait
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+  setAvatarUrl(dataUrl);
+  closeAvatarModal();
+
+  // Upload to Supabase in the background and swap to the hosted URL
+  if (currentUser) {
+    canvas.toBlob(async blob => {
+      try {
+        const path = `${currentUser.id}/avatar-${Date.now()}.jpg`;
+        const { error } = await sb.storage.from('avatars').upload(path, blob, {
+          contentType: 'image/jpeg', upsert: true
+        });
+        if (error) throw error;
+        avatarStoragePath = path; // track for future character persistence
+      } catch (err) {
+        console.warn('Avatar upload failed:', err.message);
+      }
+      btn.disabled = false;
+    }, 'image/jpeg', 0.85);
+  } else {
+    btn.disabled = false;
+  }
+}
+
+function setAvatarUrl(url) {
+  avatarUrl = url;
+  // Overview panel
+  const img  = document.getElementById('avatar-img');
+  const ph   = document.getElementById('avatar-placeholder');
+  const prev = document.getElementById('avatar-preview');
+  if (url) {
+    img.src = url; img.style.display = ''; ph.style.display = 'none';
+    prev.style.borderColor = 'var(--gold)';
+  } else {
+    img.src = ''; img.style.display = 'none'; ph.style.display = '';
+    prev.style.borderColor = 'var(--border)';
+  }
+  // Playsheet
+  const psImg = document.getElementById('ps-avatar');
+  const psPh  = document.getElementById('ps-avatar-placeholder');
+  if (url) {
+    psImg.src = url; psImg.style.display = ''; psPh.style.display = 'none';
+  } else {
+    psImg.src = ''; psImg.style.display = 'none'; psPh.style.display = '';
+  }
 }
 
 function getHeldItems() {
@@ -2323,6 +2453,7 @@ function gatherCharacterData() {
     equipment,
     armor: getArmorSelections(),
     heldItems: getHeldItems(),
+    avatarUrl,
   };
 }
 
@@ -2397,127 +2528,161 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-// ─── CONFIG FILE PERSISTENCE (auto-save/auto-load via the File System Access API) ──
-// Lets the browser write configuration changes directly back to arcane-config.json
-// on disk, and silently reload it on startup, instead of relying on manual
-// export/import. Only Chromium browsers support this; everywhere else falls back
-// to the manual Export/Import Configuration buttons.
-const CONFIG_FILENAME = 'arcane-config.json';
-let configFileHandle = null;
-let configLinked = false;
+// ─── SUPABASE ────────────────────────────────────────────────────────────────
+const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
+const SUPABASE_KEY  = 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';      // replace with your Supabase anon/public key
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-function idbOpen() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('arcaneBuilderDB', 1);
-    req.onupgradeneeded = () => req.result.createObjectStore('handles');
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+let currentUser       = null;
+let currentCampaignId = null;
+let currentConfigId   = null;
+
+// ─── AUTH UI ─────────────────────────────────────────────────────────────────
+function showLogin()  {
+  document.getElementById('login-form').style.display  = '';
+  document.getElementById('signup-form').style.display = 'none';
+  document.getElementById('login-error').style.display = 'none';
+}
+function showSignup() {
+  document.getElementById('login-form').style.display  = 'none';
+  document.getElementById('signup-form').style.display = '';
+  document.getElementById('login-error').style.display = 'none';
+}
+function showAuthError(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+async function submitLogin() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) showAuthError(error.message);
+}
+
+async function submitSignup() {
+  const displayName = document.getElementById('auth-displayname').value.trim();
+  const email       = document.getElementById('auth-signup-email').value.trim();
+  const password    = document.getElementById('auth-signup-password').value;
+  const { error } = await sb.auth.signUp({
+    email, password,
+    options: { data: { display_name: displayName } }
   });
-}
-async function idbGet(key) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const req = db.transaction('handles', 'readonly').objectStore('handles').get(key);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-async function idbSet(key, val) {
-  const db = await idbOpen();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction('handles', 'readwrite');
-    tx.objectStore('handles').put(val, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  if (error) showAuthError(error.message);
+  else showAuthError('Check your email to confirm your account, then sign in.');
 }
 
-async function verifyPermission(handle, mode) {
-  const opts = { mode };
-  try {
-    if ((await handle.queryPermission(opts)) === 'granted') return true;
-    if ((await handle.requestPermission(opts)) === 'granted') return true;
-  } catch (e) {}
-  return false;
+async function submitSignOut() {
+  await sb.auth.signOut();
 }
 
-function setConfigStatus(text, linked) {
-  const el = document.getElementById('config-status');
-  if (el) { el.textContent = text; el.style.color = linked ? 'var(--gold2)' : 'var(--text-dim)'; }
+// ─── CAMPAIGN UI ─────────────────────────────────────────────────────────────
+function showCampaignModal() {
+  const modal = document.getElementById('modal-campaign');
+  modal.style.display = 'flex';
+  loadCampaignList();
 }
 
-async function connectConfigFile() {
-  if (!window.showOpenFilePicker) {
-    alert('Your browser does not support linking a local file for auto-save. Use Export/Import Configuration instead.');
+function hideCampaignModal() {
+  document.getElementById('modal-campaign').style.display = 'none';
+}
+
+function setCampaignError(msg) {
+  const el = document.getElementById('campaign-error');
+  el.textContent = msg; el.style.display = msg ? '' : 'none';
+}
+
+async function loadCampaignList() {
+  const list = document.getElementById('campaign-list');
+  list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
+  const { data, error } = await sb
+    .from('campaigns')
+    .select('id, name, gm_id')
+    .order('created_at', { ascending: false });
+  if (error) { setCampaignError(error.message); return; }
+  if (!data.length) {
+    list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">No campaigns yet — create one below.</span>';
     return;
   }
-  try {
-    const [handle] = await window.showOpenFilePicker({
-      types: [{ description: 'Arcane Config', accept: { 'application/json': ['.json'] } }],
-      suggestedName: CONFIG_FILENAME,
-    });
-    const ok = await verifyPermission(handle, 'readwrite');
-    if (!ok) { setConfigStatus('⚠ Permission denied', false); return; }
-    const file = await handle.getFile();
-    const data = JSON.parse(await file.text());
-    configFileHandle = handle;
-    configLinked = true;
-    await idbSet('configFileHandle', handle);
-    applyConfigData(data, { skipWrite: true });
-    setConfigStatus('🔗 Linked: ' + handle.name, true);
-  } catch (err) {
-    if (err.name !== 'AbortError') alert('Failed to link configuration file: ' + err.message);
+  list.innerHTML = data.map(c => `
+    <div onclick="selectCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}')" style="
+      padding:10px 14px; border:1px solid var(--border); border-radius:4px;
+      margin-bottom:8px; cursor:pointer; transition:border-color 0.15s;"
+      onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
+      <div style="color:var(--text-bright);font-size:0.9rem;">${c.name}</div>
+      <div style="color:var(--text-dim);font-size:0.72rem;">${c.gm_id === currentUser.id ? 'Game Master' : 'Player'}</div>
+    </div>`).join('');
+}
+
+async function createCampaign() {
+  const name = document.getElementById('new-campaign-name').value.trim();
+  if (!name) { setCampaignError('Please enter a campaign name.'); return; }
+  setCampaignError('');
+  const { data, error } = await sb
+    .from('campaigns')
+    .insert({ name, gm_id: currentUser.id })
+    .select('id, name')
+    .single();
+  if (error) { setCampaignError(error.message); return; }
+  // Insert the GM as a member
+  await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
+  // Create an empty game config for this campaign
+  await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() });
+  document.getElementById('new-campaign-name').value = '';
+  await selectCampaign(data.id, data.name);
+}
+
+async function selectCampaign(id, name) {
+  currentCampaignId = id;
+  hideCampaignModal();
+  document.getElementById('nav-campaign').textContent = name;
+  await loadConfigFromSupabase();
+}
+
+// ─── CONFIG PERSISTENCE (Supabase) ───────────────────────────────────────────
+function setConfigStatus(text, ok) {
+  const el = document.getElementById('config-status');
+  if (el) { el.textContent = text; el.style.color = ok ? 'var(--gold2)' : 'var(--text-dim)'; }
+}
+
+// Debounce writes so rapid UI changes don't hammer the database
+let _writeTimer = null;
+function writeConfigToDisk() {
+  clearTimeout(_writeTimer);
+  _writeTimer = setTimeout(writeConfigToSupabase, 1500);
+}
+
+async function writeConfigToSupabase() {
+  if (!currentCampaignId) return;
+  const config = gatherConfigData();
+  if (currentConfigId) {
+    await sb.from('game_configs')
+      .update({ config, updated_by: currentUser.id })
+      .eq('id', currentConfigId);
+  } else {
+    const { data } = await sb.from('game_configs')
+      .insert({ campaign_id: currentCampaignId, config, updated_by: currentUser.id })
+      .select('id').single();
+    if (data) currentConfigId = data.id;
   }
 }
 
-async function writeConfigToDisk() {
-  if (!configFileHandle || !configLinked) return;
-  try {
-    const ok = await verifyPermission(configFileHandle, 'readwrite');
-    if (!ok) return;
-    const writable = await configFileHandle.createWritable();
-    await writable.write(JSON.stringify(gatherConfigData(), null, 2));
-    await writable.close();
-  } catch (err) {
-    console.warn('Could not auto-save configuration to disk:', err);
+async function loadConfigFromSupabase() {
+  if (!currentCampaignId) return;
+  setConfigStatus('Loading configuration…', false);
+  const { data, error } = await sb
+    .from('game_configs')
+    .select('id, config')
+    .eq('campaign_id', currentCampaignId)
+    .single();
+  if (error || !data) {
+    setConfigStatus('No configuration found for this campaign.', false);
+    return;
   }
-}
-
-async function loadConfigFromDisk() {
-  // 1) Try a previously linked file handle (silent if permission is still granted).
-  try {
-    const handle = await idbGet('configFileHandle');
-    if (handle) {
-      const granted = (await handle.queryPermission({ mode: 'readwrite' })) === 'granted';
-      if (granted) {
-        const file = await handle.getFile();
-        const data = JSON.parse(await file.text());
-        configFileHandle = handle;
-        configLinked = true;
-        applyConfigData(data, { skipWrite: true });
-        setConfigStatus('🔗 Linked: ' + handle.name, true);
-        return true;
-      }
-      configFileHandle = handle;
-      setConfigStatus('⚠ Click Connect to reload ' + handle.name, false);
-      return false;
-    }
-  } catch (err) { /* IndexedDB or File System Access unavailable */ }
-
-  // 2) Fall back to fetching a config file sitting next to this HTML file
-  // (works when served over http/https; usually blocked under plain file://).
-  try {
-    const res = await fetch(CONFIG_FILENAME, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      applyConfigData(data, { skipWrite: true });
-      setConfigStatus('📄 Loaded ' + CONFIG_FILENAME + ' (read-only — click Connect to enable auto-save)', false);
-      return true;
-    }
-  } catch (err) { /* blocked under file:// in most browsers */ }
-
-  setConfigStatus('⚠ No configuration loaded — click Connect or Import Configuration', false);
-  return false;
+  currentConfigId = data.id;
+  applyConfigData(data.config, { skipWrite: true });
+  setConfigStatus('Configuration loaded.', true);
 }
 
 function applyConfigData(data, opts) {
@@ -2654,6 +2819,9 @@ function applyCharacterData(data) {
     renderHandActions('right');
     renderHandActions('left');
   }
+
+  // Avatar
+  setAvatarUrl(data.avatarUrl || '');
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
@@ -2661,11 +2829,36 @@ buildStatRows();
 buildFeatures();
 buildArmorFields();
 
-(async () => {
-  await loadConfigFromDisk();
+// Handle auth state changes — login shows app, logout shows login screen
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    document.getElementById('modal-login').style.display    = 'none';
+    document.getElementById('modal-campaign').style.display = 'none';
+    document.getElementById('nav-user').textContent =
+      session.user.user_metadata?.display_name || session.user.email;
+    // If no campaign is selected yet, prompt for one
+    if (!currentCampaignId) showCampaignModal();
+  } else {
+    currentUser       = null;
+    currentCampaignId = null;
+    currentConfigId   = null;
+    document.getElementById('modal-login').style.display    = 'flex';
+    document.getElementById('modal-campaign').style.display = 'none';
+    document.getElementById('nav-user').textContent     = '';
+    document.getElementById('nav-campaign').textContent = '';
+  }
+});
 
-  // Ensure UI reflects whatever config we ended up with, even if loading failed
-  // (RACE_DATA/SKILLS/etc. stay empty until the user connects/imports a config).
+(async () => {
+  // Restore session if already logged in (e.g. page refresh)
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    // Not logged in — show login modal, skip config load
+    document.getElementById('modal-login').style.display = 'flex';
+  }
+
+  // Build UI with default/empty data — config loads after campaign is selected
   buildCharSelects();
   buildLoadoutSelects();
   buildSkillFilters();
@@ -2675,24 +2868,107 @@ buildArmorFields();
   buildArmorManagerTable();
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
-
-  // Set defaults matching the spreadsheet example, if the loaded config has them.
-  const trySelect = (id, val) => {
-    const el = document.getElementById(id);
-    if ([...el.options].some(o => o.value === val)) el.value = val;
-  };
-  trySelect('sel-race', 'Ogre');
-  trySelect('sel-bodytype', 'Humanoid');
-  trySelect('sel-gender', 'Male');
-  trySelect('sel-age', 'Adult');
-  trySelect('sel-height', 'Medium');
-  trySelect('sel-build', 'Stout');
-  trySelect('sel-social', 'Introvert');
-  trySelect('sel-mental', 'Balanced');
-  statValues = { Strength:20, Endurance:15, Agility:11, Memory:9, Intellect:9, Senses:16, Quintessence:0 };
-  buildStatRows();
   recalc();
 })();
 </script>
+
+<!-- ─── AVATAR CROP MODAL ───────────────────────────────────────────────── -->
+<div id="modal-avatar" style="
+  display:none; position:fixed; inset:0; z-index:2000;
+  background:rgba(0,0,0,0.9); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:24px; width:520px; max-width:96vw; display:flex; flex-direction:column; gap:16px;">
+    <h2 style="margin:0;">Crop Avatar</h2>
+    <div style="max-height:400px;overflow:hidden;background:var(--bg3);border-radius:4px;">
+      <img id="avatar-crop-img" style="max-width:100%;display:block;">
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <span style="color:var(--text-dim);font-size:0.78rem;">Drag to reposition · Scroll to zoom</span>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn-sm" onclick="closeAvatarModal()">Cancel</button>
+        <button class="btn" onclick="confirmCrop()" id="avatar-confirm-btn">Set Avatar</button>
+      </div>
+    </div>
+    <div id="avatar-upload-status" style="font-size:0.78rem;color:var(--text-dim);min-height:1em;"></div>
+  </div>
+</div>
+
+<!-- ─── LOGIN MODAL ─────────────────────────────────────────────────────── -->
+<div id="modal-login" style="
+  display:flex; position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,0.85); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:32px 36px; width:360px; max-width:94vw;">
+    <h2 style="text-align:center; margin-bottom:4px;">Arcane</h2>
+    <p style="text-align:center; color:var(--text-dim); font-size:0.8rem; margin-bottom:24px; font-style:italic;">Character Builder</p>
+
+    <div id="login-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
+
+    <div id="login-form">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="your@email.com" style="width:100%;">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="auth-password" placeholder="Password" style="width:100%;" onkeydown="if(event.key==='Enter')submitLogin()">
+      </div>
+      <button class="btn" style="width:100%; margin-top:8px;" onclick="submitLogin()">Sign In</button>
+      <div style="text-align:center; margin-top:12px;">
+        <span style="color:var(--text-dim); font-size:0.8rem;">No account? </span>
+        <button class="btn-sm" onclick="showSignup()">Create one</button>
+      </div>
+    </div>
+
+    <div id="signup-form" style="display:none;">
+      <div class="field">
+        <label>Display Name</label>
+        <input type="text" id="auth-displayname" placeholder="How you appear to others" style="width:100%;">
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth-signup-email" placeholder="your@email.com" style="width:100%;">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="auth-signup-password" placeholder="Min 6 characters" style="width:100%;" onkeydown="if(event.key==='Enter')submitSignup()">
+      </div>
+      <button class="btn" style="width:100%; margin-top:8px;" onclick="submitSignup()">Create Account</button>
+      <div style="text-align:center; margin-top:12px;">
+        <span style="color:var(--text-dim); font-size:0.8rem;">Already have an account? </span>
+        <button class="btn-sm" onclick="showLogin()">Sign in</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── CAMPAIGN MODAL ──────────────────────────────────────────────────── -->
+<div id="modal-campaign" style="
+  display:none; position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,0.85); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:32px 36px; width:420px; max-width:94vw;">
+    <h2 style="text-align:center; margin-bottom:20px;">Select Campaign</h2>
+
+    <div id="campaign-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
+
+    <div id="campaign-list" style="margin-bottom:20px; max-height:240px; overflow-y:auto;"></div>
+
+    <div style="border-top:1px solid var(--border); padding-top:16px;">
+      <p style="color:var(--text-dim); font-size:0.78rem; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.08em;">Create New Campaign</p>
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="new-campaign-name" placeholder="Campaign name..." style="flex:1;">
+        <button class="btn" onclick="createCampaign()">Create</button>
+      </div>
+    </div>
+
+    <div style="text-align:right; margin-top:16px;">
+      <button class="btn-sm" onclick="submitSignOut()" style="color:var(--text-dim);">Sign Out</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
