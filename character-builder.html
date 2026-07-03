@@ -77,6 +77,274 @@
   .nav-btn.active { color: var(--gold2); border-left-color: var(--gold); background: var(--bg3); }
   .nav-section { color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 18px 2px; }
 
+  /* ── PLAY MODE ─────────────────────────────────────────────────────────── */
+  .play-btn {
+    margin-left: auto;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: 1px solid var(--accent2);
+    color: #fff;
+    font-family: 'Georgia', serif;
+    font-size: 0.82rem;
+    padding: 5px 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+  }
+  .play-btn:hover { filter: brightness(1.15); }
+  .play-btn.exit { background: linear-gradient(135deg, #4a3a1c, #6b5530); border-color: var(--gold); color: var(--gold2); }
+
+  #play-mode { display: none; }
+  #play-mode.active { display: flex; flex-direction: column; height: calc(100vh - 46px); }
+
+  .play-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .play-panel {
+    overflow-y: auto;
+    background: var(--bg2);
+    flex-shrink: 0;
+  }
+  #play-char-panel  { width: 300px; min-width: 160px; max-width: 600px; border-right: 1px solid var(--border); }
+  #play-gm-panel    { width: 260px; min-width: 160px; max-width: 480px; border-left:  1px solid var(--border); border-right: none; }
+
+  .play-resize-handle {
+    width: 5px;
+    background: var(--border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    position: relative;
+    z-index: 5;
+  }
+  .play-resize-handle:hover,
+  .play-resize-handle.resizing { background: var(--gold); }
+  .play-panel-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    position: sticky;
+    top: 0;
+    z-index: 5;
+  }
+  .play-panel-header .panel-title { color: var(--gold); font-size: 0.78rem; }
+
+  /* compact play-sheet inside play mode */
+  .ps-compact-avatar {
+    width: 72px; height: 88px;
+    border: 2px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg3);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ps-compact-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .ps-stat-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.78rem; border-bottom: 1px solid rgba(61,51,40,0.4); }
+  .ps-stat-label { color: var(--text-dim); }
+  .ps-stat-val   { color: var(--gold2); font-weight: bold; }
+
+  /* ── MAP PANEL ─────────────────────────────────────────────────────────── */
+  .map-panel {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    background: #0a0906;
+  }
+  .map-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .map-toolbar .tb-sep { width: 1px; background: var(--border); height: 18px; margin: 0 2px; }
+  .map-toolbar .tb-label { font-size: 0.72rem; color: var(--text-dim); }
+  .map-toolbar .tb-zoom  { font-size: 0.8rem; color: var(--gold2); min-width: 44px; text-align: center; }
+  .map-viewport {
+    flex: 1;
+    overflow: hidden;
+    position: relative;
+    cursor: grab;
+    user-select: none;
+  }
+  .map-viewport.dragging { cursor: grabbing; }
+  .map-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: top left;
+  }
+  .map-canvas img {
+    display: block;
+    max-width: none;
+    image-rendering: auto;
+  }
+  .map-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-dim);
+    font-style: italic;
+    gap: 12px;
+  }
+  .map-placeholder .big-icon { font-size: 3rem; opacity: 0.3; }
+
+  /* GM right panel — map library */
+  .play-panel-right { border-left: 1px solid var(--border); border-right: none; }
+  .map-thumb-item {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .map-thumb-item:hover { background: var(--bg3); }
+  .map-thumb-item.active-map { background: rgba(107,63,160,0.25); border-left: 3px solid var(--accent2); padding-left: 7px; }
+  .map-thumb {
+    width: 56px; height: 42px;
+    border-radius: 3px;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .map-thumb-info { flex: 1; min-width: 0; }
+  .map-thumb-name { font-size: 0.8rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .map-thumb-status { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+  .map-activate-btn {
+    font-size: 0.7rem; padding: 3px 8px;
+    background: var(--accent); border: 1px solid var(--accent2);
+    color: #fff; border-radius: 3px; cursor: pointer; white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .map-activate-btn:hover { filter: brightness(1.2); }
+  .map-upload-area {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── GM PANEL TABS ─────────────────────────────────────────────────────── */
+  .gm-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .gm-tab {
+    flex: 1;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-family: 'Georgia', serif;
+    font-size: 0.74rem;
+    padding: 7px 4px;
+    cursor: pointer;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    transition: all 0.15s;
+  }
+  .gm-tab:hover  { color: var(--text); }
+  .gm-tab.active { color: var(--gold2); border-bottom-color: var(--gold); }
+
+  /* ── TOKENS ─────────────────────────────────────────────────────────────── */
+  .map-token {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    cursor: grab;
+    user-select: none;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .map-token.dragging { cursor: grabbing; z-index: 30; }
+  .token-ring {
+    border-radius: 50%;
+    border: 2px solid var(--gold);
+    overflow: hidden;
+    background: var(--bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .token-ring.type-creature { border-color: #b03030; }
+  .token-ring.type-item     { border-color: #708090; border-radius: 4px; }
+  .map-token.selected .token-ring {
+    border-color: #fff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 12px rgba(255,255,255,0.4);
+  }
+  .token-ring img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .token-icon { font-size: 1.2rem; }
+  .token-label {
+    font-size: 9px;
+    color: #fff;
+    text-shadow: 0 0 3px #000, 0 0 6px #000;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 72px;
+    text-align: center;
+    line-height: 1.2;
+    pointer-events: none;
+  }
+
+  /* token add list in GM panel */
+  .token-add-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+  }
+  .token-add-row .t-name { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .token-add-row .t-sub  { font-size: 0.66rem; color: var(--text-dim); }
+  .token-add-btn {
+    font-size: 0.7rem; padding: 3px 8px;
+    background: var(--green); border: 1px solid #3d8a4e;
+    color: #fff; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+  }
+  .token-add-btn:hover { filter: brightness(1.2); }
+  .token-remove-btn {
+    font-size: 0.7rem; padding: 3px 8px;
+    background: var(--red); border: 1px solid #a83030;
+    color: #fff; border-radius: 3px; cursor: pointer; flex-shrink: 0;
+  }
+  .token-remove-btn:hover { filter: brightness(1.2); }
+
+  /* active tokens section */
+  .token-on-map-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.76rem;
+  }
+  .token-on-map-row .t-dot {
+    width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  }
+
   .main-content { padding: 14px 20px; overflow-y: auto; }
   .panel { display: none; }
   .panel.active { display: block; }
@@ -396,6 +664,7 @@
     <h1>⚔ Arcane Character Builder</h1>
     <div class="subtitle">Design your character — traits, stats, skills &amp; loadout</div>
   </div>
+  <button class="play-btn" id="play-mode-btn" onclick="enterPlayMode()">▶ Play Mode</button>
 </header>
 
 <div class="app-layout">
@@ -410,8 +679,12 @@
     <div class="nav-section">Summary</div>
     <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
     <div class="nav-section">File</div>
-    <button class="nav-btn" onclick="exportCharacter()">💾 Export Character</button>
-    <button class="nav-btn" onclick="document.getElementById('import-file').click()">📂 Import Character</button>
+    <button class="nav-btn" onclick="saveCharacter()">☁ Save Character</button>
+    <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
+    <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
+    <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
+    <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
+    <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
     <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
     <div class="nav-section">Game Configuration</div>
     <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
@@ -1221,6 +1494,10 @@ function updatePlaysheet(attrs) {
   renderHandActions('left');
   renderHandHit('right', attrs);
   renderHandHit('left', attrs);
+  // keep play mode character panel live
+  if (document.getElementById('play-mode')?.classList.contains('active')) {
+    renderPlayCharacter();
+  }
 }
 
 // How many of each loadout item are carried (weapons: one per row added;
@@ -2457,6 +2734,175 @@ function gatherCharacterData() {
   };
 }
 
+// ─── CHARACTER SAVE / LOAD (Supabase) ────────────────────────────────────────
+let currentCharacterId = null;
+
+function setCharSaveStatus(text, ok) {
+  const el = document.getElementById('char-save-status');
+  if (el) { el.textContent = text; el.style.color = ok ? 'var(--gold2)' : 'var(--text-dim)'; }
+}
+
+async function saveCharacter() {
+  if (!currentCampaignId || !currentUser) {
+    setCharSaveStatus('Sign in and select a campaign first.', false);
+    return;
+  }
+  const data = gatherCharacterData();
+  if (!data.name) {
+    setCharSaveStatus('Enter a character name before saving.', false);
+    return;
+  }
+  setCharSaveStatus('Saving…', false);
+
+  const row = {
+    campaign_id: currentCampaignId,
+    user_id:     currentUser.id,
+    name:        data.name,
+    species:     data.race || data.species || '',
+    body_type:   data.bodyType || '',
+    sex:         data.sex || '',
+    age:         data.age || '',
+    height:      data.height || '',
+    build:       data.build || '',
+    social:      data.social || '',
+    mental:      data.mental || '',
+    stats:       data.stats,
+    features:    data.features,
+    skills:      data.skills,
+    weapons:     data.weapons,
+    equipment:   data.equipment,
+    armor:       data.armor,
+    held_items:  data.heldItems,
+    avatar_url:  avatarStoragePath || data.avatarUrl || '',
+  };
+
+  let error;
+  if (currentCharacterId) {
+    ({ error } = await sb.from('characters')
+      .update(row)
+      .eq('id', currentCharacterId));
+  } else {
+    const { data: inserted, error: err } = await sb.from('characters')
+      .insert(row)
+      .select('id')
+      .single();
+    error = err;
+    if (inserted) currentCharacterId = inserted.id;
+  }
+
+  if (error) {
+    setCharSaveStatus('Save failed: ' + error.message, false);
+  } else {
+    setCharSaveStatus('Saved ' + new Date().toLocaleTimeString(), true);
+  }
+}
+
+async function showCharacterListModal() {
+  const modal = document.getElementById('modal-characters');
+  const list  = document.getElementById('character-list');
+  const err   = document.getElementById('character-list-error');
+  err.style.display = 'none';
+  modal.style.display = 'flex';
+  list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
+
+  const { data, error } = await sb
+    .from('characters')
+    .select('id, name, species, sex, updated_at')
+    .eq('campaign_id', currentCampaignId)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    err.textContent = error.message; err.style.display = '';
+    list.innerHTML = '';
+    return;
+  }
+  if (!data.length) {
+    list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">No saved characters in this campaign yet.</span>';
+    return;
+  }
+
+  list.innerHTML = data.map(c => `
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:10px 14px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;">
+      <div style="cursor:pointer;flex:1;" onclick="loadCharacter('${c.id}')">
+        <div style="color:var(--text-bright);font-size:0.9rem;">${c.name}</div>
+        <div style="color:var(--text-dim);font-size:0.72rem;">${c.species || ''}${c.sex ? ' · ' + c.sex : ''} · Saved ${new Date(c.updated_at).toLocaleDateString()}</div>
+      </div>
+      <button class="remove-btn" title="Delete character" onclick="deleteCharacter('${c.id}','${c.name.replace(/'/g,"\\'")}')">✕</button>
+    </div>`).join('');
+}
+
+function hideCharacterListModal() {
+  document.getElementById('modal-characters').style.display = 'none';
+}
+
+async function loadCharacter(id) {
+  const { data, error } = await sb
+    .from('characters')
+    .select('*')
+    .eq('id', id)
+    .single();
+  if (error) { alert('Failed to load character: ' + error.message); return; }
+
+  currentCharacterId = data.id;
+  hideCharacterListModal();
+
+  // Map DB columns back to the character data shape applyCharacterData expects
+  applyCharacterData({
+    name:      data.name,
+    race:      data.species,
+    bodyType:  data.body_type,
+    sex:       data.sex,
+    age:       data.age,
+    height:    data.height,
+    build:     data.build,
+    social:    data.social,
+    mental:    data.mental,
+    stats:     data.stats,
+    features:  data.features,
+    skills:    data.skills,
+    weapons:   data.weapons,
+    equipment: data.equipment,
+    armor:     data.armor,
+    heldItems: data.held_items,
+    avatarUrl: data.avatar_url || '',
+  });
+
+  setCharSaveStatus('Loaded: ' + data.name, true);
+}
+
+async function deleteCharacter(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('characters').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  if (currentCharacterId === id) {
+    currentCharacterId = null;
+    setCharSaveStatus('', false);
+  }
+  showCharacterListModal(); // refresh list
+}
+
+function newCharacter() {
+  if (!confirm('Start a new character? Unsaved changes will be lost.')) return;
+  currentCharacterId = null;
+  setCharSaveStatus('', false);
+  avatarUrl = '';
+  avatarStoragePath = '';
+  setAvatarUrl('');
+  document.getElementById('char-name').value = '';
+  statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+  buildStatRows();
+  document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.querySelectorAll('#skill-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.getElementById('weapon-list').innerHTML = '';
+  document.getElementById('equip-list').innerHTML = '';
+  for (const area of ARMOR_AREAS) {
+    const el = document.getElementById('armor-' + area.key);
+    if (el) el.value = 'None';
+  }
+  recalc();
+}
+
 function exportCharacter() {
   const data = gatherCharacterData();
   const charName = (data.name || 'character').replace(/[^a-z0-9_\-]/gi, '_').toLowerCase();
@@ -2477,6 +2923,8 @@ function importCharacter(input) {
   reader.onload = e => {
     try {
       const data = JSON.parse(e.target.result);
+      currentCharacterId = null;
+      setCharSaveStatus('Imported from file — click Save to add to campaign.', false);
       applyCharacterData(data);
     } catch (err) {
       alert('Failed to load character file: ' + err.message);
@@ -2557,6 +3005,7 @@ function showAuthError(msg) {
 async function submitLogin() {
   const email    = document.getElementById('auth-email').value.trim();
   const password = document.getElementById('auth-password').value;
+  if (email) localStorage.setItem('arcane-last-email', email);
   const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) showAuthError(error.message);
 }
@@ -2853,6 +3302,9 @@ sb.auth.onAuthStateChange(async (event, session) => {
 (async () => {
   // Restore session if already logged in (e.g. page refresh)
   const { data: { session } } = await sb.auth.getSession();
+  const savedEmail = localStorage.getItem('arcane-last-email');
+  if (savedEmail) document.getElementById('auth-email').value = savedEmail;
+
   if (!session) {
     // Not logged in — show login modal, skip config load
     document.getElementById('modal-login').style.display = 'flex';
@@ -2870,7 +3322,856 @@ sb.auth.onAuthStateChange(async (event, session) => {
   buildRangedWeaponsManagerTable();
   recalc();
 })();
+
+// ─── PLAY MODE ───────────────────────────────────────────────────────────────
+
+let currentCampaignGmId = null;
+let activeMapId          = null;
+let mapChannel           = null;
+let mapScale             = 1;
+let mapOffsetX           = 0;
+let mapOffsetY           = 0;
+let mapImgW              = 0;
+let mapImgH              = 0;
+let mapDragging          = false;
+let mapDragStartX        = 0;
+let mapDragStartY        = 0;
+let mapDragOriginX       = 0;
+let mapDragOriginY       = 0;
+
+function isGM() {
+  return currentUser && currentCampaignGmId && currentUser.id === currentCampaignGmId;
+}
+
+// ─── Mode toggle ─────────────────────────────────────────────────────────────
+function enterPlayMode() {
+  document.querySelector('.app-layout').style.display = 'none';
+  const pm = document.getElementById('play-mode');
+  pm.classList.add('active');
+  document.getElementById('play-mode-btn').style.display = 'none';
+
+  document.getElementById('play-campaign-name').textContent =
+    document.getElementById('nav-campaign').textContent || '';
+
+  // Layout: GM gets right panel
+  const layout = document.getElementById('play-layout');
+  const gmPanel = document.getElementById('play-gm-panel');
+  const gmToolbar = document.getElementById('map-toolbar-gm');
+  const resizeRight = document.getElementById('resize-right');
+  if (isGM()) {
+    gmPanel.style.display = 'flex';
+    resizeRight.style.display = '';
+    gmToolbar.style.display = 'flex';
+    gmToolbar.innerHTML = `
+      <div class="tb-sep"></div>
+      <span class="tb-label">GM:</span>
+      <button class="btn-sm" onclick="triggerMapUpload()">⬆ Upload</button>`;
+    loadMapLibrary();
+  } else {
+    gmPanel.style.display = 'none';
+    resizeRight.style.display = 'none';
+    gmToolbar.style.display = 'none';
+  }
+
+  renderPlayCharacter();
+  subscribeMapRealtime();
+  loadActiveMap(activeMapId);
+  initMapInteraction();
+}
+
+function exitPlayMode() {
+  document.querySelector('.app-layout').style.display = '';
+  const pm = document.getElementById('play-mode');
+  pm.classList.remove('active');
+  document.getElementById('play-mode-btn').style.display = '';
+  if (mapChannel) { mapChannel.unsubscribe(); mapChannel = null; }
+  cleanupMapInteraction();
+}
+
+// ─── Compact character sheet ──────────────────────────────────────────────────
+function renderPlayCharacter() {
+  const el = document.getElementById('play-char-content');
+  if (!el) return;
+
+  // Pull live values from the builder
+  const nameEl  = document.getElementById('char-name');
+  const charName = nameEl ? nameEl.value : '—';
+
+  // Get final attributes from the recalc display
+  const attrNames = [
+    ['Strength','str'],['Endurance','end'],['Agility','agi'],
+    ['Memory','mem'],['Intellect','int'],['Senses','sen'],['Quintessence','qui'],
+    ['Physical Coordination','PhysCoord'],['Manual Dexterity','ManualDex'],
+    ['Stamina','Stamina'],['Vitality','Vitality'],['Stealth','Stealth'],
+    ['Perception','Perception'],['Power','Power'],['Willpower','Willpower'],
+  ];
+
+  // Build attrs map from existing DOM (attrs displayed in playsheet)
+  const attrs = {};
+  attrNames.forEach(([label, key]) => {
+    const el = document.getElementById('ps-attr-' + key);
+    if (el) attrs[key] = parseFloat(el.textContent) || 0;
+  });
+
+  const coreStats = [
+    ['Strength','str'],['Endurance','end'],['Agility','agi'],
+    ['Memory','mem'],['Intellect','int'],['Senses','sen'],
+  ];
+  const derivedStats = [
+    ['Physical Coord','PhysCoord'],['Manual Dex','ManualDex'],
+    ['Stamina','Stamina'],['Vitality','Vitality'],['Power','Power'],
+    ['Willpower','Willpower'],['Perception','Perception'],['Stealth','Stealth'],
+  ];
+
+  const statRow = ([label, key]) =>
+    `<div class="ps-stat-row">
+      <span class="ps-stat-label">${label}</span>
+      <span class="ps-stat-val">${attrs[key] ?? '—'}</span>
+    </div>`;
+
+  // Avatar
+  const avatarHtml = avatarUrl
+    ? `<img src="${avatarUrl}" style="width:100%;height:100%;object-fit:cover;">`
+    : `<span style="font-size:1.4rem;opacity:0.4;">🧙</span>`;
+
+  // Held items with hit/dmg/power
+  const rightSel = document.getElementById('ps-hand-right');
+  const leftSel  = document.getElementById('ps-hand-left');
+  const rightItem = rightSel ? rightSel.value : '';
+  const leftItem  = leftSel  ? leftSel.value  : '';
+
+  // Armor summary
+  const armorSlots = ['head','torso','rarm','larm','rleg','lleg'];
+  const armorLabels = {head:'Head',torso:'Torso',rarm:'R.Arm',larm:'L.Arm',rleg:'R.Leg',lleg:'L.Leg'};
+  const armorRows = armorSlots.map(s => {
+    const sel = document.getElementById('armor-' + s);
+    const val = sel ? sel.value : '—';
+    return `<div class="ps-stat-row"><span class="ps-stat-label">${armorLabels[s]}</span><span class="ps-stat-val" style="font-size:0.72rem;">${val || 'None'}</span></div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
+      <div class="ps-compact-avatar">${avatarHtml}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${charName || 'No Character'}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;" id="play-char-sub"></div>
+        <div style="font-size:0.72rem;color:var(--text-dim);">Right: <span style="color:var(--text);">${rightItem || 'Bare Hand'}</span></div>
+        <div style="font-size:0.72rem;color:var(--text-dim);">Left: <span style="color:var(--text);">${leftItem || 'Bare Hand'}</span></div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Core Stats</div>
+      ${coreStats.map(statRow).join('')}
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Derived</div>
+      ${derivedStats.map(statRow).join('')}
+    </div>
+
+    <div style="margin-bottom:10px;">
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Held Items</div>
+      <div id="play-hit-right"></div>
+      <div id="play-hit-left"></div>
+    </div>
+
+    <div>
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Armor</div>
+      ${armorRows}
+    </div>
+  `;
+
+  // Populate sub (species / body type)
+  const raceEl = document.getElementById('char-race');
+  const btEl   = document.getElementById('char-bodytype');
+  const sub = [raceEl?.value, btEl?.value].filter(Boolean).join(' · ');
+  const subEl = document.getElementById('play-char-sub');
+  if (subEl) subEl.textContent = sub;
+
+  // Render hit/dmg/power using existing renderHandHit logic, into play panel slots
+  renderPlayHandHit('right', attrs);
+  renderPlayHandHit('left',  attrs);
+}
+
+function renderPlayHandHit(side, attrs) {
+  const playContainer = document.getElementById('play-hit-' + side);
+  if (!playContainer) return;
+
+  const sel = document.getElementById('ps-hand-' + side);
+  const itemName = sel ? (sel.value || 'Bare Hand') : 'Bare Hand';
+  const label = side === 'right' ? 'Right Hand' : 'Left Hand';
+
+  const psContainer = document.getElementById('ps-hit-' + side);
+  const actionsHtml = psContainer?.innerHTML?.trim()
+    || '<span style="color:var(--text-dim);font-size:0.72rem;font-style:italic;">—</span>';
+
+  playContainer.innerHTML = `
+    <div style="font-size:0.72rem;color:var(--text-dim);margin:6px 0 3px;">
+      ${label}: <span style="color:var(--gold2);font-weight:bold;">${itemName}</span>
+    </div>
+    ${actionsHtml}`;
+}
+
+// ─── Supabase Realtime ────────────────────────────────────────────────────────
+function subscribeMapRealtime() {
+  if (mapChannel) { mapChannel.unsubscribe(); mapChannel = null; }
+  if (!currentCampaignId) return;
+
+  mapChannel = sb.channel('play-campaign-' + currentCampaignId)
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'campaigns',
+      filter: `id=eq.${currentCampaignId}`,
+    }, payload => {
+      const newMapId = payload.new.active_map_id;
+      if (newMapId !== activeMapId) {
+        activeMapId = newMapId;
+        loadActiveMap(newMapId);
+        if (isGM()) loadMapLibrary(); // refresh active indicator
+      }
+    })
+    .subscribe();
+}
+
+// ─── Map loading ──────────────────────────────────────────────────────────────
+async function loadActiveMap(mapId) {
+  const img         = document.getElementById('map-img');
+  const placeholder = document.getElementById('map-placeholder');
+  const nameLabel   = document.getElementById('play-active-map-name');
+
+  if (!mapId) {
+    img.style.display = 'none';
+    placeholder.style.display = 'flex';
+    document.getElementById('map-placeholder-text').textContent =
+      isGM() ? 'Upload a map and click Activate to begin.' : 'No map active for this campaign.';
+    if (nameLabel) nameLabel.textContent = '';
+    return;
+  }
+
+  const { data, error } = await sb.from('maps').select('name, image_url').eq('id', mapId).single();
+  if (error || !data) return;
+
+  placeholder.style.display = 'none';
+  img.onload = () => {
+    mapImgW = img.naturalWidth;
+    mapImgH = img.naturalHeight;
+    // give the canvas explicit dimensions so overflow:hidden clips correctly
+    const canvas = document.getElementById('map-canvas');
+    canvas.style.width  = mapImgW + 'px';
+    canvas.style.height = mapImgH + 'px';
+    // double rAF: let the browser apply the new canvas size before reading viewport dims
+    requestAnimationFrame(() => requestAnimationFrame(mapFit));
+  };
+  img.onerror = () => {
+    placeholder.style.display = 'flex';
+    document.getElementById('map-placeholder-text').textContent =
+      'Map image failed to load. Check that the Maps storage bucket is set to Public in Supabase.';
+    img.style.display = 'none';
+  };
+  // reset to identity so any stale scale doesn't persist while image loads
+  mapScale = 1; mapOffsetX = 0; mapOffsetY = 0;
+  const canvas = document.getElementById('map-canvas');
+  canvas.style.width = ''; canvas.style.height = '';
+  applyMapTransform();
+  img.src = data.image_url;
+  img.style.display = 'block';
+  if (nameLabel) nameLabel.textContent = '— ' + data.name;
+}
+
+// ─── Map library (GM) ────────────────────────────────────────────────────────
+async function loadMapLibrary() {
+  if (!currentCampaignId) return;
+  const listEl = document.getElementById('map-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="padding:10px;font-size:0.76rem;color:var(--text-dim);">Loading…</div>';
+
+  const { data: maps } = await sb.from('maps')
+    .select('id, name, image_url')
+    .eq('campaign_id', currentCampaignId)
+    .order('created_at', { ascending: false });
+
+  if (!maps || !maps.length) {
+    listEl.innerHTML = '<div style="padding:10px;font-size:0.76rem;color:var(--text-dim);font-style:italic;">No maps yet.</div>';
+    return;
+  }
+
+  listEl.innerHTML = maps.map(m => {
+    const isActive = m.id === activeMapId;
+    return `<div class="map-thumb-item${isActive ? ' active-map' : ''}" id="map-item-${m.id}">
+      <img class="map-thumb" src="${m.image_url}" alt="${m.name}" onerror="this.style.opacity='0.3'">
+      <div class="map-thumb-info">
+        <div class="map-thumb-name">${m.name}</div>
+        <div class="map-thumb-status">${isActive ? '● Active' : 'Inactive'}</div>
+      </div>
+      ${isActive ? '' : `<button class="map-activate-btn" onclick="activateMap('${m.id}')">Activate</button>`}
+    </div>`;
+  }).join('');
+}
+
+async function activateMap(mapId) {
+  if (!isGM() || !currentCampaignId) return;
+  const { error } = await sb.from('campaigns')
+    .update({ active_map_id: mapId })
+    .eq('id', currentCampaignId);
+  if (!error) {
+    activeMapId = mapId;
+    loadActiveMap(mapId);
+    loadMapLibrary();
+  }
+}
+
+// ─── Map upload ───────────────────────────────────────────────────────────────
+function triggerMapUpload() {
+  document.getElementById('map-file-input').click();
+}
+
+async function onMapFileSelected(input) {
+  const file = input.files[0];
+  if (!file || !currentCampaignId) return;
+  input.value = '';
+
+  const statusEl = document.getElementById('map-upload-status');
+  statusEl.textContent = 'Uploading…';
+
+  const ext  = file.name.split('.').pop();
+  const path = `${currentCampaignId}/${Date.now()}.${ext}`;
+
+  const { error: upErr } = await sb.storage.from('maps').upload(path, file, {
+    contentType: file.type, upsert: false,
+  });
+  if (upErr) { statusEl.textContent = 'Upload failed: ' + upErr.message; return; }
+
+  const { data: urlData } = sb.storage.from('maps').getPublicUrl(path);
+  const imageUrl = urlData.publicUrl;
+
+  const mapName = file.name.replace(/\.[^.]+$/, '').replace(/[-_]/g, ' ');
+
+  const { error: dbErr } = await sb.from('maps').insert({
+    campaign_id: currentCampaignId,
+    name: mapName,
+    image_url: imageUrl,
+    uploaded_by: currentUser.id,
+  });
+  if (dbErr) { statusEl.textContent = 'DB error: ' + dbErr.message; return; }
+
+  statusEl.textContent = '✓ Uploaded — click Activate to use.';
+  loadMapLibrary();
+  setTimeout(() => { statusEl.textContent = ''; }, 4000);
+}
+
+// ─── Pan / zoom ───────────────────────────────────────────────────────────────
+function applyMapTransform() {
+  const canvas = document.getElementById('map-canvas');
+  // Use left/top for positioning so overflow:hidden clips correctly after layout,
+  // and scale() only for zoom (no translate inside transform).
+  canvas.style.left      = mapOffsetX + 'px';
+  canvas.style.top       = mapOffsetY + 'px';
+  canvas.style.transform = `scale(${mapScale})`;
+  const label = document.getElementById('map-zoom-label');
+  if (label) label.textContent = Math.round(mapScale * 100) + '%';
+}
+
+function mapZoom(factor, cx, cy) {
+  const vp = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const px = cx !== undefined ? cx : rect.width  / 2;
+  const py = cy !== undefined ? cy : rect.height / 2;
+
+  const newScale = Math.min(8, Math.max(0.1, mapScale * factor));
+  // keep the image point under the cursor fixed:
+  // imgX = (px - left) / scale  →  newLeft = px - imgX * newScale
+  const imgX = (px - mapOffsetX) / mapScale;
+  const imgY = (py - mapOffsetY) / mapScale;
+  mapOffsetX = px - imgX * newScale;
+  mapOffsetY = py - imgY * newScale;
+  mapScale   = newScale;
+  applyMapTransform();
+}
+
+function mapFit() {
+  const vp = document.getElementById('map-viewport');
+  if (!mapImgW || !mapImgH) return;
+  const scaleX = vp.clientWidth  / mapImgW;
+  const scaleY = vp.clientHeight / mapImgH;
+  mapScale   = Math.min(scaleX, scaleY, 1);
+  mapOffsetX = (vp.clientWidth  - mapImgW * mapScale) / 2;
+  mapOffsetY = (vp.clientHeight - mapImgH * mapScale) / 2;
+  applyMapTransform();
+}
+
+function mapReset() {
+  mapScale = 1;
+  mapOffsetX = 0;
+  mapOffsetY = 0;
+  applyMapTransform();
+}
+
+function initMapInteraction() {
+  const vp = document.getElementById('map-viewport');
+  if (!vp || vp._mapEventsAttached) return;
+  vp._mapEventsAttached = true;
+
+  vp.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect  = vp.getBoundingClientRect();
+    const cx    = e.clientX - rect.left;
+    const cy    = e.clientY - rect.top;
+    const delta = e.deltaY > 0 ? 0.85 : 1.18;
+    mapZoom(delta, cx, cy);
+  }, { passive: false });
+
+  vp.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    mapDragging   = true;
+    mapDragStartX = e.clientX;
+    mapDragStartY = e.clientY;
+    mapDragOriginX = mapOffsetX;
+    mapDragOriginY = mapOffsetY;
+    vp.classList.add('dragging');
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!mapDragging) return;
+    mapOffsetX = mapDragOriginX + (e.clientX - mapDragStartX);
+    mapOffsetY = mapDragOriginY + (e.clientY - mapDragStartY);
+    applyMapTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!mapDragging) return;
+    mapDragging = false;
+    document.getElementById('map-viewport')?.classList.remove('dragging');
+  });
+
+  // Touch support
+  let lastTouchDist = 0;
+  vp.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      mapDragging    = true;
+      mapDragStartX  = e.touches[0].clientX;
+      mapDragStartY  = e.touches[0].clientY;
+      mapDragOriginX = mapOffsetX;
+      mapDragOriginY = mapOffsetY;
+    } else if (e.touches.length === 2) {
+      mapDragging = false;
+      lastTouchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+
+  vp.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (e.touches.length === 1 && mapDragging) {
+      mapOffsetX = mapDragOriginX + (e.touches[0].clientX - mapDragStartX);
+      mapOffsetY = mapDragOriginY + (e.touches[0].clientY - mapDragStartY);
+      applyMapTransform();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const rect = vp.getBoundingClientRect();
+      const cx = ((e.touches[0].clientX + e.touches[1].clientX) / 2) - rect.left;
+      const cy = ((e.touches[0].clientY + e.touches[1].clientY) / 2) - rect.top;
+      mapZoom(dist / lastTouchDist, cx, cy);
+      lastTouchDist = dist;
+    }
+  }, { passive: false });
+
+  vp.addEventListener('touchend', () => { mapDragging = false; });
+}
+
+function cleanupMapInteraction() {
+  const vp = document.getElementById('map-viewport');
+  if (vp) vp._mapEventsAttached = false;
+}
+
+// ─── Panel resize ─────────────────────────────────────────────────────────────
+let _resizeSide = null;
+let _resizeStartX = 0;
+let _resizeStartW = 0;
+
+function startPanelResize(e, side) {
+  e.preventDefault();
+  _resizeSide  = side;
+  _resizeStartX = e.clientX;
+  const panel = document.getElementById(side === 'left' ? 'play-char-panel' : 'play-gm-panel');
+  _resizeStartW = panel.offsetWidth;
+  document.getElementById('resize-' + side).classList.add('resizing');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+}
+
+document.addEventListener('mousemove', e => {
+  if (!_resizeSide) return;
+  const panel = document.getElementById(_resizeSide === 'left' ? 'play-char-panel' : 'play-gm-panel');
+  const delta = _resizeSide === 'left'
+    ?  (e.clientX - _resizeStartX)
+    : -(e.clientX - _resizeStartX);
+  const cs  = getComputedStyle(panel);
+  const minW = parseInt(cs.minWidth) || 160;
+  const maxW = parseInt(cs.maxWidth) || 600;
+  panel.style.width = Math.min(maxW, Math.max(minW, _resizeStartW + delta)) + 'px';
+});
+
+document.addEventListener('mouseup', () => {
+  if (!_resizeSide) return;
+  document.getElementById('resize-' + _resizeSide)?.classList.remove('resizing');
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  _resizeSide = null;
+});
+
+// ─── Patch selectCampaign to capture gm_id + active_map_id ──────────────────
+const _origSelectCampaign = selectCampaign;
+selectCampaign = async function(id, name) {
+  await _origSelectCampaign(id, name);
+  const { data } = await sb.from('campaigns')
+    .select('gm_id, active_map_id')
+    .eq('id', id)
+    .single();
+  if (data) {
+    currentCampaignGmId = data.gm_id;
+    activeMapId         = data.active_map_id || null;
+  }
+};
+
+// ─── STAGE 2: TOKENS ─────────────────────────────────────────────────────────
+
+let mapTokens        = {};   // id → token row
+let tokenChannel     = null; // Realtime broadcast channel
+let dragTokenId      = null;
+let dragOffsetX      = 0;
+let dragOffsetY      = 0;
+
+const TOKEN_SIZE = 44; // canvas-pixel diameter
+
+// ── GM tab switch ─────────────────────────────────────────────────────────────
+function switchGmTab(tab) {
+  ['maps','tokens'].forEach(t => {
+    document.getElementById('gm-tab-' + t).classList.toggle('active', t === tab);
+    const el = document.getElementById('gm-tab-content-' + t);
+    el.style.display = t === tab ? 'flex' : 'none';
+  });
+  if (tab === 'tokens') refreshTokenPanel();
+}
+
+// ── Token rendering ───────────────────────────────────────────────────────────
+function tokenHtml(t) {
+  const size   = TOKEN_SIZE;
+  const typeClass = t.entity_type === 'creature' ? 'type-creature'
+                  : t.entity_type === 'item'     ? 'type-item' : '';
+  const inner = t.avatar_url
+    ? `<img src="${t.avatar_url}" alt="" onerror="this.style.display='none'">`
+    : `<span class="token-icon">${t.entity_type === 'creature' ? '👾' : t.entity_type === 'item' ? '📦' : '🧙'}</span>`;
+
+  return `<div class="map-token" id="token-${t.id}"
+    data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
+    style="left:${t.x_pct}%;top:${t.y_pct}%;"
+    onmousedown="startTokenDrag(event,'${t.id}')">
+    <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
+    <div class="token-label">${t.label}</div>
+  </div>`;
+}
+
+function renderAllTokens() {
+  // remove old token elements
+  document.querySelectorAll('.map-token').forEach(el => el.remove());
+  Object.values(mapTokens).forEach(t => {
+    if (!t.visible && !isGM()) return;
+    const canvas = document.getElementById('map-canvas');
+    if (canvas) canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
+  });
+}
+
+function upsertTokenElement(t) {
+  if (!t.visible && !isGM()) {
+    document.getElementById('token-' + t.id)?.remove();
+    return;
+  }
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas) return;
+  let el = document.getElementById('token-' + t.id);
+  if (el) {
+    el.style.left = t.x_pct + '%';
+    el.style.top  = t.y_pct + '%';
+  } else {
+    canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
+  }
+}
+
+// ── Load tokens for the active map ───────────────────────────────────────────
+async function loadMapTokens(mapId) {
+  document.querySelectorAll('.map-token').forEach(el => el.remove());
+  mapTokens = {};
+  if (!mapId || !currentCampaignId) return;
+
+  const { data } = await sb.from('map_tokens')
+    .select('*')
+    .eq('map_id', mapId)
+    .eq('campaign_id', currentCampaignId);
+
+  if (data) {
+    data.forEach(t => { mapTokens[t.id] = t; });
+    renderAllTokens();
+    if (isGM()) refreshTokenPanel();
+  }
+}
+
+// ── Token drag ────────────────────────────────────────────────────────────────
+function canMoveToken(t) {
+  if (isGM()) return true;
+  return t.entity_type === 'character' && t.entity_id === currentCharacterId;
+}
+
+function startTokenDrag(e, tokenId) {
+  e.stopPropagation(); // prevent map pan
+  const t = mapTokens[tokenId];
+  if (!t || !canMoveToken(t)) return;
+  e.preventDefault();
+
+  dragTokenId = tokenId;
+  const el = document.getElementById('token-' + tokenId);
+  if (el) el.classList.add('dragging', 'selected');
+
+  // record where in the token we clicked (in canvas coords)
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const cx   = (e.clientX - rect.left - mapOffsetX) / mapScale;
+  const cy   = (e.clientY - rect.top  - mapOffsetY) / mapScale;
+  dragOffsetX = cx - (t.x_pct / 100 * mapImgW);
+  dragOffsetY = cy - (t.y_pct / 100 * mapImgH);
+}
+
+function onTokenMouseMove(e) {
+  if (!dragTokenId) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const cx   = (e.clientX - rect.left - mapOffsetX) / mapScale;
+  const cy   = (e.clientY - rect.top  - mapOffsetY) / mapScale;
+
+  const x_pct = Math.min(100, Math.max(0, (cx - dragOffsetX) / mapImgW * 100));
+  const y_pct = Math.min(100, Math.max(0, (cy - dragOffsetY) / mapImgH * 100));
+
+  // update locally
+  const el = document.getElementById('token-' + dragTokenId);
+  if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
+
+  // broadcast to others (fast path)
+  tokenChannel?.send({ type: 'broadcast', event: 'token-move',
+    payload: { id: dragTokenId, x_pct, y_pct } });
+}
+
+async function onTokenMouseUp(e) {
+  if (!dragTokenId) return;
+  const el = document.getElementById('token-' + dragTokenId);
+  if (!el) { dragTokenId = null; return; }
+
+  el.classList.remove('dragging');
+  const x_pct = parseFloat(el.style.left);
+  const y_pct = parseFloat(el.style.top);
+
+  // update cache
+  if (mapTokens[dragTokenId]) {
+    mapTokens[dragTokenId].x_pct = x_pct;
+    mapTokens[dragTokenId].y_pct = y_pct;
+  }
+
+  // persist to DB (also triggers Postgres Changes for others without broadcast sub)
+  await sb.from('map_tokens')
+    .update({ x_pct, y_pct })
+    .eq('id', dragTokenId);
+
+  dragTokenId = null;
+}
+
+// ── Realtime ──────────────────────────────────────────────────────────────────
+function subscribeTokenRealtime() {
+  tokenChannel?.unsubscribe();
+  if (!currentCampaignId) return;
+
+  tokenChannel = sb.channel('tokens-' + currentCampaignId)
+    // fast broadcast for drag moves
+    .on('broadcast', { event: 'token-move' }, ({ payload }) => {
+      if (payload.id === dragTokenId) return; // we're the dragger
+      const el = document.getElementById('token-' + payload.id);
+      if (el) { el.style.left = payload.x_pct + '%'; el.style.top = payload.y_pct + '%'; }
+      if (mapTokens[payload.id]) {
+        mapTokens[payload.id].x_pct = payload.x_pct;
+        mapTokens[payload.id].y_pct = payload.y_pct;
+      }
+    })
+    // DB changes: token added or removed
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'map_tokens',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
+      mapTokens[t.id] = t;
+      upsertTokenElement(t);
+      if (isGM()) refreshTokenPanel();
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'map_tokens',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ old: t }) => {
+      delete mapTokens[t.id];
+      document.getElementById('token-' + t.id)?.remove();
+      if (isGM()) refreshTokenPanel();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'map_tokens',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
+      mapTokens[t.id] = t;
+      if (t.id !== dragTokenId) upsertTokenElement(t);
+    })
+    .subscribe();
+}
+
+// ── Add / remove tokens (GM) ──────────────────────────────────────────────────
+async function addCharacterToken(charId, charName, avatarPath) {
+  if (!activeMapId || !currentCampaignId) return;
+
+  // check if already on this map
+  if (Object.values(mapTokens).some(t => t.entity_id === charId && t.map_id === activeMapId)) {
+    alert(charName + ' is already on this map.');
+    return;
+  }
+
+  let avatar_url = '';
+  if (avatarPath) {
+    const { data: u } = sb.storage.from('avatars').getPublicUrl(avatarPath);
+    avatar_url = u.publicUrl;
+  }
+
+  await sb.from('map_tokens').insert({
+    map_id: activeMapId,
+    campaign_id: currentCampaignId,
+    entity_type: 'character',
+    entity_id: charId,
+    label: charName,
+    avatar_url,
+    x_pct: 50,
+    y_pct: 50,
+    visible: true,
+  });
+  // INSERT triggers Realtime → upsertTokenElement + refreshTokenPanel
+}
+
+async function removeToken(tokenId) {
+  await sb.from('map_tokens').delete().eq('id', tokenId);
+  // DELETE triggers Realtime → element removal + refreshTokenPanel
+}
+
+async function toggleTokenVisibility(tokenId) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  await sb.from('map_tokens').update({ visible: !t.visible }).eq('id', tokenId);
+}
+
+// ── GM token panel ────────────────────────────────────────────────────────────
+async function refreshTokenPanel() {
+  renderOnMapTokens();
+  await loadCampaignCharactersForTokens();
+}
+
+function renderOnMapTokens() {
+  const el = document.getElementById('tokens-on-map');
+  if (!el) return;
+  const list = Object.values(mapTokens);
+  if (!list.length) {
+    el.innerHTML = '<div style="padding:6px 0;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No tokens on map.</div>';
+    return;
+  }
+  el.innerHTML = list.map(t => {
+    const dot = t.entity_type === 'creature' ? '#b03030'
+              : t.entity_type === 'item'     ? '#708090' : 'var(--gold)';
+    const eye = t.visible ? '👁' : '🚫';
+    return `<div class="token-on-map-row">
+      <span class="t-dot" style="background:${dot};"></span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.label}</span>
+      <button class="btn-sm" onclick="toggleTokenVisibility('${t.id}')" title="${t.visible ? 'Hide from players' : 'Show to players'}" style="padding:2px 6px;">${eye}</button>
+      <button class="token-remove-btn" onclick="removeToken('${t.id}')">✕</button>
+    </div>`;
+  }).join('');
+}
+
+async function loadCampaignCharactersForTokens() {
+  const el = document.getElementById('tokens-char-list');
+  if (!el || !currentCampaignId) return;
+  el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);">Loading…</div>';
+
+  const { data: chars } = await sb.from('characters')
+    .select('id, name, species, avatar_url')
+    .eq('campaign_id', currentCampaignId)
+    .order('name');
+
+  if (!chars?.length) {
+    el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No characters in this campaign yet.</div>';
+    return;
+  }
+
+  const onMap = new Set(Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => t.entity_id));
+
+  el.innerHTML = chars.map(c => {
+    const already = onMap.has(c.id);
+    return `<div class="token-add-row">
+      <div style="flex:1;min-width:0;">
+        <div class="t-name">${c.name}</div>
+        <div class="t-sub">${c.species || ''}</div>
+      </div>
+      ${already
+        ? `<span style="font-size:0.7rem;color:var(--text-dim);font-style:italic;">on map</span>`
+        : `<button class="token-add-btn" onclick="addCharacterToken('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.avatar_url || ''}')">+ Add</button>`}
+    </div>`;
+  }).join('');
+}
+
+// ── Wire token drag into existing mouse/touch handlers ────────────────────────
+// Extend the existing window mousemove / mouseup listeners
+document.addEventListener('mousemove', onTokenMouseMove);
+document.addEventListener('mouseup',   onTokenMouseUp);
+
+// ── Extend enterPlayMode to subscribe to token realtime ──────────────────────
+// (loadMapTokens is handled by the patched loadActiveMap below)
+const _origEnterPlayMode = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayMode();
+  subscribeTokenRealtime();
+};
+
+// ── Extend exitPlayMode to clean up token state ───────────────────────────────
+const _origExitPlayMode = exitPlayMode;
+exitPlayMode = function() {
+  _origExitPlayMode();
+  tokenChannel?.unsubscribe();
+  tokenChannel = null;
+  mapTokens    = {};
+  dragTokenId  = null;
+  document.querySelectorAll('.map-token').forEach(el => el.remove());
+};
+
+// ── Extend loadActiveMap realtime handler to also reload tokens ───────────────
+const _origLoadActiveMap = loadActiveMap;
+loadActiveMap = async function(mapId) {
+  await _origLoadActiveMap(mapId);
+  await loadMapTokens(mapId);
+};
 </script>
+
+<!-- ─── CHARACTER LIST MODAL ────────────────────────────────────────────── -->
+<div id="modal-characters" style="
+  display:none; position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,0.85); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:28px 32px; width:460px; max-width:94vw;">
+    <h2 style="margin-bottom:16px;">Load Character</h2>
+    <div id="character-list-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
+    <div id="character-list" style="max-height:320px; overflow-y:auto; margin-bottom:16px;"></div>
+    <div style="text-align:right;">
+      <button class="btn-sm" onclick="hideCharacterListModal()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── AVATAR CROP MODAL ───────────────────────────────────────────────── -->
 <div id="modal-avatar" style="
@@ -2909,7 +4210,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     <div id="login-form">
       <div class="field">
         <label>Email</label>
-        <input type="email" id="auth-email" placeholder="your@email.com" style="width:100%;">
+        <input type="email" id="auth-email" placeholder="your@email.com" style="width:100%;" value="">
       </div>
       <div class="field">
         <label>Password</label>
@@ -2941,6 +4242,87 @@ sb.auth.onAuthStateChange(async (event, session) => {
         <button class="btn-sm" onclick="showLogin()">Sign in</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ─── PLAY MODE ──────────────────────────────────────────────────────── -->
+<div id="play-mode">
+  <!-- toolbar row -->
+  <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;">
+    <span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Play Mode</span>
+    <span id="play-campaign-name" style="font-size:0.8rem;color:var(--gold);margin-left:4px;"></span>
+    <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
+    <button class="play-btn exit" style="margin-left:auto;" onclick="exitPlayMode()">✕ Exit Play Mode</button>
+  </div>
+
+  <!-- main play layout -->
+  <div class="play-layout player-layout" id="play-layout">
+
+    <!-- LEFT: compact character sheet -->
+    <div class="play-panel" id="play-char-panel">
+      <div class="play-panel-header">
+        <span class="panel-title">Character</span>
+      </div>
+      <div id="play-char-content" style="padding:10px 12px;"></div>
+    </div>
+
+    <div class="play-resize-handle" id="resize-left" onmousedown="startPanelResize(event,'left')"></div>
+
+    <!-- CENTER: map -->
+    <div class="map-panel" id="play-map-panel" style="flex:1;min-width:0;">
+      <div class="map-toolbar" id="map-toolbar">
+        <button class="btn-sm" onclick="mapZoom(1.25)" title="Zoom in">+</button>
+        <span class="tb-zoom" id="map-zoom-label">100%</span>
+        <button class="btn-sm" onclick="mapZoom(0.8)" title="Zoom out">−</button>
+        <button class="btn-sm" onclick="mapFit()" title="Fit to screen">Fit</button>
+        <button class="btn-sm" onclick="mapReset()" title="Reset zoom/pan">1:1</button>
+        <div class="tb-sep"></div>
+        <!-- GM-only controls inserted here by JS -->
+        <div id="map-toolbar-gm" style="display:none;align-items:center;gap:6px;"></div>
+      </div>
+      <div class="map-viewport" id="map-viewport">
+        <div class="map-canvas" id="map-canvas">
+          <img id="map-img" src="" alt="" style="display:none;" draggable="false">
+        </div>
+        <div class="map-placeholder" id="map-placeholder">
+          <div class="big-icon">🗺</div>
+          <div id="map-placeholder-text">No map active for this campaign.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="play-resize-handle" id="resize-right" style="display:none;" onmousedown="startPanelResize(event,'right')"></div>
+
+    <!-- RIGHT: GM panel (maps + tokens) -->
+    <div class="play-panel play-panel-right" id="play-gm-panel" style="display:none;flex-direction:column;">
+      <div class="gm-tabs">
+        <button class="gm-tab active" id="gm-tab-maps"   onclick="switchGmTab('maps')">Maps</button>
+        <button class="gm-tab"        id="gm-tab-tokens" onclick="switchGmTab('tokens')">Tokens</button>
+      </div>
+
+      <!-- MAPS TAB -->
+      <div id="gm-tab-content-maps" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+        <div class="map-upload-area">
+          <button class="btn" style="width:100%;font-size:0.8rem;" onclick="triggerMapUpload()">⬆ Upload Map Image</button>
+          <input type="file" id="map-file-input" accept="image/*" style="display:none" onchange="onMapFileSelected(this)">
+          <div id="map-upload-status" style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
+        </div>
+        <div id="map-list" style="overflow-y:auto;flex:1;"></div>
+      </div>
+
+      <!-- TOKENS TAB -->
+      <div id="gm-tab-content-tokens" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+        <div style="padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">On Map</div>
+          <div id="tokens-on-map" style="max-height:140px;overflow-y:auto;"></div>
+        </div>
+        <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Characters</div>
+        </div>
+        <div id="tokens-char-list" style="overflow-y:auto;flex:1;"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
