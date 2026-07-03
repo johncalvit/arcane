@@ -332,6 +332,16 @@
   }
   .token-remove-btn:hover { filter: brightness(1.2); }
 
+  /* scale calibration */
+  .map-viewport.cal-mode { cursor: crosshair !important; }
+  #scale-indicator {
+    position: absolute; bottom: 8px; left: 8px;
+    background: rgba(0,0,0,0.65); color: var(--gold2);
+    font-size: 0.7rem; padding: 3px 10px; border-radius: 3px;
+    pointer-events: none; z-index: 15; display: none;
+  }
+  #cal-svg { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 25; overflow: visible; }
+
   /* active tokens section */
   .token-on-map-row {
     display: flex;
@@ -432,6 +442,8 @@
     display: flex; align-items: center; justify-content: center;
   }
   .btn-sm:hover { border-color: var(--gold); color: var(--gold2); }
+  /* Text toolbar buttons — auto width with horizontal padding */
+  .btn-sm.btn-text { width: auto; padding: 0 8px; font-size: 0.78rem; white-space: nowrap; }
   .stat-input {
     width: 44px;
     background: var(--bg);
@@ -1744,6 +1756,13 @@ async function confirmCrop() {
   }
 }
 
+function resolveAvatarUrl(raw) {
+  if (!raw) return '';
+  if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
+  // storage path → public URL
+  return sb.storage.from('avatars').getPublicUrl(raw).data.publicUrl;
+}
+
 function setAvatarUrl(url) {
   avatarUrl = url;
   // Overview panel
@@ -2865,8 +2884,12 @@ async function loadCharacter(id) {
     equipment: data.equipment,
     armor:     data.armor,
     heldItems: data.held_items,
-    avatarUrl: data.avatar_url || '',
+    avatarUrl: resolveAvatarUrl(data.avatar_url),
   });
+
+  // keep storage path so re-saves don't re-upload
+  avatarStoragePath = (data.avatar_url && !data.avatar_url.startsWith('data:') && !data.avatar_url.startsWith('http'))
+    ? data.avatar_url : '';
 
   setCharSaveStatus('Loaded: ' + data.name, true);
 }
@@ -3365,7 +3388,7 @@ function enterPlayMode() {
     gmToolbar.innerHTML = `
       <div class="tb-sep"></div>
       <span class="tb-label">GM:</span>
-      <button class="btn-sm" onclick="triggerMapUpload()">⬆ Upload</button>`;
+      <button class="btn-sm btn-text" onclick="triggerMapUpload()">⬆ Upload</button>`;
     loadMapLibrary();
   } else {
     gmPanel.style.display = 'none';
@@ -3865,13 +3888,17 @@ function tokenHtml(t) {
   const size   = TOKEN_SIZE;
   const typeClass = t.entity_type === 'creature' ? 'type-creature'
                   : t.entity_type === 'item'     ? 'type-item' : '';
+  const fallbackIcon = t.entity_type === 'creature' ? '👾' : t.entity_type === 'item' ? '📦' : '🧙';
   const inner = t.avatar_url
-    ? `<img src="${t.avatar_url}" alt="" onerror="this.style.display='none'">`
-    : `<span class="token-icon">${t.entity_type === 'creature' ? '👾' : t.entity_type === 'item' ? '📦' : '🧙'}</span>`;
+    ? `<img src="${t.avatar_url}" alt=""
+         onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+       <span class="token-icon" style="display:none;">${fallbackIcon}</span>`
+    : `<span class="token-icon">${fallbackIcon}</span>`;
 
+  const hiddenStyle = !t.visible ? 'opacity:0.35;filter:grayscale(60%);' : '';
   return `<div class="map-token" id="token-${t.id}"
     data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
-    style="left:${t.x_pct}%;top:${t.y_pct}%;"
+    style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
     onmousedown="startTokenDrag(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label">${t.label}</div>
@@ -3897,8 +3924,10 @@ function upsertTokenElement(t) {
   if (!canvas) return;
   let el = document.getElementById('token-' + t.id);
   if (el) {
-    el.style.left = t.x_pct + '%';
-    el.style.top  = t.y_pct + '%';
+    el.style.left    = t.x_pct + '%';
+    el.style.top     = t.y_pct + '%';
+    el.style.opacity = t.visible ? '' : '0.35';
+    el.style.filter  = t.visible ? '' : 'grayscale(60%)';
   } else {
     canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
   }
@@ -4038,8 +4067,12 @@ async function addCharacterToken(charId, charName, avatarPath) {
 
   let avatar_url = '';
   if (avatarPath) {
-    const { data: u } = sb.storage.from('avatars').getPublicUrl(avatarPath);
-    avatar_url = u.publicUrl;
+    if (avatarPath.startsWith('data:') || avatarPath.startsWith('http')) {
+      avatar_url = avatarPath; // already a usable URL or data URI
+    } else {
+      const { data: u } = sb.storage.from('avatars').getPublicUrl(avatarPath);
+      avatar_url = u.publicUrl;
+    }
   }
 
   await sb.from('map_tokens').insert({
@@ -4049,22 +4082,27 @@ async function addCharacterToken(charId, charName, avatarPath) {
     entity_id: charId,
     label: charName,
     avatar_url,
-    x_pct: 50,
-    y_pct: 50,
+    ...findTokenPlacement(),
     visible: true,
   });
   // INSERT triggers Realtime → upsertTokenElement + refreshTokenPanel
 }
 
 async function removeToken(tokenId) {
+  // optimistic update — don't wait for Realtime (DELETE old record may lack campaign_id)
+  delete mapTokens[tokenId];
+  document.getElementById('token-' + tokenId)?.remove();
+  refreshTokenPanel();
   await sb.from('map_tokens').delete().eq('id', tokenId);
-  // DELETE triggers Realtime → element removal + refreshTokenPanel
 }
 
 async function toggleTokenVisibility(tokenId) {
   const t = mapTokens[tokenId];
   if (!t) return;
-  await sb.from('map_tokens').update({ visible: !t.visible }).eq('id', tokenId);
+  t.visible = !t.visible;
+  upsertTokenElement(t);
+  renderOnMapTokens();
+  await sb.from('map_tokens').update({ visible: t.visible }).eq('id', tokenId);
 }
 
 // ── GM token panel ────────────────────────────────────────────────────────────
@@ -4149,13 +4187,373 @@ exitPlayMode = function() {
   document.querySelectorAll('.map-token').forEach(el => el.remove());
 };
 
-// ── Extend loadActiveMap realtime handler to also reload tokens ───────────────
+// ── Extend loadActiveMap realtime handler to also reload tokens + scale ───────
 const _origLoadActiveMap = loadActiveMap;
 loadActiveMap = async function(mapId) {
   await _origLoadActiveMap(mapId);
   await loadMapTokens(mapId);
+  await loadMapScale(mapId);
+};
+
+// ─── STAGE 3: CREATURES + SCALE CALIBRATION ──────────────────────────────────
+
+let calMode    = false;
+let calDrawing = false;
+let calStartX  = 0;
+let calStartY  = 0;
+let mapScalePPF = 0;  // pixels per foot for the active map
+
+// ── GM toolbar: add calibrate button ─────────────────────────────────────────
+// Patched into enterPlayMode via the gmToolbar innerHTML already set in
+// enterPlayMode; we extend it here after the fact.
+const _origEnterPlayModeS3 = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModeS3();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-gm');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" id="cal-btn" onclick="toggleCalibrationMode()">📏 Calibrate</button>`);
+  }
+};
+
+// ── Calibration mode ─────────────────────────────────────────────────────────
+function toggleCalibrationMode() {
+  calMode ? exitCalibrationMode() : enterCalibrationMode();
+}
+
+function enterCalibrationMode() {
+  calMode = true;
+  document.getElementById('map-viewport').classList.add('cal-mode');
+  const btn = document.getElementById('cal-btn');
+  if (btn) btn.textContent = '✕ Cancel Cal.';
+}
+
+function exitCalibrationMode() {
+  calMode    = false;
+  calDrawing = false;
+  document.getElementById('map-viewport').classList.remove('cal-mode');
+  const btn = document.getElementById('cal-btn');
+  if (btn) btn.textContent = '📏 Calibrate';
+  // hide SVG line
+  const svg = document.getElementById('cal-svg');
+  if (svg) svg.style.display = 'none';
+}
+
+function calMouseDown(e) {
+  if (!calMode) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  calStartX  = e.clientX - rect.left;
+  calStartY  = e.clientY - rect.top;
+  calDrawing = true;
+  const svg = document.getElementById('cal-svg');
+  svg.style.display = 'block';
+  document.getElementById('cal-dot-a').setAttribute('cx', calStartX);
+  document.getElementById('cal-dot-a').setAttribute('cy', calStartY);
+  document.getElementById('cal-dot-b').setAttribute('cx', calStartX);
+  document.getElementById('cal-dot-b').setAttribute('cy', calStartY);
+  document.getElementById('cal-line').setAttribute('x1', calStartX);
+  document.getElementById('cal-line').setAttribute('y1', calStartY);
+  document.getElementById('cal-line').setAttribute('x2', calStartX);
+  document.getElementById('cal-line').setAttribute('y2', calStartY);
+  document.getElementById('cal-text').textContent = '';
+  return true; // handled
+}
+
+function calMouseMove(e) {
+  if (!calMode || !calDrawing) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x    = e.clientX - rect.left;
+  const y    = e.clientY - rect.top;
+  document.getElementById('cal-line').setAttribute('x2', x);
+  document.getElementById('cal-line').setAttribute('y2', y);
+  document.getElementById('cal-dot-b').setAttribute('cx', x);
+  document.getElementById('cal-dot-b').setAttribute('cy', y);
+  // show pixel length in image coords
+  const pxLen = Math.hypot(x - calStartX, y - calStartY) / mapScale;
+  const mid = { x: (calStartX + x) / 2, y: (calStartY + y) / 2 };
+  const txt = document.getElementById('cal-text');
+  txt.setAttribute('x', mid.x);
+  txt.setAttribute('y', mid.y);
+  txt.textContent = Math.round(pxLen) + ' px';
+  return true;
+}
+
+function calMouseUp(e) {
+  if (!calMode || !calDrawing) return false;
+  calDrawing = false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x    = e.clientX - rect.left;
+  const y    = e.clientY - rect.top;
+  const pxLen = Math.hypot(x - calStartX, y - calStartY) / mapScale;
+
+  if (pxLen < 10) { exitCalibrationMode(); return true; }
+
+  _calPxLen = pxLen;
+  document.getElementById('cal-px-display').textContent = Math.round(pxLen) + ' image pixels';
+  document.getElementById('cal-feet-input').value = '30';
+  const m = document.getElementById('modal-cal');
+  m.style.display = 'flex';
+  setTimeout(() => document.getElementById('cal-feet-input').focus(), 50);
+  return true;
+}
+
+let _calPxLen = 0;
+
+function confirmCalibration() {
+  const feet = parseFloat(document.getElementById('cal-feet-input').value);
+  if (!isNaN(feet) && feet > 0) saveMapScale(_calPxLen / feet);
+  document.getElementById('modal-cal').style.display = 'none';
+  exitCalibrationMode();
+}
+
+function cancelCalibration() {
+  document.getElementById('modal-cal').style.display = 'none';
+  exitCalibrationMode();
+}
+
+// ── Measure tool ─────────────────────────────────────────────────────────────
+let measureMode    = false;
+let measureDrawing = false;
+let measureStartX  = 0;
+let measureStartY  = 0;
+
+function toggleMeasureMode() {
+  measureMode ? exitMeasureMode() : enterMeasureMode();
+}
+
+function enterMeasureMode() {
+  measureMode = true;
+  if (calMode) exitCalibrationMode();
+  document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
+  document.getElementById('measure-btn').style.color = 'var(--gold2)';
+  document.getElementById('measure-btn').style.borderColor = 'var(--gold)';
+}
+
+function exitMeasureMode() {
+  measureMode    = false;
+  measureDrawing = false;
+  document.getElementById('map-viewport').classList.remove('cal-mode');
+  document.getElementById('measure-btn').style.color = '';
+  document.getElementById('measure-btn').style.borderColor = '';
+  document.getElementById('measure-svg').style.display = 'none';
+}
+
+function measureMouseDown(e) {
+  if (!measureMode) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  measureStartX  = e.clientX - rect.left;
+  measureStartY  = e.clientY - rect.top;
+  measureDrawing = true;
+  const svg = document.getElementById('measure-svg');
+  svg.style.display = 'block';
+  ['measure-dot-a','measure-dot-b'].forEach(id => {
+    document.getElementById(id).setAttribute('cx', measureStartX);
+    document.getElementById(id).setAttribute('cy', measureStartY);
+  });
+  document.getElementById('measure-line').setAttribute('x1', measureStartX);
+  document.getElementById('measure-line').setAttribute('y1', measureStartY);
+  document.getElementById('measure-line').setAttribute('x2', measureStartX);
+  document.getElementById('measure-line').setAttribute('y2', measureStartY);
+  document.getElementById('measure-text').textContent = '';
+  return true;
+}
+
+function measureMouseMove(e) {
+  if (!measureMode || !measureDrawing) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x    = e.clientX - rect.left;
+  const y    = e.clientY - rect.top;
+  document.getElementById('measure-line').setAttribute('x2', x);
+  document.getElementById('measure-line').setAttribute('y2', y);
+  document.getElementById('measure-dot-b').setAttribute('cx', x);
+  document.getElementById('measure-dot-b').setAttribute('cy', y);
+  const pxLen = Math.hypot(x - measureStartX, y - measureStartY) / mapScale;
+  const mid   = { x: (measureStartX + x) / 2, y: (measureStartY + y) / 2 };
+  const txt   = document.getElementById('measure-text');
+  txt.setAttribute('x', mid.x);
+  txt.setAttribute('y', mid.y);
+  if (mapScalePPF > 0) {
+    const ft = pxLen / mapScalePPF;
+    txt.textContent = ft >= 100 ? Math.round(ft) + ' ft' : ft.toFixed(1) + ' ft';
+  } else {
+    txt.textContent = Math.round(pxLen) + ' px (calibrate for ft)';
+  }
+}
+
+function measureMouseUp(e) {
+  if (!measureMode || !measureDrawing) return;
+  measureDrawing = false;
+  // line stays visible; user can drag again to remeasure or click the button to dismiss
+  measureMouseMove(e); // snap final position
+}
+
+// Hook calibration into the existing mouse event listeners in initMapInteraction
+// by patching the viewport's mousedown. We do it after init runs.
+const _origInitMapInteraction = initMapInteraction;
+initMapInteraction = function() {
+  _origInitMapInteraction();
+  const vp = document.getElementById('map-viewport');
+  if (!vp || vp._calEventsAttached) return;
+  vp._calEventsAttached = true;
+
+  vp.addEventListener('mousedown', e => {
+    if (calMouseDown(e))     { e.stopImmediatePropagation(); return; }
+    if (measureMouseDown(e)) { e.stopImmediatePropagation(); }
+  }, true); // capture phase so it runs before the pan handler
+
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); });
+  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e); });
+};
+
+// ── Save + load scale ─────────────────────────────────────────────────────────
+async function saveMapScale(ppf) {
+  if (!activeMapId) return;
+  mapScalePPF = ppf;
+  updateScaleIndicator();
+  await sb.from('maps')
+    .update({ scale_pixels_per_foot: ppf, scale_calibrated: true })
+    .eq('id', activeMapId);
+}
+
+async function loadMapScale(mapId) {
+  mapScalePPF = 0;
+  if (!mapId) { updateScaleIndicator(); return; }
+  const { data } = await sb.from('maps')
+    .select('scale_pixels_per_foot, scale_calibrated')
+    .eq('id', mapId).single();
+  if (data?.scale_calibrated && data.scale_pixels_per_foot) {
+    mapScalePPF = data.scale_pixels_per_foot;
+  }
+  updateScaleIndicator();
+}
+
+function updateScaleIndicator() {
+  const el = document.getElementById('scale-indicator');
+  if (!el) return;
+  if (!mapScalePPF) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  // show as "X ft per 30px" — pick a round screen-pixel size for readability
+  const ftPer30 = (30 / mapScalePPF).toFixed(1);
+  el.textContent = `⬛ 30 px = ${ftPer30} ft  (${mapScalePPF.toFixed(1)} px/ft)`;
+}
+
+// ── Token placement helper ────────────────────────────────────────────────────
+function findTokenPlacement() {
+  const count = Object.values(mapTokens).length;
+  // Space tokens by 1.6× TOKEN_SIZE in image pixels, laid out in a grid
+  // starting near the top-left corner of the map.
+  if (mapImgW && mapImgH) {
+    const spacingX = (TOKEN_SIZE * 1.8 / mapImgW) * 100;
+    const spacingY = (TOKEN_SIZE * 1.8 / mapImgH) * 100;
+    const cols     = Math.max(1, Math.floor(80 / spacingX));
+    return {
+      x_pct: 5 + (count % cols)             * spacingX,
+      y_pct: 5 + Math.floor(count / cols)   * spacingY,
+    };
+  }
+  // Fallback when map dimensions aren't loaded yet
+  const col = count % 8;
+  const row = Math.floor(count / 8);
+  return { x_pct: 5 + col * 11, y_pct: 5 + row * 11 };
+}
+
+// ── Creatures ─────────────────────────────────────────────────────────────────
+function populateCreatureSpecies() {
+  const sel = document.getElementById('creature-species-sel');
+  if (!sel) return;
+  const species = Object.keys(RACE_DATA).sort();
+  if (!species.length) {
+    sel.innerHTML = '<option value="">No species in config</option>';
+    return;
+  }
+  const prev = sel.value;
+  sel.innerHTML = species.map(s => `<option value="${s}">${s}</option>`).join('');
+  if (species.includes(prev)) sel.value = prev;
+}
+
+async function addCreatureToken() {
+  if (!activeMapId || !currentCampaignId) return;
+  const speciesSel = document.getElementById('creature-species-sel');
+  const labelInput = document.getElementById('creature-label-input');
+  const species    = speciesSel?.value;
+  if (!species) { alert('Select a species first.'); return; }
+  const label = labelInput?.value.trim() || species;
+
+  const btn = document.querySelector('#gm-tab-content-tokens .token-add-btn:last-of-type');
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+
+  // create session creature row
+  const { data: creature, error } = await sb.from('session_creatures').insert({
+    campaign_id: currentCampaignId,
+    species,
+    label,
+    stats: {},
+  }).select('id').single();
+
+  if (error || !creature) {
+    alert('Failed to add creature: ' + (error?.message || 'unknown error'));
+    if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
+    return;
+  }
+
+  // place map token
+  await sb.from('map_tokens').insert({
+    map_id:      activeMapId,
+    campaign_id: currentCampaignId,
+    entity_type: 'creature',
+    entity_id:   creature.id,
+    label,
+    avatar_url:  '',
+    x_pct:       50,
+    y_pct:       50,
+    visible:     true,
+  });
+
+  if (labelInput) labelInput.value = '';
+  if (btn) { btn.disabled = false; btn.textContent = '+ Add'; }
+  // Realtime INSERT → upsertTokenElement + refreshTokenPanel
+}
+
+// ── Patch switchGmTab to populate species when opening Tokens tab ─────────────
+const _origSwitchGmTab = switchGmTab;
+switchGmTab = function(tab) {
+  _origSwitchGmTab(tab);
+  if (tab === 'tokens') populateCreatureSpecies();
 };
 </script>
+
+<!-- ─── CALIBRATION MODAL ────────────────────────────────────────────────── -->
+<div id="modal-cal" style="
+  display:none; position:fixed; inset:0; z-index:1500;
+  background:rgba(0,0,0,0.82); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:28px 32px; width:360px; max-width:94vw; display:flex; flex-direction:column; gap:16px;">
+    <h2 style="margin:0; font-size:1.1rem;">📏 Calibrate Scale</h2>
+    <p style="margin:0; font-size:0.85rem; color:var(--text-dim); line-height:1.5;">
+      You drew a line of <strong id="cal-px-display" style="color:var(--gold2);"></strong>.<br>
+      How many feet does that line represent?
+    </p>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <input id="cal-feet-input" type="number" min="1" step="1" value="30"
+        style="width:90px; background:var(--bg); border:1px solid var(--border); color:var(--text);
+               border-radius:4px; padding:6px 10px; font-size:1rem; font-family:inherit;"
+        onkeydown="if(event.key==='Enter') confirmCalibration();">
+      <span style="color:var(--text-dim); font-size:0.85rem;">feet</span>
+    </div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:4px;">
+      <button class="btn-sm btn-text" onclick="cancelCalibration()">Cancel</button>
+      <button class="btn-sm btn-text" onclick="confirmCalibration()"
+        style="border-color:var(--gold); color:var(--gold2);">Set Scale</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── CHARACTER LIST MODAL ────────────────────────────────────────────── -->
 <div id="modal-characters" style="
@@ -4274,8 +4672,10 @@ loadActiveMap = async function(mapId) {
         <button class="btn-sm" onclick="mapZoom(1.25)" title="Zoom in">+</button>
         <span class="tb-zoom" id="map-zoom-label">100%</span>
         <button class="btn-sm" onclick="mapZoom(0.8)" title="Zoom out">−</button>
-        <button class="btn-sm" onclick="mapFit()" title="Fit to screen">Fit</button>
-        <button class="btn-sm" onclick="mapReset()" title="Reset zoom/pan">1:1</button>
+        <button class="btn-sm btn-text" onclick="mapFit()" title="Fit to screen">Fit</button>
+        <button class="btn-sm btn-text" onclick="mapReset()" title="Reset zoom/pan">1:1</button>
+        <div class="tb-sep"></div>
+        <button class="btn-sm btn-text" id="measure-btn" onclick="toggleMeasureMode()" title="Measure distance">📐 Measure</button>
         <div class="tb-sep"></div>
         <!-- GM-only controls inserted here by JS -->
         <div id="map-toolbar-gm" style="display:none;align-items:center;gap:6px;"></div>
@@ -4288,6 +4688,25 @@ loadActiveMap = async function(mapId) {
           <div class="big-icon">🗺</div>
           <div id="map-placeholder-text">No map active for this campaign.</div>
         </div>
+        <!-- calibration line SVG overlay -->
+        <svg id="cal-svg" width="100%" height="100%">
+          <line id="cal-line" stroke="#f0d080" stroke-width="2" stroke-dasharray="6,3" x1="0" y1="0" x2="0" y2="0"/>
+          <circle id="cal-dot-a" r="5" fill="#f0d080" cx="0" cy="0"/>
+          <circle id="cal-dot-b" r="5" fill="#f0d080" cx="0" cy="0"/>
+          <text id="cal-text" fill="#f0d080" font-size="12" font-family="Georgia,serif" text-anchor="middle" dy="-6"></text>
+        </svg>
+        <!-- measure line SVG overlay -->
+        <svg id="measure-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;display:none;z-index:24;overflow:visible;">
+          <line id="measure-line" stroke="#40c8e0" stroke-width="2" stroke-dasharray="8,4" x1="0" y1="0" x2="0" y2="0"/>
+          <circle id="measure-dot-a" r="5" fill="#40c8e0" cx="0" cy="0"/>
+          <circle id="measure-dot-b" r="5" fill="#40c8e0" cx="0" cy="0"/>
+          <text id="measure-text" fill="#40c8e0" font-size="13" font-weight="bold"
+                font-family="Georgia,serif" text-anchor="middle" dy="-8"
+                style="paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;"></text>
+        </svg>
+        <!-- scale indicator -->
+        <div id="scale-indicator"></div>
       </div>
     </div>
 
@@ -4316,10 +4735,26 @@ loadActiveMap = async function(mapId) {
           <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">On Map</div>
           <div id="tokens-on-map" style="max-height:140px;overflow-y:auto;"></div>
         </div>
-        <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);flex-shrink:0;">
-          <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Characters</div>
+        <!-- scrollable area: characters + creatures -->
+        <div style="flex:1;overflow-y:auto;">
+          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
+            <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Characters</div>
+          </div>
+          <div id="tokens-char-list"></div>
+
+          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
+            <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Add Creature</div>
+          </div>
+          <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+            <select id="creature-species-sel" style="width:100%;margin-bottom:5px;font-size:0.8rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;"></select>
+            <div style="display:flex;gap:6px;">
+              <input type="text" id="creature-label-input" placeholder="Label, e.g. Goblin 3"
+                style="flex:1;font-size:0.8rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;"
+                onkeydown="if(event.key==='Enter')addCreatureToken()">
+              <button class="token-add-btn" onclick="addCreatureToken()">+ Add</button>
+            </div>
+          </div>
         </div>
-        <div id="tokens-char-list" style="overflow-y:auto;flex:1;"></div>
       </div>
     </div>
 
