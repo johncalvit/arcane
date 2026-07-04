@@ -139,6 +139,83 @@
   }
   .play-panel-header .panel-title { color: var(--gold); font-size: 0.78rem; }
 
+  /* ── Action Tracker ─────────────────────────────────────────────────── */
+  .at-clock {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px; border-bottom: 1px solid var(--border);
+    background: var(--bg); flex-shrink: 0;
+  }
+  .at-clock-time {
+    font-size: 1.15rem; font-weight: 700; color: var(--gold2);
+    font-family: monospace; min-width: 52px; letter-spacing: 0.05em;
+  }
+  .at-clock-label { font-size: 0.68rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.1em; }
+  .at-next-btn {
+    margin-left: auto;
+    background: linear-gradient(135deg, #3a2a0e, #5a4020);
+    border: 1px solid var(--gold); color: var(--gold2);
+    border-radius: 4px; font-size: 0.8rem; padding: 4px 12px;
+    cursor: pointer; font-family: Georgia, serif;
+  }
+  .at-next-btn:hover { filter: brightness(1.2); }
+  .at-next-btn:disabled { opacity: 0.4; cursor: default; filter: none; }
+  .at-combatant {
+    border-bottom: 1px solid var(--border);
+    padding: 7px 10px; transition: background 0.15s;
+  }
+  .at-combatant.at-active { background: rgba(201,168,76,0.07); }
+  .at-combatant.at-ready  { background: rgba(45,107,58,0.12); }
+  .at-comb-header { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+  .at-comb-name { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); flex: 1; }
+  .at-comb-t    { font-size: 0.72rem; color: var(--text-dim); font-family: monospace; }
+  .at-action-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+  }
+  .at-action-label { font-size: 0.78rem; color: var(--gold); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .at-action-done  { color: #6dcc8a; }
+  .at-bar-wrap { flex: 1; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .at-bar { height: 100%; background: var(--gold); border-radius: 3px; transition: width 0.2s; }
+  .at-bar.done { background: #6dcc8a; }
+  .at-action-secs { font-size: 0.68rem; color: var(--text-dim); font-family: monospace; min-width: 28px; text-align: right; }
+  .at-comb-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+  .at-btn {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 3px;
+    border: 1px solid var(--border); background: var(--bg3);
+    color: var(--text-dim); cursor: pointer; font-family: Georgia, serif;
+  }
+  .at-btn:hover { border-color: var(--gold); color: var(--gold2); }
+  .at-btn.danger { border-color: #6b2020; color: #c06060; }
+  .at-btn.danger:hover { border-color: #c06060; color: #e08080; }
+  .at-btn.primary { border-color: var(--gold); color: var(--gold2); }
+  .at-empty { padding: 16px 10px; font-size: 0.8rem; color: var(--text-dim); font-style: italic; text-align: center; }
+  .at-add-row { padding: 8px 10px; border-bottom: 1px solid var(--border); display: flex; gap: 6px; }
+  .at-add-row select, .at-add-row input {
+    flex: 1; font-size: 0.78rem; background: var(--bg3); color: var(--text);
+    border: 1px solid var(--border); border-radius: 3px; padding: 3px 6px;
+  }
+  /* action-pick modal */
+  .at-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+    display: flex; align-items: center; justify-content: center; z-index: 900;
+  }
+  .at-modal {
+    background: var(--bg2); border: 1px solid var(--gold);
+    border-radius: 10px; padding: 20px 24px; min-width: 320px; max-width: 480px;
+  }
+  .at-modal h3 { color: var(--gold2); margin-bottom: 14px; font-size: 0.95rem; }
+  .at-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; }
+  .at-action-pick-btn {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
+    padding: 7px 8px; cursor: pointer; text-align: left;
+    font-family: Georgia, serif; color: var(--text); transition: border-color 0.15s;
+  }
+  .at-action-pick-btn:hover { border-color: var(--gold); color: var(--gold2); }
+  .at-pick-name { font-size: 0.82rem; font-weight: 600; }
+  .at-pick-dur  { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+  .at-freeform  { display: flex; gap: 6px; margin-bottom: 12px; }
+  .at-freeform input { flex: 1; font-size: 0.8rem; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 4px 8px; }
+  .at-freeform input[type=number] { width: 60px; flex: none; }
+
   /* compact play-sheet inside play mode */
   .ps-compact-avatar {
     width: 72px; height: 88px;
@@ -333,7 +410,8 @@
   .token-remove-btn:hover { filter: brightness(1.2); }
 
   /* scale calibration */
-  .map-viewport.cal-mode { cursor: crosshair !important; }
+  .map-viewport.cal-mode  { cursor: crosshair !important; }
+  .map-viewport.path-mode { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%234de080' fill-opacity='0.25' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='%234de080' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair !important; }
   #scale-indicator {
     position: absolute; bottom: 8px; left: 8px;
     background: rgba(0,0,0,0.65); color: var(--gold2);
@@ -341,6 +419,34 @@
     pointer-events: none; z-index: 15; display: none;
   }
   #cal-svg { position: absolute; inset: 0; pointer-events: none; display: none; z-index: 25; overflow: visible; }
+
+  /* landing modal */
+  .landing-cols { display: flex; gap: 20px; align-items: flex-start; }
+  .landing-col  { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .landing-col h3 { margin: 0 0 4px; font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--text-dim); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .landing-scroll { max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
+  .landing-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .landing-item:hover { border-color: var(--gold); }
+  .landing-item.selected { border-color: var(--gold); background: rgba(180,140,40,0.08); }
+  .landing-dim { color: var(--text-dim); font-size: 0.78rem; }
+  .landing-delete-btn {
+    background: none; border: none; cursor: pointer; font-size: 0.85rem;
+    opacity: 0.35; padding: 2px 4px; border-radius: 3px; flex-shrink: 0;
+    transition: opacity 0.15s, color 0.15s; color: var(--text);
+  }
+  .landing-delete-btn:hover { opacity: 1; color: #e06060; }
+  .landing-config-btn {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 4px;
+    background: none; color: var(--text); font-family: inherit; font-size: 0.85rem;
+    cursor: pointer; width: 100%; text-align: left; transition: border-color 0.15s;
+  }
+  .landing-config-btn:hover { border-color: var(--gold); color: var(--gold2); }
 
   /* active tokens section */
   .token-on-map-row {
@@ -582,17 +688,28 @@
     border-radius: 6px;
     padding: 6px 10px;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 8px;
-    cursor: pointer;
     transition: border-color 0.15s;
   }
   .skill-item:hover { border-color: var(--gold); }
-  .skill-item input[type="checkbox"] { margin-top: 3px; accent-color: var(--gold); }
+  .skill-info { flex: 1; min-width: 0; }
   .skill-info .si-name { font-size: 0.8rem; }
   .skill-info .si-type { font-size: 0.64rem; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.05em; }
-  .skill-info .si-req { font-size: 0.66rem; color: var(--text-dim); }
-  .si-cost { margin-left: auto; flex-shrink: 0; font-size: 0.72rem; color: var(--gold2); white-space: nowrap; }
+  .skill-invest { display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  .skill-pt-btn {
+    background: none; border: 1px solid var(--border); border-radius: 3px;
+    color: var(--gold2); font-size: 0.85rem; width: 22px; height: 22px;
+    cursor: pointer; line-height: 1; padding: 0; transition: border-color 0.15s;
+  }
+  .skill-pt-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .skill-pt-btn:disabled { opacity: 0.3; cursor: default; }
+  .skill-pts { min-width: 18px; text-align: center; font-size: 0.82rem; color: var(--text); }
+  .skill-pct { min-width: 36px; text-align: right; font-size: 0.82rem; font-weight: bold; }
+  .skill-pct-zero   { color: var(--text-dim); }
+  .skill-pct-active { color: var(--gold2); }
+  .skill-pct-max    { color: #6dcc8a; }
+  .skill-per-pt { font-size: 0.66rem; color: var(--text-dim); white-space: nowrap; }
 
   /* Loadout */
   .loadout-section { margin-bottom: 14px; }
@@ -673,40 +790,53 @@
 
 <header>
   <div>
-    <h1>⚔ Arcane Character Builder</h1>
-    <div class="subtitle">Design your character — traits, stats, skills &amp; loadout</div>
+    <h1 id="app-title">⚔ Arcane Character Builder</h1>
+    <div class="subtitle" id="app-subtitle">Design your character — traits, stats, skills &amp; loadout</div>
   </div>
   <button class="play-btn" id="play-mode-btn" onclick="enterPlayMode()">▶ Play Mode</button>
 </header>
 
 <div class="app-layout">
   <nav class="sidebar">
-    <div class="nav-section">Design</div>
-    <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
-    <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
-    <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
-    <div class="nav-section">Equipment</div>
-    <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
-    <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
-    <div class="nav-section">Summary</div>
-    <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
-    <div class="nav-section">File</div>
-    <button class="nav-btn" onclick="saveCharacter()">☁ Save Character</button>
-    <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
-    <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
-    <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
-    <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
-    <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
-    <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
-    <div class="nav-section">Game Configuration</div>
-    <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
-    <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
-    <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
-    <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
-    <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
-    <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
-    <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
-    <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;"></div>
+
+    <!-- CHARACTER MODE NAV -->
+    <div id="char-nav">
+      <div class="nav-section">Design</div>
+      <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
+      <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
+      <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
+      <div class="nav-section">Equipment</div>
+      <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
+      <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
+      <div class="nav-section">Summary</div>
+      <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
+      <div class="nav-section">File</div>
+      <button class="nav-btn" onclick="saveCharacter()">☁ Save Character</button>
+      <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
+      <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
+      <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
+      <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
+      <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
+    </div>
+
+    <!-- CONFIG MODE NAV -->
+    <div id="gm-config-nav" style="display:none;">
+      <button class="nav-btn" onclick="exitConfigMode()" style="color:var(--text-dim);font-size:0.78rem;">← Character Design</button>
+      <div class="nav-section">Game Configuration</div>
+      <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
+      <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
+      <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
+      <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
+      <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
+      <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
+      <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
+      <button id="save-owner-default-btn" class="nav-btn" onclick="saveAsOwnerDefault()" style="display:none; color:var(--gold2);">⭐ Save as Default Config</button>
+      <button class="nav-btn" onclick="document.getElementById('modal-reset-defaults').style.display='flex'" style="color:#c08080;">↺ Reset to Defaults</button>
+      <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;"></div>
+    </div>
+
+    <!-- ACCOUNT (always visible) -->
     <div class="nav-section">Account</div>
     <div id="nav-user" style="padding:6px 18px;font-size:0.76rem;color:var(--text-dim);"></div>
     <div id="nav-campaign" style="padding:2px 18px 6px;font-size:0.72rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
@@ -842,7 +972,8 @@
         Define new skills or edit/delete existing ones. Success % is the sum of the chosen attributes' values, capped at 100%.
         Set a count greater than 1 to add an attribute multiple times — e.g. Knowledge = 3 makes success = Knowledge × 3.
       </p>
-      <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:16px;">+ Add New Skill</button>
+      <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:12px;">+ Add New Skill</button>
+      <div class="skill-filter" id="skillmgr-filters" style="margin-bottom:14px;"></div>
       <div id="skill-form-anchor"></div>
 
       <div id="skill-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
@@ -1195,13 +1326,61 @@
 // here — they're loaded at runtime from the config file (see CONFIG PERSISTENCE below).
 // These start empty and are populated by loadConfig() before the UI is built.
 
-let RACE_DATA = {};
-let GENDER_DATA = {};
-let AGE_DATA = {};
-let HEIGHT_DATA = {};
-let BUILD_DATA = {};
-let SOCIAL_DATA = {};
-let MENTAL_DATA = {};
+// All attribute multipliers default to 1 (neutral). Height = base height in inches, Weight = body-weight multiplier.
+const DEFAULT_RACE_DATA = {
+  Human:   { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.5, Height:66, Weight:1   },
+  Dwarf:   { Power:1.2, Speed:0.8, Toughness:1.3, Stamina:1.2, ManualDex:1.1, PhysNimble:0.9, Knowledge:1,   SocialSkills:0.9, Intellect:1,   Intuition:0.9, Quintessence:0.3, DayVision:0.8, Hearing:1.1, Smell:1,   Taste:1.1, NightVision:1.2, Height:50, Weight:1.1 },
+  Elf:     { Power:0.9, Speed:1.1, Toughness:0.8, Stamina:0.9, ManualDex:1.2, PhysNimble:1.2, Knowledge:1.2, SocialSkills:1.1, Intellect:1.1, Intuition:1.2, Quintessence:1.5, DayVision:1.3, Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:68, Weight:0.85},
+  Gnome:   { Power:0.7, Speed:0.8, Toughness:0.8, Stamina:0.8, ManualDex:1.3, PhysNimble:1.1, Knowledge:1.3, SocialSkills:1,   Intellect:1.3, Intuition:1.1, Quintessence:1.2, DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:42, Weight:0.5 },
+  Goblin:  { Power:0.8, Speed:1.2, Toughness:0.9, Stamina:1,   ManualDex:1.1, PhysNimble:1.3, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:1,   Quintessence:0.3, DayVision:0.9, Hearing:1.2, Smell:1.1, Taste:1,   NightVision:1.3, Height:48, Weight:0.6 },
+  Ogre:    { Power:1.8, Speed:0.7, Toughness:1.6, Stamina:1.5, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.6, SocialSkills:0.7, Intellect:0.7, Intuition:0.8, Quintessence:0.2, DayVision:0.8, Hearing:0.9, Smell:1.2, Taste:0.8, NightVision:0.8, Height:90, Weight:2.5 },
+  Halfling:{ Power:0.8, Speed:0.9, Toughness:0.9, Stamina:1,   ManualDex:1.2, PhysNimble:1.2, Knowledge:1,   SocialSkills:1.2, Intellect:1,   Intuition:1.1, Quintessence:0.4, DayVision:1,   Hearing:1.1, Smell:1.1, Taste:1.2, NightVision:0.8, Height:40, Weight:0.55},
+};
+
+const DEFAULT_GENDER_DATA = {
+  Male:        { Power:1.1, Speed:1,   Toughness:1.05, Stamina:1.05, ManualDex:0.95, PhysNimble:0.95, Knowledge:1,   SocialSkills:0.95, Intellect:1,   Intuition:0.95, Quintessence:1,   DayVision:1,   Hearing:0.95, Smell:0.95, Taste:0.95, NightVision:1,   Height:1.04, Weight:1.15 },
+  Female:      { Power:0.9, Speed:1,   Toughness:0.95, Stamina:0.95, ManualDex:1.05, PhysNimble:1.05, Knowledge:1,   SocialSkills:1.05, Intellect:1,   Intuition:1.05, Quintessence:1,   DayVision:1,   Hearing:1.05, Smell:1.05, Taste:1.05, NightVision:1,   Height:0.96, Weight:0.85 },
+  Androgynous: { Power:1,   Speed:1,   Toughness:1,    Stamina:1,    ManualDex:1,    PhysNimble:1,    Knowledge:1,   SocialSkills:1,    Intellect:1,   Intuition:1,    Quintessence:1.1, DayVision:1,   Hearing:1,    Smell:1,    Taste:1,    NightVision:1,   Height:1,    Weight:1    },
+};
+
+const DEFAULT_AGE_DATA = {
+  Young:   { Power:0.8, Speed:1.1, Toughness:0.8, Stamina:1.1, ManualDex:0.9, PhysNimble:1.1, Knowledge:0.7, SocialSkills:0.8, Intellect:0.9, Intuition:0.9, Quintessence:1,   DayVision:1.1, Hearing:1.1, Smell:1,   Taste:1,   NightVision:1,   Height:0.85, Weight:0.7 },
+  Adult:   { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:1,   DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:1,   Height:1,    Weight:1   },
+  'Middle Age': { Power:1, Speed:0.95, Toughness:1.05, Stamina:0.95, ManualDex:1, PhysNimble:0.95, Knowledge:1.1, SocialSkills:1.1, Intellect:1.1, Intuition:1.1, Quintessence:1, DayVision:0.95, Hearing:0.95, Smell:1, Taste:1, NightVision:1, Height:1, Weight:1.05 },
+  Elder:   { Power:0.8, Speed:0.85, Toughness:0.85, Stamina:0.8, ManualDex:0.9, PhysNimble:0.85, Knowledge:1.2, SocialSkills:1.15, Intellect:1.2, Intuition:1.2, Quintessence:1.1, DayVision:0.8, Hearing:0.8, Smell:0.9, Taste:0.9, NightVision:0.9, Height:0.98, Weight:0.9 },
+};
+
+const DEFAULT_HEIGHT_DATA = {
+  Short:   { Power:0.9, Speed:0.95, Toughness:0.95, Stamina:1, ManualDex:1.05, PhysNimble:1.05, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:0.92, Weight:0.85 },
+  Average: { Power:1,   Speed:1,    Toughness:1,    Stamina:1, ManualDex:1,    PhysNimble:1,    Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1,    Weight:1    },
+  Tall:    { Power:1.1, Speed:1.05, Toughness:1.05, Stamina:1, ManualDex:0.95, PhysNimble:0.95, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Height:1.08, Weight:1.15 },
+};
+
+const DEFAULT_BUILD_DATA = {
+  Slim:    { Power:0.85, Speed:1.1, Toughness:0.85, Stamina:0.9, ManualDex:1.05, PhysNimble:1.1, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Weight:0.8,  TargetAdj:0.8 },
+  Average: { Power:1,    Speed:1,   Toughness:1,    Stamina:1,   ManualDex:1,    PhysNimble:1,   Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Weight:1,    TargetAdj:1   },
+  Stocky:  { Power:1.15, Speed:0.9, Toughness:1.15, Stamina:1.1, ManualDex:0.95, PhysNimble:0.9, Knowledge:1, SocialSkills:1, Intellect:1, Intuition:1, Quintessence:1, DayVision:1, Hearing:1, Smell:1, Taste:1, NightVision:1, Weight:1.2,  TargetAdj:1.2 },
+};
+
+const DEFAULT_SOCIAL_DATA = {
+  Introvert: { SocialSkills:0.9, Intuition:1.1, Knowledge:1.05 },
+  Balanced:  { },
+  Extrovert: { SocialSkills:1.1, Intuition:0.9, Speed:1.05 },
+};
+
+const DEFAULT_MENTAL_DATA = {
+  Logical:   { Intellect:1.15, Intuition:0.85, Knowledge:1.1  },
+  Balanced:  { },
+  Intuitive: { Intuition:1.15, Intellect:0.85, Quintessence:1.1 },
+};
+
+let RACE_DATA   = {...DEFAULT_RACE_DATA};
+let GENDER_DATA = {...DEFAULT_GENDER_DATA};
+let AGE_DATA    = {...DEFAULT_AGE_DATA};
+let HEIGHT_DATA = {...DEFAULT_HEIGHT_DATA};
+let BUILD_DATA  = {...DEFAULT_BUILD_DATA};
+let SOCIAL_DATA = {...DEFAULT_SOCIAL_DATA};
+let MENTAL_DATA = {...DEFAULT_MENTAL_DATA};
 
 // Populate the Race/Sex/Age/Height/Build/Social/Mental dropdowns from their data tables,
 // preserving the currently selected value when it still exists.
@@ -1344,6 +1523,9 @@ function calcAttributes() {
 function recalc() {
   const attrs = calcAttributes();
 
+  // Refresh skill success percentages (attrs affect per-point gain)
+  buildSkillList();
+
   // Points
   const used = Object.values(statValues).reduce((a,b)=>a+b,0);
   const left = TOTAL_POINTS - used;
@@ -1453,16 +1635,17 @@ function updatePlaysheet(attrs) {
   }
 
   // Skills
-  const checkedSkills = [...document.querySelectorAll('#skill-list input:checked')].map(cb=>cb.dataset.name);
-  document.getElementById('ps-skills').innerHTML = checkedSkills.length
-    ? checkedSkills.map(name => {
-        const skill = SKILLS.find(s=>s.name===name);
-        const pct = calcSkillSuccess(skill, attrs);
+  const investedSkills = Object.entries(skillInvestments).filter(([,pts]) => pts > 0);
+  document.getElementById('ps-skills').innerHTML = investedSkills.length
+    ? investedSkills.map(([name, pts]) => {
+        const skill = SKILLS.find(s => s.name === name);
+        const pct = calcSkillSuccess(skill, attrs, pts);
         return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-          <span>${name}</span><span style="color:var(--gold2);font-weight:bold;">${pct === null ? '—' : pct+'%'}</span>
+          <span>${name} <span style="color:var(--text-dim);font-size:0.75rem;">(${pts}pt)</span></span>
+          <span style="color:var(--gold2);font-weight:bold;">${pct}%</span>
         </div>`;
       }).join('')
-    : '<span style="color:var(--text-dim)">None selected.</span>';
+    : '<span style="color:var(--text-dim)">No skills invested.</span>';
 
   // Features
   const checkedFeatures = [...document.querySelectorAll('#feature-list input:checked')].map(cb=>cb.dataset.name);
@@ -1875,10 +2058,74 @@ function buildFeatures() {
 }
 
 // ─── SKILLS ─────────────────────────────────────────────────────────────────
-// SKILLS now loaded entirely from the config file (see CONFIG PERSISTENCE below).
-let SKILLS = [];
+const DEFAULT_SKILLS = [
+  { name:"Acrobatics",        type:"Physical",   cost:3, req:"Physical Coordination 15+", reqAttr:"PhysCoord",   reqVal:15, successAttrs:["PhysCoord","PhysCoord"] },
+  { name:"Archery",           type:"Ranged",     cost:3, req:"Manual Dexterity 12+",      reqAttr:"ManualDex",   reqVal:12, successAttrs:["ManualDex","ManualDex"] },
+  { name:"Alchemy",           type:"Knowledge",  cost:4, req:"Logic 14+",                 reqAttr:"Logic",       reqVal:14, successAttrs:["Logic","Knowledge"] },
+  { name:"Animal Handling",   type:"Social",     cost:3, req:"Intuition 12+",             reqAttr:"Intuition",   reqVal:12, successAttrs:["Intuition","Intuition"] },
+  { name:"Athletics",         type:"Physical",   cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["PhysCoord","Stamina"] },
+  { name:"Blacksmithing",     type:"Craft",      cost:4, req:"Manual Dexterity 10+",      reqAttr:"ManualDex",   reqVal:10, successAttrs:["ManualDex","Knowledge"] },
+  { name:"Botany",            type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Knowledge","Logic"] },
+  { name:"Climbing",          type:"Physical",   cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Power","PhysCoord"] },
+  { name:"Cooking",           type:"Craft",      cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Knowledge","Taste"] },
+  { name:"Deception",         type:"Social",     cost:3, req:"Social Skills 12+",         reqAttr:"SocialSkills",reqVal:12, successAttrs:["SocialSkills","Intuition"] },
+  { name:"Diplomacy",         type:"Social",     cost:3, req:"Social Skills 14+",         reqAttr:"SocialSkills",reqVal:14, successAttrs:["SocialSkills","SocialSkills"] },
+  { name:"Disguise",          type:"Social",     cost:3, req:"Social Skills 10+",         reqAttr:"SocialSkills",reqVal:10, successAttrs:["ManualDex","SocialSkills"] },
+  { name:"Dodge",             type:"Physical",   cost:3, req:"Physical Coordination 12+", reqAttr:"PhysCoord",   reqVal:12, successAttrs:["PhysCoord","Speed"] },
+  { name:"Enchanting",        type:"Arcane",     cost:5, req:"Quintessence 15+",          reqAttr:"Quintessence",reqVal:15, successAttrs:["Quintessence","Logic"] },
+  { name:"Etiquette",         type:"Social",     cost:2, req:"Social Skills 10+",         reqAttr:"SocialSkills",reqVal:10, successAttrs:["Knowledge","SocialSkills"] },
+  { name:"First Aid",         type:"Knowledge",  cost:3, req:"Logic 10+",                 reqAttr:"Logic",       reqVal:10, successAttrs:["ManualDex","Logic"] },
+  { name:"Forgery",           type:"Social",     cost:3, req:"Manual Dexterity 12+",      reqAttr:"ManualDex",   reqVal:12, successAttrs:["ManualDex","Knowledge"] },
+  { name:"Herbalism",         type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Knowledge","Smell"] },
+  { name:"History",           type:"Knowledge",  cost:2, req:"Logic 10+",                 reqAttr:"Logic",       reqVal:10, successAttrs:["Knowledge","Knowledge"] },
+  { name:"Intimidation",      type:"Social",     cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Power","SocialSkills"] },
+  { name:"Investigation",     type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Logic","Intuition"] },
+  { name:"Leatherworking",    type:"Craft",      cost:3, req:"Manual Dexterity 10+",      reqAttr:"ManualDex",   reqVal:10, successAttrs:["ManualDex","ManualDex"] },
+  { name:"Lockpicking",       type:"Physical",   cost:4, req:"Manual Dexterity 14+",      reqAttr:"ManualDex",   reqVal:14, successAttrs:["ManualDex","ManualDex"] },
+  { name:"Magic: Elemental",  type:"Arcane",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Quintessence"] },
+  { name:"Magic: Healing",    type:"Arcane",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Intuition"] },
+  { name:"Magic: Illusion",   type:"Arcane",     cost:5, req:"Quintessence 14+",          reqAttr:"Quintessence",reqVal:14, successAttrs:["Quintessence","SocialSkills"] },
+  { name:"Medicine",          type:"Knowledge",  cost:4, req:"Logic 14+",                 reqAttr:"Logic",       reqVal:14, successAttrs:["Logic","ManualDex"] },
+  { name:"Navigation",        type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Logic","Knowledge"] },
+  { name:"Perception",        type:"Physical",   cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Hearing","DayVision"] },
+  { name:"Persuasion",        type:"Social",     cost:3, req:"Social Skills 12+",         reqAttr:"SocialSkills",reqVal:12, successAttrs:["SocialSkills","Intuition"] },
+  { name:"Pick Pocket",       type:"Physical",   cost:3, req:"Manual Dexterity 14+",      reqAttr:"ManualDex",   reqVal:14, successAttrs:["ManualDex","PhysCoord"] },
+  { name:"Religion",          type:"Knowledge",  cost:2, req:"Logic 10+",                 reqAttr:"Logic",       reqVal:10, successAttrs:["Knowledge","Intuition"] },
+  { name:"Riding",            type:"Physical",   cost:3, req:"Physical Coordination 12+", reqAttr:"PhysCoord",   reqVal:12, successAttrs:["PhysCoord","Intuition"] },
+  { name:"Sailing",           type:"Physical",   cost:3, req:"Physical Coordination 12+", reqAttr:"PhysCoord",   reqVal:12, successAttrs:["PhysCoord","Knowledge"] },
+  { name:"Sneaking",          type:"Physical",   cost:3, req:"Physical Coordination 12+", reqAttr:"PhysCoord",   reqVal:12, successAttrs:["PhysCoord","Intuition"] },
+  { name:"Sorcery",           type:"Arcane",     cost:5, req:"Quintessence 16+",          reqAttr:"Quintessence",reqVal:16, successAttrs:["Quintessence","Quintessence"] },
+  { name:"Streetwise",        type:"Social",     cost:2, req:"Social Skills 10+",         reqAttr:"SocialSkills",reqVal:10, successAttrs:["Intuition","SocialSkills"] },
+  { name:"Surgery",           type:"Knowledge",  cost:5, req:"Manual Dexterity 16+",      reqAttr:"ManualDex",   reqVal:16, successAttrs:["ManualDex","Logic"] },
+  { name:"Swimming",          type:"Physical",   cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Stamina","Power"] },
+  { name:"Tactics",           type:"Knowledge",  cost:4, req:"Logic 14+",                 reqAttr:"Logic",       reqVal:14, successAttrs:["Logic","Logic"] },
+  { name:"Tailoring",         type:"Craft",      cost:3, req:"Manual Dexterity 10+",      reqAttr:"ManualDex",   reqVal:10, successAttrs:["ManualDex","ManualDex"] },
+  { name:"Theology",          type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Knowledge","Intuition"] },
+  { name:"Tracking",          type:"Physical",   cost:3, req:"Intuition 12+",             reqAttr:"Intuition",   reqVal:12, successAttrs:["Intuition","Smell"] },
+  { name:"Trap Setting",      type:"Physical",   cost:3, req:"Manual Dexterity 12+",      reqAttr:"ManualDex",   reqVal:12, successAttrs:["ManualDex","Logic"] },
+  { name:"Woodworking",       type:"Craft",      cost:3, req:"Manual Dexterity 10+",      reqAttr:"ManualDex",   reqVal:10, successAttrs:["ManualDex","ManualDex"] },
+  // Languages & Literacy
+  { name:"Literacy of the Realm",            type:"Language", cost:2, req:"Logic 5+",   reqAttr:"Logic", reqVal:5,  successAttrs:["Knowledge","Logic"] },
+  { name:"Language, Barbaric",               type:"Language", cost:2, req:"Logic 3+",   reqAttr:"Logic", reqVal:3,  successAttrs:["Knowledge","Knowledge"] },
+  { name:"Language, New World",              type:"Language", cost:2, req:"Logic 5+",   reqAttr:"Logic", reqVal:5,  successAttrs:["Knowledge","Knowledge"] },
+  { name:"Language and Literacy, New World", type:"Language", cost:3, req:"Logic 6+",   reqAttr:"Logic", reqVal:6,  successAttrs:["Knowledge","Logic"] },
+  { name:"Language, Demonic",                type:"Language", cost:2, req:"Logic 3+",   reqAttr:"Logic", reqVal:3,  successAttrs:["Knowledge","Knowledge"] },
+  { name:"Language and Literacy, Demonic",   type:"Language", cost:4, req:"Logic 10+",  reqAttr:"Logic", reqVal:10, successAttrs:["Knowledge","Logic"] },
+  { name:"Language, Sublime",                type:"Language", cost:3, req:"Logic 8+",   reqAttr:"Logic", reqVal:8,  successAttrs:["Knowledge","Knowledge"] },
+  { name:"Language and Literacy, Sublime",   type:"Language", cost:4, req:"Logic 11+",  reqAttr:"Logic", reqVal:11, successAttrs:["Knowledge","Logic"] },
+  { name:"Language, Ancients",               type:"Language", cost:3, req:"Logic 7+",   reqAttr:"Logic", reqVal:7,  successAttrs:["Knowledge","Knowledge"] },
+  { name:"Language and Literacy, Ancients",  type:"Language", cost:4, req:"Logic 10+",  reqAttr:"Logic", reqVal:10, successAttrs:["Knowledge","Logic"] },
+  // History — require Literacy of the Realm (or any Literacy skill)
+  { name:"History of the Realm",  type:"History", cost:3, req:"Literacy (Any)", reqAttr:"", reqVal:"", successAttrs:["Knowledge","Knowledge"] },
+  { name:"History, Ancients",     type:"History", cost:3, req:"Literacy (Any)", reqAttr:"", reqVal:"", successAttrs:["Knowledge","Knowledge"] },
+  { name:"History, Demonic",      type:"History", cost:3, req:"Literacy (Any)", reqAttr:"", reqVal:"", successAttrs:["Knowledge","Knowledge"] },
+  { name:"History, Sublime",      type:"History", cost:3, req:"Literacy (Any)", reqAttr:"", reqVal:"", successAttrs:["Knowledge","Knowledge"] },
+];
+let SKILLS = [...DEFAULT_SKILLS];
 
 let skillFilter = 'All';
+let skillMgrFilter = 'All';
+let skillInvestments = {}; // { skillName: pointsInvested }
 function buildSkillFilters() {
   const types = ['All', ...new Set(SKILLS.map(s=>s.type))];
   const container = document.getElementById('skill-filters');
@@ -1920,30 +2167,51 @@ function migrateSkills() {
   }
 }
 
-// successAttrs is a flat list where an attribute can appear multiple times —
-// each occurrence adds that attribute's value again, e.g. ['Knowledge','Knowledge','Knowledge']
-// for a skill whose success is "Knowledge × 3".
-function calcSkillSuccess(skill, attrs) {
-  if (!skill || !skill.successAttrs || !skill.successAttrs.length || !attrs) return null;
-  const sum = skill.successAttrs.reduce((total,k) => total + (attrs[k] || 0), 0);
-  return Math.max(0, Math.min(100, Math.round(sum)));
+// Each point invested raises success% by the sum of the skill's successAttrs values.
+// e.g. successAttrs=['Knowledge','Knowledge','Logic'], attrs={Knowledge:15,Logic:12}
+//   → perPoint = 42,  2 pts → 84%
+function calcSkillSuccess(skill, attrs, points) {
+  if (!skill || !skill.successAttrs || !skill.successAttrs.length || !attrs) return 0;
+  points = points || 0;
+  if (points === 0) return 0;
+  const perPoint = skill.successAttrs.reduce((t, k) => t + (attrs[k] || 0), 0);
+  return Math.max(0, Math.min(100, Math.round(perPoint * points)));
+}
+
+function adjustSkillPoints(name, delta) {
+  const current = skillInvestments[name] || 0;
+  const next = Math.max(0, current + delta);
+  if (next === 0) delete skillInvestments[name];
+  else            skillInvestments[name] = next;
+  recalc();
 }
 
 function buildSkillList() {
   const container = document.getElementById('skill-list');
   container.innerHTML = '';
-  const filtered = skillFilter === 'All' ? SKILLS : SKILLS.filter(s=>s.type===skillFilter);
+  const attrs = calcAttributes();
+  const filtered = skillFilter === 'All' ? SKILLS : SKILLS.filter(s => s.type === skillFilter);
   for (const s of filtered) {
-    const item = document.createElement('label');
+    const pts = skillInvestments[s.name] || 0;
+    const pct = calcSkillSuccess(s, attrs, pts);
+    const perPt = s.successAttrs && s.successAttrs.length
+      ? Math.round(s.successAttrs.reduce((t, k) => t + (attrs[k] || 0), 0))
+      : 0;
+    const item = document.createElement('div');
     item.className = 'skill-item';
+    item.dataset.name = s.name;
     item.innerHTML = `
-      <input type="checkbox" data-name="${s.name}" data-cost="${skillCost(s)}" onchange="recalc()">
       <div class="skill-info">
         <div class="si-name">${s.name}</div>
-        <div class="si-type">${s.type}</div>
-        ${s.req ? `<div class="si-req">Requires: ${s.req}</div>` : ''}
+        <div class="si-type">${s.type}${s.req ? ' · ' + s.req : ''}</div>
       </div>
-      <div class="si-cost">${skillCost(s)} pts</div>`;
+      <div class="skill-invest">
+        <button class="skill-pt-btn" onclick="adjustSkillPoints('${s.name.replace(/'/g,"\\'")}', -1)" ${pts === 0 ? 'disabled' : ''}>−</button>
+        <span class="skill-pts">${pts}</span>
+        <button class="skill-pt-btn" onclick="adjustSkillPoints('${s.name.replace(/'/g,"\\'")}', 1)">+</button>
+        <span class="skill-pct ${pct >= 100 ? 'skill-pct-max' : pct > 0 ? 'skill-pct-active' : 'skill-pct-zero'}">${pct}%</span>
+        ${perPt ? `<span class="skill-per-pt">+${perPt}/pt</span>` : ''}
+      </div>`;
     container.appendChild(item);
   }
 }
@@ -2057,14 +2325,31 @@ function deleteSkill(index) {
   recalc();
 }
 
+function buildSkillMgrFilters() {
+  const container = document.getElementById('skillmgr-filters');
+  if (!container) return;
+  const types = ['All', ...new Set(SKILLS.map(s => s.type))];
+  container.innerHTML = '';
+  for (const t of types) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (t === skillMgrFilter ? ' active' : '');
+    btn.textContent = t;
+    btn.onclick = () => { skillMgrFilter = t; buildSkillManagerTable(); };
+    container.appendChild(btn);
+  }
+}
+
 function buildSkillManagerTable() {
   const tbody = document.getElementById('skillmgr-list');
   if (!tbody) return;
+  buildSkillMgrFilters();
   // Move the form out of the table before wiping it, so an open edit form
   // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
   if (document.getElementById('skill-form-row')) closeSkillForm();
   tbody.innerHTML = '';
-  SKILLS.forEach((s, i) => {
+  const filtered = skillMgrFilter === 'All' ? SKILLS : SKILLS.filter(s => s.type === skillMgrFilter);
+  filtered.forEach((s) => {
+    const i = SKILLS.indexOf(s);
     const reqLabel = s.reqAttr ? (ATTRIBUTES.find(a=>a.key===s.reqAttr)||{}).label : '—';
     const counts = countSuccessAttrs(s.successAttrs);
     const successLabel = Object.keys(counts).length
@@ -2080,8 +2365,7 @@ function buildSkillManagerTable() {
 
 function updateSkillPoints(attrs) {
   const knowledge = attrs ? Math.floor(attrs.Knowledge) : 0;
-  const used = [...document.querySelectorAll('#skill-list input:checked')]
-    .reduce((sum, cb) => sum + (parseFloat(cb.dataset.cost) || 3), 0);
+  const used = Object.values(skillInvestments).reduce((s, n) => s + n, 0);
   const left = knowledge - used;
   document.getElementById('skill-points-total').textContent = knowledge;
   document.getElementById('skill-points-used').textContent = used;
@@ -2095,8 +2379,72 @@ function updateSkillPoints(attrs) {
 
 // ─── WEAPONS ────────────────────────────────────────────────────────────────
 // WEAPONS and EQUIPMENT now loaded entirely from the config file (see CONFIG PERSISTENCE below).
-let WEAPONS = [];
-let EQUIPMENT = [];
+const DEFAULT_WEAPONS = [
+  { name:"Knife",               wt:0.5,  damage:"1d4",    reach:0.5 },
+  { name:"Sword, Short",        wt:2,    damage:"1d6",    reach:2   },
+  { name:"Sword, Long",         wt:3.5,  damage:"1d8",    reach:3   },
+  { name:"Axe, Hatchet",        wt:2,    damage:"1d6",    reach:1   },
+  { name:"Battleaxe",           wt:7,    damage:"1d10",   reach:2   },
+  { name:"Greataxe",            wt:12,   damage:"1d12",   reach:2.5 },
+  { name:"Mace",                wt:6,    damage:"1d6",    reach:2   },
+  { name:"Club",                wt:2,    damage:"1d4",    reach:1   },
+  { name:"Greatclub",           wt:10,   damage:"1d10",   reach:4   },
+  { name:"Staff",               wt:4,    damage:"1d6",    reach:3   },
+  { name:"Spear, Long",         wt:5,    damage:"1d8",    reach:6   },
+  { name:"Rapier",              wt:2,    damage:"1d6",    reach:3   },
+  { name:"Scimitar",            wt:3,    damage:"1d6",    reach:2.5 },
+  { name:"Greatsword",          wt:10,   damage:"1d12",   reach:4   },
+  { name:"Glaive",              wt:8,    damage:"1d10",   reach:4   },
+  { name:"Halberd",             wt:12,   damage:"1d12",   reach:6   },
+  { name:"Flail",               wt:5,    damage:"1d8",    reach:3   },
+  { name:"Hammer, War",         wt:6,    damage:"1d8",    reach:2.5 },
+  { name:"Trident",             wt:6,    damage:"1d8",    reach:4   },
+  { name:"Shield, Buckler",     wt:3,    damage:"1d4",    reach:0   },
+  { name:"Shield, Small",       wt:6,    damage:"1d4",    reach:0   },
+  { name:"Shield, Large",       wt:10,   damage:"1d4",    reach:0   },
+  { name:"Bow, Light",          wt:2,    damage:"1d6",    reach:0   },
+  { name:"Bow, Hunting",        wt:3,    damage:"1d8",    reach:0   },
+  { name:"Bow, War",            wt:3.5,  damage:"1d10",   reach:0   },
+  { name:"Crossbow, Light",     wt:6,    damage:"1d8",    reach:0   },
+  { name:"Crossbow, Heavy",     wt:8,    damage:"1d10",   reach:0   },
+  { name:"Javelin",             wt:2,    damage:"1d6",    reach:4.5 },
+  { name:"Dart",                wt:0.25, damage:"1d3",    reach:0   },
+  { name:"Sling",               wt:0.5,  damage:"1d4",    reach:0   },
+];
+const DEFAULT_EQUIPMENT = [
+  { name:"Backpack",            wt:2  },
+  { name:"Bedroll",             wt:5  },
+  { name:"Blanket",             wt:3  },
+  { name:"Canteen (full)",      wt:2  },
+  { name:"Candle (×10)",        wt:1  },
+  { name:"Chalk (×10)",         wt:0.5},
+  { name:"Climbing Gear",       wt:8  },
+  { name:"Crowbar",             wt:5  },
+  { name:"Flint & Steel",       wt:0.5},
+  { name:"Grappling Hook",      wt:4  },
+  { name:"Hammer",              wt:2  },
+  { name:"Healer's Kit",        wt:3  },
+  { name:"Lantern",             wt:2  },
+  { name:"Lock (good)",         wt:1  },
+  { name:"Manacles",            wt:2  },
+  { name:"Mirror (small)",      wt:0.5},
+  { name:"Oil (flask)",         wt:1  },
+  { name:"Pick, Miner's",       wt:10 },
+  { name:"Piton (×10)",         wt:2.5},
+  { name:"Pole (10 ft)",        wt:8  },
+  { name:"Pouch",               wt:0.5},
+  { name:"Rations (1 day)",     wt:2  },
+  { name:"Rope, Hemp (50 ft)",  wt:10 },
+  { name:"Rope, Silk (50 ft)",  wt:5  },
+  { name:"Sack",                wt:0.5},
+  { name:"Shovel",              wt:8  },
+  { name:"Thieves' Tools",      wt:1  },
+  { name:"Torch (×3)",          wt:3  },
+  { name:"Waterskin",           wt:4  },
+  { name:"Writing Kit",         wt:1  },
+];
+let WEAPONS   = [...DEFAULT_WEAPONS];
+let EQUIPMENT = [...DEFAULT_EQUIPMENT];
 
 function buildLoadoutSelects() {
   const ws = document.getElementById('weapon-select');
@@ -2710,11 +3058,33 @@ function toggleCollapse(id) {
 
 // ─── NAV ────────────────────────────────────────────────────────────────────
 function showPanel(id) {
-  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('panel-'+id).classList.add('active');
-  event.target.classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  // Highlight the matching nav button (works whether called from click or code)
+  const btn = document.querySelector(`#char-nav button[onclick*="'${id}'"], #gm-config-nav button[onclick*="'${id}'"]`);
+  if (btn) btn.classList.add('active');
   if (id === 'playsheet') recalc();
+}
+
+const CONFIG_PANELS = ['skillmgr','armormgr','meleemgr','rangedmgr'];
+
+function enterConfigMode(panel) {
+  document.getElementById('char-nav').style.display       = 'none';
+  document.getElementById('gm-config-nav').style.display  = '';
+  document.getElementById('play-mode-btn').style.display  = 'none';
+  document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
+  document.getElementById('app-subtitle').textContent     = 'Manage species, weapons, armor and skills';
+  showPanel(panel || 'skillmgr');
+}
+
+function exitConfigMode() {
+  document.getElementById('gm-config-nav').style.display  = 'none';
+  document.getElementById('char-nav').style.display       = '';
+  document.getElementById('play-mode-btn').style.display  = '';
+  document.getElementById('app-title').textContent        = '⚔ Arcane Character Builder';
+  document.getElementById('app-subtitle').textContent     = 'Design your character — traits, stats, skills & loadout';
+  showPanel('overview');
 }
 
 // ─── IMPORT / EXPORT ────────────────────────────────────────────────────────
@@ -2744,7 +3114,7 @@ function gatherCharacterData() {
     mental:  document.getElementById('sel-mental').value,
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
-    skills:   [...document.querySelectorAll('#skill-list input:checked')].map(cb => cb.dataset.name),
+    skills:   { ...skillInvestments },
     weapons,
     equipment,
     armor: getArmorSelections(),
@@ -2906,7 +3276,11 @@ async function deleteCharacter(id, name) {
 }
 
 function newCharacter() {
-  if (!confirm('Start a new character? Unsaved changes will be lost.')) return;
+  document.getElementById('modal-new-char-confirm').style.display = 'flex';
+}
+function _doNewCharacter() {
+  document.getElementById('modal-new-char-confirm').style.display = 'none';
+  hideLandingModal();
   currentCharacterId = null;
   setCharSaveStatus('', false);
   avatarUrl = '';
@@ -2916,7 +3290,9 @@ function newCharacter() {
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   buildStatRows();
   document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => cb.checked = false);
-  document.querySelectorAll('#skill-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+  skillInvestments = {};
+  buildSkillFilters();
+  buildSkillList();
   document.getElementById('weapon-list').innerHTML = '';
   document.getElementById('equip-list').innerHTML = '';
   for (const area of ARMOR_AREAS) {
@@ -3050,14 +3426,17 @@ async function submitSignOut() {
 }
 
 // ─── CAMPAIGN UI ─────────────────────────────────────────────────────────────
-function showCampaignModal() {
-  const modal = document.getElementById('modal-campaign');
-  modal.style.display = 'flex';
-  loadCampaignList();
+function showCampaignModal() { showLandingModal(); }
+function hideCampaignModal() { hideLandingModal(); }
+
+function showLandingModal() {
+  document.getElementById('modal-landing').style.display = 'flex';
+  _landingLoadCharacters();
+  _landingLoadCampaigns();
 }
 
-function hideCampaignModal() {
-  document.getElementById('modal-campaign').style.display = 'none';
+function hideLandingModal() {
+  document.getElementById('modal-landing').style.display = 'none';
 }
 
 function setCampaignError(msg) {
@@ -3065,30 +3444,182 @@ function setCampaignError(msg) {
   el.textContent = msg; el.style.display = msg ? '' : 'none';
 }
 
-async function loadCampaignList() {
-  const list = document.getElementById('campaign-list');
-  list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
+async function loadCampaignList() { _landingLoadCampaigns(); }
+
+// ── Landing modal data loaders ────────────────────────────────────────────────
+async function _landingLoadCharacters() {
+  const el = document.getElementById('landing-char-list');
+  el.innerHTML = '<span class="landing-dim">Loading…</span>';
+
+  const { data: chars, error } = await sb
+    .from('characters')
+    .select('id, name, species, avatar_url, campaign_id')
+    .eq('user_id', currentUser.id)
+    .order('updated_at', { ascending: false });
+  if (error) { el.innerHTML = `<span class="landing-dim">${error.message}</span>`; return; }
+  if (!chars.length) { el.innerHTML = '<span class="landing-dim">No saved characters yet.</span>'; return; }
+
+  // Fetch campaign names for any campaign_ids present
+  const campIds = [...new Set(chars.map(c => c.campaign_id).filter(Boolean))];
+  const campNames = {};
+  if (campIds.length) {
+    const { data: camps } = await sb.from('campaigns').select('id, name').in('id', campIds);
+    (camps || []).forEach(c => { campNames[c.id] = c.name; });
+  }
+
+  el.innerHTML = chars.map(c => {
+    const avatarUrl = resolveAvatarUrl(c.avatar_url);
+    const thumb = avatarUrl
+      ? `<img src="${avatarUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
+      : `<span style="width:32px;height:32px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;">🧙</span>`;
+    const campName = c.campaign_id ? campNames[c.campaign_id] : null;
+    const campBadge = campName
+      ? `<span style="font-size:0.68rem;color:var(--gold);opacity:0.8;">⚔ ${campName}</span>`
+      : `<span style="font-size:0.68rem;color:var(--text-dim);font-style:italic;">No campaign</span>`;
+    return `<div class="landing-item landing-char-item" data-id="${c.id}"
+        data-campaign-id="${c.campaign_id || ''}"
+        data-campaign-name="${(campName||'').replace(/"/g,'&quot;')}"
+        onclick="_landingPickChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">
+      ${thumb}
+      <div style="min-width:0;flex:1;">
+        <div style="color:var(--text-bright);font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="landing-dim" style="font-size:0.7rem;">${c.species || ''}</span>
+          ${campBadge}
+        </div>
+      </div>
+      <button class="landing-delete-btn" title="Delete character"
+        onclick="event.stopPropagation();_landingDeleteChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+async function _landingLoadCampaigns() {
+  const el = document.getElementById('landing-camp-list');
+  el.innerHTML = '<span class="landing-dim">Loading…</span>';
   const { data, error } = await sb
     .from('campaigns')
     .select('id, name, gm_id')
     .order('created_at', { ascending: false });
-  if (error) { setCampaignError(error.message); return; }
+  if (error) { el.innerHTML = `<span class="landing-dim">${error.message}</span>`; return; }
   if (!data.length) {
-    list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">No campaigns yet — create one below.</span>';
+    el.innerHTML = '<span class="landing-dim">No campaigns yet — create one below.</span>';
     return;
   }
-  list.innerHTML = data.map(c => `
-    <div onclick="selectCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}')" style="
-      padding:10px 14px; border:1px solid var(--border); border-radius:4px;
-      margin-bottom:8px; cursor:pointer; transition:border-color 0.15s;"
-      onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor='var(--border)'">
-      <div style="color:var(--text-bright);font-size:0.9rem;">${c.name}</div>
-      <div style="color:var(--text-dim);font-size:0.72rem;">${c.gm_id === currentUser.id ? 'Game Master' : 'Player'}</div>
-    </div>`).join('');
+  const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
+  const gmCol = document.getElementById('landing-gm-col');
+  if (gmCol) gmCol.style.display = userIsGmAnywhere ? '' : 'none';
+
+  el.innerHTML = data.map(c => {
+    const isGmOf = c.gm_id === currentUser.id;
+    const sel    = currentCampaignId === c.id;
+    return `<div class="landing-item landing-campaign-item${sel ? ' selected' : ''}"
+      data-id="${c.id}" data-gm="${c.gm_id}"
+      onclick="selectCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.gm_id}')">
+      <span style="font-size:1.1rem;">${isGmOf ? '👑' : '🎲'}</span>
+      <div style="min-width:0;flex:1;">
+        <div style="color:var(--text-bright);font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
+        <div class="landing-dim" style="font-size:0.7rem;">${isGmOf ? 'Game Master' : 'Player'}</div>
+      </div>
+      ${isGmOf ? '<button class="landing-delete-btn" title="Delete campaign" onclick="event.stopPropagation();_landingDeleteCampaign(\'' + c.id + '\',\'' + c.name.replace(/'/g,"\\'") + '\')">🗑</button>' : ''}
+    </div>`;
+  }).join('');
+}
+
+function _landingUpdateContinue() {
+  const btn = document.getElementById('landing-continue-btn');
+  if (btn) btn.disabled = !currentCampaignId;
+}
+
+async function _landingPickChar(id, name) {
+  await loadCharacter(id);
+
+  // Mark selected
+  document.querySelectorAll('.landing-char-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === id);
+  });
+
+  // If the character belongs to a campaign and none is selected yet, auto-select it
+  const item = document.querySelector(`.landing-char-item[data-id="${id}"]`);
+  const charCampId   = item?.dataset.campaignId   || '';
+  const charCampName = item?.dataset.campaignName || '';
+  if (charCampId && !currentCampaignId) {
+    // find gm_id for this campaign from the rendered campaign list
+    const campEl = document.querySelector(`.landing-campaign-item[data-id="${charCampId}"]`);
+    const gmId   = campEl?.dataset.gm || '';
+    await selectCampaign(charCampId, charCampName, gmId);
+  }
+
+  const status = document.getElementById('landing-char-status');
+  if (status) {
+    if (currentCampaignId) {
+      status.textContent = '✓ ' + name + ' loaded';
+      status.style.color = 'var(--gold2)';
+    } else {
+      status.textContent = '✓ ' + name + ' loaded — select a campaign to continue';
+      status.style.color = 'var(--text-dim)';
+    }
+  }
+
+  if (currentCampaignId) hideLandingModal();
+}
+
+async function _landingCreateCampaign() {
+  const inp = document.getElementById('landing-new-camp-name');
+  const name = inp.value.trim();
+  if (!name) return;
+  setCampaignError('');
+  const { data, error } = await sb
+    .from('campaigns')
+    .insert({ name, gm_id: currentUser.id })
+    .select('id, name, gm_id')
+    .single();
+  if (error) { setCampaignError(error.message); return; }
+  await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
+  await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() });
+  inp.value = '';
+  await selectCampaign(data.id, data.name, data.gm_id);
+  _landingLoadCampaigns();
+}
+
+async function _landingDeleteChar(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const { error } = await sb.from('characters').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  if (currentCharacterId === id) { currentCharacterId = null; setCharSaveStatus('', false); }
+  const status = document.getElementById('landing-char-status');
+  if (status) { status.textContent = ''; }
+  _landingLoadCharacters();
+}
+
+async function _landingDeleteCampaign(id, name) {
+  if (!confirm(`Delete campaign "${name}" and all its maps and tokens? This cannot be undone.`)) return;
+  const { error } = await sb.from('campaigns').delete().eq('id', id);
+  if (error) { alert('Delete failed: ' + error.message); return; }
+  if (currentCampaignId === id) {
+    currentCampaignId = null; currentCampaignGmId = null;
+    document.getElementById('nav-campaign').textContent = '';
+    document.getElementById('gm-config-nav').style.display = 'none';
+    _landingUpdateContinue();
+  }
+  _landingLoadCampaigns();
+}
+
+async function _landingOpenConfig(panel) {
+  // If no campaign selected yet, auto-select the first GM campaign
+  if (!currentCampaignId) {
+    const firstGmCamp = document.querySelector('.landing-campaign-item[data-gm]');
+    if (firstGmCamp && firstGmCamp.dataset.gm === currentUser?.id) {
+      const campName = firstGmCamp.querySelector('div > div')?.textContent || '';
+      await selectCampaign(firstGmCamp.dataset.id, campName, firstGmCamp.dataset.gm);
+    }
+  }
+  hideLandingModal();
+  enterConfigMode(panel);
 }
 
 async function createCampaign() {
-  const name = document.getElementById('new-campaign-name').value.trim();
+  const name = (document.getElementById('landing-new-camp-name') || document.getElementById('new-campaign-name'))?.value.trim();
   if (!name) { setCampaignError('Please enter a campaign name.'); return; }
   setCampaignError('');
   const { data, error } = await sb
@@ -3101,15 +3632,25 @@ async function createCampaign() {
   await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
   // Create an empty game config for this campaign
   await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() });
-  document.getElementById('new-campaign-name').value = '';
-  await selectCampaign(data.id, data.name);
+  const inp = document.getElementById('landing-new-camp-name') || document.getElementById('new-campaign-name');
+  if (inp) inp.value = '';
+  await selectCampaign(data.id, data.name, currentUser.id);
 }
 
-async function selectCampaign(id, name) {
-  currentCampaignId = id;
-  hideCampaignModal();
+async function selectCampaign(id, name, gmId) {
+  currentCampaignId   = id;
+  currentCampaignGmId = gmId || null;
   document.getElementById('nav-campaign').textContent = name;
+  const userIsGm = currentUser && gmId === currentUser.id;
+  // Only update sidebar GM nav; never hide the landing GM col once shown
+  document.getElementById('gm-config-nav').style.display = userIsGm ? '' : 'none';
+  const gmCol = document.getElementById('landing-gm-col');
+  if (gmCol && userIsGm) gmCol.style.display = '';  // show if GM of this campaign, never force-hide
   await loadConfigFromSupabase();
+  document.querySelectorAll('.landing-campaign-item').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === id);
+  });
+  _landingUpdateContinue();
 }
 
 // ─── CONFIG PERSISTENCE (Supabase) ───────────────────────────────────────────
@@ -3125,62 +3666,165 @@ function writeConfigToDisk() {
   _writeTimer = setTimeout(writeConfigToSupabase, 1500);
 }
 
+// ── Shared config ─────────────────────────────────────────────────────────────
+// Phase 1: one global config shared across all campaigns.
+// Phase 2 (future): load campaign-specific config first, fall back to global.
+// The shared config row ID is cached in localStorage so every campaign finds it.
+const SHARED_CONFIG_LS_KEY   = 'arcane-shared-config-id';
+const OWNER_DEFAULT_LS_KEY = 'arcane-owner-default-config';   // stores JSON blob
+const OWNER_USER_LS_KEY    = 'arcane-owner-user-id';
+
+function isConfigOwner() {
+  const ownerId = localStorage.getItem(OWNER_USER_LS_KEY);
+  return currentUser && (!ownerId || currentUser.id === ownerId);
+}
+
+function updateOwnerButtonVisibility() {
+  const btn = document.getElementById('save-owner-default-btn');
+  if (btn) btn.style.display = isConfigOwner() ? '' : 'none';
+}
+
 async function writeConfigToSupabase() {
-  if (!currentCampaignId) return;
+  if (!currentUser) return { error: { message: 'Not logged in' } };
   const config = gatherConfigData();
   if (currentConfigId) {
-    await sb.from('game_configs')
+    const { error } = await sb.from('game_configs')
       .update({ config, updated_by: currentUser.id })
       .eq('id', currentConfigId);
+    if (error) console.error('Config update failed:', error);
+    return { error };
   } else {
-    const { data } = await sb.from('game_configs')
-      .insert({ campaign_id: currentCampaignId, config, updated_by: currentUser.id })
+    const { data, error } = await sb.from('game_configs')
+      .insert({ campaign_id: currentCampaignId || null, config, updated_by: currentUser.id })
       .select('id').single();
-    if (data) currentConfigId = data.id;
+    if (error) { console.error('Config insert failed:', error); return { error }; }
+    if (data) {
+      currentConfigId = data.id;
+      localStorage.setItem(SHARED_CONFIG_LS_KEY, data.id);
+    }
+    return { error: null };
   }
 }
+
+function _seedDefaults() {
+  replaceObjectContents(RACE_DATA,   DEFAULT_RACE_DATA);
+  replaceObjectContents(GENDER_DATA, DEFAULT_GENDER_DATA);
+  replaceObjectContents(AGE_DATA,    DEFAULT_AGE_DATA);
+  replaceObjectContents(HEIGHT_DATA, DEFAULT_HEIGHT_DATA);
+  replaceObjectContents(BUILD_DATA,  DEFAULT_BUILD_DATA);
+  replaceObjectContents(SOCIAL_DATA, DEFAULT_SOCIAL_DATA);
+  replaceObjectContents(MENTAL_DATA, DEFAULT_MENTAL_DATA);
+  replaceArrayContents(SKILLS,    DEFAULT_SKILLS);    migrateSkills();
+  replaceArrayContents(WEAPONS,   DEFAULT_WEAPONS);
+  replaceArrayContents(EQUIPMENT, DEFAULT_EQUIPMENT);
+  replaceArrayContents(MELEE_WEAPONS,  DEFAULT_MELEE_WEAPONS);
+  replaceArrayContents(RANGED_WEAPONS, DEFAULT_RANGED_WEAPONS);
+  replaceObjectContents(ARMOR_AREA_WEIGHTS, DEFAULT_ARMOR_AREA_WEIGHTS);
+  replaceObjectContents(ARMOR_TYPE_DATA,    DEFAULT_ARMOR_TYPE_DATA);
+}
+
+function saveAsOwnerDefault() {
+  if (!isConfigOwner()) { setConfigStatus('You are not the config owner.', false); return; }
+  const config = gatherConfigData();
+  try {
+    localStorage.setItem(OWNER_DEFAULT_LS_KEY, JSON.stringify(config));
+    localStorage.setItem(OWNER_USER_LS_KEY, currentUser.id);
+    setConfigStatus(`Owner default saved (${SKILLS.length} skills, ${WEAPONS.length} weapons).`, true);
+  } catch (e) {
+    setConfigStatus('Save failed: ' + e.message, false);
+  }
+}
+
+async function resetToDefaults() {
+  document.getElementById('modal-reset-defaults').style.display = 'none';
+  setConfigStatus('Resetting to defaults…', false);
+
+  // Prefer owner-saved defaults (localStorage) over hardcoded JS defaults
+  const ownerJson = localStorage.getItem(OWNER_DEFAULT_LS_KEY);
+  if (ownerJson) {
+    try {
+      const config = JSON.parse(ownerJson);
+      applyConfigData(config);
+      const { error } = await writeConfigToSupabase();
+      if (error) setConfigStatus('Reset locally but save failed: ' + error.message, false);
+      else       setConfigStatus(`Reset to owner defaults and saved (${SKILLS.length} skills, ${WEAPONS.length} weapons).`, true);
+      return;
+    } catch (e) {
+      localStorage.removeItem(OWNER_DEFAULT_LS_KEY);
+    }
+  }
+
+  // Fall back to hardcoded JS defaults
+  _seedDefaults();
+  rebuildAllConfigUI();
+  const { error } = await writeConfigToSupabase();
+  if (error) setConfigStatus('Reset locally but save failed: ' + error.message, false);
+  else       setConfigStatus(`Reset to built-in defaults and saved (${SKILLS.length} skills, ${WEAPONS.length} weapons).`, true);
+}
+
 
 async function loadConfigFromSupabase() {
-  if (!currentCampaignId) return;
   setConfigStatus('Loading configuration…', false);
-  const { data, error } = await sb
-    .from('game_configs')
+
+  // Try cached row ID first
+  const cachedId = localStorage.getItem(SHARED_CONFIG_LS_KEY);
+  if (cachedId) {
+    const { data } = await sb.from('game_configs').select('id, config').eq('id', cachedId).single();
+    if (data) {
+      currentConfigId = data.id;
+      applyConfigData(data.config);
+      setConfigStatus('Configuration loaded.', true);
+      return;
+    }
+    localStorage.removeItem(SHARED_CONFIG_LS_KEY);
+  }
+
+  // Look for any existing config row (oldest = canonical shared config)
+  const { data: rows } = await sb.from('game_configs')
     .select('id, config')
-    .eq('campaign_id', currentCampaignId)
-    .single();
-  if (error || !data) {
-    setConfigStatus('No configuration found for this campaign.', false);
+    .order('created_at', { ascending: true })
+    .limit(1);
+  const row = rows && rows[0];
+  if (row) {
+    currentConfigId = row.id;
+    localStorage.setItem(SHARED_CONFIG_LS_KEY, row.id);
+    applyConfigData(row.config);
+    setConfigStatus('Configuration loaded.', true);
     return;
   }
-  currentConfigId = data.id;
-  applyConfigData(data.config, { skipWrite: true });
-  setConfigStatus('Configuration loaded.', true);
+
+  // No config in DB — seed defaults and save so everyone gets them
+  applyConfigData({});
+  await writeConfigToSupabase();
+  setConfigStatus('Default configuration created.', true);
 }
 
-function applyConfigData(data, opts) {
-  opts = opts || {};
-  const speciesData = data.species || data.races; // accept legacy "races" key from older config files
-  if (speciesData)   replaceObjectContents(RACE_DATA, speciesData);
-  const sexesData = data.sexes || data.genders; // accept legacy "genders" key from older config files
-  if (sexesData)     replaceObjectContents(GENDER_DATA, sexesData);
-  if (data.ages)     replaceObjectContents(AGE_DATA, data.ages);
-  if (data.heights)  replaceObjectContents(HEIGHT_DATA, data.heights);
-  if (data.builds)   replaceObjectContents(BUILD_DATA, data.builds);
-  if (data.socials)  replaceObjectContents(SOCIAL_DATA, data.socials);
-  if (data.mentals)  replaceObjectContents(MENTAL_DATA, data.mentals);
-  if (data.weapons)  replaceArrayContents(WEAPONS, data.weapons);
-  if (data.equipment) replaceArrayContents(EQUIPMENT, data.equipment);
-  if (data.skills) {
-    replaceArrayContents(SKILLS, data.skills);
-    migrateSkills();
-  }
-  if (data.armorAreaWeights && Object.keys(data.armorAreaWeights).length) replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights);
-  if (data.armorTypes && Object.keys(data.armorTypes).length)             replaceObjectContents(ARMOR_TYPE_DATA, data.armorTypes);
-  if (data.meleeWeapons && data.meleeWeapons.length) replaceArrayContents(MELEE_WEAPONS, data.meleeWeapons);
-  if (data.rangedWeapons && data.rangedWeapons.length) replaceArrayContents(RANGED_WEAPONS, data.rangedWeapons);
+// Apply a full config object wholesale — no partial loading, no per-key guards.
+// Missing keys fall back to defaults so the app is never partially populated.
+function applyConfigData(data) {
+  data = data || {};
+  replaceObjectContents(RACE_DATA,   data.species || data.races   || DEFAULT_RACE_DATA);
+  replaceObjectContents(GENDER_DATA, data.sexes   || data.genders || DEFAULT_GENDER_DATA);
+  replaceObjectContents(AGE_DATA,    data.ages    || DEFAULT_AGE_DATA);
+  replaceObjectContents(HEIGHT_DATA, data.heights || DEFAULT_HEIGHT_DATA);
+  replaceObjectContents(BUILD_DATA,  data.builds  || DEFAULT_BUILD_DATA);
+  replaceObjectContents(SOCIAL_DATA, data.socials || DEFAULT_SOCIAL_DATA);
+  replaceObjectContents(MENTAL_DATA, data.mentals || DEFAULT_MENTAL_DATA);
+  replaceArrayContents(SKILLS,          data.skills        && data.skills.length        ? data.skills        : DEFAULT_SKILLS);
+  replaceArrayContents(WEAPONS,         data.weapons       && data.weapons.length       ? data.weapons       : DEFAULT_WEAPONS);
+  replaceArrayContents(EQUIPMENT,       data.equipment     && data.equipment.length     ? data.equipment     : DEFAULT_EQUIPMENT);
+  replaceArrayContents(MELEE_WEAPONS,   data.meleeWeapons  && data.meleeWeapons.length  ? data.meleeWeapons  : DEFAULT_MELEE_WEAPONS);
+  replaceArrayContents(RANGED_WEAPONS,  data.rangedWeapons && data.rangedWeapons.length ? data.rangedWeapons : DEFAULT_RANGED_WEAPONS);
+  replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
+  replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
+  migrateSkills();
+  rebuildAllConfigUI();
+}
 
+function rebuildAllConfigUI() {
   buildCharSelects();
   buildLoadoutSelects();
+  skillMgrFilter = 'All';
   buildSkillFilters();
   buildSkillList();
   buildSkillManagerTable();
@@ -3189,8 +3833,6 @@ function applyConfigData(data, opts) {
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   recalc();
-
-  if (!opts.skipWrite) writeConfigToDisk();
 }
 
 function importConfig(input) {
@@ -3235,15 +3877,18 @@ function applyCharacterData(data) {
     });
   }
 
-  // Skills — rebuild list first so checkboxes exist, then check
-  if (data.skills) {
-    skillFilter = 'All';
-    buildSkillFilters();
-    buildSkillList();
-    document.querySelectorAll('#skill-list input[type="checkbox"]').forEach(cb => {
-      cb.checked = data.skills.includes(cb.dataset.name);
-    });
+  // Skills — support both old array format (1 pt each) and new object format
+  skillFilter = 'All';
+  if (Array.isArray(data.skills)) {
+    skillInvestments = {};
+    data.skills.forEach(name => { skillInvestments[name] = 1; });
+  } else if (data.skills && typeof data.skills === 'object') {
+    skillInvestments = { ...data.skills };
+  } else {
+    skillInvestments = {};
   }
+  buildSkillFilters();
+  buildSkillList();
 
   // Weapons
   if (data.weapons) {
@@ -3303,37 +3948,40 @@ buildArmorFields();
 
 // Handle auth state changes — login shows app, logout shows login screen
 sb.auth.onAuthStateChange(async (event, session) => {
+  const $ = id => document.getElementById(id);
   if (session?.user) {
     currentUser = session.user;
-    document.getElementById('modal-login').style.display    = 'none';
-    document.getElementById('modal-campaign').style.display = 'none';
-    document.getElementById('nav-user').textContent =
+    if ($('modal-login'))   $('modal-login').style.display   = 'none';
+    if ($('modal-landing')) $('modal-landing').style.display = 'none';
+    if ($('nav-user'))      $('nav-user').textContent =
       session.user.user_metadata?.display_name || session.user.email;
-    // If no campaign is selected yet, prompt for one
-    if (!currentCampaignId) showCampaignModal();
+    updateOwnerButtonVisibility();
+    if (!currentCampaignId) showLandingModal();
   } else {
-    currentUser       = null;
-    currentCampaignId = null;
-    currentConfigId   = null;
-    document.getElementById('modal-login').style.display    = 'flex';
-    document.getElementById('modal-campaign').style.display = 'none';
-    document.getElementById('nav-user').textContent     = '';
+    currentUser         = null;
+    currentCampaignId   = null;
+    currentCampaignGmId = null;
+    currentConfigId     = null;
+    if ($('modal-login'))      $('modal-login').style.display   = 'flex';
+    if ($('modal-landing'))    $('modal-landing').style.display = 'none';
+    if ($('gm-config-nav'))    $('gm-config-nav').style.display = 'none';
+    if ($('nav-user'))         $('nav-user').textContent     = '';
     document.getElementById('nav-campaign').textContent = '';
   }
+});
+
+// Restore last-used email once the DOM is fully parsed
+document.addEventListener('DOMContentLoaded', () => {
+  const savedEmail = localStorage.getItem('arcane-last-email');
+  const el = document.getElementById('auth-email');
+  if (savedEmail && el) el.value = savedEmail;
 });
 
 (async () => {
   // Restore session if already logged in (e.g. page refresh)
   const { data: { session } } = await sb.auth.getSession();
-  const savedEmail = localStorage.getItem('arcane-last-email');
-  if (savedEmail) document.getElementById('auth-email').value = savedEmail;
 
-  if (!session) {
-    // Not logged in — show login modal, skip config load
-    document.getElementById('modal-login').style.display = 'flex';
-  }
-
-  // Build UI with default/empty data — config loads after campaign is selected
+  // Always build UI first (with whatever data is in memory)
   buildCharSelects();
   buildLoadoutSelects();
   buildSkillFilters();
@@ -3344,6 +3992,14 @@ sb.auth.onAuthStateChange(async (event, session) => {
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   recalc();
+
+  if (!session) {
+    document.getElementById('modal-login').style.display = 'flex';
+  } else {
+    // Logged in — load shared config; applyConfigData will rebuild selects with real data
+    await loadConfigFromSupabase();
+    recalc();
+  }
 })();
 
 // ─── PLAY MODE ───────────────────────────────────────────────────────────────
@@ -3369,12 +4025,15 @@ function isGM() {
 // ─── Mode toggle ─────────────────────────────────────────────────────────────
 function enterPlayMode() {
   document.querySelector('.app-layout').style.display = 'none';
+  document.querySelector('header').style.display = 'none';
   const pm = document.getElementById('play-mode');
   pm.classList.add('active');
   document.getElementById('play-mode-btn').style.display = 'none';
 
-  document.getElementById('play-campaign-name').textContent =
-    document.getElementById('nav-campaign').textContent || '';
+  const campaignName = document.getElementById('nav-campaign').textContent || '';
+  document.getElementById('play-title').textContent = campaignName
+    ? `✦ Arcane — ${campaignName}`
+    : '✦ Arcane';
 
   // Layout: GM gets right panel
   const layout = document.getElementById('play-layout');
@@ -3397,6 +4056,7 @@ function enterPlayMode() {
   }
 
   renderPlayCharacter();
+  loadPlayCharCache();
   subscribeMapRealtime();
   loadActiveMap(activeMapId);
   initMapInteraction();
@@ -3404,11 +4064,312 @@ function enterPlayMode() {
 
 function exitPlayMode() {
   document.querySelector('.app-layout').style.display = '';
+  document.querySelector('header').style.display = '';
   const pm = document.getElementById('play-mode');
   pm.classList.remove('active');
   document.getElementById('play-mode-btn').style.display = '';
   if (mapChannel) { mapChannel.unsubscribe(); mapChannel = null; }
   cleanupMapInteraction();
+}
+
+// ─── Action Tracker ───────────────────────────────────────────────────────────
+
+const GENERAL_ACTIONS = [
+  { label: 'Move',         dur: 2 },
+  { label: 'Sprint',       dur: 3 },
+  { label: 'Dodge',        dur: 2 },
+  { label: 'Block',        dur: 1 },
+  { label: 'Stand Up',     dur: 2 },
+  { label: 'Draw Weapon',  dur: 2 },
+  { label: 'Search',       dur: 4 },
+  { label: 'Hide',         dur: 3 },
+  { label: 'Use Item',     dur: 2 },
+  { label: 'Interact',     dur: 2 },
+  { label: 'Wait',         dur: 3 },
+];
+
+const WEAPON_ACTIONS = {
+  // melee
+  'Sword':    [{ label: 'Swing',  dur: 2 }, { label: 'Thrust', dur: 2 }, { label: 'Parry', dur: 1 }],
+  'Axe':      [{ label: 'Swing',  dur: 3 }, { label: 'Chop',   dur: 3 }, { label: 'Block', dur: 2 }],
+  'Dagger':   [{ label: 'Slash',  dur: 1 }, { label: 'Stab',   dur: 1 }, { label: 'Parry', dur: 1 }],
+  'Staff':    [{ label: 'Swing',  dur: 2 }, { label: 'Thrust', dur: 2 }, { label: 'Block', dur: 1 }],
+  'Mace':     [{ label: 'Smash',  dur: 3 }, { label: 'Block',  dur: 2 }],
+  'Spear':    [{ label: 'Thrust', dur: 2 }, { label: 'Sweep',  dur: 3 }, { label: 'Parry', dur: 1 }],
+  'Shield':   [{ label: 'Block',  dur: 1 }, { label: 'Bash',   dur: 2 }],
+  // ranged
+  'Bow':      [{ label: 'Nock Arrow', dur: 2 }, { label: 'Aim', dur: 2 }, { label: 'Fire', dur: 1 }],
+  'Crossbow': [{ label: 'Load',  dur: 4 }, { label: 'Aim', dur: 2 }, { label: 'Fire', dur: 1 }],
+  'Thrown':   [{ label: 'Throw', dur: 2 }],
+  // arcane
+  'Wand':     [{ label: 'Channel', dur: 2 }, { label: 'Release', dur: 1 }],
+};
+
+const SPELL_ACTIONS = [
+  { label: 'Gather Power',  dur: 3 },
+  { label: 'Incantation',   dur: 4 },
+  { label: 'Cast (Quick)',  dur: 2 },
+  { label: 'Maintain Spell',dur: 3 },
+  { label: 'Dismiss Spell', dur: 1 },
+];
+
+// combatant: { id, name, avatar, type ('character'|'creature'), actions: [{label, startAt, completesAt}] }
+let atCombatants = [];
+let atClock = 0;
+let atModalTarget = null; // combatant id receiving next action
+
+function atFmtTime(s) { return s + 's'; }
+
+function atNextCompletionTime() {
+  let min = Infinity;
+  for (const c of atCombatants) {
+    for (const a of c.actions) {
+      if (a.completesAt > atClock && a.completesAt < min) min = a.completesAt;
+    }
+  }
+  return min === Infinity ? null : min;
+}
+
+function atAdvance() {
+  const next = atNextCompletionTime();
+  if (next === null) return;
+  atClock = next;
+  renderAtList();
+}
+
+function atReset() {
+  if (!confirm('Reset combat clock and clear all actions?')) return;
+  atClock = 0;
+  atCombatants.forEach(c => c.actions = []);
+  renderAtList();
+}
+
+function atSortedCombatants() {
+  return [...atCombatants].sort((a, b) => {
+    const aMin = a.actions.length ? Math.min(...a.actions.map(x => x.completesAt)) : Infinity;
+    const bMin = b.actions.length ? Math.min(...b.actions.map(x => x.completesAt)) : Infinity;
+    return aMin - bMin;
+  });
+}
+
+function atAddCombatant() {
+  const sel = document.getElementById('at-add-sel');
+  const opt = sel.options[sel.selectedIndex];
+  const val = sel.value;
+  if (!val) return;
+  if (atCombatants.find(c => c.id === val)) return;
+  const [type, id] = val.split('::');
+  const name   = opt.dataset.name   || id;
+  const avatar = opt.dataset.avatar || null;
+  atCombatants.push({ id: val, name, avatar, type, actions: [] });
+  renderAtList();
+}
+
+function atRemoveCombatant(id) {
+  atCombatants = atCombatants.filter(c => c.id !== id);
+  renderAtList();
+}
+
+async function atOpenModal(combatantId) {
+  atModalTarget = combatantId;
+  const c = atCombatants.find(x => x.id === combatantId);
+  document.getElementById('at-modal-title').textContent = `${c?.name || 'Combatant'} — Choose Action`;
+  document.getElementById('at-free-label').value = '';
+  document.getElementById('at-free-dur').value = '3';
+  document.getElementById('at-action-modal').style.display = 'flex';
+
+  const grid = document.getElementById('at-action-grid');
+  grid.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;grid-column:1/-1;">Loading…</div>';
+  const actions = [...GENERAL_ACTIONS];
+
+  if (c?.type === 'char') {
+    const charId = combatantId.split('::')[1];
+    const { data: row } = await sb.from('characters').select('held_items, skills').eq('id', charId).single();
+    const heldItems = row?.held_items || {};
+    const heldNames = [...new Set([heldItems.right, heldItems.left].filter(Boolean))];
+    heldNames.forEach(itemName => {
+      const itemActions = getActionsForItem(itemName);
+      itemActions.forEach(actionLabel => {
+        const lc = actionLabel.toLowerCase();
+        const dur = lc.includes('parry') || lc.includes('block') ? 1
+                  : lc.includes('nock') || lc.includes('load')   ? 3
+                  : lc.includes('aim')                           ? 2
+                  : lc.includes('throw') || lc.includes('fire')  ? 1
+                  : 2;
+        actions.push({ label: `${actionLabel} (${itemName})`, dur });
+      });
+    });
+    // spell actions if any Arcane skill invested
+    const inv = row?.skills || {};
+    const hasArcane = Object.keys(inv).some(k => {
+      const sk = SKILLS.find(s => s.name === k);
+      return sk && sk.type === 'Arcane';
+    });
+    if (hasArcane) actions.push(...SPELL_ACTIONS);
+  }
+
+  grid.innerHTML = '';
+  actions.forEach(a => {
+    const btn = document.createElement('button');
+    btn.className = 'at-action-pick-btn';
+    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${a.dur}s</div>`;
+    btn.onclick = () => atPickAction(a.label, a.dur);
+    grid.appendChild(btn);
+  });
+}
+
+function atCloseModal() {
+  document.getElementById('at-action-modal').style.display = 'none';
+  atModalTarget = null;
+}
+
+function atPickAction(label, dur) {
+  const c = atCombatants.find(x => x.id === atModalTarget);
+  if (!c) return;
+  const start = atClock;
+  const completesAt = start + dur;
+  c.actions.push({ label, startAt: start, completesAt });
+  atCloseModal();
+  renderAtList();
+}
+
+function atPickFreeform() {
+  const label = document.getElementById('at-free-label').value.trim();
+  const dur   = parseInt(document.getElementById('at-free-dur').value) || 3;
+  if (!label) return;
+  atPickAction(label, dur);
+}
+
+function atCancelAction(combatantId, idx) {
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c) return;
+  c.actions.splice(idx, 1);
+  renderAtList();
+}
+
+function renderAtList() {
+  // clock display
+  document.getElementById('at-clock-display').textContent = atFmtTime(atClock);
+  document.getElementById('at-next-btn').disabled = atNextCompletionTime() === null;
+
+  const list = document.getElementById('at-list');
+  if (!atCombatants.length) {
+    list.innerHTML = '<div class="at-empty">No combatants added. Use the selector above to add characters or creatures.</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  const sorted = atSortedCombatants();
+
+  for (const c of sorted) {
+    const earliest = c.actions.length ? Math.min(...c.actions.map(a => a.completesAt)) : null;
+    const isReady  = earliest !== null && earliest <= atClock;
+    const isNext   = earliest !== null && earliest === atNextCompletionTime();
+
+    const div = document.createElement('div');
+    div.className = 'at-combatant' + (isNext ? ' at-active' : '') + (isReady ? ' at-ready' : '');
+
+    // header row
+    const nameEl = `<span class="at-comb-name">${c.name}</span>`;
+    const timeEl = earliest !== null
+      ? `<span class="at-comb-t">${isReady ? '✓ ready' : atFmtTime(earliest - atClock) + ' remaining'}</span>`
+      : `<span class="at-comb-t" style="color:var(--text-dim)">idle</span>`;
+
+    // action rows
+    let actionRows = '';
+    if (c.actions.length) {
+      c.actions.forEach((a, i) => {
+        const done     = a.completesAt <= atClock;
+        const total    = a.completesAt - a.startAt;
+        const elapsed  = Math.min(atClock - a.startAt, total);
+        const pct      = total > 0 ? Math.round((elapsed / total) * 100) : 100;
+        const secsLeft = Math.max(0, a.completesAt - atClock);
+        actionRows += `
+          <div class="at-action-row">
+            <span class="at-action-label ${done ? 'at-action-done' : ''}">${done ? '✓ ' : ''}${a.label}</span>
+            <div class="at-bar-wrap"><div class="at-bar ${done ? 'done' : ''}" style="width:${pct}%"></div></div>
+            <span class="at-action-secs">${done ? '—' : atFmtTime(secsLeft)}</span>
+            <button class="at-btn danger" onclick="atCancelAction('${c.id.replace(/'/g,"\\'")}',${i})" title="Cancel action">✕</button>
+          </div>`;
+      });
+    }
+
+    // buttons
+    const safeId = c.id.replace(/'/g,"\\'");
+    const addBtn    = `<button class="at-btn primary" onclick="atOpenModal('${safeId}')">+ Action</button>`;
+    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Draw movement path on map">🏃 Path</button>`;
+    const removeBtn = `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>`;
+
+    div.innerHTML = `
+      <div class="at-comb-header">${nameEl}${timeEl}</div>
+      ${actionRows}
+      <div class="at-comb-btns">${addBtn}${pathBtn}${removeBtn}</div>`;
+
+    list.appendChild(div);
+  }
+}
+
+async function atPopulateAddSel() {
+  const sel = document.getElementById('at-add-sel');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— Add combatant —</option>';
+
+  // load campaign characters from DB
+  if (currentCampaignId) {
+    const { data: chars } = await sb.from('characters')
+      .select('id, name, avatar_url').eq('campaign_id', currentCampaignId).order('name');
+    if (chars?.length) {
+      const og = document.createElement('optgroup');
+      og.label = 'Characters';
+      chars.forEach(c => {
+        const o = document.createElement('option');
+        o.value = 'char::' + c.id;
+        o.textContent = c.name || c.id;
+        o.dataset.name   = c.name || c.id;
+        o.dataset.avatar = c.avatar_url || '';
+        og.appendChild(o);
+      });
+      sel.appendChild(og);
+    }
+  }
+
+  // creature tokens currently on map
+  const creatures = Object.values(mapTokens || {}).filter(t => t.entity_type === 'creature');
+  if (creatures.length) {
+    const og = document.createElement('optgroup');
+    og.label = 'Creatures on Map';
+    creatures.forEach(t => {
+      const o = document.createElement('option');
+      o.value = 'creature::' + t.id;
+      o.textContent = t.label || t.id;
+      o.dataset.name   = t.label || t.id;
+      o.dataset.avatar = t.avatar_url || '';
+      og.appendChild(o);
+    });
+    sel.appendChild(og);
+  }
+}
+
+async function atAutoAddMapTokens() {
+  const tokens = Object.values(mapTokens || {});
+  if (!tokens.length) return;
+
+  // load character names in one query
+  const charIds = tokens.filter(t => t.entity_type === 'character').map(t => t.entity_id);
+  let charMap = {};
+  if (charIds.length) {
+    const { data } = await sb.from('characters').select('id, name, avatar_url').in('id', charIds);
+    (data || []).forEach(c => { charMap[c.id] = c; });
+  }
+
+  for (const t of tokens) {
+    const id    = t.entity_type === 'character' ? ('char::' + t.entity_id) : ('creature::' + t.id);
+    if (atCombatants.find(c => c.id === id)) continue;
+    const name   = t.entity_type === 'character' ? (charMap[t.entity_id]?.name || t.label || t.entity_id) : (t.label || t.id);
+    const avatar = t.entity_type === 'character' ? (charMap[t.entity_id]?.avatar_url || null) : (t.avatar_url || null);
+    atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', actions: [] });
+  }
+  renderAtList();
 }
 
 // ─── Compact character sheet ──────────────────────────────────────────────────
@@ -3420,36 +4381,19 @@ function renderPlayCharacter() {
   const nameEl  = document.getElementById('char-name');
   const charName = nameEl ? nameEl.value : '—';
 
-  // Get final attributes from the recalc display
-  const attrNames = [
-    ['Strength','str'],['Endurance','end'],['Agility','agi'],
-    ['Memory','mem'],['Intellect','int'],['Senses','sen'],['Quintessence','qui'],
-    ['Physical Coordination','PhysCoord'],['Manual Dexterity','ManualDex'],
-    ['Stamina','Stamina'],['Vitality','Vitality'],['Stealth','Stealth'],
-    ['Perception','Perception'],['Power','Power'],['Willpower','Willpower'],
-  ];
+  // Compute attributes directly (same source as playsheet)
+  const attrs = calcAttributes();
 
-  // Build attrs map from existing DOM (attrs displayed in playsheet)
-  const attrs = {};
-  attrNames.forEach(([label, key]) => {
-    const el = document.getElementById('ps-attr-' + key);
-    if (el) attrs[key] = parseFloat(el.textContent) || 0;
-  });
-
-  const coreStats = [
-    ['Strength','str'],['Endurance','end'],['Agility','agi'],
-    ['Memory','mem'],['Intellect','int'],['Senses','sen'],
-  ];
-  const derivedStats = [
-    ['Physical Coord','PhysCoord'],['Manual Dex','ManualDex'],
-    ['Stamina','Stamina'],['Vitality','Vitality'],['Power','Power'],
-    ['Willpower','Willpower'],['Perception','Perception'],['Stealth','Stealth'],
+  const groups = [
+    { label: 'Physical',  keys: ATTRIBUTES.filter(a => a.group === 'physical') },
+    { label: 'Cognitive', keys: ATTRIBUTES.filter(a => a.group === 'cognitive') },
+    { label: 'Senses',    keys: ATTRIBUTES.filter(a => a.group === 'senses') },
   ];
 
   const statRow = ([label, key]) =>
     `<div class="ps-stat-row">
       <span class="ps-stat-label">${label}</span>
-      <span class="ps-stat-val">${attrs[key] ?? '—'}</span>
+      <span class="ps-stat-val">${attrs[key] != null ? Math.round(attrs[key]) : '—'}</span>
     </div>`;
 
   // Avatar
@@ -3483,15 +4427,11 @@ function renderPlayCharacter() {
       </div>
     </div>
 
+    ${groups.map(g => `
     <div style="margin-bottom:10px;">
-      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Core Stats</div>
-      ${coreStats.map(statRow).join('')}
-    </div>
-
-    <div style="margin-bottom:10px;">
-      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Derived</div>
-      ${derivedStats.map(statRow).join('')}
-    </div>
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">${g.label}</div>
+      ${g.keys.map(a => statRow([a.label, a.key])).join('')}
+    </div>`).join('')}
 
     <div style="margin-bottom:10px;">
       <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Held Items</div>
@@ -3957,8 +4897,18 @@ function canMoveToken(t) {
   return t.entity_type === 'character' && t.entity_id === currentCharacterId;
 }
 
+let _tokenDragMoved   = false;
+let _tokenDragStartX  = 0;
+let _tokenDragStartY  = 0;
+let _tokenClickId     = null; // id of token that started the mousedown
+
 function startTokenDrag(e, tokenId) {
-  e.stopPropagation(); // prevent map pan
+  e.stopPropagation();
+  _tokenClickId    = tokenId;
+  _tokenDragMoved  = false;
+  _tokenDragStartX = e.clientX;
+  _tokenDragStartY = e.clientY;
+
   const t = mapTokens[tokenId];
   if (!t || !canMoveToken(t)) return;
   e.preventDefault();
@@ -3977,6 +4927,11 @@ function startTokenDrag(e, tokenId) {
 }
 
 function onTokenMouseMove(e) {
+  if (_tokenClickId && !_tokenDragMoved) {
+    const dx = e.clientX - _tokenDragStartX;
+    const dy = e.clientY - _tokenDragStartY;
+    if (Math.hypot(dx, dy) > 5) _tokenDragMoved = true;
+  }
   if (!dragTokenId) return;
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
@@ -3996,26 +4951,174 @@ function onTokenMouseMove(e) {
 }
 
 async function onTokenMouseUp(e) {
-  if (!dragTokenId) return;
+  const clickedId = _tokenClickId;
+  _tokenClickId = null;
+
+  if (!dragTokenId) {
+    // no drag started (non-moveable token) — still treat as click
+    if (clickedId && !_tokenDragMoved) showTokenInfo(clickedId);
+    return;
+  }
+
   const el = document.getElementById('token-' + dragTokenId);
   if (!el) { dragTokenId = null; return; }
 
   el.classList.remove('dragging');
+
+  if (!_tokenDragMoved) {
+    // click, not a drag — show info
+    dragTokenId = null;
+    showTokenInfo(clickedId);
+    return;
+  }
+
   const x_pct = parseFloat(el.style.left);
   const y_pct = parseFloat(el.style.top);
 
-  // update cache
   if (mapTokens[dragTokenId]) {
     mapTokens[dragTokenId].x_pct = x_pct;
     mapTokens[dragTokenId].y_pct = y_pct;
   }
 
-  // persist to DB (also triggers Postgres Changes for others without broadcast sub)
-  await sb.from('map_tokens')
-    .update({ x_pct, y_pct })
-    .eq('id', dragTokenId);
-
+  await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', dragTokenId);
   dragTokenId = null;
+}
+
+// ── Campaign character cache ──────────────────────────────────────────────────
+let playCharCache = {}; // entity_id → full row
+
+async function loadPlayCharCache() {
+  if (!currentCampaignId) return;
+  const { data } = await sb.from('characters')
+    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, held_items, armor, avatar_url')
+    .eq('campaign_id', currentCampaignId);
+  playCharCache = {};
+  (data || []).forEach(row => { playCharCache[row.id] = row; });
+}
+
+// ── Token info panel ─────────────────────────────────────────────────────────
+function calcAttributesFromData(data) {
+  const race   = data.race   || '';
+  const gender = data.sex    || '';
+  const age    = data.age    || '';
+  const height = data.height || '';
+  const build  = data.build  || '';
+  const social = data.social || '';
+  const mental = data.mental || '';
+  const stats  = data.stats  || {};
+  const results = {};
+  for (const attr of ATTRIBUTES) {
+    const rawVal = stats[attr.rawStat] || 0;
+    const rM = (RACE_DATA[race]   || {})[attr.raceKey] || 1;
+    const gM = getModifier(GENDER_DATA, gender, attr.key);
+    const aM = getModifier(AGE_DATA,    age,    attr.key);
+    const hM = getModifier(HEIGHT_DATA, height, attr.key);
+    const bM = getModifier(BUILD_DATA,  build,  attr.key);
+    const sM = getModifier({Introvert:SOCIAL_DATA.Introvert,Balanced:SOCIAL_DATA.Balanced,Extrovert:SOCIAL_DATA.Extrovert}, social, attr.key);
+    const mM = getModifier({Logical:MENTAL_DATA.Logical,Balanced:MENTAL_DATA.Balanced,Intuitive:MENTAL_DATA.Intuitive}, mental, attr.key);
+    results[attr.key] = rawVal * rM * gM * aM * hM * bM * sM * mM;
+  }
+  return results;
+}
+
+async function showTokenInfo(tokenId) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+
+  const el = document.getElementById('play-char-content');
+  if (!el) return;
+
+  // Header with back button
+  const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← My Character</button>`;
+
+  if (t.entity_type === 'creature') {
+    const race = RACE_DATA[t.species] || {};
+    el.innerHTML = `${backBtn}
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
+        <div class="ps-compact-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;">👾</div>
+        <div>
+          <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${t.label}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim);">${t.species || 'Creature'}</div>
+        </div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No stat sheet for creature tokens.</div>`;
+    return;
+  }
+
+  if (t.entity_type !== 'character') return;
+
+  // Use cache; fall back to DB fetch if not yet loaded
+  let row = playCharCache[t.entity_id];
+  if (!row) {
+    el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Loading…</div>`;
+    const { data } = await sb.from('characters')
+      .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, held_items, armor, avatar_url')
+      .eq('id', t.entity_id).single();
+    if (!data) {
+      el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Could not load character.</div>`;
+      return;
+    }
+    playCharCache[data.id] = data;
+    row = data;
+  }
+
+  const charData = {
+    race:   row.species   || '',
+    bodyType: row.body_type || '',
+    sex:    row.sex       || '',
+    age:    row.age       || '',
+    height: row.height    || '',
+    build:  row.build     || '',
+    social: row.social    || '',
+    mental: row.mental    || '',
+    stats:  row.stats     || {},
+  };
+  const attrs = calcAttributesFromData(charData);
+
+  const groups = [
+    { label: 'Physical',  keys: ATTRIBUTES.filter(a => a.group === 'physical') },
+    { label: 'Cognitive', keys: ATTRIBUTES.filter(a => a.group === 'cognitive') },
+    { label: 'Senses',    keys: ATTRIBUTES.filter(a => a.group === 'senses') },
+  ];
+  const statRow = (a) => `
+    <div class="ps-stat-row">
+      <span class="ps-stat-label">${a.label}</span>
+      <span class="ps-stat-val">${attrs[a.key] != null ? Math.round(attrs[a.key]) : '—'}</span>
+    </div>`;
+
+  const resolvedAvatar = resolveAvatarUrl(row.avatar_url);
+  const avatarHtml = resolvedAvatar
+    ? `<img src="${resolvedAvatar}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`
+    : `<span style="font-size:1.4rem;opacity:0.4;">🧙</span>`;
+
+  const held = row.held_items || {};
+  const armorSlots = ['head','torso','rarm','larm','rleg','lleg'];
+  const armorLabels = {head:'Head',torso:'Torso',rarm:'R.Arm',larm:'L.Arm',rleg:'R.Leg',lleg:'L.Leg'};
+  const armor = row.armor || {};
+  const armorRows = armorSlots.map(s =>
+    `<div class="ps-stat-row"><span class="ps-stat-label">${armorLabels[s]}</span><span class="ps-stat-val" style="font-size:0.72rem;">${armor[s] || 'None'}</span></div>`
+  ).join('');
+
+  el.innerHTML = `
+    ${backBtn}
+    <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
+      <div class="ps-compact-avatar">${avatarHtml}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name || '—'}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${[row.species, row.body_type].filter(Boolean).join(' · ')}</div>
+        <div style="font-size:0.72rem;color:var(--text-dim);">Right: <span style="color:var(--text);">${held.right || 'Bare Hand'}</span></div>
+        <div style="font-size:0.72rem;color:var(--text-dim);">Left: <span style="color:var(--text);">${held.left || 'Bare Hand'}</span></div>
+      </div>
+    </div>
+    ${groups.map(g => `
+      <div style="margin-bottom:10px;">
+        <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">${g.label}</div>
+        ${g.keys.map(statRow).join('')}
+      </div>`).join('')}
+    <div>
+      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Armor</div>
+      ${armorRows}
+    </div>`;
 }
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
@@ -4393,6 +5496,206 @@ function measureMouseUp(e) {
   measureMouseMove(e); // snap final position
 }
 
+// ── Path tool ─────────────────────────────────────────────────────────────────
+let pathMode    = false;
+let pathPoints  = [];   // [{x,y}] in viewport coords
+let pathCharId  = null; // combatant id this path is for
+
+function enterPathMode(combatantId) {
+  if (pathMode) exitPathMode();
+  pathMode   = true;
+  pathPoints = [];
+  pathCharId = combatantId;
+  if (calMode)     exitCalibrationMode();
+  if (measureMode) exitMeasureMode();
+  const vp = document.getElementById('map-viewport');
+  vp.classList.add('path-mode');
+  const btn = document.getElementById('path-btn');
+  if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
+  const svg = document.getElementById('path-svg');
+  if (svg) { svg.style.display = 'block'; svg.innerHTML = ''; }
+
+  // Seed first waypoint at the combatant's token centre
+  if (combatantId) {
+    const token = _pathFindToken(combatantId);
+    if (token) {
+      // x_pct/y_pct are % of image dimensions → convert to viewport coords
+      const imgX = (token.x_pct / 100) * mapImgW;
+      const imgY = (token.y_pct / 100) * mapImgH;
+      const vpX  = imgX * mapScale + mapOffsetX;
+      const vpY  = imgY * mapScale + mapOffsetY;
+      pathPoints.push({ x: vpX, y: vpY });
+      pathRenderSvg(null, null);
+    }
+  }
+}
+
+function _pathFindToken(combatantId) {
+  const [type, id] = combatantId.split('::');
+  if (type === 'char') {
+    return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === id) || null;
+  } else {
+    return mapTokens[id] || null;
+  }
+}
+
+function exitPathMode() {
+  pathMode   = false;
+  pathPoints = [];
+  pathCharId = null;
+  document.getElementById('map-viewport').classList.remove('path-mode');
+  const btn = document.getElementById('path-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+  const svg = document.getElementById('path-svg');
+  if (svg) { svg.style.display = 'none'; svg.innerHTML = ''; }
+}
+
+function pathGetSpeed() {
+  // Use the live calcMaxSpeed if the current character sheet is loaded
+  try {
+    const attrs = calcAttributes();
+    if (!attrs || !attrs.Speed) return 5;
+    const { total } = getCarriedWeight(attrs);
+    return Math.max(1, calcMaxSpeed(attrs, total));
+  } catch(e) { return 5; }
+}
+
+function pathTotalFeet() {
+  if (pathPoints.length < 2 || mapScalePPF <= 0) return null;
+  let dist = 0;
+  for (let i = 1; i < pathPoints.length; i++) {
+    dist += Math.hypot(pathPoints[i].x - pathPoints[i-1].x, pathPoints[i].y - pathPoints[i-1].y);
+  }
+  return (dist / mapScale) / mapScalePPF;
+}
+
+function pathRenderSvg(mouseX, mouseY) {
+  const svg = document.getElementById('path-svg');
+  if (!svg) return;
+  svg.innerHTML = '';
+
+  const pts = mouseX != null ? [...pathPoints, {x: mouseX, y: mouseY}] : pathPoints;
+  if (pts.length < 1) return;
+
+  const color  = '#4de080';
+  const dimClr = 'rgba(77,224,128,0.5)';
+
+  // Polyline
+  if (pts.length >= 2) {
+    const polyline = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    polyline.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
+    polyline.setAttribute('stroke', color);
+    polyline.setAttribute('stroke-width', '2');
+    polyline.setAttribute('stroke-dasharray', '8,4');
+    polyline.setAttribute('fill', 'none');
+    polyline.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(polyline);
+  }
+
+  // Waypoint dots
+  pathPoints.forEach((p, i) => {
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
+    c.setAttribute('r', i === 0 ? 6 : 4);
+    c.setAttribute('fill', color);
+    c.setAttribute('stroke', '#000'); c.setAttribute('stroke-width', '1');
+    svg.appendChild(c);
+  });
+
+  // Ghost dot at mouse
+  if (mouseX != null && pathPoints.length >= 1) {
+    const g = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    g.setAttribute('cx', mouseX); g.setAttribute('cy', mouseY);
+    g.setAttribute('r', 4); g.setAttribute('fill', dimClr);
+    g.setAttribute('stroke', color); g.setAttribute('stroke-width', '1');
+    svg.appendChild(g);
+  }
+
+  // Distance + time label near last point
+  const lastPt = pts[pts.length - 1];
+  const allPts = mouseX != null ? pts : pathPoints;
+  if (allPts.length >= 2 && mapScalePPF > 0) {
+    let dist = 0;
+    for (let i = 1; i < allPts.length; i++)
+      dist += Math.hypot(allPts[i].x - allPts[i-1].x, allPts[i].y - allPts[i-1].y);
+    const feet = (dist / mapScale) / mapScalePPF;
+    const spd  = pathGetSpeed();
+    const secs = feet / spd;
+    const secRound = Math.round(secs * 10) / 10;
+    const timeStr  = secRound <= 4 ? secRound + 's' : secRound + 's ⚠';
+    const fillClr  = secs <= 2 ? '#4de080' : secs <= 4 ? '#f0d080' : '#e06060';
+    const label = `${Math.round(feet)} ft · ${timeStr}`;
+
+    const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+    tx.setAttribute('x', lastPt.x + 10);
+    tx.setAttribute('y', lastPt.y - 8);
+    tx.setAttribute('fill', fillClr);
+    tx.setAttribute('font-size', '12');
+    tx.setAttribute('font-family', 'Georgia,serif');
+    tx.setAttribute('font-weight', 'bold');
+    tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+    tx.textContent = label;
+    svg.appendChild(tx);
+  } else if (allPts.length >= 2) {
+    // No calibration — just show pixels
+    let dist = 0;
+    for (let i = 1; i < allPts.length; i++)
+      dist += Math.hypot(allPts[i].x - allPts[i-1].x, allPts[i].y - allPts[i-1].y);
+    const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
+    tx.setAttribute('x', lastPt.x + 10);
+    tx.setAttribute('y', lastPt.y - 8);
+    tx.setAttribute('fill', '#4de080');
+    tx.setAttribute('font-size', '12');
+    tx.setAttribute('font-family', 'Georgia,serif');
+    tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+    tx.textContent = Math.round((dist / mapScale)) + ' px (calibrate map for ft/s)';
+    svg.appendChild(tx);
+  }
+}
+
+function pathMouseDown(e) {
+  if (!pathMode) return false;
+  if (e.button === 2) { pathCommit(); return true; }
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x    = e.clientX - rect.left;
+  const y    = e.clientY - rect.top;
+  if (e.detail === 2 && pathPoints.length >= 1) {
+    // double-click: commit
+    pathCommit();
+    return true;
+  }
+  pathPoints.push({x, y});
+  pathRenderSvg(null, null);
+  return true;
+}
+
+function pathMouseMove(e) {
+  if (!pathMode || pathPoints.length === 0) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  pathRenderSvg(e.clientX - rect.left, e.clientY - rect.top);
+}
+
+function pathCommit() {
+  const feet = pathTotalFeet();
+  const spd  = pathGetSpeed();
+  const secs = feet != null ? Math.max(1, Math.round(feet / spd)) : 2;
+  const combId = pathCharId;
+  exitPathMode();
+  if (!combId) return;
+  // add Move action to the action tracker
+  const c = atCombatants.find(x => x.id === combId);
+  if (c) {
+    const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
+    c.actions.push({ label, startAt: atClock, completesAt: atClock + secs });
+    renderAtList();
+    // switch to Actions tab so player sees it
+    switchGmTab('actions');
+  }
+}
+
 // Hook calibration into the existing mouse event listeners in initMapInteraction
 // by patching the viewport's mousedown. We do it after init runs.
 const _origInitMapInteraction = initMapInteraction;
@@ -4404,10 +5707,15 @@ initMapInteraction = function() {
 
   vp.addEventListener('mousedown', e => {
     if (calMouseDown(e))     { e.stopImmediatePropagation(); return; }
-    if (measureMouseDown(e)) { e.stopImmediatePropagation(); }
-  }, true); // capture phase so it runs before the pan handler
+    if (measureMouseDown(e)) { e.stopImmediatePropagation(); return; }
+    if (pathMouseDown(e))    { e.stopImmediatePropagation(); }
+  }, true);
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); });
+  vp.addEventListener('contextmenu', e => {
+    if (pathMode) { e.preventDefault(); pathCommit(); }
+  });
+
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); pathMouseMove(e); });
   window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e); });
 };
 
@@ -4523,10 +5831,57 @@ async function addCreatureToken() {
 // ── Patch switchGmTab to populate species when opening Tokens tab ─────────────
 const _origSwitchGmTab = switchGmTab;
 switchGmTab = function(tab) {
-  _origSwitchGmTab(tab);
-  if (tab === 'tokens') populateCreatureSpecies();
+  // extend tab list to include 'actions'
+  const allTabs = ['maps','tokens','actions'];
+  allTabs.forEach(t => {
+    const btn = document.getElementById('gm-tab-' + t);
+    const el  = document.getElementById('gm-tab-content-' + t);
+    if (btn) btn.classList.toggle('active', t === tab);
+    if (el)  el.style.display = t === tab ? 'flex' : 'none';
+  });
+  if (tab === 'tokens')  populateCreatureSpecies();
+  if (tab === 'actions') { atPopulateAddSel(); atAutoAddMapTokens(); }
 };
 </script>
+
+
+<!-- ─── NEW CHARACTER CONFIRM MODAL ─────────────────────────────────────── -->
+<div id="modal-reset-defaults" style="
+  display:none; position:fixed; inset:0; z-index:1200;
+  background:rgba(0,0,0,0.82); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:28px 32px; width:400px; max-width:94vw; display:flex; flex-direction:column; gap:16px;">
+    <h2 style="margin:0; font-size:1.05rem;">↺ Reset to Defaults</h2>
+    <p style="margin:0; font-size:0.85rem; color:var(--text-dim); line-height:1.6;">
+      Replace all configuration with the built-in defaults — species, skills, weapons, armor, and equipment.<br><br>
+      This overwrites the shared config for <strong>all players</strong>. Export first if you want to keep a backup.
+    </p>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn-sm btn-text" onclick="document.getElementById('modal-reset-defaults').style.display='none'">Cancel</button>
+      <button class="btn-sm btn-text" onclick="resetToDefaults()"
+        style="border-color:#c08080; color:#c08080;">Reset to Defaults</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-new-char-confirm" style="
+  display:none; position:fixed; inset:0; z-index:1200;
+  background:rgba(0,0,0,0.82); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
+    padding:28px 32px; width:360px; max-width:94vw; display:flex; flex-direction:column; gap:16px;">
+    <h2 style="margin:0; font-size:1.05rem;">✦ New Character</h2>
+    <p style="margin:0; font-size:0.85rem; color:var(--text-dim); line-height:1.6;">
+      Start a new character? Any unsaved changes will be lost.
+    </p>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn-sm btn-text" onclick="document.getElementById('modal-new-char-confirm').style.display='none'">Cancel</button>
+      <button class="btn-sm btn-text" onclick="_doNewCharacter()"
+        style="border-color:var(--gold); color:var(--gold2);">New Character</button>
+    </div>
+  </div>
+</div>
 
 <!-- ─── CALIBRATION MODAL ────────────────────────────────────────────────── -->
 <div id="modal-cal" style="
@@ -4647,8 +6002,7 @@ switchGmTab = function(tab) {
 <div id="play-mode">
   <!-- toolbar row -->
   <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;">
-    <span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Play Mode</span>
-    <span id="play-campaign-name" style="font-size:0.8rem;color:var(--gold);margin-left:4px;"></span>
+    <span id="play-title" style="font-size:0.9rem;font-weight:600;color:var(--gold2);letter-spacing:0.04em;">✦ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <button class="play-btn exit" style="margin-left:auto;" onclick="exitPlayMode()">✕ Exit Play Mode</button>
   </div>
@@ -4676,6 +6030,7 @@ switchGmTab = function(tab) {
         <button class="btn-sm btn-text" onclick="mapReset()" title="Reset zoom/pan">1:1</button>
         <div class="tb-sep"></div>
         <button class="btn-sm btn-text" id="measure-btn" onclick="toggleMeasureMode()" title="Measure distance">📐 Measure</button>
+        <button class="btn-sm btn-text" id="path-btn" onclick="pathMode ? exitPathMode() : enterPathMode(null)" title="Draw movement path">🏃 Path</button>
         <div class="tb-sep"></div>
         <!-- GM-only controls inserted here by JS -->
         <div id="map-toolbar-gm" style="display:none;align-items:center;gap:6px;"></div>
@@ -4707,6 +6062,9 @@ switchGmTab = function(tab) {
         </svg>
         <!-- scale indicator -->
         <div id="scale-indicator"></div>
+        <!-- path drawing SVG overlay -->
+        <svg id="path-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;display:none;z-index:25;overflow:visible;"></svg>
       </div>
     </div>
 
@@ -4715,8 +6073,9 @@ switchGmTab = function(tab) {
     <!-- RIGHT: GM panel (maps + tokens) -->
     <div class="play-panel play-panel-right" id="play-gm-panel" style="display:none;flex-direction:column;">
       <div class="gm-tabs">
-        <button class="gm-tab active" id="gm-tab-maps"   onclick="switchGmTab('maps')">Maps</button>
-        <button class="gm-tab"        id="gm-tab-tokens" onclick="switchGmTab('tokens')">Tokens</button>
+        <button class="gm-tab active" id="gm-tab-maps"    onclick="switchGmTab('maps')">Maps</button>
+        <button class="gm-tab"        id="gm-tab-tokens"  onclick="switchGmTab('tokens')">Tokens</button>
+        <button class="gm-tab"        id="gm-tab-actions" onclick="switchGmTab('actions')">Actions</button>
       </div>
 
       <!-- MAPS TAB -->
@@ -4756,36 +6115,110 @@ switchGmTab = function(tab) {
           </div>
         </div>
       </div>
-    </div>
 
-  </div>
-</div>
-
-<!-- ─── CAMPAIGN MODAL ──────────────────────────────────────────────────── -->
-<div id="modal-campaign" style="
-  display:none; position:fixed; inset:0; z-index:1000;
-  background:rgba(0,0,0,0.85); align-items:center; justify-content:center;">
-  <div style="
-    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
-    padding:32px 36px; width:420px; max-width:94vw;">
-    <h2 style="text-align:center; margin-bottom:20px;">Select Campaign</h2>
-
-    <div id="campaign-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
-
-    <div id="campaign-list" style="margin-bottom:20px; max-height:240px; overflow-y:auto;"></div>
-
-    <div style="border-top:1px solid var(--border); padding-top:16px;">
-      <p style="color:var(--text-dim); font-size:0.78rem; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.08em;">Create New Campaign</p>
-      <div style="display:flex; gap:8px;">
-        <input type="text" id="new-campaign-name" placeholder="Campaign name..." style="flex:1;">
-        <button class="btn" onclick="createCampaign()">Create</button>
+      <!-- ACTIONS TAB -->
+      <div id="gm-tab-content-actions" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+        <!-- clock bar -->
+        <div class="at-clock">
+          <div>
+            <div class="at-clock-label">Combat Time</div>
+            <div class="at-clock-time" id="at-clock-display">0s</div>
+          </div>
+          <button class="at-next-btn" id="at-next-btn" onclick="atAdvance()" title="Advance to next action completion">⏭ Next</button>
+          <button class="at-btn" onclick="atReset()" title="Reset combat clock" style="margin-left:4px;">↺</button>
+        </div>
+        <!-- add combatant row -->
+        <div class="at-add-row">
+          <select id="at-add-sel" style="flex:1;"></select>
+          <button class="token-add-btn" onclick="atAddCombatant()" title="Add to tracker">+ Add</button>
+        </div>
+        <!-- combatant list -->
+        <div id="at-list" style="flex:1;overflow-y:auto;"></div>
       </div>
+
     </div>
 
-    <div style="text-align:right; margin-top:16px;">
-      <button class="btn-sm" onclick="submitSignOut()" style="color:var(--text-dim);">Sign Out</button>
+  </div>
+</div>
+
+<!-- Action Picker Modal -->
+<div id="at-action-modal" class="at-modal-overlay" style="display:none;" onclick="if(event.target===this)atCloseModal()">
+  <div class="at-modal">
+    <h3 id="at-modal-title">Choose Next Action</h3>
+    <div class="at-action-grid" id="at-action-grid"></div>
+    <div class="at-freeform">
+      <input type="text" id="at-free-label" placeholder="Custom action…">
+      <input type="number" id="at-free-dur" placeholder="sec" min="1" max="120" value="3">
+      <button class="at-btn primary" onclick="atPickFreeform()">Add</button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="at-btn" onclick="atCloseModal()">Cancel</button>
     </div>
   </div>
 </div>
+
+<!-- ─── LANDING MODAL ────────────────────────────────────────────────────── -->
+<div id="modal-landing" style="
+  display:none; position:fixed; inset:0; z-index:1000;
+  background:rgba(0,0,0,0.88); align-items:center; justify-content:center;">
+  <div style="
+    background:var(--bg2); border:1px solid var(--gold); border-radius:8px;
+    padding:32px 36px; width:860px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+
+    <h2 style="text-align:center; margin:0 0 24px; letter-spacing:0.06em;">✦ Arcane</h2>
+
+    <div id="campaign-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:14px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
+
+    <div class="landing-cols">
+
+      <!-- CHARACTERS -->
+      <div class="landing-col">
+        <h3>Characters</h3>
+        <div class="landing-scroll" id="landing-char-list">
+          <span class="landing-dim">Loading…</span>
+        </div>
+        <div id="landing-char-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;"></div>
+        <button class="landing-config-btn" onclick="newCharacter();">
+          <span>✦</span> New Character
+        </button>
+      </div>
+
+      <!-- CAMPAIGNS -->
+      <div class="landing-col">
+        <h3>Campaigns</h3>
+        <div class="landing-scroll" id="landing-camp-list">
+          <span class="landing-dim">Loading…</span>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:2px;">
+          <input type="text" id="landing-new-camp-name" placeholder="New campaign name…"
+            style="flex:1; font-size:0.82rem;" onkeydown="if(event.key==='Enter')_landingCreateCampaign()">
+          <button class="btn-sm btn-text" onclick="_landingCreateCampaign()">Create</button>
+        </div>
+      </div>
+
+      <!-- GM CONFIGURATION -->
+      <div class="landing-col" id="landing-gm-col" style="display:none;">
+        <h3>Game Configuration</h3>
+        <div style="display:flex; flex-direction:column; gap:6px;">
+          <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skill Manager</button>
+          <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
+          <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
+          <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
+          <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
+          <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding-top:16px; border-top:1px solid var(--border);">
+      <button class="btn-sm btn-text" onclick="submitSignOut()" style="color:var(--text-dim);">Sign Out</button>
+      <button class="btn" id="landing-continue-btn" disabled onclick="hideLandingModal()">Continue →</button>
+    </div>
+  </div>
+</div>
+
+<!-- keep id alias so any lingering references don't break -->
+<div id="modal-campaign" style="display:none;"></div>
 </body>
 </html>
