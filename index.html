@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arcane Character Builder</title>
+<title>Arcane Virtual Tabletop</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.css">
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.js"></script>
@@ -3183,6 +3183,8 @@ async function saveCharacter() {
     setCharSaveStatus('Save failed: ' + error.message, false);
   } else {
     setCharSaveStatus('Saved ' + new Date().toLocaleTimeString(), true);
+    // refresh cache so token info panel reflects latest data
+    if (document.getElementById('play-mode')?.classList.contains('active')) loadPlayCharCache();
   }
 }
 
@@ -4981,7 +4983,16 @@ async function onTokenMouseUp(e) {
   }
 
   await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', dragTokenId);
+
+  // keep path-tool seed position current if this token is a combatant
+  const movedId = dragTokenId;
   dragTokenId = null;
+
+  // update token position in mapTokens so next Path draw starts at the new spot
+  if (mapTokens[movedId]) {
+    mapTokens[movedId].x_pct = x_pct;
+    mapTokens[movedId].y_pct = y_pct;
+  }
 }
 
 // ── Campaign character cache ──────────────────────────────────────────────────
