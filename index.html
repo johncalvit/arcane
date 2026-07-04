@@ -411,7 +411,18 @@
 
   /* scale calibration */
   .map-viewport.cal-mode  { cursor: crosshair !important; }
-  .map-viewport.path-mode { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%234de080' fill-opacity='0.25' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='%234de080' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair !important; }
+  .map-viewport.path-mode   { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='10' fill='%234de080' fill-opacity='0.25' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='12' y1='4' x2='12' y2='20' stroke='%234de080' stroke-width='2'/%3E%3Cline x1='4' y1='12' x2='20' y2='12' stroke='%234de080' stroke-width='2'/%3E%3C/svg%3E") 12 12, crosshair !important; }
+  .map-viewport.attack-mode { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='14' cy='14' r='11' fill='none' stroke='%23e05050' stroke-width='2'/%3E%3Ccircle cx='14' cy='14' r='3' fill='%23e05050'/%3E%3Cline x1='14' y1='2' x2='14' y2='8' stroke='%23e05050' stroke-width='2'/%3E%3Cline x1='14' y1='20' x2='14' y2='26' stroke='%23e05050' stroke-width='2'/%3E%3Cline x1='2' y1='14' x2='8' y2='14' stroke='%23e05050' stroke-width='2'/%3E%3Cline x1='20' y1='14' x2='26' y2='14' stroke='%23e05050' stroke-width='2'/%3E%3Cline x1='24' y1='22' x2='30' y2='28' stroke='%23e05050' stroke-width='2.5' stroke-linecap='round'/%3E%3Cpolygon points='28,24 30,28 26,28' fill='%23e05050'/%3E%3C/svg%3E") 14 14, crosshair !important; }
+  /* attack-mode weapon action submenu */
+  .at-weapon-group { grid-column: 1 / -1; border: 1px solid var(--border); border-radius:5px; overflow:hidden; margin-bottom:2px; }
+  .at-weapon-header { display:flex; align-items:center; gap:6px; padding:7px 10px; cursor:pointer; background:var(--bg3); font-size:0.82rem; font-weight:600; color:var(--text); }
+  .at-weapon-header:hover { background:var(--bg2); color:var(--gold2); }
+  .at-weapon-header .at-weapon-chevron { margin-left:auto; font-size:0.7rem; color:var(--text-dim); transition:transform 0.15s; }
+  .at-weapon-header.open .at-weapon-chevron { transform:rotate(180deg); }
+  .at-weapon-actions { display:none; padding:6px 8px; gap:5px; flex-wrap:wrap; background:var(--bg); }
+  .at-weapon-actions.open { display:flex; }
+  .at-weapon-action-btn { font-size:0.75rem; padding:4px 10px; border-radius:3px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-family:Georgia,serif; }
+  .at-weapon-action-btn:hover { border-color:#e05050; color:#e08080; }
   #scale-indicator {
     position: absolute; bottom: 8px; left: 8px;
     background: rgba(0,0,0,0.65); color: var(--gold2);
@@ -4211,6 +4222,8 @@ async function atOpenModal(combatantId) {
   }
 
   grid.innerHTML = '';
+
+  // General actions
   actions.forEach(a => {
     const btn = document.createElement('button');
     btn.className = 'at-action-pick-btn';
@@ -4218,6 +4231,74 @@ async function atOpenModal(combatantId) {
     btn.onclick = () => atPickAction(a.label, a.dur);
     grid.appendChild(btn);
   });
+
+  // Weapon attack groups (melee + ranged)
+  if (c?.type === 'char') {
+    const charId = combatantId.split('::')[1];
+    const cached = playCharCache[charId];
+    const heldItems = cached?.held_items || {};
+    const heldNames = [...new Set([heldItems.right, heldItems.left].filter(Boolean))];
+
+    heldNames.forEach(itemName => {
+      const norm = normalizeWeaponName(itemName);
+      const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
+      const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
+
+      if (meleeRows.length) {
+        const maxReach = Math.max(...meleeRows.map(r => r.reach));
+        const group = _buildAttackGroup(`⚔ ${itemName}`, meleeRows, combatantId, false, maxReach);
+        grid.appendChild(group);
+      }
+      if (rangedRows.length) {
+        const maxRange = Math.max(...rangedRows.map(r => r.rangeIncrement));
+        const group = _buildAttackGroup(`🏹 ${itemName}`, rangedRows, combatantId, true, maxRange);
+        grid.appendChild(group);
+      }
+    });
+  }
+}
+
+function _buildAttackGroup(title, weaponRows, combatantId, isRanged, rangeFt) {
+  const wrap = document.createElement('div');
+  wrap.className = 'at-weapon-group';
+  wrap.style.gridColumn = '1 / -1';
+
+  const header = document.createElement('div');
+  header.className = 'at-weapon-header';
+  header.innerHTML = `<span>${title}</span><span class="at-pick-dur" style="margin-left:6px;font-size:0.68rem;">${rangeFt} ft</span><span class="at-weapon-chevron">▾</span>`;
+
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'at-weapon-actions';
+
+  // If only one attack action, skip the submenu and go straight to targeting
+  const attackRows = isRanged ? weaponRows : weaponRows.filter(r => r.damageMax > 0);
+  const rows = attackRows.length ? attackRows : weaponRows;
+
+  rows.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'at-weapon-action-btn';
+    btn.textContent = `${r.action} (dmg ${r.damageMax})`;
+    btn.onclick = () => {
+      atCloseModal();
+      enterAttackMode(combatantId, r.weapon, r.action, isRanged, rangeFt);
+    };
+    actionsDiv.appendChild(btn);
+  });
+
+  header.onclick = () => {
+    if (rows.length === 1) {
+      // single action — go straight to attack targeting
+      atCloseModal();
+      enterAttackMode(combatantId, rows[0].weapon, rows[0].action, isRanged, rangeFt);
+      return;
+    }
+    const open = header.classList.toggle('open');
+    actionsDiv.classList.toggle('open', open);
+  };
+
+  wrap.appendChild(header);
+  wrap.appendChild(actionsDiv);
+  return wrap;
 }
 
 function atCloseModal() {
@@ -4639,6 +4720,7 @@ function applyMapTransform() {
 }
 
 function mapZoom(factor, cx, cy) {
+  refreshAttackCircle();
   const vp = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const px = cx !== undefined ? cx : rect.width  / 2;
@@ -4664,6 +4746,7 @@ function mapFit() {
   mapOffsetX = (vp.clientWidth  - mapImgW * mapScale) / 2;
   mapOffsetY = (vp.clientHeight - mapImgH * mapScale) / 2;
   applyMapTransform();
+  refreshAttackCircle();
 }
 
 function mapReset() {
@@ -4671,6 +4754,7 @@ function mapReset() {
   mapOffsetX = 0;
   mapOffsetY = 0;
   applyMapTransform();
+  refreshAttackCircle();
 }
 
 function initMapInteraction() {
@@ -4906,6 +4990,8 @@ let _tokenClickId     = null; // id of token that started the mousedown
 
 function startTokenDrag(e, tokenId) {
   e.stopPropagation();
+  // In attack mode a token click selects the target
+  if (attackMode) { e.preventDefault(); attackTokenClick(tokenId); return; }
   _tokenClickId    = tokenId;
   _tokenDragMoved  = false;
   _tokenDragStartX = e.clientX;
@@ -5006,6 +5092,118 @@ async function loadPlayCharCache() {
   playCharCache = {};
   (data || []).forEach(row => { playCharCache[row.id] = row; });
 }
+
+// ── Attack mode ───────────────────────────────────────────────────────────────
+let attackMode        = false;
+let attackCombatantId = null;
+let attackWeaponName  = null;
+let attackActionLabel = null;
+let attackIsRanged    = false;
+let attackRangeFt     = 0;
+
+function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt) {
+  if (attackMode) exitAttackMode();
+  if (pathMode)   exitPathMode();
+  attackMode        = true;
+  attackCombatantId = combatantId;
+  attackWeaponName  = weaponName;
+  attackActionLabel = actionLabel;
+  attackIsRanged    = isRanged;
+  attackRangeFt     = rangeFt;
+
+  document.getElementById('map-viewport').classList.add('attack-mode');
+
+  const svg = document.getElementById('attack-svg');
+  svg.style.display = 'block';
+  drawRangeCircle();
+}
+
+function exitAttackMode() {
+  attackMode        = false;
+  attackCombatantId = null;
+  attackWeaponName  = null;
+  attackActionLabel = null;
+  document.getElementById('map-viewport').classList.remove('attack-mode');
+  const svg = document.getElementById('attack-svg');
+  svg.style.display = 'none';
+  svg.innerHTML = '';
+}
+
+function drawRangeCircle() {
+  if (!attackCombatantId || mapScalePPF <= 0) return;
+  const token = _pathFindToken(attackCombatantId);
+  if (!token) return;
+
+  const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
+  const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
+  const radiusPx = attackRangeFt * mapScalePPF * mapScale;
+
+  const svg = document.getElementById('attack-svg');
+  svg.innerHTML = '';
+
+  // range ring
+  const color  = attackIsRanged ? '#e0a030' : '#e05050';
+  const fill   = attackIsRanged ? 'rgba(224,160,48,0.08)' : 'rgba(224,80,80,0.12)';
+  const dash   = attackIsRanged ? '10,6' : 'none';
+
+  const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  circle.setAttribute('cx', vpX);
+  circle.setAttribute('cy', vpY);
+  circle.setAttribute('r',  Math.max(1, radiusPx));
+  circle.setAttribute('fill', fill);
+  circle.setAttribute('stroke', color);
+  circle.setAttribute('stroke-width', '2');
+  circle.setAttribute('stroke-dasharray', dash);
+  svg.appendChild(circle);
+
+  // label
+  const rangeTxt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  rangeTxt.setAttribute('x', vpX);
+  rangeTxt.setAttribute('y', vpY - radiusPx - 6);
+  rangeTxt.setAttribute('text-anchor', 'middle');
+  rangeTxt.setAttribute('fill', color);
+  rangeTxt.setAttribute('font-size', '11');
+  rangeTxt.setAttribute('font-family', 'Georgia,serif');
+  rangeTxt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  rangeTxt.textContent = `${attackActionLabel} · ${attackRangeFt} ft`;
+  svg.appendChild(rangeTxt);
+
+  // prompt
+  const prompt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  prompt.setAttribute('x', vpX);
+  prompt.setAttribute('y', vpY + radiusPx + 16);
+  prompt.setAttribute('text-anchor', 'middle');
+  prompt.setAttribute('fill', 'rgba(224,80,80,0.8)');
+  prompt.setAttribute('font-size', '11');
+  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  prompt.textContent = 'Click target — Esc to cancel';
+  svg.appendChild(prompt);
+}
+
+function attackTokenClick(tokenId) {
+  if (!attackMode) return false;
+  const target = mapTokens[tokenId];
+  if (!target) return false;
+  if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
+    // clicked own token — cancel
+    exitAttackMode(); return true;
+  }
+
+  const c = atCombatants.find(x => x.id === attackCombatantId);
+  const dur = attackIsRanged ? 2 : 2;
+  if (c) {
+    const label = `${attackActionLabel} → ${target.label}`;
+    c.actions.push({ label, startAt: atClock, completesAt: atClock + dur });
+    renderAtList();
+    switchGmTab('actions');
+  }
+  exitAttackMode();
+  return true;
+}
+
+// Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
+function refreshAttackCircle() { if (attackMode) drawRangeCircle(); }
 
 // ── Token info panel ─────────────────────────────────────────────────────────
 function calcAttributesFromData(data) {
@@ -5281,6 +5479,12 @@ async function loadCampaignCharactersForTokens() {
 // Extend the existing window mousemove / mouseup listeners
 document.addEventListener('mousemove', onTokenMouseMove);
 document.addEventListener('mouseup',   onTokenMouseUp);
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (attackMode) { exitAttackMode(); e.stopPropagation(); }
+    else if (pathMode) { exitPathMode(); e.stopPropagation(); }
+  }
+});
 
 // ── Extend enterPlayMode to subscribe to token realtime ──────────────────────
 // (loadMapTokens is handled by the patched loadActiveMap below)
@@ -5294,6 +5498,8 @@ enterPlayMode = function() {
 const _origExitPlayMode = exitPlayMode;
 exitPlayMode = function() {
   _origExitPlayMode();
+  if (attackMode) exitAttackMode();
+  if (pathMode)   exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
   mapTokens    = {};
@@ -6076,6 +6282,9 @@ switchGmTab = function(tab) {
         <!-- path drawing SVG overlay -->
         <svg id="path-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:25;overflow:visible;"></svg>
+        <!-- attack range SVG overlay -->
+        <svg id="attack-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;display:none;z-index:26;overflow:visible;"></svg>
       </div>
     </div>
 
