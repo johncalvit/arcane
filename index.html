@@ -5359,24 +5359,107 @@ function drawRangeCircle() {
   svg.appendChild(prompt);
 }
 
+// Compute _targetAdj from a raw DB character row (same formula as calcAttributes)
+function calcTargetAdjFromRow(row) {
+  const race   = row.species  || '';
+  const gender = row.sex      || '';
+  const age    = row.age      || '';
+  const height = row.height   || '';
+  const build  = row.build    || '';
+  const raceH  = (RACE_DATA[race]     || {}).Height || 60;
+  const gH     = (GENDER_DATA[gender] || {}).Height || 1;
+  const aH     = (AGE_DATA[age]       || {}).Height || 1;
+  const hH     = (HEIGHT_DATA[height] || {}).Height || 1;
+  const heightIn = raceH * gH * aH * hH;
+  const buildTA  = (BUILD_DATA[build] || {}).TargetAdj || 1;
+  return Math.max(1, Math.round(heightIn / 12 * buildTA));
+}
+
 function attackTokenClick(tokenId) {
   if (!attackMode) return false;
   const target = mapTokens[tokenId];
   if (!target) return false;
   if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
-    // clicked own token — cancel
     exitAttackMode(); return true;
   }
 
+  // ── Attacker HIT value ────────────────────────────────────────────────────
+  const [atkType, atkId] = attackCombatantId.split('::');
+  let hitValue = null;
+  if (atkType === 'char') {
+    const atkRow = playCharCache[atkId];
+    if (atkRow) {
+      const atkAttrs = calcAttributesFromData({
+        race: atkRow.species || '', bodyType: atkRow.body_type || '',
+        sex: atkRow.sex || '', age: atkRow.age || '',
+        height: atkRow.height || '', build: atkRow.build || '',
+        social: atkRow.social || '', mental: atkRow.mental || '',
+        stats: atkRow.stats || {},
+      });
+      const weaponRows = getWeaponRows(attackWeaponName);
+      const actionRow  = weaponRows.find(r => r.action === attackActionLabel);
+      if (actionRow) hitValue = calcHitValue(actionRow.hitFormula, atkAttrs);
+    }
+  }
+
+  // ── Range penalty (ranged weapons only) ───────────────────────────────────
+  let rangePenalty    = 0;
+  let rangeIncrements = 0;
+  let distanceFt      = 0;
+  if (attackIsRanged && mapScalePPF > 0 && attackRangeFt > 0) {
+    const atkToken = _pathFindToken(attackCombatantId);
+    if (atkToken) {
+      const atkImgX = (atkToken.x_pct / 100) * mapImgW;
+      const atkImgY = (atkToken.y_pct / 100) * mapImgH;
+      const tgtImgX = (target.x_pct   / 100) * mapImgW;
+      const tgtImgY = (target.y_pct   / 100) * mapImgH;
+      distanceFt      = Math.hypot(tgtImgX - atkImgX, tgtImgY - atkImgY) / mapScalePPF;
+      rangeIncrements = Math.round(distanceFt / attackRangeFt);
+      rangePenalty    = rangeIncrements; // −1 per increment
+    }
+  }
+
+  const adjustedHit = hitValue != null ? Math.max(0, hitValue - rangePenalty) : null;
+
+  // ── Target size ───────────────────────────────────────────────────────────
+  let targetAdj = 5; // default
+  if (target.entity_type === 'character' && playCharCache[target.entity_id]) {
+    targetAdj = calcTargetAdjFromRow(playCharCache[target.entity_id]);
+  } else if (target.entity_type === 'creature') {
+    const race = RACE_DATA[target.species] || {};
+    targetAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
+  }
+
+  // ── Hit threshold ─────────────────────────────────────────────────────────
+  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj : null;
+  const threshold    = rawThreshold != null ? Math.min(100, Math.round(rawThreshold)) : null;
+
+  // ── Log action to tracker ─────────────────────────────────────────────────
+  const actionLabel = `${attackActionLabel} → ${target.label}`;
   const c = atCombatants.find(x => x.id === attackCombatantId);
-  const dur = attackIsRanged ? 2 : 2;
   if (c) {
-    const label = `${attackActionLabel} → ${target.label}`;
-    c.actions.push({ label, startAt: atClock, completesAt: atClock + dur });
+    c.actions.push({ label: actionLabel, startAt: atClock, completesAt: atClock + 2 });
     renderAtList();
     switchGmTab('actions');
   }
   exitAttackMode();
+
+  // ── Open hit roller ───────────────────────────────────────────────────────
+  let subtitle = '';
+  if (hitValue != null) {
+    if (attackIsRanged && rangeIncrements > 0) {
+      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}`;
+    } else {
+      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${rawThreshold > 100 ? ' (capped 100)' : ''}`;
+    }
+  }
+  openRoller({
+    label: actionLabel,
+    min: 1, max: 100,
+    target: threshold,
+    targetLabel: subtitle,
+  });
+
   return true;
 }
 
