@@ -5288,7 +5288,7 @@ async function showTokenInfo(tokenId) {
   if (!row) {
     el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Loading…</div>`;
     const { data } = await sb.from('characters')
-      .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, held_items, armor, avatar_url')
+      .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url')
       .eq('id', t.entity_id).single();
     if (!data) {
       el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Could not load character.</div>`;
@@ -5335,26 +5335,53 @@ async function showTokenInfo(tokenId) {
     `<div class="ps-stat-row"><span class="ps-stat-label">${armorLabels[s]}</span><span class="ps-stat-val" style="font-size:0.72rem;">${armor[s] || 'None'}</span></div>`
   ).join('');
 
+  const skills = row.skills || {};
+  const investedSkills = Object.entries(skills).filter(([,pts]) => pts > 0);
+  const skillsHtml = investedSkills.length
+    ? investedSkills.map(([name, pts]) => {
+        const skill = SKILLS.find(s => s.name === name);
+        const pct = calcSkillSuccess(skill, attrs, pts);
+        return `<div class="ps-stat-row">
+          <span class="ps-stat-label" style="flex:1;">${name}</span>
+          <span class="ps-stat-val" style="min-width:36px;text-align:right;">${pct}%</span>
+        </div>`;
+      }).join('')
+    : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
+
+  const collapseId = (s) => `ti-sec-${t.id}-${s}`;
+  const section = (key, title, content) => `
+    <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+      <div onclick="(function(el){el.style.display=el.style.display==='none'?'block':'none'})(document.getElementById('${collapseId(key)}'))"
+           style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;cursor:pointer;background:var(--bg3);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">
+        ${title}
+        <span style="font-size:0.7rem;opacity:0.5;">▾</span>
+      </div>
+      <div id="${collapseId(key)}" style="padding:6px 8px;">${content}</div>
+    </div>`;
+
+  const statsContent = groups.map(g => `
+    <div style="margin-bottom:8px;">
+      <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${g.label}</div>
+      ${g.keys.map(statRow).join('')}
+    </div>`).join('');
+
+  const equipContent = `
+    <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${held.right || 'Bare Hand'}</span></div>
+    <div style="font-size:0.72rem;color:var(--text-dim);">Left: <span style="color:var(--text);">${held.left || 'Bare Hand'}</span></div>`;
+
   el.innerHTML = `
     ${backBtn}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
       <div class="ps-compact-avatar">${avatarHtml}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name || '—'}</div>
-        <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${[row.species, row.body_type].filter(Boolean).join(' · ')}</div>
-        <div style="font-size:0.72rem;color:var(--text-dim);">Right: <span style="color:var(--text);">${held.right || 'Bare Hand'}</span></div>
-        <div style="font-size:0.72rem;color:var(--text-dim);">Left: <span style="color:var(--text);">${held.left || 'Bare Hand'}</span></div>
+        <div style="font-size:0.72rem;color:var(--text-dim);">${[row.species, row.body_type].filter(Boolean).join(' · ')}</div>
       </div>
     </div>
-    ${groups.map(g => `
-      <div style="margin-bottom:10px;">
-        <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">${g.label}</div>
-        ${g.keys.map(statRow).join('')}
-      </div>`).join('')}
-    <div>
-      <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:4px;">Armor</div>
-      ${armorRows}
-    </div>`;
+    ${section('stats',  'Stats',     statsContent)}
+    ${section('equip',  'Equipment', equipContent)}
+    ${section('armor',  'Armor',     armorRows)}
+    ${section('skills', 'Skills',    skillsHtml)}`;
 }
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
