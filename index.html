@@ -4720,21 +4720,19 @@ function applyMapTransform() {
 }
 
 function mapZoom(factor, cx, cy) {
-  refreshAttackCircle();
   const vp = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const px = cx !== undefined ? cx : rect.width  / 2;
   const py = cy !== undefined ? cy : rect.height / 2;
-
   const newScale = Math.min(8, Math.max(0.1, mapScale * factor));
-  // keep the image point under the cursor fixed:
-  // imgX = (px - left) / scale  →  newLeft = px - imgX * newScale
   const imgX = (px - mapOffsetX) / mapScale;
   const imgY = (py - mapOffsetY) / mapScale;
   mapOffsetX = px - imgX * newScale;
   mapOffsetY = py - imgY * newScale;
   mapScale   = newScale;
   applyMapTransform();
+  refreshAttackCircle();
+  refreshMeasure();
 }
 
 function mapFit() {
@@ -4747,6 +4745,7 @@ function mapFit() {
   mapOffsetY = (vp.clientHeight - mapImgH * mapScale) / 2;
   applyMapTransform();
   refreshAttackCircle();
+  refreshMeasure();
 }
 
 function mapReset() {
@@ -4755,6 +4754,7 @@ function mapReset() {
   mapOffsetY = 0;
   applyMapTransform();
   refreshAttackCircle();
+  refreshMeasure();
 }
 
 function initMapInteraction() {
@@ -4910,8 +4910,27 @@ function switchGmTab(tab) {
 }
 
 // ── Token rendering ───────────────────────────────────────────────────────────
+function getTokenSize(t) {
+  if (t && t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
+    const row   = playCharCache[t.entity_id];
+    const race   = row.race   || row.species || '';
+    const gender = row.sex    || '';
+    const age    = row.age    || '';
+    const height = row.height || '';
+    const raceH  = (RACE_DATA[race]     || {}).Height || 60;
+    const gH     = (GENDER_DATA[gender] || {}).Height || 1;
+    const aH     = (AGE_DATA[age]       || {}).Height || 1;
+    const hH     = (HEIGHT_DATA[height] || {}).Height || 1;
+    const heightIn  = raceH * gH * aH * hH;
+    const roundedFt = Math.round((heightIn / 12) / 2.5) * 2.5;
+    const clamped   = Math.max(2.5, Math.min(10, roundedFt));
+    return Math.round(TOKEN_SIZE * clamped / 5.0);
+  }
+  return TOKEN_SIZE;
+}
+
 function tokenHtml(t) {
-  const size   = TOKEN_SIZE;
+  const size   = getTokenSize(t);
   const typeClass = t.entity_type === 'creature' ? 'type-creature'
                   : t.entity_type === 'item'     ? 'type-item' : '';
   const fallbackIcon = t.entity_type === 'creature' ? '👾' : t.entity_type === 'item' ? '📦' : '🧙';
@@ -5131,20 +5150,22 @@ function exitAttackMode() {
 
 function drawRangeCircle() {
   if (!attackCombatantId || mapScalePPF <= 0) return;
+  if (attackIsRanged) return; // no range circle for ranged weapons
   const token = _pathFindToken(attackCombatantId);
   if (!token) return;
 
   const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
   const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
-  const radiusPx = attackRangeFt * mapScalePPF * mapScale;
+  // start ring at token edge, not center
+  const tokenHalfVp = (getTokenSize(token) / 2) * mapScale;
+  const radiusPx = tokenHalfVp + attackRangeFt * mapScalePPF * mapScale;
 
   const svg = document.getElementById('attack-svg');
   svg.innerHTML = '';
 
-  // range ring
-  const color  = attackIsRanged ? '#e0a030' : '#e05050';
-  const fill   = attackIsRanged ? 'rgba(224,160,48,0.08)' : 'rgba(224,80,80,0.12)';
-  const dash   = attackIsRanged ? '10,6' : 'none';
+  const color = '#e05050';
+  const fill  = 'rgba(224,80,80,0.12)';
+  const dash  = 'none';
 
   const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
   circle.setAttribute('cx', vpX);
@@ -5638,8 +5659,10 @@ function cancelCalibration() {
 // ── Measure tool ─────────────────────────────────────────────────────────────
 let measureMode    = false;
 let measureDrawing = false;
-let measureStartX  = 0;
-let measureStartY  = 0;
+let measureImgX    = 0; // start point in image coords (stable across zoom)
+let measureImgY    = 0;
+let measureEndImgX = 0; // end point in image coords
+let measureEndImgY = 0;
 
 function toggleMeasureMode() {
   measureMode ? exitMeasureMode() : enterMeasureMode();
@@ -5666,51 +5689,69 @@ function measureMouseDown(e) {
   if (!measureMode) return false;
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
-  measureStartX  = e.clientX - rect.left;
-  measureStartY  = e.clientY - rect.top;
+  const vpX  = e.clientX - rect.left;
+  const vpY  = e.clientY - rect.top;
+  measureImgX    = (vpX - mapOffsetX) / mapScale;
+  measureImgY    = (vpY - mapOffsetY) / mapScale;
+  measureEndImgX = measureImgX;
+  measureEndImgY = measureImgY;
   measureDrawing = true;
   const svg = document.getElementById('measure-svg');
   svg.style.display = 'block';
   ['measure-dot-a','measure-dot-b'].forEach(id => {
-    document.getElementById(id).setAttribute('cx', measureStartX);
-    document.getElementById(id).setAttribute('cy', measureStartY);
+    document.getElementById(id).setAttribute('cx', vpX);
+    document.getElementById(id).setAttribute('cy', vpY);
   });
-  document.getElementById('measure-line').setAttribute('x1', measureStartX);
-  document.getElementById('measure-line').setAttribute('y1', measureStartY);
-  document.getElementById('measure-line').setAttribute('x2', measureStartX);
-  document.getElementById('measure-line').setAttribute('y2', measureStartY);
+  document.getElementById('measure-line').setAttribute('x1', vpX);
+  document.getElementById('measure-line').setAttribute('y1', vpY);
+  document.getElementById('measure-line').setAttribute('x2', vpX);
+  document.getElementById('measure-line').setAttribute('y2', vpY);
   document.getElementById('measure-text').textContent = '';
   return true;
+}
+
+function _measureDraw() {
+  const sx = measureImgX    * mapScale + mapOffsetX;
+  const sy = measureImgY    * mapScale + mapOffsetY;
+  const ex = measureEndImgX * mapScale + mapOffsetX;
+  const ey = measureEndImgY * mapScale + mapOffsetY;
+  document.getElementById('measure-dot-a').setAttribute('cx', sx);
+  document.getElementById('measure-dot-a').setAttribute('cy', sy);
+  document.getElementById('measure-dot-b').setAttribute('cx', ex);
+  document.getElementById('measure-dot-b').setAttribute('cy', ey);
+  document.getElementById('measure-line').setAttribute('x1', sx);
+  document.getElementById('measure-line').setAttribute('y1', sy);
+  document.getElementById('measure-line').setAttribute('x2', ex);
+  document.getElementById('measure-line').setAttribute('y2', ey);
+  const imgDist = Math.hypot(measureEndImgX - measureImgX, measureEndImgY - measureImgY);
+  const txt = document.getElementById('measure-text');
+  txt.setAttribute('x', (sx + ex) / 2);
+  txt.setAttribute('y', (sy + ey) / 2 - 5);
+  if (mapScalePPF > 0) {
+    const ft = imgDist / mapScalePPF;
+    txt.textContent = ft >= 100 ? Math.round(ft) + ' ft' : ft.toFixed(1) + ' ft';
+  } else {
+    txt.textContent = Math.round(imgDist) + ' px (calibrate for ft)';
+  }
+}
+
+function refreshMeasure() {
+  if (measureMode && measureDrawing) _measureDraw();
 }
 
 function measureMouseMove(e) {
   if (!measureMode || !measureDrawing) return;
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
-  const x    = e.clientX - rect.left;
-  const y    = e.clientY - rect.top;
-  document.getElementById('measure-line').setAttribute('x2', x);
-  document.getElementById('measure-line').setAttribute('y2', y);
-  document.getElementById('measure-dot-b').setAttribute('cx', x);
-  document.getElementById('measure-dot-b').setAttribute('cy', y);
-  const pxLen = Math.hypot(x - measureStartX, y - measureStartY) / mapScale;
-  const mid   = { x: (measureStartX + x) / 2, y: (measureStartY + y) / 2 };
-  const txt   = document.getElementById('measure-text');
-  txt.setAttribute('x', mid.x);
-  txt.setAttribute('y', mid.y);
-  if (mapScalePPF > 0) {
-    const ft = pxLen / mapScalePPF;
-    txt.textContent = ft >= 100 ? Math.round(ft) + ' ft' : ft.toFixed(1) + ' ft';
-  } else {
-    txt.textContent = Math.round(pxLen) + ' px (calibrate for ft)';
-  }
+  measureEndImgX = (e.clientX - rect.left  - mapOffsetX) / mapScale;
+  measureEndImgY = (e.clientY - rect.top   - mapOffsetY) / mapScale;
+  _measureDraw();
 }
 
 function measureMouseUp(e) {
   if (!measureMode || !measureDrawing) return;
   measureDrawing = false;
-  // line stays visible; user can drag again to remeasure or click the button to dismiss
-  measureMouseMove(e); // snap final position
+  measureMouseMove(e);
 }
 
 // ── Path tool ─────────────────────────────────────────────────────────────────
