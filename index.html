@@ -230,6 +230,53 @@
   .ps-stat-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.78rem; border-bottom: 1px solid rgba(61,51,40,0.4); }
   .ps-stat-label { color: var(--text-dim); }
   .ps-stat-val   { color: var(--gold2); font-weight: bold; }
+  .ps-rollable   { cursor: pointer; border-bottom: 1px dashed var(--gold); }
+  .ps-rollable:hover { color: var(--gold); }
+
+  /* ── Slot-machine roller overlay ───────────────────────────────────────── */
+  #roller-overlay {
+    position: fixed; inset: 0; z-index: 9000;
+    background: rgba(0,0,0,0.75);
+    display: flex; align-items: center; justify-content: center;
+  }
+  #roller-card {
+    background: var(--bg2); border: 2px solid var(--gold);
+    border-radius: 10px; padding: 28px 40px;
+    text-align: center; min-width: 260px;
+    box-shadow: 0 0 40px rgba(0,0,0,0.8);
+  }
+  #roller-label {
+    font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 0.12em; margin-bottom: 6px;
+  }
+  #roller-target {
+    font-size: 0.72rem; color: var(--text-dim); margin-bottom: 18px;
+  }
+  #roller-number {
+    font-size: 5rem; font-weight: bold; color: var(--gold2);
+    font-family: monospace; line-height: 1;
+    min-width: 3ch; display: inline-block;
+    text-shadow: 0 0 20px rgba(201,168,76,0.5);
+    transition: color 0.2s;
+  }
+  #roller-number.success { color: #4de080; text-shadow: 0 0 20px rgba(77,224,128,0.5); }
+  #roller-number.fail    { color: #e05050; text-shadow: 0 0 20px rgba(224,80,80,0.5); }
+  #roller-status {
+    margin-top: 18px; font-size: 0.82rem; color: var(--text-dim);
+    min-height: 1.4em; font-family: Georgia, serif;
+  }
+  #roller-result-label {
+    margin-top: 8px; font-size: 1.3rem; font-weight: bold;
+    letter-spacing: 0.15em; min-height: 1.6em;
+  }
+  #roller-result-label.success { color: #4de080; }
+  #roller-result-label.fail    { color: #e05050; }
+  #roller-close {
+    margin-top: 18px; font-size: 0.75rem; color: var(--text-dim);
+    background: none; border: 1px solid var(--border); border-radius: 3px;
+    padding: 3px 14px; cursor: pointer; font-family: Georgia, serif;
+    display: none;
+  }
 
   /* ── MAP PANEL ─────────────────────────────────────────────────────────── */
   .map-panel {
@@ -4511,9 +4558,10 @@ function renderPlayCharacter() {
     ? investedSkills.map(([name, pts]) => {
         const skill = SKILLS.find(s => s.name === name);
         const pct = calcSkillSuccess(skill, attrs, pts);
+        const call = `openRoller({label:${JSON.stringify(name)},target:${pct},targetLabel:'or less'})`;
         return `<div class="ps-stat-row">
           <span class="ps-stat-label" style="flex:1;">${name}</span>
-          <span class="ps-stat-val" style="min-width:36px;text-align:right;">${pct}%</span>
+          <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" onclick="${call}">${pct}%</span>
         </div>`;
       }).join('')
     : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
@@ -4580,6 +4628,91 @@ function renderPlayHandHit(side, attrs) {
       ${label}: <span style="color:var(--gold2);font-weight:bold;">${itemName}</span>
     </div>
     ${actionsHtml}`;
+}
+
+// ── Slot-machine roller ───────────────────────────────────────────────────────
+// openRoller({ label, min=1, max=100, target=null, targetLabel='' })
+//   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
+let _roller = null;
+
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '' }) {
+  _roller = { label, min, max, target, targetLabel, phase: 'idle', finalNum: null, timeoutId: null };
+
+  document.getElementById('roller-label').textContent = label;
+  document.getElementById('roller-target').textContent =
+    target != null ? `Target: ${target}${targetLabel ? ' ' + targetLabel : ''}` : '';
+  document.getElementById('roller-number').textContent = '—';
+  document.getElementById('roller-number').className = '';
+  document.getElementById('roller-status').textContent = 'Click to roll';
+  document.getElementById('roller-result-label').textContent = '';
+  document.getElementById('roller-result-label').className = '';
+  document.getElementById('roller-close').style.display = 'none';
+  document.getElementById('roller-overlay').style.display = 'flex';
+}
+
+function rollerClick() {
+  if (!_roller) return;
+  if (_roller.phase === 'idle')     { _rollerStartSpin(); return; }
+  if (_roller.phase === 'spinning') { _rollerBeginStop(); return; }
+}
+
+function _rollerRand() {
+  return Math.floor(Math.random() * (_roller.max - _roller.min + 1)) + _roller.min;
+}
+
+function _rollerStartSpin() {
+  _roller.phase = 'spinning';
+  document.getElementById('roller-status').textContent = 'Click to stop';
+  _rollerTick(45);
+}
+
+function _rollerTick(interval) {
+  if (_roller.phase !== 'spinning') return;
+  document.getElementById('roller-number').textContent = _rollerRand();
+  _roller.timeoutId = setTimeout(() => _rollerTick(interval), interval);
+}
+
+function _rollerBeginStop() {
+  _roller.phase = 'stopping';
+  clearTimeout(_roller.timeoutId);
+  // Choose the final number now — timing the click cannot influence it
+  _roller.finalNum = _rollerRand();
+  document.getElementById('roller-status').textContent = 'Stopping…';
+  // Deceleration steps: delays in ms, last step reveals the final number
+  const steps = [80, 120, 170, 230, 300, 380, 460];
+  let i = 0;
+  function step() {
+    const isLast = i === steps.length - 1;
+    document.getElementById('roller-number').textContent =
+      isLast ? _roller.finalNum : _rollerRand();
+    if (isLast) { _rollerShowResult(); return; }
+    setTimeout(step, steps[i++]);
+  }
+  setTimeout(step, steps[i++]);
+}
+
+function _rollerShowResult() {
+  _roller.phase = 'done';
+  const n = _roller.finalNum;
+  const numEl    = document.getElementById('roller-number');
+  const resultEl = document.getElementById('roller-result-label');
+
+  if (_roller.target != null) {
+    const success = n <= _roller.target;
+    numEl.className    = success ? 'success' : 'fail';
+    resultEl.textContent = success ? 'SUCCESS' : 'FAIL';
+    resultEl.className   = success ? 'success' : 'fail';
+    document.getElementById('roller-status').textContent = '';
+  } else {
+    document.getElementById('roller-status').textContent = '';
+  }
+  document.getElementById('roller-close').style.display = 'inline-block';
+}
+
+function closeRoller() {
+  clearTimeout(_roller?.timeoutId);
+  _roller = null;
+  document.getElementById('roller-overlay').style.display = 'none';
 }
 
 // ─── Supabase Realtime ────────────────────────────────────────────────────────
@@ -5358,9 +5491,10 @@ async function showTokenInfo(tokenId) {
     ? investedSkills.map(([name, pts]) => {
         const skill = SKILLS.find(s => s.name === name);
         const pct = calcSkillSuccess(skill, attrs, pts);
+        const call = `openRoller({label:${JSON.stringify(name)},target:${pct},targetLabel:'or less'})`;
         return `<div class="ps-stat-row">
           <span class="ps-stat-label" style="flex:1;">${name}</span>
-          <span class="ps-stat-val" style="min-width:36px;text-align:right;">${pct}%</span>
+          <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" onclick="${call}">${pct}%</span>
         </div>`;
       }).join('')
     : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
@@ -6152,6 +6286,18 @@ switchGmTab = function(tab) {
 };
 </script>
 
+
+<!-- ─── SLOT-MACHINE ROLLER OVERLAY ─────────────────────────────────────── -->
+<div id="roller-overlay" style="display:none;" onclick="rollerClick()">
+  <div id="roller-card" onclick="event.stopPropagation()">
+    <div id="roller-label"></div>
+    <div id="roller-target"></div>
+    <div id="roller-number">—</div>
+    <div id="roller-status">Click to roll</div>
+    <div id="roller-result-label"></div>
+    <button id="roller-close" onclick="closeRoller()">Close</button>
+  </div>
+</div>
 
 <!-- ─── NEW CHARACTER CONFIRM MODAL ─────────────────────────────────────── -->
 <div id="modal-reset-defaults" style="
