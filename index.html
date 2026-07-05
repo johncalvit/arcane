@@ -4558,7 +4558,8 @@ function renderPlayCharacter() {
     ? investedSkills.map(([name, pts]) => {
         const skill = SKILLS.find(s => s.name === name);
         const pct = calcSkillSuccess(skill, attrs, pts);
-        const call = `openRoller({label:${JSON.stringify(name)},target:${pct},targetLabel:'or less'})`;
+        const safeLabel = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const call = `openRoller({label:'${safeLabel}',target:${pct},targetLabel:'or less'})`;
         return `<div class="ps-stat-row">
           <span class="ps-stat-label" style="flex:1;">${name}</span>
           <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" onclick="${call}">${pct}%</span>
@@ -5491,7 +5492,8 @@ async function showTokenInfo(tokenId) {
     ? investedSkills.map(([name, pts]) => {
         const skill = SKILLS.find(s => s.name === name);
         const pct = calcSkillSuccess(skill, attrs, pts);
-        const call = `openRoller({label:${JSON.stringify(name)},target:${pct},targetLabel:'or less'})`;
+        const safeLabel = name.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const call = `openRoller({label:'${safeLabel}',target:${pct},targetLabel:'or less'})`;
         return `<div class="ps-stat-row">
           <span class="ps-stat-label" style="flex:1;">${name}</span>
           <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" onclick="${call}">${pct}%</span>
