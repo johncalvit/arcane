@@ -4643,16 +4643,16 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
     target != null ? `Target: ${target}${targetLabel ? ' ' + targetLabel : ''}` : '';
   document.getElementById('roller-number').textContent = '—';
   document.getElementById('roller-number').className = '';
-  document.getElementById('roller-status').textContent = 'Click to roll';
+  document.getElementById('roller-status').textContent = 'Click to stop';
   document.getElementById('roller-result-label').textContent = '';
   document.getElementById('roller-result-label').className = '';
   document.getElementById('roller-close').style.display = 'none';
   document.getElementById('roller-overlay').style.display = 'flex';
+  _rollerStartSpin();
 }
 
 function rollerClick() {
   if (!_roller) return;
-  if (_roller.phase === 'idle')     { _rollerStartSpin(); return; }
   if (_roller.phase === 'spinning') { _rollerBeginStop(); return; }
 }
 
