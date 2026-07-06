@@ -888,6 +888,7 @@
     <div id="gm-config-nav" style="display:none;">
       <button class="nav-btn" onclick="exitConfigMode()" style="color:var(--text-dim);font-size:0.78rem;">← Character Design</button>
       <div class="nav-section">Game Configuration</div>
+      <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species Manager</button>
       <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
       <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
@@ -1027,6 +1028,82 @@
       </div>
       <div class="skill-filter" id="skill-filters"></div>
       <div class="skill-list" id="skill-list"></div>
+    </div>
+
+    <!-- SPECIES MANAGER -->
+    <div id="panel-speciesmgr" class="panel">
+      <h2>Species Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Add or edit playable species. Attribute values are multipliers (1.0 = neutral). Height is the base height in inches before age/height modifiers. Weight is a body-weight multiplier.
+      </p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <button class="btn" onclick="openSpeciesForm(null)">+ Add New Species</button>
+        <div style="margin-left:auto;display:flex;gap:6px;">
+          <button id="smgr-filter-all" class="filter-btn active" onclick="setSpeciesMgrFilter(true)">All</button>
+          <button id="smgr-filter-players" class="filter-btn" onclick="setSpeciesMgrFilter(false)">Players Only</button>
+        </div>
+      </div>
+
+      <div id="species-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="species-form-title" style="margin-top:0;">New Species</h3>
+        <div class="grid-2" style="margin-bottom:12px;">
+          <div class="field">
+            <label>Species Name</label>
+            <input type="text" id="smgr-name" placeholder="e.g. Orc">
+          </div>
+          <div class="field">
+            <label>Base Height (inches)</label>
+            <input type="number" id="smgr-height" min="12" max="180" step="1" value="66">
+          </div>
+          <div class="field">
+            <label>Weight Multiplier</label>
+            <input type="number" id="smgr-weight" min="0.1" max="5" step="0.05" value="1">
+          </div>
+          <div class="field">
+            <label>Body Type</label>
+            <select id="smgr-body-type">
+              <option>Humanoid</option>
+              <option>Quadruped</option>
+              <option>Dragon</option>
+              <option>Insect</option>
+              <option>Fish</option>
+              <option>Bird</option>
+              <option>Plant</option>
+              <option>Snake</option>
+              <option>Winged Humanoid</option>
+              <option>Centaur</option>
+            </select>
+          </div>
+          <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px;">
+            <input type="checkbox" id="smgr-monster-only" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer;">
+            <label for="smgr-monster-only" style="cursor:pointer;margin:0;">Monster only (not available to players)</label>
+          </div>
+        </div>
+
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Physical</div>
+        <div class="grid-2" style="margin-bottom:12px;" id="smgr-physical"></div>
+
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Cognitive</div>
+        <div class="grid-2" style="margin-bottom:12px;" id="smgr-cognitive"></div>
+
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Senses</div>
+        <div class="grid-2" style="margin-bottom:16px;" id="smgr-senses"></div>
+
+        <div style="display:flex;gap:10px;">
+          <button class="btn" onclick="saveSpecies()">Save Species</button>
+          <button class="btn danger" onclick="closeSpeciesForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Height</th><th>Power</th><th>Speed</th>
+            <th>Toughness</th><th>Quintessence</th><th>Night Vision</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="speciesmgr-list"></tbody>
+      </table>
     </div>
 
     <!-- SKILL MANAGER -->
@@ -1392,13 +1469,13 @@
 
 // All attribute multipliers default to 1 (neutral). Height = base height in inches, Weight = body-weight multiplier.
 const DEFAULT_RACE_DATA = {
-  Human:   { Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.5, Height:66, Weight:1   },
-  Dwarf:   { Power:1.2, Speed:0.8, Toughness:1.3, Stamina:1.2, ManualDex:1.1, PhysNimble:0.9, Knowledge:1,   SocialSkills:0.9, Intellect:1,   Intuition:0.9, Quintessence:0.3, DayVision:0.8, Hearing:1.1, Smell:1,   Taste:1.1, NightVision:1.2, Height:50, Weight:1.1 },
-  Elf:     { Power:0.9, Speed:1.1, Toughness:0.8, Stamina:0.9, ManualDex:1.2, PhysNimble:1.2, Knowledge:1.2, SocialSkills:1.1, Intellect:1.1, Intuition:1.2, Quintessence:1.5, DayVision:1.3, Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:68, Weight:0.85},
-  Gnome:   { Power:0.7, Speed:0.8, Toughness:0.8, Stamina:0.8, ManualDex:1.3, PhysNimble:1.1, Knowledge:1.3, SocialSkills:1,   Intellect:1.3, Intuition:1.1, Quintessence:1.2, DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:42, Weight:0.5 },
-  Goblin:  { Power:0.8, Speed:1.2, Toughness:0.9, Stamina:1,   ManualDex:1.1, PhysNimble:1.3, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:1,   Quintessence:0.3, DayVision:0.9, Hearing:1.2, Smell:1.1, Taste:1,   NightVision:1.3, Height:48, Weight:0.6 },
-  Ogre:    { Power:1.8, Speed:0.7, Toughness:1.6, Stamina:1.5, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.6, SocialSkills:0.7, Intellect:0.7, Intuition:0.8, Quintessence:0.2, DayVision:0.8, Hearing:0.9, Smell:1.2, Taste:0.8, NightVision:0.8, Height:90, Weight:2.5 },
-  Halfling:{ Power:0.8, Speed:0.9, Toughness:0.9, Stamina:1,   ManualDex:1.2, PhysNimble:1.2, Knowledge:1,   SocialSkills:1.2, Intellect:1,   Intuition:1.1, Quintessence:0.4, DayVision:1,   Hearing:1.1, Smell:1.1, Taste:1.2, NightVision:0.8, Height:40, Weight:0.55},
+  Human:   { BodyType:'Humanoid', Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.5, Height:66, Weight:1   },
+  Dwarf:   { BodyType:'Humanoid', Power:1.2, Speed:0.8, Toughness:1.3, Stamina:1.2, ManualDex:1.1, PhysNimble:0.9, Knowledge:1,   SocialSkills:0.9, Intellect:1,   Intuition:0.9, Quintessence:0.3, DayVision:0.8, Hearing:1.1, Smell:1,   Taste:1.1, NightVision:1.2, Height:50, Weight:1.1 },
+  Elf:     { BodyType:'Humanoid', Power:0.9, Speed:1.1, Toughness:0.8, Stamina:0.9, ManualDex:1.2, PhysNimble:1.2, Knowledge:1.2, SocialSkills:1.1, Intellect:1.1, Intuition:1.2, Quintessence:1.5, DayVision:1.3, Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:68, Weight:0.85},
+  Gnome:   { BodyType:'Humanoid', Power:0.7, Speed:0.8, Toughness:0.8, Stamina:0.8, ManualDex:1.3, PhysNimble:1.1, Knowledge:1.3, SocialSkills:1,   Intellect:1.3, Intuition:1.1, Quintessence:1.2, DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:42, Weight:0.5 },
+  Goblin:  { BodyType:'Humanoid', Power:0.8, Speed:1.2, Toughness:0.9, Stamina:1,   ManualDex:1.1, PhysNimble:1.3, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:1,   Quintessence:0.3, DayVision:0.9, Hearing:1.2, Smell:1.1, Taste:1,   NightVision:1.3, Height:48, Weight:0.6 },
+  Ogre:    { BodyType:'Humanoid', Power:1.8, Speed:0.7, Toughness:1.6, Stamina:1.5, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.6, SocialSkills:0.7, Intellect:0.7, Intuition:0.8, Quintessence:0.2, DayVision:0.8, Hearing:0.9, Smell:1.2, Taste:0.8, NightVision:0.8, Height:90, Weight:2.5 },
+  Halfling:{ BodyType:'Humanoid', Power:0.8, Speed:0.9, Toughness:0.9, Stamina:1,   ManualDex:1.2, PhysNimble:1.2, Knowledge:1,   SocialSkills:1.2, Intellect:1,   Intuition:1.1, Quintessence:0.4, DayVision:1,   Hearing:1.1, Smell:1.1, Taste:1.2, NightVision:0.8, Height:40, Weight:0.55},
 };
 
 const DEFAULT_GENDER_DATA = {
@@ -1461,7 +1538,9 @@ function buildCharSelects() {
   for (const [id, table] of tables) {
     const sel = document.getElementById(id);
     const prev = sel.value;
-    const keys = Object.keys(table);
+    const keys = Object.keys(table).filter(k =>
+      id !== 'sel-race' || !table[k].monsterOnly
+    );
     sel.innerHTML = keys.map(k => `<option>${k}</option>`).join('');
     sel.value = keys.includes(prev) ? prev : keys[0];
   }
@@ -3128,10 +3207,12 @@ function showPanel(id) {
   // Highlight the matching nav button (works whether called from click or code)
   const btn = document.querySelector(`#char-nav button[onclick*="'${id}'"], #gm-config-nav button[onclick*="'${id}'"]`);
   if (btn) btn.classList.add('active');
-  if (id === 'playsheet') recalc();
+  if (id === 'playsheet')  recalc();
+  if (id === 'skillmgr')   buildSkillManagerTable();
+  if (id === 'speciesmgr') buildSpeciesManagerTable();
 }
 
-const CONFIG_PANELS = ['skillmgr','armormgr','meleemgr','rangedmgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr'];
 
 function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
@@ -3149,6 +3230,114 @@ function exitConfigMode() {
   document.getElementById('app-title').textContent        = '⚔ Arcane Character Builder';
   document.getElementById('app-subtitle').textContent     = 'Design your character — traits, stats, skills & loadout';
   showPanel('overview');
+}
+
+// ── Species Manager ───────────────────────────────────────────────────────────
+let _speciesEditName = null; // null = new, string = editing existing
+
+const SPECIES_ATTR_FIELDS = ATTRIBUTES.map(a => ({ raceKey: a.raceKey, label: a.label, group: a.group }));
+
+let speciesMgrShowMonsters = true;
+function setSpeciesMgrFilter(showAll) {
+  speciesMgrShowMonsters = showAll;
+  document.getElementById('smgr-filter-all').classList.toggle('active', showAll);
+  document.getElementById('smgr-filter-players').classList.toggle('active', !showAll);
+  buildSpeciesManagerTable();
+}
+
+function buildSpeciesManagerTable() {
+  const tbody = document.getElementById('speciesmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  Object.entries(RACE_DATA).filter(([,d]) => speciesMgrShowMonsters || !d.monsterOnly).forEach(([name, d]) => {
+    const tr = document.createElement('tr');
+    const isDefault = name in DEFAULT_RACE_DATA;
+    tr.innerHTML = `
+      <td style="font-weight:bold;">${name}${d.monsterOnly ? ' <span style="font-size:0.65rem;color:#e05050;border:1px solid #e05050;border-radius:3px;padding:1px 5px;vertical-align:middle;">Monster</span>' : ''}</td>
+      <td>${d.Height ?? '—'}"</td>
+      <td>${d.Power ?? 1}</td>
+      <td>${d.Speed ?? 1}</td>
+      <td>${d.Toughness ?? 1}</td>
+      <td>${d.Quintessence ?? 1}</td>
+      <td>${d.NightVision ?? 1}</td>
+      <td style="white-space:nowrap;">
+        <button class="btn-sm" onclick="openSpeciesForm('${name}')">Edit</button>
+        ${!isDefault ? `<button class="btn-sm danger" style="margin-left:4px;" onclick="deleteSpecies('${name}')">✕</button>` : ''}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function _buildSpeciesAttrInputs() {
+  ['physical','cognitive','senses'].forEach(group => {
+    const container = document.getElementById('smgr-' + group);
+    if (!container) return;
+    container.innerHTML = '';
+    SPECIES_ATTR_FIELDS.filter(f => f.group === group).forEach(f => {
+      const div = document.createElement('div');
+      div.className = 'field';
+      div.innerHTML = `<label>${f.label}</label>
+        <input type="number" id="smgr-attr-${f.raceKey}" min="0.1" max="10" step="0.05" value="1">`;
+      container.appendChild(div);
+    });
+  });
+}
+
+function openSpeciesForm(name) {
+  _speciesEditName = name;
+  _buildSpeciesAttrInputs();
+  document.getElementById('species-form-title').textContent = name ? `Edit — ${name}` : 'New Species';
+
+  const d = name ? (RACE_DATA[name] || {}) : {};
+  document.getElementById('smgr-name').value        = name || '';
+  document.getElementById('smgr-name').disabled      = !!name;
+  document.getElementById('smgr-height').value       = d.Height ?? 66;
+  document.getElementById('smgr-weight').value       = d.Weight ?? 1;
+  document.getElementById('smgr-body-type').value    = d.BodyType ?? 'Humanoid';
+  document.getElementById('smgr-monster-only').checked = !!d.monsterOnly;
+
+  SPECIES_ATTR_FIELDS.forEach(f => {
+    const el = document.getElementById('smgr-attr-' + f.raceKey);
+    if (el) el.value = d[f.raceKey] ?? 1;
+  });
+
+  document.getElementById('species-form').style.display = 'block';
+  document.getElementById('species-form').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeSpeciesForm() {
+  document.getElementById('species-form').style.display = 'none';
+  _speciesEditName = null;
+}
+
+function saveSpecies() {
+  const nameInput = document.getElementById('smgr-name').value.trim();
+  if (!nameInput) { alert('Species name is required.'); return; }
+
+  const entry = {
+    Height: parseFloat(document.getElementById('smgr-height').value) || 66,
+    Weight: parseFloat(document.getElementById('smgr-weight').value) || 1,
+    BodyType: document.getElementById('smgr-body-type').value || 'Humanoid',
+    monsterOnly: document.getElementById('smgr-monster-only').checked || false,
+  };
+  SPECIES_ATTR_FIELDS.forEach(f => {
+    const el = document.getElementById('smgr-attr-' + f.raceKey);
+    entry[f.raceKey] = parseFloat(el?.value) || 1;
+  });
+
+  RACE_DATA[nameInput] = entry;
+  buildCharSelects();
+  buildSpeciesManagerTable();
+  closeSpeciesForm();
+  writeConfigToSupabase();
+}
+
+function deleteSpecies(name) {
+  if (!confirm(`Delete species "${name}"? This cannot be undone.`)) return;
+  delete RACE_DATA[name];
+  buildCharSelects();
+  buildSpeciesManagerTable();
+  writeConfigToSupabase();
 }
 
 // ─── IMPORT / EXPORT ────────────────────────────────────────────────────────
@@ -3789,16 +3978,16 @@ function _seedDefaults() {
   replaceObjectContents(ARMOR_TYPE_DATA,    DEFAULT_ARMOR_TYPE_DATA);
 }
 
-function saveAsOwnerDefault() {
+async function saveAsOwnerDefault() {
   if (!isConfigOwner()) { setConfigStatus('You are not the config owner.', false); return; }
   const config = gatherConfigData();
   try {
     localStorage.setItem(OWNER_DEFAULT_LS_KEY, JSON.stringify(config));
     localStorage.setItem(OWNER_USER_LS_KEY, currentUser.id);
-    setConfigStatus(`Owner default saved (${SKILLS.length} skills, ${WEAPONS.length} weapons).`, true);
-  } catch (e) {
-    setConfigStatus('Save failed: ' + e.message, false);
-  }
+  } catch (e) { /* localStorage unavailable — not fatal */ }
+  const { error } = await writeConfigToSupabase();
+  if (error) setConfigStatus('Save failed: ' + error.message, false);
+  else        setConfigStatus(`Default config saved (${SKILLS.length} skills, ${Object.keys(RACE_DATA).length} species).`, true);
 }
 
 async function resetToDefaults() {
@@ -3905,10 +4094,15 @@ function importConfig(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
+  reader.onload = async e => {
     try {
       const data = JSON.parse(e.target.result);
       applyConfigData(data);
+      rebuildAllConfigUI();
+      buildSpeciesManagerTable();
+      const { error } = await writeConfigToSupabase();
+      if (error) setConfigStatus('Imported locally but save failed: ' + error.message, false);
+      else        setConfigStatus('Configuration imported and saved.', true);
     } catch (err) {
       alert('Failed to load configuration file: ' + err.message);
     }
@@ -4636,20 +4830,70 @@ function renderPlayHandHit(side, attrs) {
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '' }) {
-  _roller = { label, min, max, target, targetLabel, phase: 'idle', finalNum: null, timeoutId: null };
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [] }) {
+  _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
+              phase: 'idle', finalNum: null, timeoutId: null };
 
   document.getElementById('roller-label').textContent = label;
-  document.getElementById('roller-target').textContent =
-    target != null ? `Target: ${target}${targetLabel ? ' ' + targetLabel : ''}` : '';
   document.getElementById('roller-number').textContent = '—';
   document.getElementById('roller-number').className = '';
   document.getElementById('roller-status').textContent = 'Click to stop';
   document.getElementById('roller-result-label').textContent = '';
   document.getElementById('roller-result-label').className = '';
   document.getElementById('roller-close').style.display = 'none';
+
+  // Defense buttons
+  const defSection = document.getElementById('roller-defense');
+  const defBtns    = document.getElementById('roller-defense-btns');
+  if (defenseOptions.length) {
+    defBtns.innerHTML = '';
+    // "No Defense" button (selected by default)
+    const noDefBtn = _makeDefBtn('No Defense', 0, true);
+    defBtns.appendChild(noDefBtn);
+    defenseOptions.forEach(opt => defBtns.appendChild(_makeDefBtn(opt.label, opt.reduction, false)));
+    defSection.style.display = 'block';
+  } else {
+    defSection.style.display = 'none';
+  }
+
+  _rollerUpdateTarget();
   document.getElementById('roller-overlay').style.display = 'flex';
   _rollerStartSpin();
+}
+
+function _makeDefBtn(label, reduction, active) {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  btn.dataset.reduction = reduction;
+  btn.style.cssText = `font-size:0.72rem;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;
+    border:1px solid ${active ? 'var(--gold)' : 'var(--border)'};
+    background:${active ? 'rgba(201,168,76,0.15)' : 'var(--bg3)'};
+    color:${active ? 'var(--gold2)' : 'var(--text)'};`;
+  btn.onclick = () => {
+    document.querySelectorAll('#roller-defense-btns button').forEach(b => {
+      b.style.borderColor  = 'var(--border)';
+      b.style.background   = 'var(--bg3)';
+      b.style.color        = 'var(--text)';
+    });
+    btn.style.borderColor = 'var(--gold)';
+    btn.style.background  = 'rgba(201,168,76,0.15)';
+    btn.style.color       = 'var(--gold2)';
+    _roller.defenseReduction = reduction;
+    _roller.target = _roller.baseTarget != null
+      ? Math.max(0, Math.round(_roller.baseTarget - reduction))
+      : null;
+    _rollerUpdateTarget();
+  };
+  return btn;
+}
+
+function _rollerUpdateTarget() {
+  const t   = _roller.target;
+  const tl  = _roller.targetLabel;
+  const def = _roller.defenseReduction;
+  const defAdj = def > 0 ? `  (${_roller.baseTarget} − ${def} defense)` : '';
+  document.getElementById('roller-target').textContent =
+    t != null ? `Target: ${t}${defAdj}${tl ? '  ·  ' + tl : ''}` : '';
 }
 
 function rollerClick() {
@@ -5432,7 +5676,7 @@ function attackTokenClick(tokenId) {
 
   // ── Hit threshold ─────────────────────────────────────────────────────────
   const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj : null;
-  const threshold    = rawThreshold != null ? Math.min(100, Math.round(rawThreshold)) : null;
+  const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
 
   // ── Log action to tracker ─────────────────────────────────────────────────
   const actionLabel = `${attackActionLabel} → ${target.label}`;
@@ -5444,13 +5688,46 @@ function attackTokenClick(tokenId) {
   }
   exitAttackMode();
 
+  // ── Defender's available Block / Parry actions ────────────────────────────
+  const defenseOptions = [];
+  if (target.entity_type === 'character' && playCharCache[target.entity_id]) {
+    const defRow   = playCharCache[target.entity_id];
+    const defAttrs = calcAttributesFromData({
+      race: defRow.species || '', bodyType: defRow.body_type || '',
+      sex: defRow.sex || '', age: defRow.age || '',
+      height: defRow.height || '', build: defRow.build || '',
+      social: defRow.social || '', mental: defRow.mental || '',
+      stats: defRow.stats || {},
+    });
+    const defSize = calcTargetAdjFromRow(defRow);
+    const held    = defRow.held_items || {};
+    const seen    = new Set();
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      for (const r of getWeaponRows(itemName)) {
+        if (r.action !== 'Block' && r.action !== 'Parry') continue;
+        const key = `${r.action}::${itemName}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const defVal = calcHitValue(r.hitFormula, defAttrs);
+        if (defVal == null) continue;
+        const reduction = Math.round(defVal * defSize);
+        defenseOptions.push({
+          label: `${r.action} — ${itemName} (−${reduction})`,
+          reduction,
+        });
+      }
+    }
+  }
+
   // ── Open hit roller ───────────────────────────────────────────────────────
   let subtitle = '';
   if (hitValue != null) {
     if (attackIsRanged && rangeIncrements > 0) {
       subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}`;
     } else {
-      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${rawThreshold > 100 ? ' (capped 100)' : ''}`;
+      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}`;
     }
   }
   openRoller({
@@ -5458,6 +5735,7 @@ function attackTokenClick(tokenId) {
     min: 1, max: 100,
     target: threshold,
     targetLabel: subtitle,
+    defenseOptions,
   });
 
   return true;
@@ -6373,12 +6651,16 @@ switchGmTab = function(tab) {
 
 
 <!-- ─── SLOT-MACHINE ROLLER OVERLAY ─────────────────────────────────────── -->
-<div id="roller-overlay" style="display:none;" onclick="rollerClick()">
-  <div id="roller-card" onclick="event.stopPropagation()">
+<div id="roller-overlay" style="display:none;">
+  <div id="roller-card" onclick="rollerClick()">
     <div id="roller-label"></div>
     <div id="roller-target"></div>
+    <div id="roller-defense" style="margin-bottom:14px;display:none;">
+      <div style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:6px;">Defender's Response</div>
+      <div id="roller-defense-btns" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;"></div>
+    </div>
     <div id="roller-number">—</div>
-    <div id="roller-status">Click to roll</div>
+    <div id="roller-status">Click to stop</div>
     <div id="roller-result-label"></div>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
@@ -6490,14 +6772,23 @@ switchGmTab = function(tab) {
 <!-- ─── LOGIN MODAL ─────────────────────────────────────────────────────── -->
 <div id="modal-login" style="
   display:flex; position:fixed; inset:0; z-index:1000;
-  background:rgba(0,0,0,0.85); align-items:center; justify-content:center;">
+  background:rgba(0,0,0,0.88); align-items:center; justify-content:center;">
   <div style="
-    background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
-    padding:32px 36px; width:360px; max-width:94vw;">
-    <h2 style="text-align:center; margin-bottom:4px;">Arcane</h2>
-    <p style="text-align:center; color:var(--text-dim); font-size:0.8rem; margin-bottom:24px; font-style:italic;">Character Builder</p>
+    background:var(--bg2); border:1px solid var(--gold); border-radius:8px;
+    padding:36px 40px; width:360px; max-width:94vw;
+    box-shadow:0 0 60px rgba(0,0,0,0.8), 0 0 20px rgba(201,168,76,0.08);">
 
-    <div id="login-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
+    <div style="text-align:center; margin-bottom:28px;">
+      <div style="font-size:2rem; color:var(--gold2); font-family:Georgia,serif; font-weight:bold; letter-spacing:0.06em;">✦ Arcane</div>
+      <div style="font-size:0.72rem; color:var(--text-dim); letter-spacing:0.18em; text-transform:uppercase; margin-top:4px;">Virtual Tabletop</div>
+      <div style="width:48px; height:1px; background:var(--gold); margin:14px auto 0; opacity:0.4;"></div>
+    </div>
+
+    <div style="text-align:center; font-size:0.65rem; color:var(--text-dim); opacity:0.5; margin-bottom:20px; letter-spacing:0.05em;">
+      © 2026 John Calvit. All rights reserved.
+    </div>
+
+    <div id="login-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:14px; padding:8px 10px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
 
     <div id="login-form">
       <div class="field">
@@ -6508,10 +6799,10 @@ switchGmTab = function(tab) {
         <label>Password</label>
         <input type="password" id="auth-password" placeholder="Password" style="width:100%;" onkeydown="if(event.key==='Enter')submitLogin()">
       </div>
-      <button class="btn" style="width:100%; margin-top:8px;" onclick="submitLogin()">Sign In</button>
-      <div style="text-align:center; margin-top:12px;">
-        <span style="color:var(--text-dim); font-size:0.8rem;">No account? </span>
-        <button class="btn-sm" onclick="showSignup()">Create one</button>
+      <button class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;" onclick="submitLogin()">Sign In</button>
+      <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
+        No account?
+        <button onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
       </div>
     </div>
 
@@ -6528,12 +6819,13 @@ switchGmTab = function(tab) {
         <label>Password</label>
         <input type="password" id="auth-signup-password" placeholder="Min 6 characters" style="width:100%;" onkeydown="if(event.key==='Enter')submitSignup()">
       </div>
-      <button class="btn" style="width:100%; margin-top:8px;" onclick="submitSignup()">Create Account</button>
-      <div style="text-align:center; margin-top:12px;">
-        <span style="color:var(--text-dim); font-size:0.8rem;">Already have an account? </span>
-        <button class="btn-sm" onclick="showLogin()">Sign in</button>
+      <button class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;" onclick="submitSignup()">Create Account</button>
+      <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
+        Already have an account?
+        <button onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Sign in</button>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -6742,6 +7034,7 @@ switchGmTab = function(tab) {
       <div class="landing-col" id="landing-gm-col" style="display:none;">
         <h3>Game Configuration</h3>
         <div style="display:flex; flex-direction:column; gap:6px;">
+          <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species Manager</button>
           <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skill Manager</button>
           <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
           <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
