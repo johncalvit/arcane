@@ -3749,6 +3749,8 @@ async function _landingLoadCharacters() {
   }).join('');
 }
 
+let _campaignCache = []; // used by _landingPickChar when camp col is hidden
+
 async function _landingLoadCampaigns() {
   const el = document.getElementById('landing-camp-list');
   el.innerHTML = '<span class="landing-dim">Loading…</span>';
@@ -3757,13 +3759,19 @@ async function _landingLoadCampaigns() {
     .select('id, name, gm_id')
     .order('created_at', { ascending: false });
   if (error) { el.innerHTML = `<span class="landing-dim">${error.message}</span>`; return; }
+
+  _campaignCache = data || [];
+
+  const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
+  const gmCol  = document.getElementById('landing-gm-col');
+  const campCol = document.getElementById('landing-camp-col');
+  if (gmCol)   gmCol.style.display   = userIsGmAnywhere ? '' : 'none';
+  if (campCol) campCol.style.display = userIsGmAnywhere ? '' : 'none';
+
   if (!data.length) {
     el.innerHTML = '<span class="landing-dim">No campaigns yet — create one below.</span>';
     return;
   }
-  const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
-  const gmCol = document.getElementById('landing-gm-col');
-  if (gmCol) gmCol.style.display = userIsGmAnywhere ? '' : 'none';
 
   el.innerHTML = data.map(c => {
     const isGmOf = c.gm_id === currentUser.id;
@@ -3779,6 +3787,13 @@ async function _landingLoadCampaigns() {
       ${isGmOf ? '<button class="landing-delete-btn" title="Delete campaign" onclick="event.stopPropagation();_landingDeleteCampaign(\'' + c.id + '\',\'' + c.name.replace(/'/g,"\\'") + '\')">🗑</button>' : ''}
     </div>`;
   }).join('');
+
+  // For pure players: auto-select their campaign (silently if only one)
+  if (!userIsGmAnywhere && !currentCampaignId) {
+    if (data.length === 1) {
+      await selectCampaign(data[0].id, data[0].name, data[0].gm_id);
+    }
+  }
 }
 
 function _landingUpdateContinue() {
@@ -3799,10 +3814,11 @@ async function _landingPickChar(id, name) {
   const charCampId   = item?.dataset.campaignId   || '';
   const charCampName = item?.dataset.campaignName || '';
   if (charCampId && !currentCampaignId) {
-    // find gm_id for this campaign from the rendered campaign list
-    const campEl = document.querySelector(`.landing-campaign-item[data-id="${charCampId}"]`);
-    const gmId   = campEl?.dataset.gm || '';
-    await selectCampaign(charCampId, charCampName, gmId);
+    const campEl  = document.querySelector(`.landing-campaign-item[data-id="${charCampId}"]`);
+    const cached  = _campaignCache.find(c => c.id === charCampId);
+    const gmId    = campEl?.dataset.gm || cached?.gm_id || '';
+    const cName   = charCampName || cached?.name || '';
+    await selectCampaign(charCampId, cName, gmId);
   }
 
   const status = document.getElementById('landing-char-status');
@@ -7104,7 +7120,7 @@ switchGmTab = function(tab) {
       </div>
 
       <!-- CAMPAIGNS -->
-      <div class="landing-col">
+      <div class="landing-col" id="landing-camp-col">
         <h3>Campaigns</h3>
         <div class="landing-scroll" id="landing-camp-list">
           <span class="landing-dim">Loading…</span>
