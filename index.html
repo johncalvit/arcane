@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706i';
+const VERSION = 'v0.1.20260706j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5053,9 +5053,9 @@ function renderPlayHandHit(side, attrs) {
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [] }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
-              phase: 'idle', finalNum: null, timeoutId: null };
+              phase: 'idle', finalNum: null, timeoutId: null, strayContext };
 
   document.getElementById('roller-label').textContent = label;
   document.getElementById('roller-number').textContent = '—';
@@ -5176,6 +5176,10 @@ function _rollerShowResult() {
     resultEl.textContent = label;
     resultEl.className   = success ? 'success' : 'fail';
     document.getElementById('roller-status').textContent = '';
+    // Stray shot on ranged miss (not crit fail — arrow still goes somewhere)
+    if (!success && !critSuccess && _roller.strayContext) {
+      setTimeout(() => _triggerStrayShot(n, _roller.target, _roller.strayContext), 600);
+    }
   } else {
     document.getElementById('roller-status').textContent = '';
   }
@@ -5186,6 +5190,95 @@ function closeRoller() {
   clearTimeout(_roller?.timeoutId);
   _roller = null;
   document.getElementById('roller-overlay').style.display = 'none';
+}
+
+// ── Stray shot (ranged miss) ──────────────────────────────────────────────────
+
+function getTokensInPath(oImgX, oImgY, bearingRad, rangePx, excludeIds) {
+  const dx   = Math.cos(bearingRad);
+  const dy   = Math.sin(bearingRad);
+  const hits = [];
+  for (const t of Object.values(mapTokens)) {
+    if (excludeIds.has(t.id)) continue;
+    const cx = (t.x_pct / 100) * mapImgW;
+    const cy = (t.y_pct / 100) * mapImgH;
+    const vx = cx - oImgX;
+    const vy = cy - oImgY;
+    const proj     = vx * dx + vy * dy;          // distance along ray
+    if (proj < 0 || proj > rangePx) continue;     // behind or beyond range
+    const perpDist = Math.abs(vx * dy - vy * dx); // perpendicular distance
+    const hitRadius = getTokenSize(t) / 2;         // image-space px
+    if (perpDist <= hitRadius) hits.push({ token: t, dist: proj });
+  }
+  return hits.sort((a, b) => a.dist - b.dist);
+}
+
+function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
+  const x1 = oImgX  * mapScale + mapOffsetX;
+  const y1 = oImgY  * mapScale + mapOffsetY;
+  const x2 = endImgX * mapScale + mapOffsetX;
+  const y2 = endImgY * mapScale + mapOffsetY;
+  const vp  = document.getElementById('map-viewport');
+  document.getElementById('stray-ray-svg')?.remove();
+  const svg  = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.id = 'stray-ray-svg';
+  svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:50;overflow:visible;';
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+  line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+  line.setAttribute('stroke', '#e08030');
+  line.setAttribute('stroke-width', '2');
+  line.setAttribute('stroke-dasharray', '10,5');
+  line.setAttribute('opacity', '0.85');
+  svg.appendChild(line);
+  vp.appendChild(svg);
+  setTimeout(() => { svg.style.transition = 'opacity 1s'; svg.style.opacity = '0'; }, 2500);
+  setTimeout(() => svg.remove(), 3600);
+}
+
+function _triggerStrayShot(roll, threshold, ctx) {
+  if (!mapScalePPF) return;
+  const missAmount  = roll - threshold;
+  const divergeDeg  = Math.floor(missAmount / 2);
+  const side        = (missAmount % 2 === 1) ? -1 : 1; // odd=left, even=right
+  const baseBearing = Math.atan2(ctx.tgtImgY - ctx.atkImgY, ctx.tgtImgX - ctx.atkImgX);
+  const newBearing  = baseBearing + (divergeDeg * side * Math.PI / 180);
+  const rangePx     = ctx.rangeFt * mapScalePPF;
+  const endImgX     = ctx.atkImgX + Math.cos(newBearing) * rangePx;
+  const endImgY     = ctx.atkImgY + Math.sin(newBearing) * rangePx;
+
+  drawStrayRay(ctx.atkImgX, ctx.atkImgY, endImgX, endImgY);
+
+  const exclude = new Set([ctx.atkTokenId]);
+  const hits    = getTokensInPath(ctx.atkImgX, ctx.atkImgY, newBearing, rangePx, exclude);
+  if (!hits.length) return;
+
+  const strayTarget = hits[0].token;
+  const dirStr = divergeDeg === 0
+    ? 'barely off-target'
+    : `${divergeDeg}° to the ${side === -1 ? 'left' : 'right'}`;
+
+  let strayThreshold = null;
+  if (ctx.adjustedHit != null) {
+    let strayAdj = 5;
+    if (strayTarget.entity_type === 'character' && playCharCache[strayTarget.entity_id]) {
+      strayAdj = calcTargetAdjFromRow(playCharCache[strayTarget.entity_id]);
+    } else if (strayTarget.entity_type === 'creature') {
+      const race = RACE_DATA[strayTarget.species] || {};
+      strayAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
+    }
+    strayThreshold = Math.round(ctx.adjustedHit * strayAdj);
+  }
+
+  // Show stray roller after a brief pause (roller may still be showing)
+  setTimeout(() => {
+    openRoller({
+      label: `⚠ Stray Shot → ${strayTarget.label}`,
+      min: 1, max: 100,
+      target: strayThreshold,
+      targetLabel: `Deflected ${dirStr} · undefended`,
+    });
+  }, 400);
 }
 
 // ─── Supabase Realtime ────────────────────────────────────────────────────────
@@ -5931,6 +6024,25 @@ function attackTokenClick(tokenId) {
     renderAtList();
     switchGmTab('actions');
   }
+
+  // Capture stray context before exitAttackMode clears attack state
+  let strayContext = null;
+  if (attackIsRanged && mapScalePPF > 0) {
+    const atkToken = _pathFindToken(attackCombatantId);
+    if (atkToken) {
+      strayContext = {
+        atkImgX:    (atkToken.x_pct / 100) * mapImgW,
+        atkImgY:    (atkToken.y_pct / 100) * mapImgH,
+        tgtImgX:    (target.x_pct  / 100) * mapImgW,
+        tgtImgY:    (target.y_pct  / 100) * mapImgH,
+        tgtTokenId: target.id,
+        atkTokenId: atkToken.id,
+        adjustedHit,
+        rangeFt:    attackRangeFt,
+      };
+    }
+  }
+
   exitAttackMode();
 
   // ── Defender's available Block / Parry actions ────────────────────────────
@@ -5981,6 +6093,7 @@ function attackTokenClick(tokenId) {
     target: threshold,
     targetLabel: subtitle,
     defenseOptions,
+    strayContext,
   });
 
   return true;
