@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706k';
+const VERSION = 'v0.1.20260706l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5218,7 +5218,7 @@ function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
   const svg = document.getElementById('stray-svg');
   if (!svg) return;
   svg.innerHTML = '';
-  svg.style.display = '';
+  svg.style.display = 'block';
 
   const angle = Math.atan2(endImgY - oImgY, endImgX - oImgX);
   const farX  = endImgX;
