@@ -2025,37 +2025,41 @@ function renderHandHit(side, attrs) {
 let avatarUrl         = '';  // data URL — used for display and export
 let avatarStoragePath = '';  // Supabase storage path — for future character persistence
 let cropper           = null;
+let _avatarCropTarget = 'character'; // 'character' | 'species'
 
 function openAvatarPicker() {
   document.getElementById('avatar-file-input').click();
+}
+
+function _openCropModal(dataUrl, target) {
+  _avatarCropTarget = target;
+  const modal = document.getElementById('modal-avatar');
+  const img   = document.getElementById('avatar-crop-img');
+  modal.style.display = 'flex';
+  img.src = dataUrl;
+  if (cropper) { cropper.destroy(); cropper = null; }
+  img.onload = () => {
+    cropper = new Cropper(img, {
+      aspectRatio: 13 / 16,
+      viewMode: 1,
+      dragMode: 'move',
+      autoCropArea: 0.9,
+      restore: false,
+      guides: true,
+      center: true,
+      highlight: false,
+      cropBoxMovable: false,
+      cropBoxResizable: false,
+      toggleDragModeOnDblclick: false,
+    });
+  };
 }
 
 function onAvatarFileSelected(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => {
-    const modal = document.getElementById('modal-avatar');
-    const img   = document.getElementById('avatar-crop-img');
-    modal.style.display = 'flex';
-    img.src = e.target.result;
-    if (cropper) { cropper.destroy(); cropper = null; }
-    img.onload = () => {
-      cropper = new Cropper(img, {
-        aspectRatio: 13 / 16,   // portrait — matches the 130×160 preview
-        viewMode: 1,
-        dragMode: 'move',
-        autoCropArea: 0.9,
-        restore: false,
-        guides: true,
-        center: true,
-        highlight: false,
-        cropBoxMovable: false,
-        cropBoxResizable: false,
-        toggleDragModeOnDblclick: false,
-      });
-    };
-  };
+  reader.onload = e => _openCropModal(e.target.result, 'character');
   reader.readAsDataURL(file);
   input.value = '';
 }
@@ -2070,11 +2074,19 @@ async function confirmCrop() {
   const btn = document.getElementById('avatar-confirm-btn');
   const status = document.getElementById('avatar-upload-status');
   btn.disabled = true;
-  status.textContent = 'Uploading…';
+  status.textContent = _avatarCropTarget === 'species' ? 'Saving…' : 'Uploading…';
 
   const canvas = cropper.getCroppedCanvas({ width: 260, height: 320 });
-  // Display immediately from the local canvas — no network wait
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+  if (_avatarCropTarget === 'species') {
+    _setSpeciesAvatarPreview(dataUrl);
+    closeAvatarModal();
+    btn.disabled = false;
+    status.textContent = '';
+    return;
+  }
+
   setAvatarUrl(dataUrl);
   closeAvatarModal();
 
@@ -3345,7 +3357,7 @@ function onSpeciesAvatarSelected(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = e => _setSpeciesAvatarPreview(e.target.result);
+  reader.onload = e => _openCropModal(e.target.result, 'species');
   reader.readAsDataURL(file);
   input.value = '';
 }
@@ -3677,7 +3689,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706c';
+const VERSION = 'v0.1.20260706d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6786,7 +6798,7 @@ async function addCreatureToken() {
     entity_type: 'creature',
     entity_id:   creature.id,
     label,
-    avatar_url:  '',
+    avatar_url:  (RACE_DATA[species] || {}).avatarUrl || '',
     x_pct:       50,
     y_pct:       50,
     visible:     true,
