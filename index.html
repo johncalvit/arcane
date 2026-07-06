@@ -3630,7 +3630,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20250706';
+const VERSION = 'v0.1.20250706b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4134,10 +4134,10 @@ async function loadConfigFromSupabase() {
     localStorage.removeItem(SHARED_CONFIG_LS_KEY);
   }
 
-  // Look for any existing config row (oldest = canonical shared config)
+  // Load the most recently saved config row (newest = canonical shared config)
   const { data: rows } = await sb.from('game_configs')
     .select('id, config')
-    .order('created_at', { ascending: true })
+    .order('updated_at', { ascending: false })
     .limit(1);
   const row = rows && rows[0];
   if (row) {
