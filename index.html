@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706l';
+const VERSION = 'v0.1.20260706m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5220,45 +5220,45 @@ function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
   svg.innerHTML = '';
   svg.style.display = 'block';
 
-  const angle = Math.atan2(endImgY - oImgY, endImgX - oImgX);
-  const farX  = endImgX;
-  const farY  = endImgY;
+  // SVG is in map-viewport space — convert image coords to viewport coords
+  const x1 = oImgX   * mapScale + mapOffsetX;
+  const y1 = oImgY   * mapScale + mapOffsetY;
+  const x2 = endImgX * mapScale + mapOffsetX;
+  const y2 = endImgY * mapScale + mapOffsetY;
 
-  const sw = Math.max(2, 5 / mapScale);
-  const dash = `${18 / mapScale},${7 / mapScale}`;
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  const sw    = 4;
+  const dash  = '18,7';
 
-  function makeLine(x2, y2, stroke, width, extra) {
+  function makeLine(stroke, width, extra) {
     const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-    l.setAttribute('x1', oImgX); l.setAttribute('y1', oImgY);
-    l.setAttribute('x2', x2);    l.setAttribute('y2', y2);
+    l.setAttribute('x1', x1); l.setAttribute('y1', y1);
+    l.setAttribute('x2', x2); l.setAttribute('y2', y2);
     l.setAttribute('stroke', stroke);
     l.setAttribute('stroke-width', String(width));
     if (extra) Object.entries(extra).forEach(([k,v]) => l.setAttribute(k, v));
     svg.appendChild(l);
   }
 
-  // Dark outline for contrast
-  makeLine(farX, farY, '#000', sw + 4 / mapScale, { 'stroke-dasharray': dash, opacity: '0.5' });
-  // Bright orange ray
-  makeLine(farX, farY, '#ff9020', sw, { 'stroke-dasharray': dash, opacity: '1' });
+  makeLine('#000',    sw + 3, { 'stroke-dasharray': dash, opacity: '0.5' });
+  makeLine('#ff9020', sw,     { 'stroke-dasharray': dash, opacity: '1'   });
 
-  // Arrow tip at the far end
-  const tipLen = 18 / mapScale;
-  const tip1x  = farX - tipLen * Math.cos(angle - 0.45);
-  const tip1y  = farY - tipLen * Math.sin(angle - 0.45);
-  const tip2x  = farX - tipLen * Math.cos(angle + 0.45);
-  const tip2y  = farY - tipLen * Math.sin(angle + 0.45);
+  const tipLen = 14;
+  const tip1x  = x2 - tipLen * Math.cos(angle - 0.45);
+  const tip1y  = y2 - tipLen * Math.sin(angle - 0.45);
+  const tip2x  = x2 - tipLen * Math.cos(angle + 0.45);
+  const tip2y  = y2 - tipLen * Math.sin(angle + 0.45);
 
   function makeArrow(stroke, width) {
     const a = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-    a.setAttribute('points', `${tip1x},${tip1y} ${farX},${farY} ${tip2x},${tip2y}`);
+    a.setAttribute('points', `${tip1x},${tip1y} ${x2},${y2} ${tip2x},${tip2y}`);
     a.setAttribute('stroke', stroke);
     a.setAttribute('stroke-width', String(width));
     a.setAttribute('fill', 'none');
     a.setAttribute('stroke-linejoin', 'round');
     svg.appendChild(a);
   }
-  makeArrow('#000', sw + 4 / mapScale);
+  makeArrow('#000',    sw + 3);
   makeArrow('#ff9020', sw);
 }
 
@@ -5303,15 +5303,50 @@ function _triggerStrayShot(roll, threshold, ctx) {
     strayThreshold = Math.round(ctx.adjustedHit * strayAdj);
   }
 
-  // Show stray roller after a brief pause (roller may still be showing)
+  // Close the original roller, show the ray, then prompt for stray roll
   setTimeout(() => {
-    openRoller({
-      label: `⚠ Stray Shot → ${strayTarget.label}`,
-      min: 1, max: 100,
-      target: strayThreshold,
-      targetLabel: `Deflected ${dirStr} · undefended`,
-    });
+    document.getElementById('roller-overlay').style.display = 'none';
+    _roller = null;
+    _showStrayPrompt(strayTarget, dirStr, strayThreshold);
   }, 400);
+}
+
+function _showStrayPrompt(strayTarget, dirStr, strayThreshold) {
+  const existing = document.getElementById('stray-prompt');
+  if (existing) existing.remove();
+
+  const d = document.createElement('div');
+  d.id = 'stray-prompt';
+  d.style.cssText = `
+    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+    background:var(--panel-bg,#23232a);border:2px solid #e08030;border-radius:8px;
+    padding:12px 20px;z-index:9999;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,0.7);
+    min-width:280px;
+  `;
+  d.innerHTML = `
+    <div style="font-size:0.95rem;color:#ff9020;font-weight:bold;margin-bottom:6px;">⚠ Stray Shot!</div>
+    <div style="font-size:0.85rem;color:var(--text-muted,#aaa);margin-bottom:10px;">
+      Shot veered ${dirStr}<br>and may hit <strong style="color:var(--text-bright,#fff);">${strayTarget.label}</strong>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button onclick="
+        document.getElementById('stray-prompt').remove();
+        openRoller({
+          label: '⚠ Stray Shot → ${strayTarget.label.replace(/'/g,"\\'")}',
+          min:1, max:100,
+          target:${strayThreshold},
+          targetLabel:'Deflected ${dirStr.replace(/'/g,"\\'")} · undefended'
+        });"
+        style="padding:6px 18px;background:#e08030;border:none;border-radius:5px;color:#fff;cursor:pointer;font-weight:bold;">
+        Roll to Hit
+      </button>
+      <button onclick="document.getElementById('stray-prompt').remove();clearStrayRay();"
+        style="padding:6px 18px;background:#444;border:none;border-radius:5px;color:#ccc;cursor:pointer;">
+        Dismiss
+      </button>
+    </div>
+  `;
+  document.body.appendChild(d);
 }
 
 // ─── Supabase Realtime ────────────────────────────────────────────────────────
