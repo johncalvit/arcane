@@ -3630,6 +3630,8 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
+const VERSION = 'v0.1.20250706';
+
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
 const SUPABASE_KEY  = 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';      // replace with your Supabase anon/public key
@@ -3686,6 +3688,8 @@ function hideCampaignModal() { hideLandingModal(); }
 
 function showLandingModal() {
   document.getElementById('modal-landing').style.display = 'flex';
+  const vEl = document.getElementById('landing-version');
+  if (vEl) vEl.textContent = VERSION;
   _landingLoadCharacters();
   _landingLoadCampaigns();
 }
@@ -7176,6 +7180,7 @@ switchGmTab = function(tab) {
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding-top:16px; border-top:1px solid var(--border);">
       <button class="btn-sm btn-text" onclick="submitSignOut()" style="color:var(--text-dim);">Sign Out</button>
+      <span id="landing-version" style="font-size:0.68rem;color:var(--text-dim);"></span>
       <button class="btn" id="landing-continue-btn" disabled onclick="hideLandingModal()">Continue →</button>
     </div>
   </div>
