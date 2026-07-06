@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706h';
+const VERSION = 'v0.1.20260706i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4110,8 +4110,6 @@ async function selectCampaign(id, name, gmId) {
   currentCampaignGmId = gmId || null;
   document.getElementById('nav-campaign').textContent = name;
   const userIsGm = currentUser && gmId === currentUser.id;
-  // Only update sidebar GM nav; never hide the landing GM col once shown
-  document.getElementById('gm-config-nav').style.display = userIsGm ? '' : 'none';
   const gmCol = document.getElementById('landing-gm-col');
   if (gmCol && userIsGm) gmCol.style.display = '';  // show if GM of this campaign, never force-hide
   // Show invite section for GMs, join col for players
