@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706m';
+const VERSION = 'v0.1.20260706n';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5190,7 +5190,7 @@ function closeRoller() {
   clearTimeout(_roller?.timeoutId);
   _roller = null;
   document.getElementById('roller-overlay').style.display = 'none';
-  clearStrayRay();
+  clearStrayRay(true);
 }
 
 // ── Stray shot (ranged miss) ──────────────────────────────────────────────────
@@ -5262,9 +5262,10 @@ function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
   makeArrow('#ff9020', sw);
 }
 
-function clearStrayRay() {
+function clearStrayRay(broadcast = false) {
   const svg = document.getElementById('stray-svg');
   if (svg) { svg.innerHTML = ''; svg.style.display = 'none'; }
+  if (broadcast && mapChannel) mapChannel.send({ type: 'broadcast', event: 'clear-stray-ray', payload: {} });
 }
 
 function _triggerStrayShot(roll, threshold, ctx) {
@@ -5281,6 +5282,10 @@ function _triggerStrayShot(roll, threshold, ctx) {
   const endImgY  = ctx.atkImgY + Math.sin(newBearing) * mapDiag;
 
   drawStrayRay(ctx.atkImgX, ctx.atkImgY, endImgX, endImgY);
+  if (mapChannel) mapChannel.send({
+    type: 'broadcast', event: 'stray-ray',
+    payload: { oImgX: ctx.atkImgX, oImgY: ctx.atkImgY, endImgX, endImgY }
+  });
 
   const exclude = new Set([ctx.atkTokenId]);
   const hits    = getTokensInPath(ctx.atkImgX, ctx.atkImgY, newBearing, mapDiag, exclude);
@@ -5340,7 +5345,7 @@ function _showStrayPrompt(strayTarget, dirStr, strayThreshold) {
         style="padding:6px 18px;background:#e08030;border:none;border-radius:5px;color:#fff;cursor:pointer;font-weight:bold;">
         Roll to Hit
       </button>
-      <button onclick="document.getElementById('stray-prompt').remove();clearStrayRay();"
+      <button onclick="document.getElementById('stray-prompt').remove();clearStrayRay(true);"
         style="padding:6px 18px;background:#444;border:none;border-radius:5px;color:#ccc;cursor:pointer;">
         Dismiss
       </button>
@@ -5365,8 +5370,14 @@ function subscribeMapRealtime() {
       if (newMapId !== activeMapId) {
         activeMapId = newMapId;
         loadActiveMap(newMapId);
-        if (isGM()) loadMapLibrary(); // refresh active indicator
+        if (isGM()) loadMapLibrary();
       }
+    })
+    .on('broadcast', { event: 'stray-ray' }, ({ payload }) => {
+      drawStrayRay(payload.oImgX, payload.oImgY, payload.endImgX, payload.endImgY);
+    })
+    .on('broadcast', { event: 'clear-stray-ray' }, () => {
+      clearStrayRay();
     })
     .subscribe();
 }
