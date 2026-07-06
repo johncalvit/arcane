@@ -3837,6 +3837,78 @@ async function _landingCreateCampaign() {
   _landingLoadCampaigns();
 }
 
+function _genInviteCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function generateInviteCode() {
+  if (!currentCampaignId || !currentUser) return;
+  const status = document.getElementById('landing-invite-status');
+  status.textContent = 'Generating…';
+  const code      = _genInviteCode();
+  const expiresAt = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString();
+  const { error } = await sb.from('campaign_invites').insert({
+    campaign_id: currentCampaignId,
+    code,
+    created_by: currentUser.id,
+    expires_at: expiresAt,
+  });
+  if (error) { status.textContent = 'Error: ' + error.message; return; }
+  status.textContent = '';
+  document.getElementById('landing-invite-code').textContent = code;
+  const campName = document.getElementById('nav-campaign').textContent || 'Arcane VTT';
+  const body = encodeURIComponent(
+    `You've been invited to join the campaign "${campName}" in Arcane VTT.\n\n` +
+    `Your invite code is: ${code}\n\n` +
+    `This code expires in 5 days. Log in at https://johncalvit.github.io/arcane and enter the code on the landing page to join.`
+  );
+  document.getElementById('landing-invite-mailto').href =
+    `mailto:?subject=${encodeURIComponent('Arcane VTT – Campaign Invite')}&body=${body}`;
+  document.getElementById('landing-invite-result').style.display = '';
+}
+
+function copyInviteCode() {
+  const code = document.getElementById('landing-invite-code').textContent;
+  navigator.clipboard.writeText(code).then(() => {
+    document.getElementById('landing-invite-status').textContent = 'Copied!';
+    setTimeout(() => { document.getElementById('landing-invite-status').textContent = ''; }, 2000);
+  });
+}
+
+async function redeemInviteCode() {
+  const input  = document.getElementById('landing-invite-input');
+  const status = document.getElementById('landing-join-status');
+  const code   = input.value.trim().toUpperCase();
+  if (!code) return;
+  if (!currentUser) { status.textContent = 'You must be signed in.'; return; }
+  status.textContent = 'Checking code…';
+
+  const { data, error } = await sb.from('campaign_invites')
+    .select('campaign_id, expires_at')
+    .eq('code', code)
+    .single();
+
+  if (error || !data) { status.textContent = 'Invalid code. Please check and try again.'; return; }
+  if (new Date(data.expires_at) < new Date()) { status.textContent = 'This code has expired.'; return; }
+
+  // Add to campaign_members (ignore if already a member)
+  const { error: memErr } = await sb.from('campaign_members').upsert(
+    { campaign_id: data.campaign_id, user_id: currentUser.id, role: 'player' },
+    { onConflict: 'campaign_id,user_id' }
+  );
+  if (memErr) { status.textContent = 'Error joining: ' + memErr.message; return; }
+
+  status.textContent = '✓ Joined! Loading campaign…';
+  input.value = '';
+  await _landingLoadCampaigns();
+  // Auto-select the joined campaign
+  const campEl = document.querySelector(`.landing-campaign-item[data-id="${data.campaign_id}"]`);
+  if (campEl) campEl.click();
+}
+
 async function _landingDeleteChar(id, name) {
   if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
   const { error } = await sb.from('characters').delete().eq('id', id);
@@ -3901,6 +3973,14 @@ async function selectCampaign(id, name, gmId) {
   document.getElementById('gm-config-nav').style.display = userIsGm ? '' : 'none';
   const gmCol = document.getElementById('landing-gm-col');
   if (gmCol && userIsGm) gmCol.style.display = '';  // show if GM of this campaign, never force-hide
+  // Show invite section for GMs, join col for players
+  const inviteSection = document.getElementById('landing-invite-section');
+  const joinCol       = document.getElementById('landing-join-col');
+  if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
+  if (joinCol)       joinCol.style.display        = userIsGm ? 'none' : '';
+  // Reset invite result on campaign change
+  const inviteResult = document.getElementById('landing-invite-result');
+  if (inviteResult) inviteResult.style.display = 'none';
   await loadConfigFromSupabase();
   document.querySelectorAll('.landing-campaign-item').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === id);
@@ -7042,6 +7122,32 @@ switchGmTab = function(tab) {
           <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
           <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
         </div>
+        <div id="landing-invite-section" style="margin-top:14px;display:none;">
+          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Campaign Invite</div>
+          <button class="landing-config-btn" onclick="generateInviteCode()" id="landing-invite-btn">🔑 Generate Invite Code</button>
+          <div id="landing-invite-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+            <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Share this code — expires in 5 days</div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span id="landing-invite-code" style="font-family:monospace;font-size:1.3rem;letter-spacing:0.15em;color:var(--gold);"></span>
+              <button class="btn-sm" onclick="copyInviteCode()" title="Copy">📋</button>
+            </div>
+            <a id="landing-invite-mailto" href="#" style="display:inline-block;margin-top:8px;font-size:0.78rem;color:var(--gold2);">📧 Email this code</a>
+          </div>
+          <div id="landing-invite-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:4px;"></div>
+        </div>
+      </div>
+
+      <!-- INVITE CODE ENTRY (players) -->
+      <div class="landing-col" id="landing-join-col" style="display:none;">
+        <h3>Join a Campaign</h3>
+        <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;">Enter an invite code from your GM to join their campaign.</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="landing-invite-input" placeholder="e.g. A3X9K2"
+            style="flex:1;font-size:1rem;text-transform:uppercase;letter-spacing:0.12em;"
+            maxlength="6" onkeydown="if(event.key==='Enter')redeemInviteCode()">
+          <button class="btn-sm btn-text" onclick="redeemInviteCode()">Join</button>
+        </div>
+        <div id="landing-join-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
       </div>
 
     </div>
