@@ -938,10 +938,8 @@
         </div>
         <div class="field field-inline">
           <label>Body Type</label>
-          <select id="sel-bodytype" onchange="recalc()">
-            <option>Humanoid</option>
-            <option>Modified Humanoid</option>
-          </select>
+          <div id="sel-bodytype-display" style="font-size:0.85rem;color:var(--text-bright);padding:4px 0;">Humanoid</div>
+          <input type="hidden" id="sel-bodytype" value="Humanoid">
         </div>
         <div class="field field-inline">
           <label>Sex</label>
@@ -2118,10 +2116,19 @@ function resolveAvatarUrl(raw) {
 }
 
 function applySpeciesDefaultAvatar() {
-  if (avatarUrl) return; // don't overwrite a custom avatar
   const race = document.getElementById('sel-race')?.value || '';
-  const speciesAvatar = (RACE_DATA[race] || {}).avatarUrl || '';
-  if (speciesAvatar) setAvatarUrl(speciesAvatar);
+  const rd = RACE_DATA[race] || {};
+  // Sync body type from species
+  const bt = rd.BodyType || 'Humanoid';
+  const btInput = document.getElementById('sel-bodytype');
+  const btDisplay = document.getElementById('sel-bodytype-display');
+  if (btInput)   btInput.value       = bt;
+  if (btDisplay) btDisplay.textContent = bt;
+  // Apply species default avatar only if no custom avatar set
+  if (!avatarUrl) {
+    const speciesAvatar = rd.avatarUrl || '';
+    if (speciesAvatar) setAvatarUrl(speciesAvatar);
+  }
 }
 
 function setAvatarUrl(url) {
@@ -3689,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706f';
+const VERSION = 'v0.1.20260706h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4329,7 +4336,11 @@ function applyCharacterData(data) {
   // Basic fields
   if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
   if (data.race)   document.getElementById('sel-race').value   = data.race;
-  if (data.bodyType) document.getElementById('sel-bodytype').value = data.bodyType;
+  if (data.bodyType) {
+    document.getElementById('sel-bodytype').value = data.bodyType;
+    const btDisplay = document.getElementById('sel-bodytype-display');
+    if (btDisplay) btDisplay.textContent = data.bodyType;
+  }
   const sexVal = data.sex || data.gender; // accept legacy "gender" key from older character files
   if (sexVal)      document.getElementById('sel-gender').value = sexVal;
   if (data.age)    document.getElementById('sel-age').value    = data.age;
@@ -5157,9 +5168,14 @@ function _rollerShowResult() {
   const resultEl = document.getElementById('roller-result-label');
 
   if (_roller.target != null) {
-    const success = n <= _roller.target;
-    numEl.className    = success ? 'success' : 'fail';
-    resultEl.textContent = success ? 'SUCCESS' : 'FAIL';
+    const critSuccess = n <= 5;
+    const critFail    = n >= 96;
+    const success = critSuccess || (!critFail && n <= _roller.target);
+    const label   = critSuccess ? 'CRITICAL SUCCESS'
+                  : critFail    ? 'CRITICAL FAIL'
+                  : success     ? 'SUCCESS' : 'FAIL';
+    numEl.className      = success ? 'success' : 'fail';
+    resultEl.textContent = label;
     resultEl.className   = success ? 'success' : 'fail';
     document.getElementById('roller-status').textContent = '';
   } else {
