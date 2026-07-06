@@ -3689,7 +3689,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706d';
+const VERSION = 'v0.1.20260706f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -3806,8 +3806,12 @@ async function _landingLoadCharacters() {
           ${campBadge}
         </div>
       </div>
-      <button class="landing-delete-btn" title="Delete character"
-        onclick="event.stopPropagation();_landingDeleteChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+        <button class="landing-delete-btn" title="Move to campaign"
+          onclick="event.stopPropagation();openMoveCampaignModal('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.campaign_id||''}')">🔀</button>
+        <button class="landing-delete-btn" title="Delete character"
+          onclick="event.stopPropagation();_landingDeleteChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -3996,6 +4000,57 @@ async function _landingDeleteChar(id, name) {
   const status = document.getElementById('landing-char-status');
   if (status) { status.textContent = ''; }
   _landingLoadCharacters();
+}
+
+let _moveCampCharId = null;
+
+async function openMoveCampaignModal(charId, charName, currentCampId) {
+  _moveCampCharId = charId;
+  document.getElementById('move-camp-char-name').textContent = `"${charName}"`;
+  document.getElementById('move-camp-status').textContent = '';
+  const listEl = document.getElementById('move-camp-list');
+  listEl.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
+  document.getElementById('modal-move-campaign').style.display = 'flex';
+
+  // Get campaigns this user is a member of
+  const { data: memberships } = await sb
+    .from('campaign_members')
+    .select('campaign_id, campaigns(id, name)')
+    .eq('user_id', currentUser.id);
+
+  const campaigns = (memberships || [])
+    .map(m => m.campaigns)
+    .filter(c => c && c.id !== currentCampId);
+
+  if (!campaigns.length) {
+    listEl.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">No other campaigns available.</span>';
+    return;
+  }
+
+  listEl.innerHTML = campaigns.map(c => `
+    <button class="landing-config-btn" onclick="moveCharToCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}')">
+      ${c.name}
+    </button>`).join('');
+}
+
+function closeMoveCampaignModal() {
+  document.getElementById('modal-move-campaign').style.display = 'none';
+  _moveCampCharId = null;
+}
+
+async function moveCharToCampaign(campId, campName) {
+  if (!_moveCampCharId) return;
+  const status = document.getElementById('move-camp-status');
+  status.textContent = 'Moving…';
+  const { error } = await sb.from('characters')
+    .update({ campaign_id: campId })
+    .eq('id', _moveCampCharId);
+  if (error) { status.textContent = 'Error: ' + error.message; return; }
+  status.textContent = `✓ Moved to "${campName}"`;
+  setTimeout(() => {
+    closeMoveCampaignModal();
+    _landingLoadCharacters();
+  }, 800);
 }
 
 async function _landingDeleteCampaign(id, name) {
@@ -6966,41 +7021,41 @@ switchGmTab = function(tab) {
 
     <div id="login-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:14px; padding:8px 10px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
 
-    <div id="login-form">
+    <form id="login-form" onsubmit="event.preventDefault();submitLogin()" autocomplete="on">
       <div class="field">
         <label>Email</label>
-        <input type="email" id="auth-email" placeholder="your@email.com" style="width:100%;" value="">
+        <input type="email" id="auth-email" name="email" autocomplete="username" placeholder="your@email.com" style="width:100%;" value="">
       </div>
       <div class="field">
         <label>Password</label>
-        <input type="password" id="auth-password" placeholder="Password" style="width:100%;" onkeydown="if(event.key==='Enter')submitLogin()">
+        <input type="password" id="auth-password" name="password" autocomplete="current-password" placeholder="Password" style="width:100%;">
       </div>
-      <button class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;" onclick="submitLogin()">Sign In</button>
+      <button type="submit" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Sign In</button>
       <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
         No account?
-        <button onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
+        <button type="button" onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
       </div>
-    </div>
+    </form>
 
-    <div id="signup-form" style="display:none;">
+    <form id="signup-form" style="display:none;" onsubmit="event.preventDefault();submitSignup()" autocomplete="on">
       <div class="field">
         <label>Display Name</label>
-        <input type="text" id="auth-displayname" placeholder="How you appear to others" style="width:100%;">
+        <input type="text" id="auth-displayname" name="displayname" autocomplete="nickname" placeholder="How you appear to others" style="width:100%;">
       </div>
       <div class="field">
         <label>Email</label>
-        <input type="email" id="auth-signup-email" placeholder="your@email.com" style="width:100%;">
+        <input type="email" id="auth-signup-email" name="email" autocomplete="username" placeholder="your@email.com" style="width:100%;">
       </div>
       <div class="field">
         <label>Password</label>
-        <input type="password" id="auth-signup-password" placeholder="Min 6 characters" style="width:100%;" onkeydown="if(event.key==='Enter')submitSignup()">
+        <input type="password" id="auth-signup-password" name="password" autocomplete="new-password" placeholder="Min 6 characters" style="width:100%;">
       </div>
-      <button class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;" onclick="submitSignup()">Create Account</button>
+      <button type="submit" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Create Account</button>
       <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
         Already have an account?
-        <button onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Sign in</button>
+        <button type="button" onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Sign in</button>
       </div>
-    </div>
+    </form>
 
   </div>
 </div>
@@ -7164,6 +7219,19 @@ switchGmTab = function(tab) {
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button class="at-btn" onclick="atCloseModal()">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- ─── MOVE TO CAMPAIGN MODAL ──────────────────────────────────────────── -->
+<div id="modal-move-campaign" style="display:none;position:fixed;inset:0;z-index:2100;
+  background:rgba(0,0,0,0.85);align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:28px 32px;width:340px;max-width:94vw;">
+    <h3 style="margin:0 0 6px;">Move Character</h3>
+    <p id="move-camp-char-name" style="margin:0 0 16px;color:var(--gold2);font-size:0.88rem;"></p>
+    <div id="move-camp-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;"></div>
+    <div id="move-camp-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-bottom:10px;"></div>
+    <button class="btn-sm btn-text" onclick="closeMoveCampaignModal()">Cancel</button>
   </div>
 </div>
 
