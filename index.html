@@ -934,7 +934,7 @@
           <div class="grid-2" style="margin-bottom:0">
         <div class="field field-inline">
           <label>Species</label>
-          <select id="sel-race" onchange="recalc()"></select>
+          <select id="sel-race" onchange="recalc();applySpeciesDefaultAvatar()"></select>
         </div>
         <div class="field field-inline">
           <label>Body Type</label>
@@ -1073,6 +1073,22 @@
               <option>Winged Humanoid</option>
               <option>Centaur</option>
             </select>
+          </div>
+          <div class="field">
+            <label>Default Avatar</label>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div id="smgr-avatar-preview" onclick="document.getElementById('smgr-avatar-file').click()" title="Click to upload"
+                style="width:60px;height:74px;border:2px dashed var(--border);border-radius:4px;background:var(--bg3);cursor:pointer;
+                       display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">
+                <img id="smgr-avatar-img" src="" style="display:none;width:100%;height:100%;object-fit:cover;">
+                <span id="smgr-avatar-placeholder" style="font-size:0.65rem;color:var(--text-dim);text-align:center;">Click<br>to set</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px;">
+                <button class="btn-sm" onclick="document.getElementById('smgr-avatar-file').click()">Upload Image</button>
+                <button class="btn-sm danger" onclick="clearSpeciesAvatar()">Clear</button>
+              </div>
+              <input type="file" id="smgr-avatar-file" accept="image/*" style="display:none" onchange="onSpeciesAvatarSelected(this)">
+            </div>
           </div>
           <div class="field" style="display:flex;align-items:center;gap:8px;padding-top:18px;">
             <input type="checkbox" id="smgr-monster-only" style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer;">
@@ -2087,6 +2103,13 @@ function resolveAvatarUrl(raw) {
   if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
   // storage path → public URL
   return sb.storage.from('avatars').getPublicUrl(raw).data.publicUrl;
+}
+
+function applySpeciesDefaultAvatar() {
+  if (avatarUrl) return; // don't overwrite a custom avatar
+  const race = document.getElementById('sel-race')?.value || '';
+  const speciesAvatar = (RACE_DATA[race] || {}).avatarUrl || '';
+  if (speciesAvatar) setAvatarUrl(speciesAvatar);
 }
 
 function setAvatarUrl(url) {
@@ -3295,6 +3318,7 @@ function openSpeciesForm(name) {
   document.getElementById('smgr-weight').value       = d.Weight ?? 1;
   document.getElementById('smgr-body-type').value    = d.BodyType ?? 'Humanoid';
   document.getElementById('smgr-monster-only').checked = !!d.monsterOnly;
+  _setSpeciesAvatarPreview(d.avatarUrl || '');
 
   SPECIES_ATTR_FIELDS.forEach(f => {
     const el = document.getElementById('smgr-attr-' + f.raceKey);
@@ -3310,6 +3334,26 @@ function closeSpeciesForm() {
   _speciesEditName = null;
 }
 
+function _setSpeciesAvatarPreview(url) {
+  const img  = document.getElementById('smgr-avatar-img');
+  const ph   = document.getElementById('smgr-avatar-placeholder');
+  if (url) { img.src = url; img.style.display = 'block'; ph.style.display = 'none'; }
+  else      { img.src = ''; img.style.display = 'none';  ph.style.display = ''; }
+}
+
+function onSpeciesAvatarSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => _setSpeciesAvatarPreview(e.target.result);
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+function clearSpeciesAvatar() {
+  _setSpeciesAvatarPreview('');
+}
+
 function saveSpecies() {
   const nameInput = document.getElementById('smgr-name').value.trim();
   if (!nameInput) { alert('Species name is required.'); return; }
@@ -3319,6 +3363,8 @@ function saveSpecies() {
     Weight: parseFloat(document.getElementById('smgr-weight').value) || 1,
     BodyType: document.getElementById('smgr-body-type').value || 'Humanoid',
     monsterOnly: document.getElementById('smgr-monster-only').checked || false,
+    avatarUrl: document.getElementById('smgr-avatar-img').src && document.getElementById('smgr-avatar-img').style.display !== 'none'
+      ? document.getElementById('smgr-avatar-img').src : '',
   };
   SPECIES_ATTR_FIELDS.forEach(f => {
     const el = document.getElementById('smgr-attr-' + f.raceKey);
@@ -3541,6 +3587,7 @@ function _doNewCharacter() {
   avatarUrl = '';
   avatarStoragePath = '';
   setAvatarUrl('');
+  applySpeciesDefaultAvatar();
   document.getElementById('char-name').value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   buildStatRows();
@@ -3630,7 +3677,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706b';
+const VERSION = 'v0.1.20260706c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5441,8 +5488,19 @@ function tokenHtml(t) {
   const typeClass = t.entity_type === 'creature' ? 'type-creature'
                   : t.entity_type === 'item'     ? 'type-item' : '';
   const fallbackIcon = t.entity_type === 'creature' ? '👾' : t.entity_type === 'item' ? '📦' : '🧙';
-  const inner = t.avatar_url
-    ? `<img src="${t.avatar_url}" alt=""
+  const speciesAvatar = (() => {
+    if (t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
+      const race = playCharCache[t.entity_id].species || playCharCache[t.entity_id].race || '';
+      return (RACE_DATA[race] || {}).avatarUrl || '';
+    }
+    if (t.entity_type === 'creature') {
+      return (RACE_DATA[t.label] || RACE_DATA[t.species] || {}).avatarUrl || '';
+    }
+    return '';
+  })();
+  const displayUrl = t.avatar_url || speciesAvatar;
+  const inner = displayUrl
+    ? `<img src="${displayUrl}" alt=""
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
        <span class="token-icon" style="display:none;">${fallbackIcon}</span>`
     : `<span class="token-icon">${fallbackIcon}</span>`;
