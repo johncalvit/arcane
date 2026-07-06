@@ -5358,8 +5358,8 @@ document.addEventListener('mouseup', () => {
 
 // ─── Patch selectCampaign to capture gm_id + active_map_id ──────────────────
 const _origSelectCampaign = selectCampaign;
-selectCampaign = async function(id, name) {
-  await _origSelectCampaign(id, name);
+selectCampaign = async function(id, name, gmId) {
+  await _origSelectCampaign(id, name, gmId);
   const { data } = await sb.from('campaigns')
     .select('gm_id, active_map_id')
     .eq('id', id)
@@ -5367,6 +5367,12 @@ selectCampaign = async function(id, name) {
   if (data) {
     currentCampaignGmId = data.gm_id;
     activeMapId         = data.active_map_id || null;
+    // Re-run invite/join visibility now that we have the authoritative gm_id
+    const userIsGm = currentUser && data.gm_id === currentUser.id;
+    const inviteSection = document.getElementById('landing-invite-section');
+    const joinCol       = document.getElementById('landing-join-col');
+    if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
+    if (joinCol)       joinCol.style.display        = userIsGm ? 'none' : '';
   }
 };
 
@@ -7138,7 +7144,7 @@ switchGmTab = function(tab) {
       </div>
 
       <!-- INVITE CODE ENTRY (players) -->
-      <div class="landing-col" id="landing-join-col" style="display:none;">
+      <div class="landing-col" id="landing-join-col" style="display:none;width:220px;">
         <h3>Join a Campaign</h3>
         <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;">Enter an invite code from your GM to join their campaign.</p>
         <div style="display:flex;gap:8px;">
