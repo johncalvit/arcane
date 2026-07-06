@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706j';
+const VERSION = 'v0.1.20260706k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5220,29 +5220,46 @@ function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
   svg.innerHTML = '';
   svg.style.display = '';
 
-  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-  line.setAttribute('x1', oImgX);   line.setAttribute('y1', oImgY);
-  line.setAttribute('x2', endImgX); line.setAttribute('y2', endImgY);
-  line.setAttribute('stroke', '#e08030');
-  line.setAttribute('stroke-width', String(Math.max(1, 3 / mapScale)));
-  line.setAttribute('stroke-dasharray', `${12 / mapScale},${5 / mapScale}`);
-  line.setAttribute('opacity', '0.9');
-  svg.appendChild(line);
+  const angle = Math.atan2(endImgY - oImgY, endImgX - oImgX);
+  const farX  = endImgX;
+  const farY  = endImgY;
 
-  // Arrow tip at end
-  const angle  = Math.atan2(endImgY - oImgY, endImgX - oImgX);
-  const tipLen = 12 / mapScale;
-  const tip1x  = endImgX - tipLen * Math.cos(angle - 0.4);
-  const tip1y  = endImgY - tipLen * Math.sin(angle - 0.4);
-  const tip2x  = endImgX - tipLen * Math.cos(angle + 0.4);
-  const tip2y  = endImgY - tipLen * Math.sin(angle + 0.4);
-  const arrow  = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-  arrow.setAttribute('points', `${tip1x},${tip1y} ${endImgX},${endImgY} ${tip2x},${tip2y}`);
-  arrow.setAttribute('stroke', '#e08030');
-  arrow.setAttribute('stroke-width', String(Math.max(1, 3 / mapScale)));
-  arrow.setAttribute('fill', 'none');
-  arrow.setAttribute('opacity', '0.9');
-  svg.appendChild(arrow);
+  const sw = Math.max(2, 5 / mapScale);
+  const dash = `${18 / mapScale},${7 / mapScale}`;
+
+  function makeLine(x2, y2, stroke, width, extra) {
+    const l = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    l.setAttribute('x1', oImgX); l.setAttribute('y1', oImgY);
+    l.setAttribute('x2', x2);    l.setAttribute('y2', y2);
+    l.setAttribute('stroke', stroke);
+    l.setAttribute('stroke-width', String(width));
+    if (extra) Object.entries(extra).forEach(([k,v]) => l.setAttribute(k, v));
+    svg.appendChild(l);
+  }
+
+  // Dark outline for contrast
+  makeLine(farX, farY, '#000', sw + 4 / mapScale, { 'stroke-dasharray': dash, opacity: '0.5' });
+  // Bright orange ray
+  makeLine(farX, farY, '#ff9020', sw, { 'stroke-dasharray': dash, opacity: '1' });
+
+  // Arrow tip at the far end
+  const tipLen = 18 / mapScale;
+  const tip1x  = farX - tipLen * Math.cos(angle - 0.45);
+  const tip1y  = farY - tipLen * Math.sin(angle - 0.45);
+  const tip2x  = farX - tipLen * Math.cos(angle + 0.45);
+  const tip2y  = farY - tipLen * Math.sin(angle + 0.45);
+
+  function makeArrow(stroke, width) {
+    const a = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    a.setAttribute('points', `${tip1x},${tip1y} ${farX},${farY} ${tip2x},${tip2y}`);
+    a.setAttribute('stroke', stroke);
+    a.setAttribute('stroke-width', String(width));
+    a.setAttribute('fill', 'none');
+    a.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(a);
+  }
+  makeArrow('#000', sw + 4 / mapScale);
+  makeArrow('#ff9020', sw);
 }
 
 function clearStrayRay() {
@@ -5258,13 +5275,15 @@ function _triggerStrayShot(roll, threshold, ctx) {
   const baseBearing = Math.atan2(ctx.tgtImgY - ctx.atkImgY, ctx.tgtImgX - ctx.atkImgX);
   const newBearing  = baseBearing + (divergeDeg * side * Math.PI / 180);
   const rangePx     = ctx.rangeFt * mapScalePPF;
-  const endImgX     = ctx.atkImgX + Math.cos(newBearing) * rangePx;
-  const endImgY     = ctx.atkImgY + Math.sin(newBearing) * rangePx;
+  // Ray travels to edge of map — use diagonal as guaranteed-long distance
+  const mapDiag  = Math.hypot(mapImgW, mapImgH);
+  const endImgX  = ctx.atkImgX + Math.cos(newBearing) * mapDiag;
+  const endImgY  = ctx.atkImgY + Math.sin(newBearing) * mapDiag;
 
   drawStrayRay(ctx.atkImgX, ctx.atkImgY, endImgX, endImgY);
 
   const exclude = new Set([ctx.atkTokenId]);
-  const hits    = getTokensInPath(ctx.atkImgX, ctx.atkImgY, newBearing, rangePx, exclude);
+  const hits    = getTokensInPath(ctx.atkImgX, ctx.atkImgY, newBearing, mapDiag, exclude);
   if (!hits.length) return;
 
   const strayTarget = hits[0].token;
