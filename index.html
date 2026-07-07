@@ -419,6 +419,18 @@
   }
   .token-ring img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .token-icon { font-size: 1.2rem; }
+  .token-prone-badge {
+    position: absolute;
+    top: calc(100% + 14px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: bold;
+    color: #ffdd44;
+    text-shadow: 0 0 4px #000, 0 0 8px #000;
+    white-space: nowrap;
+    pointer-events: none;
+  }
   .token-label {
     position: absolute;
     top: 100%;
@@ -3696,7 +3708,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706p';
+const VERSION = 'v0.1.20260706q';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4782,6 +4794,11 @@ function atPickAction(label, dur) {
   const start = atClock;
   const completesAt = start + dur;
   c.actions.push({ label, startAt: start, completesAt });
+  // Standing up clears prone for this combatant's token
+  if (label === 'Stand Up') {
+    const token = _pathFindToken(atModalTarget);
+    if (token) _setProne(token.id, false);
+  }
   atCloseModal();
   renderAtList();
 }
@@ -5073,7 +5090,7 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
     // "No Defense" button (selected by default)
     const noDefBtn = _makeDefBtn('No Defense', 0, true);
     defBtns.appendChild(noDefBtn);
-    defenseOptions.forEach(opt => defBtns.appendChild(_makeDefBtn(opt.label, opt.reduction, false)));
+    defenseOptions.forEach(opt => defBtns.appendChild(_makeDefBtn(opt.label, opt.reduction, false, opt.onSelect)));
     defSection.style.display = 'block';
   } else {
     defSection.style.display = 'none';
@@ -5084,7 +5101,7 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   _rollerStartSpin();
 }
 
-function _makeDefBtn(label, reduction, active) {
+function _makeDefBtn(label, reduction, active, onSelect) {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.dataset.reduction = reduction;
@@ -5106,6 +5123,7 @@ function _makeDefBtn(label, reduction, active) {
       ? Math.max(0, Math.round(_roller.baseTarget - reduction))
       : null;
     _rollerUpdateTarget();
+    if (onSelect) onSelect();
   };
   return btn;
 }
@@ -5707,6 +5725,7 @@ selectCampaign = async function(id, name, gmId) {
 // ─── STAGE 2: TOKENS ─────────────────────────────────────────────────────────
 
 let mapTokens        = {};   // id → token row
+let _proneTokens     = new Set(); // token IDs currently prone
 let tokenChannel     = null; // Realtime broadcast channel
 let dragTokenId      = null;
 let dragOffsetX      = 0;
@@ -5767,13 +5786,36 @@ function tokenHtml(t) {
     : `<span class="token-icon">${fallbackIcon}</span>`;
 
   const hiddenStyle = !t.visible ? 'opacity:0.35;filter:grayscale(60%);' : '';
+  const proneTag = _proneTokens.has(t.id)
+    ? `<div class="token-prone-badge">⬇ PRONE</div>` : '';
   return `<div class="map-token" id="token-${t.id}"
     data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
     style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
     onmousedown="startTokenDrag(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label">${t.label}</div>
+    ${proneTag}
   </div>`;
+}
+
+function _setProne(tokenId, prone) {
+  if (prone) _proneTokens.add(tokenId);
+  else       _proneTokens.delete(tokenId);
+  // Re-render just this token so the badge appears/disappears
+  const t = mapTokens[tokenId];
+  if (t) upsertTokenElement(t);
+  // Force label refresh since upsertTokenElement only updates position/opacity
+  const el = document.getElementById('token-' + tokenId);
+  if (el) {
+    const existing = el.querySelector('.token-prone-badge');
+    if (existing) existing.remove();
+    if (prone) {
+      const badge = document.createElement('div');
+      badge.className = 'token-prone-badge';
+      badge.textContent = '⬇ PRONE';
+      el.appendChild(badge);
+    }
+  }
 }
 
 function renderAllTokens() {
@@ -6112,9 +6154,19 @@ function attackTokenClick(tokenId) {
     switchGmTab('actions');
   }
 
+  // Block melee attacks from prone attackers
+  const wasRanged = attackIsRanged;
+  if (!wasRanged) {
+    const atkTok = _pathFindToken(attackCombatantId);
+    if (atkTok && _proneTokens.has(atkTok.id)) {
+      alert(`${atkTok.label} is prone and cannot make melee attacks. Use "Stand Up" first.`);
+      return false;
+    }
+  }
+
   // Capture stray context before exitAttackMode clears attack state
   let strayContext = null;
-  if (attackIsRanged && mapScalePPF > 0) {
+  if (wasRanged && mapScalePPF > 0) {
     const atkToken = _pathFindToken(attackCombatantId);
     if (atkToken) {
       strayContext = {
@@ -6164,18 +6216,32 @@ function attackTokenClick(tokenId) {
       }
     }
 
-    // Retreat and Evade — always available to characters, cost 3 sec action
+    const targetIsProne = _proneTokens.has(target.id);
     const physCoord = defAttrs.PhysCoord || 0;
-    const retreatReduction = Math.round(physCoord * defSize);
-    const evadeReduction   = Math.round(physCoord * defSize / 2);
-    defenseOptions.push({
-      label: `Retreat — move out of area (−${retreatReduction}) [3 sec]`,
-      reduction: retreatReduction,
-    });
-    defenseOptions.push({
-      label: `Evade — dodge in place (−${evadeReduction}) [3 sec]`,
-      reduction: evadeReduction,
-    });
+
+    // Retreat and Evade — unavailable while prone
+    if (!targetIsProne) {
+      const retreatReduction = Math.round(physCoord * defSize);
+      const evadeReduction   = Math.round(physCoord * defSize / 2);
+      defenseOptions.push({
+        label: `Retreat — move out of area (−${retreatReduction}) [3 sec]`,
+        reduction: retreatReduction,
+      });
+      defenseOptions.push({
+        label: `Evade — dodge in place (−${evadeReduction}) [3 sec]`,
+        reduction: evadeReduction,
+      });
+    }
+
+    // Go Prone — ranged attacks only, halves effective size
+    if (wasRanged && !targetIsProne && rawThreshold != null) {
+      const proneReduction = Math.round(rawThreshold / 2);
+      defenseOptions.push({
+        label: `Go Prone — half size (−${proneReduction}) [3 sec]`,
+        reduction: proneReduction,
+        onSelect: () => _setProne(target.id, true),
+      });
+    }
   }
 
   // ── Open hit roller ───────────────────────────────────────────────────────
