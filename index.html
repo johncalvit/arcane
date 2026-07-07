@@ -3696,7 +3696,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706n';
+const VERSION = 'v0.1.20260706p';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5214,7 +5214,15 @@ function getTokensInPath(oImgX, oImgY, bearingRad, rangePx, excludeIds) {
   return hits.sort((a, b) => a.dist - b.dist);
 }
 
-function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
+let _strayRayCoords = null; // { oImgX, oImgY, endImgX, endImgY } in image px
+
+function refreshStrayRay() {
+  if (_strayRayCoords) drawStrayRay(_strayRayCoords.oImgX, _strayRayCoords.oImgY,
+                                     _strayRayCoords.endImgX, _strayRayCoords.endImgY, false);
+}
+
+function drawStrayRay(oImgX, oImgY, endImgX, endImgY, store = true) {
+  if (store) _strayRayCoords = { oImgX, oImgY, endImgX, endImgY };
   const svg = document.getElementById('stray-svg');
   if (!svg) return;
   svg.innerHTML = '';
@@ -5263,6 +5271,7 @@ function drawStrayRay(oImgX, oImgY, endImgX, endImgY) {
 }
 
 function clearStrayRay(broadcast = false) {
+  _strayRayCoords = null;
   const svg = document.getElementById('stray-svg');
   if (svg) { svg.innerHTML = ''; svg.style.display = 'none'; }
   if (broadcast && mapChannel) mapChannel.send({ type: 'broadcast', event: 'clear-stray-ray', payload: {} });
@@ -5511,13 +5520,12 @@ async function onMapFileSelected(input) {
 // ─── Pan / zoom ───────────────────────────────────────────────────────────────
 function applyMapTransform() {
   const canvas = document.getElementById('map-canvas');
-  // Use left/top for positioning so overflow:hidden clips correctly after layout,
-  // and scale() only for zoom (no translate inside transform).
   canvas.style.left      = mapOffsetX + 'px';
   canvas.style.top       = mapOffsetY + 'px';
   canvas.style.transform = `scale(${mapScale})`;
   const label = document.getElementById('map-zoom-label');
   if (label) label.textContent = Math.round(mapScale * 100) + '%';
+  refreshStrayRay();
 }
 
 function mapZoom(factor, cx, cy) {
@@ -6155,6 +6163,19 @@ function attackTokenClick(tokenId) {
         });
       }
     }
+
+    // Retreat and Evade — always available to characters, cost 3 sec action
+    const physCoord = defAttrs.PhysCoord || 0;
+    const retreatReduction = Math.round(physCoord * defSize);
+    const evadeReduction   = Math.round(physCoord * defSize / 2);
+    defenseOptions.push({
+      label: `Retreat — move out of area (−${retreatReduction}) [3 sec]`,
+      reduction: retreatReduction,
+    });
+    defenseOptions.push({
+      label: `Evade — dodge in place (−${evadeReduction}) [3 sec]`,
+      reduction: evadeReduction,
+    });
   }
 
   // ── Open hit roller ───────────────────────────────────────────────────────
