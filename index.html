@@ -419,14 +419,12 @@
   }
   .token-ring img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .token-icon { font-size: 1.2rem; }
-  .token-prone-badge {
+  .token-condition-badge {
     position: absolute;
-    top: calc(100% + 14px);
     left: 50%;
     transform: translateX(-50%);
     font-size: 8px;
     font-weight: bold;
-    color: #ffdd44;
     text-shadow: 0 0 4px #000, 0 0 8px #000;
     white-space: nowrap;
     pointer-events: none;
@@ -3708,7 +3706,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260706q';
+const VERSION = 'v0.1.20260707a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4569,6 +4567,61 @@ function exitPlayMode() {
 
 // ─── Action Tracker ───────────────────────────────────────────────────────────
 
+// ─── Conditions ───────────────────────────────────────────────────────────────
+const CONDITION_DEFS = [
+  { key:'prone',       label:'Prone',       icon:'⬇', color:'#ffdd44',
+    desc:'Halves effective size vs ranged; cannot melee attack, evade, or retreat. Stand Up to clear.' },
+  { key:'blocking',    label:'Blocking',    icon:'🛡', color:'#4488ff',
+    desc:'Actively blocking. Block defense is pre-applied to incoming attacks.' },
+  { key:'sentinel',    label:'Sentinel',    icon:'👁', color:'#ff8c00',
+    desc:'Ready to attack any enemy that enters melee range.' },
+  { key:'stunned',     label:'Stunned',     icon:'💫', color:'#ff5555',
+    desc:'Disoriented; cannot take actions.' },
+  { key:'paralyzed',   label:'Paralyzed',   icon:'⛓', color:'#ff5555',
+    desc:'Cannot act or move.' },
+  { key:'blinded',     label:'Blinded',     icon:'🚫', color:'#ff5555',
+    desc:'Cannot see; attack penalties apply.' },
+  { key:'unconscious', label:'Unconscious', icon:'💤', color:'#888888',
+    desc:'Unconscious or asleep; cannot act.' },
+  { key:'deafened',    label:'Deafened',    icon:'🔇', color:'#888888',
+    desc:'Cannot hear.' },
+];
+
+function getConditions(tokenId) {
+  const t = mapTokens[tokenId];
+  return new Set(Array.isArray(t?.conditions) ? t.conditions : []);
+}
+
+async function setCondition(tokenId, condition, active) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+  if (active) current.add(condition);
+  else        current.delete(condition);
+  const newConds = [...current];
+  t.conditions = newConds;
+  _refreshTokenBadges(tokenId);
+  await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
+  // Realtime UPDATE will sync to other clients automatically
+}
+
+function _refreshTokenBadges(tokenId) {
+  const el = document.getElementById('token-' + tokenId);
+  if (!el) return;
+  el.querySelectorAll('.token-condition-badge').forEach(b => b.remove());
+  const conds = getConditions(tokenId);
+  let offsetY = 14;
+  for (const def of CONDITION_DEFS) {
+    if (!conds.has(def.key)) continue;
+    const badge = document.createElement('div');
+    badge.className = 'token-condition-badge';
+    badge.textContent = def.icon + ' ' + def.label.toUpperCase();
+    badge.style.cssText = `top:calc(100% + ${offsetY}px);color:${def.color};`;
+    el.appendChild(badge);
+    offsetY += 12;
+  }
+}
+
 const GENERAL_ACTIONS = [
   { label: 'Move',         dur: 2 },
   { label: 'Sprint',       dur: 3 },
@@ -4791,14 +4844,25 @@ function atCloseModal() {
 function atPickAction(label, dur) {
   const c = atCombatants.find(x => x.id === atModalTarget);
   if (!c) return;
-  const start = atClock;
-  const completesAt = start + dur;
-  c.actions.push({ label, startAt: start, completesAt });
-  // Standing up clears prone for this combatant's token
-  if (label === 'Stand Up') {
-    const token = _pathFindToken(atModalTarget);
-    if (token) _setProne(token.id, false);
+  const token = _pathFindToken(atModalTarget);
+  const conds = token ? getConditions(token.id) : new Set();
+
+  // Block actions for incapacitated conditions
+  if (conds.has('stunned') || conds.has('paralyzed') || conds.has('unconscious')) {
+    const which = conds.has('paralyzed') ? 'paralyzed' : conds.has('unconscious') ? 'unconscious' : 'stunned';
+    if (label !== 'Stand Up') {
+      alert(`${c.name} is ${which} and cannot act.`);
+      return;
+    }
   }
+
+  const start = atClock;
+  c.actions.push({ label, startAt: start, completesAt: start + dur });
+
+  if (label === 'Stand Up' && token) {
+    setCondition(token.id, 'prone', false);
+  }
+
   atCloseModal();
   renderAtList();
 }
@@ -5087,10 +5151,18 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   const defBtns    = document.getElementById('roller-defense-btns');
   if (defenseOptions.length) {
     defBtns.innerHTML = '';
-    // "No Defense" button (selected by default)
-    const noDefBtn = _makeDefBtn('No Defense', 0, true);
+    const hasPreSelected = defenseOptions.some(o => o.preSelected);
+    const noDefBtn = _makeDefBtn('No Defense', 0, !hasPreSelected);
     defBtns.appendChild(noDefBtn);
-    defenseOptions.forEach(opt => defBtns.appendChild(_makeDefBtn(opt.label, opt.reduction, false, opt.onSelect)));
+    defenseOptions.forEach(opt => {
+      const btn = _makeDefBtn(opt.label, opt.reduction, !!opt.preSelected, opt.onSelect);
+      defBtns.appendChild(btn);
+      if (opt.preSelected) {
+        _roller.defenseReduction = opt.reduction;
+        _roller.target = _roller.baseTarget != null
+          ? Math.max(0, Math.round(_roller.baseTarget - opt.reduction)) : null;
+      }
+    });
     defSection.style.display = 'block';
   } else {
     defSection.style.display = 'none';
@@ -5725,7 +5797,6 @@ selectCampaign = async function(id, name, gmId) {
 // ─── STAGE 2: TOKENS ─────────────────────────────────────────────────────────
 
 let mapTokens        = {};   // id → token row
-let _proneTokens     = new Set(); // token IDs currently prone
 let tokenChannel     = null; // Realtime broadcast channel
 let dragTokenId      = null;
 let dragOffsetX      = 0;
@@ -5786,36 +5857,26 @@ function tokenHtml(t) {
     : `<span class="token-icon">${fallbackIcon}</span>`;
 
   const hiddenStyle = !t.visible ? 'opacity:0.35;filter:grayscale(60%);' : '';
-  const proneTag = _proneTokens.has(t.id)
-    ? `<div class="token-prone-badge">⬇ PRONE</div>` : '';
+  const conds = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+  let badgeHtml = '';
+  let offsetY = 14;
+  for (const def of CONDITION_DEFS) {
+    if (!conds.has(def.key)) continue;
+    badgeHtml += `<div class="token-condition-badge" style="top:calc(100% + ${offsetY}px);color:${def.color};">${def.icon} ${def.label.toUpperCase()}</div>`;
+    offsetY += 12;
+  }
   return `<div class="map-token" id="token-${t.id}"
     data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
     style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
     onmousedown="startTokenDrag(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label">${t.label}</div>
-    ${proneTag}
+    ${badgeHtml}
   </div>`;
 }
 
 function _setProne(tokenId, prone) {
-  if (prone) _proneTokens.add(tokenId);
-  else       _proneTokens.delete(tokenId);
-  // Re-render just this token so the badge appears/disappears
-  const t = mapTokens[tokenId];
-  if (t) upsertTokenElement(t);
-  // Force label refresh since upsertTokenElement only updates position/opacity
-  const el = document.getElementById('token-' + tokenId);
-  if (el) {
-    const existing = el.querySelector('.token-prone-badge');
-    if (existing) existing.remove();
-    if (prone) {
-      const badge = document.createElement('div');
-      badge.className = 'token-prone-badge';
-      badge.textContent = '⬇ PRONE';
-      el.appendChild(badge);
-    }
-  }
+  setCondition(tokenId, 'prone', prone);
 }
 
 function renderAllTokens() {
@@ -5841,6 +5902,7 @@ function upsertTokenElement(t) {
     el.style.top     = t.y_pct + '%';
     el.style.opacity = t.visible ? '' : '0.35';
     el.style.filter  = t.visible ? '' : 'grayscale(60%)';
+    _refreshTokenBadges(t.id);
   } else {
     canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
   }
@@ -6158,7 +6220,7 @@ function attackTokenClick(tokenId) {
   const wasRanged = attackIsRanged;
   if (!wasRanged) {
     const atkTok = _pathFindToken(attackCombatantId);
-    if (atkTok && _proneTokens.has(atkTok.id)) {
+    if (atkTok && getConditions(atkTok.id).has('prone')) {
       alert(`${atkTok.label} is prone and cannot make melee attacks. Use "Stand Up" first.`);
       return false;
     }
@@ -6216,7 +6278,9 @@ function attackTokenClick(tokenId) {
       }
     }
 
-    const targetIsProne = _proneTokens.has(target.id);
+    const targetConds   = getConditions(target.id);
+    const targetIsProne = targetConds.has('prone');
+    const targetIsBlocking = targetConds.has('blocking');
     const physCoord = defAttrs.PhysCoord || 0;
 
     // Retreat and Evade — unavailable while prone
@@ -6241,6 +6305,18 @@ function attackTokenClick(tokenId) {
         reduction: proneReduction,
         onSelect: () => _setProne(target.id, true),
       });
+    }
+
+    // Pre-select best block option if character has Blocking condition
+    if (targetIsBlocking) {
+      let bestBlock = null;
+      for (const opt of defenseOptions) {
+        if ((opt.label.startsWith('Block') || opt.label.startsWith('Parry')) &&
+            (!bestBlock || opt.reduction > bestBlock.reduction)) {
+          bestBlock = opt;
+        }
+      }
+      if (bestBlock) bestBlock.preSelected = true;
     }
   }
 
@@ -6407,6 +6483,26 @@ async function showTokenInfo(tokenId) {
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${held.right || 'Bare Hand'}</span></div>
     <div style="font-size:0.72rem;color:var(--text-dim);">Left: <span style="color:var(--text);">${held.left || 'Bare Hand'}</span></div>`;
 
+  // Conditions section
+  const activeConds = getConditions(t.id);
+  const condBtnsHtml = CONDITION_DEFS.map(def => {
+    const active = activeConds.has(def.key);
+    const activeStyle = active
+      ? `background:${def.color}22;border-color:${def.color};color:${def.color};`
+      : `background:var(--bg3);border-color:var(--border);color:var(--text-dim);`;
+    const gmClick = isGM()
+      ? `onclick="setCondition('${t.id}','${def.key}',${!active}).then(()=>showTokenInfo('${t.id}'))"`
+      : '';
+    const cursor = isGM() ? 'cursor:pointer;' : 'cursor:default;';
+    return `<div title="${def.desc}"
+      style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${activeStyle}${cursor}user-select:none;"
+      ${gmClick}>
+      <span>${def.icon}</span><span>${def.label}</span>
+    </div>`;
+  }).join('');
+  const condContent = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${condBtnsHtml}</div>
+    ${!isGM() ? '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:4px;font-style:italic;">GM controls conditions.</div>' : ''}`;
+
   el.innerHTML = `
     ${backBtn}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -6416,10 +6512,11 @@ async function showTokenInfo(tokenId) {
         <div style="font-size:0.72rem;color:var(--text-dim);">${[row.species, row.body_type].filter(Boolean).join(' · ')}</div>
       </div>
     </div>
-    ${section('stats',  'Stats',     statsContent)}
-    ${section('equip',  'Equipment', equipContent)}
-    ${section('armor',  'Armor',     armorRows)}
-    ${section('skills', 'Skills',    skillsHtml)}`;
+    ${section('conds',  'Conditions', condContent)}
+    ${section('stats',  'Stats',      statsContent)}
+    ${section('equip',  'Equipment',  equipContent)}
+    ${section('armor',  'Armor',      armorRows)}
+    ${section('skills', 'Skills',     skillsHtml)}`;
 }
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
