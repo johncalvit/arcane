@@ -3152,6 +3152,249 @@ const DEFAULT_RANGED_WEAPONS = [
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
 
+// ─── Hit Location Data ────────────────────────────────────────────────────────
+// matrix: 8 rows × 5 cols, values are part keys or null (re-roll).
+// parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift called-shot rolls.
+const HIT_LOCATION_DATA = {
+  Humanoid: {
+    matrix: [
+      [null,   null,    'head',  'head',  null   ],
+      [null,   null,    'head',  'head',  null   ],
+      ['r_arm','torso', 'torso', 'torso', 'l_arm'],
+      ['r_arm','torso', 'torso', 'torso', 'l_arm'],
+      [null,   'torso', 'torso', 'torso', null   ],
+      [null,   'r_leg', null,    'l_leg', null   ],
+      [null,   'r_leg', null,    'l_leg', null   ],
+      [null,   'r_leg', null,    'l_leg', null   ],
+    ],
+    parts: {
+      head:  { label:'Head',      sizeFactor:0.25, armorSlot:'head',  rowBias:-2, colBias: 0 },
+      torso: { label:'Torso',     sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
+      r_arm: { label:'Right Arm', sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
+      l_arm: { label:'Left Arm',  sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
+      r_leg: { label:'Right Leg', sizeFactor:0.45, armorSlot:'rleg',  rowBias: 2, colBias:-1 },
+      l_leg: { label:'Left Leg',  sizeFactor:0.45, armorSlot:'lleg',  rowBias: 2, colBias: 1 },
+    },
+    defaultPart: 'torso',
+  },
+  Quadruped: {
+    matrix: [
+      [null,     null,   'head',  null,    null    ],
+      [null,     'head', 'head',  'head',  null    ],
+      [null,     'neck', 'neck',  'neck',  null    ],
+      ['l_fore', 'torso','torso', 'torso', 'r_fore'],
+      ['l_fore', 'torso','torso', 'torso', 'r_fore'],
+      ['l_hind', 'torso','torso', 'torso', 'r_hind'],
+      ['l_hind', null,   'tail',  null,    'r_hind'],
+      [null,     null,   'tail',  null,    null    ],
+    ],
+    parts: {
+      head:   { label:'Head',          sizeFactor:0.20, armorSlot:null,    rowBias:-3, colBias: 0 },
+      neck:   { label:'Neck',          sizeFactor:0.30, armorSlot:null,    rowBias:-1, colBias: 0 },
+      torso:  { label:'Torso',         sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
+      l_fore: { label:'Left Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias:-1, colBias:-2 },
+      r_fore: { label:'Right Foreleg', sizeFactor:0.35, armorSlot:null,    rowBias:-1, colBias: 2 },
+      l_hind: { label:'Left Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias:-2 },
+      r_hind: { label:'Right Hindleg', sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias: 2 },
+      tail:   { label:'Tail',          sizeFactor:0.20, armorSlot:null,    rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'torso',
+  },
+  Dragon: {
+    matrix: [
+      ['l_wing', null,    'head',  null,    'r_wing'],
+      ['l_wing', 'neck',  'head',  'neck',  'r_wing'],
+      ['l_wing', 'torso', 'torso', 'torso', 'r_wing'],
+      ['l_fore', 'torso', 'torso', 'torso', 'r_fore'],
+      ['l_fore', 'torso', 'torso', 'torso', 'r_fore'],
+      ['l_hind', 'torso', 'tail',  'torso', 'r_hind'],
+      ['l_hind', 'tail',  'tail',  'tail',  'r_hind'],
+      [null,     'tail',  null,    'tail',  null    ],
+    ],
+    parts: {
+      head:   { label:'Head',           sizeFactor:0.30, armorSlot:null,    rowBias:-3, colBias: 0 },
+      neck:   { label:'Neck',           sizeFactor:0.40, armorSlot:null,    rowBias:-2, colBias: 0 },
+      torso:  { label:'Torso',          sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
+      l_wing: { label:'Left Wing',      sizeFactor:0.50, armorSlot:null,    rowBias:-1, colBias:-2 },
+      r_wing: { label:'Right Wing',     sizeFactor:0.50, armorSlot:null,    rowBias:-1, colBias: 2 },
+      l_fore: { label:'Left Foreclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 1, colBias:-2 },
+      r_fore: { label:'Right Foreclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 1, colBias: 2 },
+      l_hind: { label:'Left Hindclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias:-2 },
+      r_hind: { label:'Right Hindclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias: 2 },
+      tail:   { label:'Tail',           sizeFactor:0.30, armorSlot:null,    rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'torso',
+  },
+  'Winged Humanoid': {
+    matrix: [
+      ['l_wing', null,    'head',  null,    'r_wing'],
+      ['l_wing', null,    'head',  null,    'r_wing'],
+      ['r_arm',  'torso', 'torso', 'torso', 'l_arm' ],
+      ['r_arm',  'torso', 'torso', 'torso', 'l_arm' ],
+      ['l_wing', 'torso', 'torso', 'torso', 'r_wing'],
+      [null,     'r_leg', null,    'l_leg', null    ],
+      [null,     'r_leg', null,    'l_leg', null    ],
+      [null,     'r_leg', null,    'l_leg', null    ],
+    ],
+    parts: {
+      head:   { label:'Head',       sizeFactor:0.25, armorSlot:'head',  rowBias:-2, colBias: 0 },
+      torso:  { label:'Torso',      sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
+      r_arm:  { label:'Right Arm',  sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
+      l_arm:  { label:'Left Arm',   sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
+      r_leg:  { label:'Right Leg',  sizeFactor:0.45, armorSlot:'rleg',  rowBias: 2, colBias:-1 },
+      l_leg:  { label:'Left Leg',   sizeFactor:0.45, armorSlot:'lleg',  rowBias: 2, colBias: 1 },
+      l_wing: { label:'Left Wing',  sizeFactor:0.45, armorSlot:null,    rowBias: 0, colBias:-2 },
+      r_wing: { label:'Right Wing', sizeFactor:0.45, armorSlot:null,    rowBias: 0, colBias: 2 },
+    },
+    defaultPart: 'torso',
+  },
+  Centaur: {
+    matrix: [
+      [null,     null,     'head',   null,     null    ],
+      [null,     null,     'head',   null,     null    ],
+      ['r_arm',  'torso',  'torso',  'torso',  'l_arm' ],
+      ['r_arm',  'torso',  'torso',  'torso',  'l_arm' ],
+      ['l_fore', 'l_torso','l_torso','l_torso','r_fore'],
+      ['l_fore', 'l_torso','l_torso','l_torso','r_fore'],
+      ['l_hind', 'l_torso','tail',   'l_torso','r_hind'],
+      ['l_hind', null,     'tail',   null,     'r_hind'],
+    ],
+    parts: {
+      head:    { label:'Head',           sizeFactor:0.25, armorSlot:'head',  rowBias:-3, colBias: 0 },
+      torso:   { label:'Upper Torso',    sizeFactor:0.80, armorSlot:'torso', rowBias: 0, colBias: 0 },
+      r_arm:   { label:'Right Arm',      sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
+      l_arm:   { label:'Left Arm',       sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
+      l_torso: { label:'Lower Body',     sizeFactor:1.00, armorSlot:null,    rowBias: 2, colBias: 0 },
+      l_fore:  { label:'Left Foreleg',   sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias:-2 },
+      r_fore:  { label:'Right Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias: 2 },
+      l_hind:  { label:'Left Hindleg',   sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias:-2 },
+      r_hind:  { label:'Right Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias: 2 },
+      tail:    { label:'Tail',           sizeFactor:0.20, armorSlot:null,    rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'l_torso',
+  },
+  Snake: {
+    matrix: [
+      [null, null,   'head', null,   null],
+      [null, 'head', 'head', 'head', null],
+      [null, 'body', 'neck', 'body', null],
+      [null, 'body', 'body', 'body', null],
+      [null, 'body', 'body', 'body', null],
+      [null, 'body', 'body', 'body', null],
+      [null, 'tail', 'body', 'tail', null],
+      [null, 'tail', 'tail', 'tail', null],
+    ],
+    parts: {
+      head: { label:'Head', sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
+      neck: { label:'Neck', sizeFactor:0.30, armorSlot:null, rowBias:-1, colBias: 0 },
+      body: { label:'Body', sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
+      tail: { label:'Tail', sizeFactor:0.25, armorSlot:null, rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'body',
+  },
+  Bird: {
+    matrix: [
+      [null,    null,    'head',  null,    null    ],
+      ['l_wing',null,    'head',  null,    'r_wing'],
+      ['l_wing','l_wing','body',  'r_wing','r_wing'],
+      ['l_wing','body',  'body',  'body',  'r_wing'],
+      [null,    'body',  'body',  'body',  null    ],
+      [null,    'l_tal', 'body',  'r_tal', null    ],
+      [null,    'l_tal', null,    'r_tal', null    ],
+      [null,    null,    null,    null,    null    ],
+    ],
+    parts: {
+      head:   { label:'Head',        sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
+      body:   { label:'Body',        sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
+      l_wing: { label:'Left Wing',   sizeFactor:0.45, armorSlot:null, rowBias:-1, colBias:-2 },
+      r_wing: { label:'Right Wing',  sizeFactor:0.45, armorSlot:null, rowBias:-1, colBias: 2 },
+      l_tal:  { label:'Left Talon',  sizeFactor:0.20, armorSlot:null, rowBias: 3, colBias:-1 },
+      r_tal:  { label:'Right Talon', sizeFactor:0.20, armorSlot:null, rowBias: 3, colBias: 1 },
+    },
+    defaultPart: 'body',
+  },
+  Fish: {
+    matrix: [
+      [null,   null,   'head', null,   null   ],
+      [null,   'head', 'head', 'head', null   ],
+      ['l_fin','body', 'body', 'body', 'r_fin'],
+      ['l_fin','body', 'body', 'body', 'r_fin'],
+      ['l_fin','body', 'body', 'body', 'r_fin'],
+      [null,   'body', 'body', 'body', null   ],
+      [null,   'tail', 'tail', 'tail', null   ],
+      [null,   null,   'tail', null,   null   ],
+    ],
+    parts: {
+      head:  { label:'Head',      sizeFactor:0.25, armorSlot:null, rowBias:-3, colBias: 0 },
+      body:  { label:'Body',      sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
+      l_fin: { label:'Left Fin',  sizeFactor:0.30, armorSlot:null, rowBias: 0, colBias:-2 },
+      r_fin: { label:'Right Fin', sizeFactor:0.30, armorSlot:null, rowBias: 0, colBias: 2 },
+      tail:  { label:'Tail',      sizeFactor:0.25, armorSlot:null, rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'body',
+  },
+  Insect: {
+    matrix: [
+      [null,  null,     'head',    null,     null  ],
+      [null,  'head',   'head',    'head',   null  ],
+      ['legs','thorax', 'thorax',  'thorax', 'legs'],
+      ['legs','thorax', 'thorax',  'thorax', 'legs'],
+      ['legs','abdomen','abdomen', 'abdomen','legs'],
+      ['legs','abdomen','abdomen', 'abdomen','legs'],
+      [null,  'abdomen','abdomen', 'abdomen',null  ],
+      [null,  null,     null,      null,     null  ],
+    ],
+    parts: {
+      head:    { label:'Head',    sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
+      thorax:  { label:'Thorax',  sizeFactor:0.80, armorSlot:null, rowBias:-1, colBias: 0 },
+      abdomen: { label:'Abdomen', sizeFactor:1.00, armorSlot:null, rowBias: 2, colBias: 0 },
+      legs:    { label:'Legs',    sizeFactor:0.25, armorSlot:null, rowBias: 0, colBias: 2 },
+    },
+    defaultPart: 'abdomen',
+  },
+  Plant: {
+    matrix: [
+      ['l_branch',null,     null,    null,     'r_branch'],
+      ['l_branch','l_branch',null,  'r_branch','r_branch'],
+      ['l_branch','trunk',  'trunk', 'trunk',  'r_branch'],
+      [null,      'trunk',  'trunk', 'trunk',  null      ],
+      [null,      'trunk',  'trunk', 'trunk',  null      ],
+      [null,      'trunk',  'trunk', 'trunk',  null      ],
+      [null,      'root',   'root',  'root',   null      ],
+      [null,      'root',   'root',  'root',   null      ],
+    ],
+    parts: {
+      l_branch: { label:'Left Branch',  sizeFactor:0.30, armorSlot:null, rowBias:-2, colBias:-2 },
+      r_branch: { label:'Right Branch', sizeFactor:0.30, armorSlot:null, rowBias:-2, colBias: 2 },
+      trunk:    { label:'Trunk',        sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
+      root:     { label:'Root',         sizeFactor:0.35, armorSlot:null, rowBias: 3, colBias: 0 },
+    },
+    defaultPart: 'trunk',
+  },
+};
+
+function getHitLocData(bodyType) {
+  return HIT_LOCATION_DATA[bodyType] || HIT_LOCATION_DATA.Humanoid;
+}
+
+function rollHitLocation(bodyType, calledPartKey) {
+  const { matrix, parts, defaultPart } = getHitLocData(bodyType);
+  const bias = calledPartKey ? parts[calledPartKey] : null;
+  const rowBias = bias?.rowBias ?? 0;
+  const colBias = bias?.colBias ?? 0;
+  let result = null;
+  let attempts = 0;
+  while (!result && attempts < 15) {
+    attempts++;
+    const rawRow = Math.ceil(Math.random() * 8);
+    const rawCol = Math.ceil(Math.random() * 5);
+    const row = Math.max(1, Math.min(8, rawRow + rowBias)) - 1;
+    const col = Math.max(1, Math.min(5, rawCol + colBias)) - 1;
+    result = matrix[row]?.[col] ?? null;
+  }
+  return result || defaultPart;
+}
+
 function positionRangedWeaponForm(index) {
   const form = document.getElementById('ranged-form');
   const oldRow = document.getElementById('ranged-form-row');
@@ -3706,7 +3949,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260707c';
+const VERSION = 'v0.1.20260707d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5131,13 +5374,105 @@ function renderPlayHandHit(side, attrs) {
 }
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
+// ── Called-shot picker ────────────────────────────────────────────────────────
+function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext }) {
+  const locData = getHitLocData(bodyType);
+  const existing = document.getElementById('called-shot-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'called-shot-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:1500;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:24px 28px;min-width:320px;max-width:94vw;display:flex;flex-direction:column;gap:14px;
+    font-family:Georgia,serif;`;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
+  title.textContent = 'Called Shot — Choose Target';
+  card.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.style.cssText = 'font-size:0.72rem;color:var(--text-dim);text-align:center;';
+  sub.textContent = `Body type: ${bodyType}`;
+  card.appendChild(sub);
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;justify-content:center;';
+
+  function pickPart(partKey) {
+    overlay.remove();
+    const part = partKey ? locData.parts[partKey] : null;
+    const locThreshold = (baseThreshold != null && part)
+      ? Math.max(1, Math.round(baseThreshold * part.sizeFactor))
+      : baseThreshold;
+    const locSubtitle = part
+      ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor}) = ${locThreshold}`
+      : baseSubtitle;
+    openRoller({
+      label: actionLabel,
+      min: 1, max: 100,
+      target: locThreshold,
+      targetLabel: locSubtitle,
+      defenseOptions,
+      strayContext,
+      locContext: partKey ? { bodyType, partKey } : null,
+    });
+  }
+
+  // Regular attack button (torso/default, no size penalty)
+  const regBtn = document.createElement('button');
+  regBtn.textContent = '⚔ Regular Attack (Torso)';
+  regBtn.style.cssText = `width:100%;padding:8px 12px;border-radius:5px;cursor:pointer;
+    font-family:Georgia,serif;font-size:0.82rem;
+    border:2px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--text);`;
+  regBtn.onclick = () => pickPart(null);
+  card.appendChild(regBtn);
+
+  const divider = document.createElement('div');
+  divider.style.cssText = 'font-size:0.65rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);text-align:center;';
+  divider.textContent = '— or aim for —';
+  card.appendChild(divider);
+
+  card.appendChild(grid);
+
+  for (const [key, part] of Object.entries(locData.parts)) {
+    if (key === locData.defaultPart) continue; // torso = regular attack
+    const btn = document.createElement('button');
+    const pct = Math.round(part.sizeFactor * 100);
+    btn.textContent = `${part.label} (${pct}%)`;
+    btn.title = `Hit chance ×${part.sizeFactor}`;
+    btn.style.cssText = `padding:6px 14px;border-radius:5px;cursor:pointer;
+      font-family:Georgia,serif;font-size:0.78rem;
+      border:1px solid var(--border);background:var(--bg3);color:var(--text);`;
+    btn.onmouseover = () => btn.style.borderColor = 'var(--gold)';
+    btn.onmouseout  = () => btn.style.borderColor = 'var(--border)';
+    btn.onclick = () => pickPart(key);
+    grid.appendChild(btn);
+  }
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancel';
+  cancel.style.cssText = `padding:5px 16px;border-radius:5px;cursor:pointer;
+    font-family:Georgia,serif;font-size:0.75rem;align-self:center;
+    border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+  cancel.onclick = () => overlay.remove();
+  card.appendChild(cancel);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
 // openRoller({ label, min=1, max=100, target=null, targetLabel='' })
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
-              phase: 'idle', finalNum: null, timeoutId: null, strayContext };
+              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext };
 
   document.getElementById('roller-label').textContent = label;
   document.getElementById('roller-number').textContent = '—';
@@ -5145,6 +5480,7 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   document.getElementById('roller-status').textContent = 'Click to stop';
   document.getElementById('roller-result-label').textContent = '';
   document.getElementById('roller-result-label').className = '';
+  document.getElementById('roller-hit-location').textContent = '';
   document.getElementById('roller-close').style.display = 'none';
 
   // Defense buttons
@@ -5267,6 +5603,17 @@ function _rollerShowResult() {
     resultEl.textContent = label;
     resultEl.className   = success ? 'success' : 'fail';
     document.getElementById('roller-status').textContent = '';
+    if (success && _roller.locContext) {
+      const { bodyType, partKey } = _roller.locContext;
+      const hitPart = rollHitLocation(bodyType, partKey);
+      const locData = getHitLocData(bodyType);
+      const partLabel = locData.parts[hitPart]?.label || hitPart;
+      const locEl = document.getElementById('roller-hit-location');
+      locEl.textContent = `HIT: ${partLabel}`;
+      locEl.style.color = '#f0c060';
+    } else if (!success && _roller.locContext) {
+      document.getElementById('roller-hit-location').textContent = '';
+    }
     // Stray shot on ranged miss (not crit fail — arrow still goes somewhere)
     if (!success && !critSuccess && _roller.strayContext) {
       setTimeout(() => _triggerStrayShot(n, _roller.target, _roller.strayContext), 600);
@@ -6254,9 +6601,11 @@ function attackTokenClick(tokenId) {
   exitAttackMode();
 
   // ── Defender's available Block / Parry actions ────────────────────────────
+  let targetBodyType = 'Humanoid';
   const defenseOptions = [];
   if (target.entity_type === 'character' && playCharCache[target.entity_id]) {
     const defRow   = playCharCache[target.entity_id];
+    if (defRow.body_type) targetBodyType = defRow.body_type;
     const defAttrs = calcAttributesFromData({
       race: defRow.species || '', bodyType: defRow.body_type || '',
       sex: defRow.sex || '', age: defRow.age || '',
@@ -6327,7 +6676,7 @@ function attackTokenClick(tokenId) {
     }
   }
 
-  // ── Open hit roller ───────────────────────────────────────────────────────
+  // ── Open called-shot picker, then hit roller ─────────────────────────────
   let subtitle = '';
   if (hitValue != null) {
     if (attackIsRanged && rangeIncrements > 0) {
@@ -6336,11 +6685,11 @@ function attackTokenClick(tokenId) {
       subtitle = `HIT ${adjustedHit} × Size ${targetAdj}`;
     }
   }
-  openRoller({
-    label: actionLabel,
-    min: 1, max: 100,
-    target: threshold,
-    targetLabel: subtitle,
+  _openCalledShotModal({
+    bodyType: targetBodyType,
+    baseThreshold: threshold,
+    baseSubtitle: subtitle,
+    actionLabel,
     defenseOptions,
     strayContext,
   });
@@ -7342,6 +7691,7 @@ switchGmTab = function(tab) {
     <div id="roller-number">—</div>
     <div id="roller-status">Click to stop</div>
     <div id="roller-result-label"></div>
+    <div id="roller-hit-location" style="font-size:1.05rem;font-weight:bold;margin-top:4px;min-height:1.4em;"></div>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
 </div>
