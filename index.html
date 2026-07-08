@@ -163,20 +163,16 @@
     border-bottom: 1px solid var(--border);
     padding: 7px 10px; transition: background 0.15s;
   }
-  .at-combatant.at-active { background: rgba(201,168,76,0.07); }
-  .at-combatant.at-ready  { background: rgba(45,107,58,0.12); }
+  .at-combatant.at-active { background: rgba(201,168,76,0.13); border-left: 3px solid var(--gold); }
   .at-comb-header { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
   .at-comb-name { font-size: 0.85rem; font-weight: 600; color: var(--text-bright); flex: 1; }
   .at-comb-t    { font-size: 0.72rem; color: var(--text-dim); font-family: monospace; }
-  .at-action-row {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
-  }
+  .at-comb-init { font-size: 0.68rem; color: var(--gold2); font-family: monospace; background: rgba(201,168,76,0.1); padding: 1px 5px; border-radius: 3px; }
+  .at-action-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
   .at-action-label { font-size: 0.78rem; color: var(--gold); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .at-action-done  { color: #6dcc8a; }
-  .at-bar-wrap { flex: 1; height: 5px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
-  .at-bar { height: 100%; background: var(--gold); border-radius: 3px; transition: width 0.2s; }
-  .at-bar.done { background: #6dcc8a; }
-  .at-action-secs { font-size: 0.68rem; color: var(--text-dim); font-family: monospace; min-width: 28px; text-align: right; }
+  .at-action-pending { color: var(--text-dim); font-style: italic; }
+  @keyframes at-blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .token-blink { animation: at-blink 0.75s ease-in-out infinite; }
   .at-comb-btns { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
   .at-btn {
     font-size: 0.7rem; padding: 2px 8px; border-radius: 3px;
@@ -3949,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260707d';
+const VERSION = 'v0.1.20260708a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4905,43 +4901,120 @@ const SPELL_ACTIONS = [
   { label: 'Dismiss Spell', dur: 1 },
 ];
 
-// combatant: { id, name, avatar, type ('character'|'creature'), actions: [{label, startAt, completesAt}] }
+// combatant: { id, name, avatar, type, initiative, tieBreak, actions: [{label, startRound, durationRounds}] }
 let atCombatants = [];
-let atClock = 0;
+let atRound      = 1;
+let atActiveIdx  = 0;
 let atModalTarget = null; // combatant id receiving next action
 
-function atFmtTime(s) { return s + 's'; }
-
-function atNextCompletionTime() {
-  let min = Infinity;
-  for (const c of atCombatants) {
-    for (const a of c.actions) {
-      if (a.completesAt > atClock && a.completesAt < min) min = a.completesAt;
-    }
-  }
-  return min === Infinity ? null : min;
+function atSortedCombatants() {
+  return [...atCombatants].sort((a, b) => {
+    const aSet = a.initiative != null, bSet = b.initiative != null;
+    if (aSet !== bSet) return aSet ? -1 : 1;
+    if (a.initiative !== b.initiative) return b.initiative - a.initiative;
+    return (b.tieBreak || 0) - (a.tieBreak || 0);
+  });
 }
 
-function atAdvance() {
-  const next = atNextCompletionTime();
-  if (next === null) return;
-  atClock = next;
+function _atActiveCombatant() {
+  return atSortedCombatants()[atActiveIdx] || null;
+}
+
+function atNext() {
+  const sorted = atSortedCombatants();
+  if (!sorted.length) return;
+  atActiveIdx++;
+  if (atActiveIdx >= sorted.length) { atActiveIdx = 0; atRound++; }
+  _atUpdateBlink();
   renderAtList();
 }
 
 function atReset() {
-  if (!confirm('Reset combat clock and clear all actions?')) return;
-  atClock = 0;
+  if (!confirm('Reset to Round 1 and clear all actions? Initiative order will be kept.')) return;
+  atRound = 1;
+  atActiveIdx = 0;
   atCombatants.forEach(c => c.actions = []);
+  _atUpdateBlink();
   renderAtList();
 }
 
-function atSortedCombatants() {
-  return [...atCombatants].sort((a, b) => {
-    const aMin = a.actions.length ? Math.min(...a.actions.map(x => x.completesAt)) : Infinity;
-    const bMin = b.actions.length ? Math.min(...b.actions.map(x => x.completesAt)) : Infinity;
-    return aMin - bMin;
-  });
+function atResetFull() {
+  if (!confirm('Reset everything including initiative?')) return;
+  atRound = 1;
+  atActiveIdx = 0;
+  atCombatants.forEach(c => { c.actions = []; c.initiative = null; c.tieBreak = null; });
+  _atUpdateBlink();
+  renderAtList();
+}
+
+// ── Initiative rolling ────────────────────────────────────────────────────────
+function atRollInitiative(combatantId) {
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c) return;
+  let base = 0;
+  if (c.type === 'char') {
+    const charId = combatantId.split('::')[1];
+    const row = playCharCache[charId];
+    if (row) {
+      const attrs = calcAttributesFromData({
+        race: row.species || '', bodyType: row.body_type || '',
+        sex: row.sex || '', age: row.age || '',
+        height: row.height || '', build: row.build || '',
+        social: row.social || '', mental: row.mental || '',
+        stats: row.stats || {},
+      });
+      base = Math.round((attrs.Speed || 0) + (attrs.PhysCoord || 0) + (attrs.Intuition || 0));
+    }
+    openRoller({
+      label: `${c.name} — Initiative`,
+      min: 1, max: 10, target: null,
+      targetLabel: `Speed + PhysCoord + Intuition (${base}) + roll`,
+      onComplete: n => {
+        c.initiative = base + n;
+        c.tieBreak   = Math.floor(Math.random() * 10) + 1;
+        renderAtList();
+      },
+    });
+  } else {
+    const roll    = Math.floor(Math.random() * 10) + 1;
+    c.initiative  = base + roll;
+    c.tieBreak    = Math.floor(Math.random() * 10) + 1;
+    renderAtList();
+  }
+}
+
+function atAcceptAction(combatantId) {
+  const sorted = atSortedCombatants();
+  const idx = sorted.findIndex(c => c.id === combatantId);
+  if (idx !== -1) atActiveIdx = idx;
+  atNext();
+}
+
+// ── Token blink ───────────────────────────────────────────────────────────────
+let _atBlinkTokenId = null;
+
+function _atFindTokenId(combatantId) {
+  const [type, id] = combatantId.split('::');
+  for (const t of Object.values(mapTokens || {})) {
+    if (type === 'char'     && t.entity_type === 'character' && t.entity_id === id) return t.id;
+    if (type === 'creature' && t.id === id) return t.id;
+  }
+  return null;
+}
+
+function _atUpdateBlink() {
+  if (_atBlinkTokenId) {
+    const el = document.getElementById('token-' + _atBlinkTokenId);
+    if (el) el.classList.remove('token-blink');
+    _atBlinkTokenId = null;
+  }
+  const active = _atActiveCombatant();
+  if (!active) return;
+  const tokenId = _atFindTokenId(active.id);
+  if (tokenId) {
+    const el = document.getElementById('token-' + tokenId);
+    if (el) { el.classList.add('token-blink'); _atBlinkTokenId = tokenId; }
+  }
 }
 
 function atAddCombatant() {
@@ -4953,7 +5026,7 @@ function atAddCombatant() {
   const [type, id] = val.split('::');
   const name   = opt.dataset.name   || id;
   const avatar = opt.dataset.avatar || null;
-  atCombatants.push({ id: val, name, avatar, type, actions: [] });
+  atCombatants.push({ id: val, name, avatar, type, initiative: null, tieBreak: null, actions: [] });
   renderAtList();
 }
 
@@ -5006,7 +5079,8 @@ async function atOpenModal(combatantId) {
   actions.forEach(a => {
     const btn = document.createElement('button');
     btn.className = 'at-action-pick-btn';
-    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${a.dur}s</div>`;
+    const r = Math.max(1, Math.ceil(a.dur / 3));
+    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${r}r</div>`;
     btn.onclick = () => atPickAction(a.label, a.dur);
     grid.appendChild(btn);
   });
@@ -5100,22 +5174,20 @@ function atPickAction(label, dur) {
     }
   }
 
-  const start = atClock;
-  c.actions.push({ label, startAt: start, completesAt: start + dur });
+  const durationRounds = Math.max(1, Math.ceil(dur / 3));
+  c.actions.push({ label, startRound: atRound, durationRounds });
 
-  if (label === 'Stand Up' && token) {
-    setCondition(token.id, 'prone', false);
-  }
+  if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
 
   atCloseModal();
   renderAtList();
 }
 
 function atPickFreeform() {
-  const label = document.getElementById('at-free-label').value.trim();
-  const dur   = parseInt(document.getElementById('at-free-dur').value) || 3;
+  const label  = document.getElementById('at-free-label').value.trim();
+  const rounds = parseInt(document.getElementById('at-free-dur').value) || 1;
   if (!label) return;
-  atPickAction(label, dur);
+  atPickAction(label, rounds * 3); // convert rounds → seconds for atPickAction
 }
 
 function atCancelAction(combatantId, idx) {
@@ -5126,9 +5198,8 @@ function atCancelAction(combatantId, idx) {
 }
 
 function renderAtList() {
-  // clock display
-  document.getElementById('at-clock-display').textContent = atFmtTime(atClock);
-  document.getElementById('at-next-btn').disabled = atNextCompletionTime() === null;
+  document.getElementById('at-clock-display').textContent = 'Round ' + atRound;
+  document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
 
   const list = document.getElementById('at-list');
   if (!atCombatants.length) {
@@ -5137,50 +5208,68 @@ function renderAtList() {
   }
 
   list.innerHTML = '';
-  const sorted = atSortedCombatants();
+  const sorted   = atSortedCombatants();
+  const activeC  = sorted[atActiveIdx];
 
-  for (const c of sorted) {
-    const earliest = c.actions.length ? Math.min(...c.actions.map(a => a.completesAt)) : null;
-    const isReady  = earliest !== null && earliest <= atClock;
-    const isNext   = earliest !== null && earliest === atNextCompletionTime();
+  for (let i = 0; i < sorted.length; i++) {
+    const c        = sorted[i];
+    const safeId   = c.id.replace(/'/g, "\\'");
+    const isActive = c === activeC;
+
+    // Action active this round
+    const curAction = c.actions.find(a =>
+      a.startRound <= atRound && atRound < a.startRound + a.durationRounds);
+    // Actions queued for future rounds
+    const futureActions = c.actions.filter(a => a.startRound > atRound);
 
     const div = document.createElement('div');
-    div.className = 'at-combatant' + (isNext ? ' at-active' : '') + (isReady ? ' at-ready' : '');
+    div.className = 'at-combatant' + (isActive ? ' at-active' : '');
 
-    // header row
-    const nameEl = `<span class="at-comb-name">${c.name}</span>`;
-    const timeEl = earliest !== null
-      ? `<span class="at-comb-t">${isReady ? '✓ ready' : atFmtTime(earliest - atClock) + ' remaining'}</span>`
-      : `<span class="at-comb-t" style="color:var(--text-dim)">idle</span>`;
+    // Header
+    const initBadge = c.initiative != null
+      ? `<span class="at-comb-init">Init ${c.initiative}</span>`
+      : `<span class="at-comb-init" style="color:var(--text-dim)">—</span>`;
+    const nameEl = `<span class="at-comb-name">${isActive ? '▶ ' : ''}${c.name}</span>`;
 
-    // action rows
-    let actionRows = '';
-    if (c.actions.length) {
-      c.actions.forEach((a, i) => {
-        const done     = a.completesAt <= atClock;
-        const total    = a.completesAt - a.startAt;
-        const elapsed  = Math.min(atClock - a.startAt, total);
-        const pct      = total > 0 ? Math.round((elapsed / total) * 100) : 100;
-        const secsLeft = Math.max(0, a.completesAt - atClock);
-        actionRows += `
-          <div class="at-action-row">
-            <span class="at-action-label ${done ? 'at-action-done' : ''}">${done ? '✓ ' : ''}${a.label}</span>
-            <div class="at-bar-wrap"><div class="at-bar ${done ? 'done' : ''}" style="width:${pct}%"></div></div>
-            <span class="at-action-secs">${done ? '—' : atFmtTime(secsLeft)}</span>
-            <button class="at-btn danger" onclick="atCancelAction('${c.id.replace(/'/g,"\\'")}',${i})" title="Cancel action">✕</button>
-          </div>`;
-      });
+    // Status area
+    let statusHtml = '';
+    if (c.initiative == null) {
+      statusHtml = `<button class="at-btn primary" style="margin-bottom:4px;" onclick="atRollInitiative('${safeId}')">🎲 Roll Initiative</button>`;
+    } else if (isActive) {
+      if (curAction) {
+        const roundsLeft = curAction.startRound + curAction.durationRounds - atRound;
+        const tag = roundsLeft > 1 ? ` <span style="color:var(--text-dim);font-size:0.7rem;">(${roundsLeft}r left)</span>` : '';
+        statusHtml = `<div class="at-action-row">
+          <span class="at-action-label">▶ ${curAction.label}${tag}</span>
+          <button class="at-btn primary" onclick="atAcceptAction('${safeId}')">✓ Accept</button>
+          <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(curAction)})" title="Cancel">✕</button>
+        </div>`;
+      } else {
+        statusHtml = `<div style="font-size:0.78rem;color:var(--gold);margin-bottom:4px;">⬡ Awaiting action</div>`;
+      }
+    } else if (curAction) {
+      const roundsLeft = curAction.startRound + curAction.durationRounds - atRound;
+      const tag = roundsLeft > 1 ? ` (+${roundsLeft - 1}r)` : '';
+      statusHtml = `<div class="at-action-row">
+        <span class="at-action-label at-action-pending">${curAction.label}${tag}</span>
+        <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(curAction)})" title="Cancel">✕</button>
+      </div>`;
     }
 
-    // buttons
-    const safeId = c.id.replace(/'/g,"\\'");
+    // Future queued actions
+    const futureHtml = futureActions.map(a => `
+      <div class="at-action-row">
+        <span class="at-action-label at-action-pending" style="font-size:0.72rem;">Rd${a.startRound}: ${a.label}</span>
+        <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(a)})" title="Cancel">✕</button>
+      </div>`).join('');
+
     const addBtn    = `<button class="at-btn primary" onclick="atOpenModal('${safeId}')">+ Action</button>`;
-    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Draw movement path on map">🏃 Path</button>`;
+    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Draw movement path">🏃</button>`;
     const removeBtn = `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>`;
 
     div.innerHTML = `
-      <div class="at-comb-header">${nameEl}${timeEl}</div>
-      ${actionRows}
+      <div class="at-comb-header">${nameEl}${initBadge}</div>
+      ${statusHtml}${futureHtml}
       <div class="at-comb-btns">${addBtn}${pathBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
@@ -5245,7 +5334,7 @@ async function atAutoAddMapTokens() {
     if (atCombatants.find(c => c.id === id)) continue;
     const name   = t.entity_type === 'character' ? (charMap[t.entity_id]?.name || t.label || t.entity_id) : (t.label || t.id);
     const avatar = t.entity_type === 'character' ? (charMap[t.entity_id]?.avatar_url || null) : (t.avatar_url || null);
-    atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', actions: [] });
+    atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', initiative: null, tieBreak: null, actions: [] });
   }
   renderAtList();
 }
@@ -5470,9 +5559,9 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, onComplete = null }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
-              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext };
+              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, onComplete };
 
   document.getElementById('roller-label').textContent = label;
   document.getElementById('roller-number').textContent = '—';
@@ -5643,6 +5732,7 @@ function _rollerShowResult() {
     document.getElementById('roller-status').textContent = '';
   }
   document.getElementById('roller-close').style.display = 'inline-block';
+  if (_roller.onComplete) _roller.onComplete(_roller.finalNum);
 }
 
 function closeRoller() {
@@ -6586,7 +6676,7 @@ function attackTokenClick(tokenId) {
   const actionLabel = `${attackActionLabel} → ${target.label}`;
   const c = atCombatants.find(x => x.id === attackCombatantId);
   if (c) {
-    c.actions.push({ label: actionLabel, startAt: atClock, completesAt: atClock + 2 });
+    c.actions.push({ label: actionLabel, startRound: atRound, durationRounds: 1 });
     renderAtList();
     switchGmTab('actions');
   }
@@ -7544,7 +7634,7 @@ function pathCommit() {
   const c = atCombatants.find(x => x.id === combId);
   if (c) {
     const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
-    c.actions.push({ label, startAt: atClock, completesAt: atClock + secs });
+    c.actions.push({ label, startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)) });
     renderAtList();
     // switch to Actions tab so player sees it
     switchGmTab('actions');
@@ -8012,11 +8102,12 @@ switchGmTab = function(tab) {
         <!-- clock bar -->
         <div class="at-clock">
           <div>
-            <div class="at-clock-label">Combat Time</div>
-            <div class="at-clock-time" id="at-clock-display">0s</div>
+            <div class="at-clock-label">Combat Round</div>
+            <div class="at-clock-time" id="at-clock-display">Round 1</div>
           </div>
-          <button class="at-next-btn" id="at-next-btn" onclick="atAdvance()" title="Advance to next action completion">⏭ Next</button>
-          <button class="at-btn" onclick="atReset()" title="Reset combat clock" style="margin-left:4px;">↺</button>
+          <button class="at-next-btn" id="at-next-btn" onclick="atNext()" title="Advance to next combatant">⏭ Next</button>
+          <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative" style="margin-left:4px;">↺ Round</button>
+          <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative" style="margin-left:2px;">↺ All</button>
         </div>
         <!-- add combatant row -->
         <div class="at-add-row">
@@ -8039,7 +8130,7 @@ switchGmTab = function(tab) {
     <div class="at-action-grid" id="at-action-grid"></div>
     <div class="at-freeform">
       <input type="text" id="at-free-label" placeholder="Custom action…">
-      <input type="number" id="at-free-dur" placeholder="sec" min="1" max="120" value="3">
+      <input type="number" id="at-free-dur" placeholder="rounds" min="1" max="40" value="1">
       <button class="at-btn primary" onclick="atPickFreeform()">Add</button>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
