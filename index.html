@@ -3706,7 +3706,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260707b';
+const VERSION = 'v0.1.20260707c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5983,6 +5983,11 @@ function onTokenMouseMove(e) {
   // update locally
   const el = document.getElementById('token-' + dragTokenId);
   if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
+  if (mapTokens[dragTokenId]) {
+    mapTokens[dragTokenId].x_pct = x_pct;
+    mapTokens[dragTokenId].y_pct = y_pct;
+  }
+  if (getConditions(dragTokenId).has('sentinel')) drawSentinelRanges();
 
   // broadcast to others (fast path)
   tokenChannel?.send({ type: 'broadcast', event: 'token-move',
