@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260708b';
+const VERSION = 'v0.1.20260708c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5433,7 +5433,18 @@ function renderPlayCharacter() {
 
   // ── Combat section (initiative + actions) ──────────────────────────────────
   const myCombatantId = currentCharacterId ? 'char::' + currentCharacterId : null;
-  const myCombatant   = myCombatantId ? atCombatants.find(x => x.id === myCombatantId) : null;
+  let myCombatant = myCombatantId ? atCombatants.find(x => x.id === myCombatantId) : null;
+  // Auto-add if character is on the map but not yet in atCombatants
+  if (!myCombatant && myCombatantId) {
+    const onMap = Object.values(mapTokens || {}).some(
+      t => t.entity_type === 'character' && t.entity_id === currentCharacterId);
+    if (onMap) {
+      const entry = { id: myCombatantId, name: charName, avatar: avatarUrl || null,
+                      type: 'char', initiative: null, tieBreak: null, actions: [] };
+      atCombatants.push(entry);
+      myCombatant = entry;
+    }
+  }
   const isMyTurn      = _atStateFromGM && myCombatantId && _atStateFromGM.activeId === myCombatantId;
   const roundLabel    = _atStateFromGM ? `Round ${_atStateFromGM.round}` : (atRound > 1 ? `Round ${atRound}` : '');
 
