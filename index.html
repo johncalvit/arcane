@@ -7296,6 +7296,8 @@ loadActiveMap = async function(mapId) {
   await _origLoadActiveMap(mapId);
   await loadMapTokens(mapId);
   await loadMapScale(mapId);
+  await atAutoAddMapTokens();
+  renderPlayCharacter();
 };
 
 // ─── STAGE 3: CREATURES + SCALE CALIBRATION ──────────────────────────────────
