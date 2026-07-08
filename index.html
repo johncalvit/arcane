@@ -3706,7 +3706,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260707a';
+const VERSION = 'v0.1.20260707b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4601,6 +4601,7 @@ async function setCondition(tokenId, condition, active) {
   const newConds = [...current];
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
+  drawSentinelRanges();
   await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
   // Realtime UPDATE will sync to other clients automatically
 }
@@ -5616,6 +5617,7 @@ function applyMapTransform() {
   const label = document.getElementById('map-zoom-label');
   if (label) label.textContent = Math.round(mapScale * 100) + '%';
   refreshStrayRay();
+  drawSentinelRanges();
 }
 
 function mapZoom(factor, cx, cy) {
@@ -6343,6 +6345,58 @@ function attackTokenClick(tokenId) {
 
 // Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
 function refreshAttackCircle() { if (attackMode) drawRangeCircle(); }
+
+function drawSentinelRanges() {
+  const svg = document.getElementById('sentinel-svg');
+  if (!svg) return;
+  svg.innerHTML = '';
+  if (!mapScalePPF) return;
+
+  for (const t of Object.values(mapTokens)) {
+    if (!getConditions(t.id).has('sentinel')) continue;
+
+    // Determine max melee reach from held weapons
+    let maxReach = 1; // default 1ft reach (unarmed)
+    if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
+      const held = playCharCache[t.entity_id].held_items || {};
+      for (const side of ['right', 'left']) {
+        const itemName = held[side];
+        if (!itemName) continue;
+        const norm = normalizeWeaponName(itemName);
+        const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
+        if (rows.length) maxReach = Math.max(maxReach, ...rows.map(r => r.reach));
+      }
+    } else if (t.entity_type === 'creature') {
+      const race = RACE_DATA[t.species] || {};
+      maxReach = Math.max(1, Math.round((race.Height || 60) / 24));
+    }
+
+    const vpX = (t.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
+    const vpY = (t.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
+    const tokenHalfVp = (getTokenSize(t) / 2) * mapScale;
+    const radiusPx = tokenHalfVp + maxReach * mapScalePPF * mapScale;
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    circle.setAttribute('cx', vpX);
+    circle.setAttribute('cy', vpY);
+    circle.setAttribute('r',  Math.max(1, radiusPx));
+    circle.setAttribute('fill', 'rgba(255,140,0,0.06)');
+    circle.setAttribute('stroke', '#ff8c00');
+    circle.setAttribute('stroke-width', '2');
+    circle.setAttribute('stroke-dasharray', '8,4');
+    svg.appendChild(circle);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('x', vpX);
+    label.setAttribute('y', vpY - radiusPx - 6);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('fill', '#ff8c00');
+    label.setAttribute('font-size', '11');
+    label.setAttribute('font-family', 'Georgia,serif');
+    label.textContent = `👁 ${t.label} · ${maxReach}ft`;
+    svg.appendChild(label);
+  }
+}
 
 // ── Token info panel ─────────────────────────────────────────────────────────
 function calcAttributesFromData(data) {
@@ -7523,6 +7577,9 @@ switchGmTab = function(tab) {
         <!-- stray shot ray overlay -->
         <svg id="stray-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:27;overflow:visible;"></svg>
+        <!-- sentinel range overlay -->
+        <svg id="sentinel-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;z-index:24;overflow:visible;"></svg>
       </div>
     </div>
 
