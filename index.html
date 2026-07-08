@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260708a';
+const VERSION = 'v0.1.20260708b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4902,10 +4902,11 @@ const SPELL_ACTIONS = [
 ];
 
 // combatant: { id, name, avatar, type, initiative, tieBreak, actions: [{label, startRound, durationRounds}] }
-let atCombatants = [];
-let atRound      = 1;
-let atActiveIdx  = 0;
+let atCombatants  = [];
+let atRound       = 1;
+let atActiveIdx   = 0;
 let atModalTarget = null; // combatant id receiving next action
+let _atStateFromGM = null; // { round, activeId } — received by players from GM broadcast
 
 function atSortedCombatants() {
   return [...atCombatants].sort((a, b) => {
@@ -4972,7 +4973,11 @@ function atRollInitiative(combatantId) {
       onComplete: n => {
         c.initiative = base + n;
         c.tieBreak   = Math.floor(Math.random() * 10) + 1;
+        if (!isGM() && mapChannel)
+          mapChannel.send({ type: 'broadcast', event: 'at-initiative',
+            payload: { combatantId, initiative: c.initiative, tieBreak: c.tieBreak } });
         renderAtList();
+        renderPlayCharacter();
       },
     });
   } else {
@@ -5179,8 +5184,13 @@ function atPickAction(label, dur) {
 
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
 
+  if (!isGM() && mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-add-action',
+      payload: { combatantId: atModalTarget, label, startRound: atRound, durationRounds } });
+
   atCloseModal();
   renderAtList();
+  renderPlayCharacter();
 }
 
 function atPickFreeform() {
@@ -5210,6 +5220,10 @@ function renderAtList() {
   list.innerHTML = '';
   const sorted   = atSortedCombatants();
   const activeC  = sorted[atActiveIdx];
+
+  if (isGM() && atCombatants.length && mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-state',
+      payload: { round: atRound, activeId: activeC?.id || null } });
 
   for (let i = 0; i < sorted.length; i++) {
     const c        = sorted[i];
@@ -5417,6 +5431,48 @@ function renderPlayCharacter() {
     <div id="play-hit-right"></div>
     <div id="play-hit-left"></div>`;
 
+  // ── Combat section (initiative + actions) ──────────────────────────────────
+  const myCombatantId = currentCharacterId ? 'char::' + currentCharacterId : null;
+  const myCombatant   = myCombatantId ? atCombatants.find(x => x.id === myCombatantId) : null;
+  const isMyTurn      = _atStateFromGM && myCombatantId && _atStateFromGM.activeId === myCombatantId;
+  const roundLabel    = _atStateFromGM ? `Round ${_atStateFromGM.round}` : (atRound > 1 ? `Round ${atRound}` : '');
+
+  let combatContent = '';
+  if (!myCombatant) {
+    combatContent = `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">Add your character to the map to join combat.</div>`;
+  } else {
+    const initVal   = myCombatant.initiative;
+    const initBadge = initVal != null
+      ? `<span style="color:var(--gold2);font-weight:bold;font-size:0.95rem;">${initVal}</span>`
+      : `<span style="color:var(--text-dim);font-style:italic;">Not rolled</span>`;
+    const safeId    = myCombatantId.replace(/'/g, "\\'");
+    const rollBtn   = initVal == null
+      ? `<button class="at-btn primary" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;">🎲 Roll</button>`
+      : `<button class="at-btn" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;" title="Re-roll">↺</button>`;
+
+    const myActions  = myCombatant.actions.filter(a => a.startRound + a.durationRounds > (atRound || 1));
+    const actionsHtml = myActions.length
+      ? myActions.map(a => {
+          const status = a.startRound <= (atRound || 1) ? '▶' : `Rd${a.startRound}:`;
+          return `<div class="at-action-row"><span class="at-action-label">${status} ${a.label}${a.durationRounds > 1 ? ` (${a.durationRounds}r)` : ''}</span></div>`;
+        }).join('')
+      : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No actions queued.</div>`;
+
+    const turnBanner = isMyTurn
+      ? `<div style="background:rgba(201,168,76,0.18);border:1px solid var(--gold);border-radius:4px;padding:5px 8px;text-align:center;font-size:0.85rem;color:var(--gold2);font-weight:bold;margin-bottom:6px;">⚔ YOUR TURN</div>`
+      : '';
+
+    combatContent = `
+      ${roundLabel ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.08em;">${roundLabel}</div>` : ''}
+      ${turnBanner}
+      <div class="at-action-row" style="margin-bottom:6px;">
+        <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
+        ${initBadge}${rollBtn}
+      </div>
+      ${actionsHtml}
+      <button class="at-btn primary" onclick="atOpenModal('${safeId}')" style="margin-top:5px;width:100%;">+ Queue Action</button>`;
+  }
+
   el.innerHTML = `
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
       <div class="ps-compact-avatar">${avatarHtml}</div>
@@ -5425,6 +5481,7 @@ function renderPlayCharacter() {
         <div style="font-size:0.72rem;color:var(--text-dim);" id="play-char-sub"></div>
       </div>
     </div>
+    ${section('combat', 'Combat',    combatContent)}
     ${section('stats',  'Stats',     statsContent)}
     ${section('equip',  'Equipment', equipContent)}
     ${section('armor',  'Armor',     armorRows)}
@@ -5936,6 +5993,24 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'clear-stray-ray' }, () => {
       clearStrayRay();
+    })
+    .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
+      if (isGM()) {
+        const c = atCombatants.find(x => x.id === payload.combatantId);
+        if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); }
+      }
+    })
+    .on('broadcast', { event: 'at-add-action' }, ({ payload }) => {
+      if (isGM()) {
+        const c = atCombatants.find(x => x.id === payload.combatantId);
+        if (c) {
+          c.actions.push({ label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds });
+          renderAtList();
+        }
+      }
+    })
+    .on('broadcast', { event: 'at-state' }, ({ payload }) => {
+      if (!isGM()) { _atStateFromGM = payload; renderPlayCharacter(); }
     })
     .subscribe();
 }
