@@ -5561,9 +5561,27 @@ function _rollerStartSpin() {
   _rollerTick(45);
 }
 
+let _rollerAudioCtx = null;
+function _rollerClick(pitch = 1.0) {
+  try {
+    if (!_rollerAudioCtx) _rollerAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _rollerAudioCtx;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880 * pitch, ctx.currentTime);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.04);
+  } catch (_) {}
+}
+
 function _rollerTick(interval) {
   if (_roller.phase !== 'spinning') return;
   document.getElementById('roller-number').textContent = _rollerRand();
+  _rollerClick(1.0);
   _roller.timeoutId = setTimeout(() => _rollerTick(interval), interval);
 }
 
@@ -5575,11 +5593,14 @@ function _rollerBeginStop() {
   document.getElementById('roller-status').textContent = 'Stopping…';
   // Deceleration steps: delays in ms, last step reveals the final number
   const steps = [80, 120, 170, 230, 300, 380, 460];
+  // Pitch drops as steps slow down (1.0 → 0.55)
+  const pitches = [0.95, 0.88, 0.80, 0.72, 0.65, 0.58, 0.55];
   let i = 0;
   function step() {
     const isLast = i === steps.length - 1;
     document.getElementById('roller-number').textContent =
       isLast ? _roller.finalNum : _rollerRand();
+    _rollerClick(pitches[i] ?? 0.55);
     if (isLast) { _rollerShowResult(); return; }
     setTimeout(step, steps[i++]);
   }
