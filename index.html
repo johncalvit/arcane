@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709g';
+const VERSION = 'v0.1.20260709h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7046,7 +7046,37 @@ async function showTokenInfo(tokenId) {
   if (!el) return;
 
   // Header with back button
-  const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← My Character</button>`;
+  const backLabel = isGM() ? '← Back' : '← My Character';
+  const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">${backLabel}</button>`;
+
+  // Build combat section for any combatant
+  function buildCombatSection(combatantId, secFn) {
+    let c = atCombatants.find(x => x.id === combatantId);
+    if (!c) return secFn('combat', 'Combat', `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">Not in action tracker.</div>`);
+    const initVal   = c.initiative;
+    const safeId    = combatantId.replace(/'/g, "\\'");
+    const initBadge = initVal != null
+      ? `<span style="color:var(--gold2);font-weight:bold;font-size:0.95rem;">${initVal}</span>`
+      : `<span style="color:var(--text-dim);font-style:italic;">Not rolled</span>`;
+    const rollBtn   = initVal == null
+      ? `<button class="at-btn primary" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;">🎲 Roll</button>`
+      : `<button class="at-btn" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;" title="Re-roll">↺</button>`;
+    const myActions   = c.actions.filter(a => a.startRound + a.durationRounds > (atRound || 1));
+    const actionsHtml = myActions.length
+      ? myActions.map(a => {
+          const status = a.startRound <= (atRound || 1) ? '▶' : `Rd${a.startRound}:`;
+          return `<div class="at-action-row"><span class="at-action-label">${status} ${a.label}${a.durationRounds > 1 ? ` (${a.durationRounds}r)` : ''}</span></div>`;
+        }).join('')
+      : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No actions queued.</div>`;
+    const content = `
+      <div class="at-action-row" style="margin-bottom:6px;">
+        <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
+        ${initBadge}${rollBtn}
+      </div>
+      ${actionsHtml}
+      <button class="at-btn primary" onclick="atOpenModal('${safeId}')" style="margin-top:5px;width:100%;">+ Queue Action</button>`;
+    return secFn('combat', 'Combat', content);
+  }
 
   if (t.entity_type === 'creature') {
     // Pull full creature data from cache (populated by loadSessionCreatureCache)
@@ -7134,15 +7164,22 @@ async function showTokenInfo(tokenId) {
         <div id="${cid(key)}" style="padding:6px 8px;">${content}</div>
       </div>`;
 
+    const cMaxSpeed = calcMaxSpeed(cAttrs, 0);
+    const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
+    const creatureCombatantId = 'creature::' + t.id;
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
         <div class="ps-compact-avatar">${avatarHtml}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${t.label}</div>
           <div style="font-size:0.72rem;color:var(--text-dim);">${[sc.species, sc.body_type].filter(Boolean).join(' · ') || 'Creature'}</div>
-          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">Size ×${sizeAdj}</div>
+          <div style="display:flex;gap:12px;margin-top:5px;">
+            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${cSpeedStr}</div></div>
+            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">×${sizeAdj}</div></div>
+          </div>
         </div>
       </div>
+      ${buildCombatSection(creatureCombatantId, csec)}
       ${csec('stats',  'Stats',      statsContent)}
       ${csec('equip',  'Equipment',  weaponRows)}
       ${csec('armor',  'Armor',      armorRows)}
@@ -7260,6 +7297,10 @@ async function showTokenInfo(tokenId) {
   const condContent = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${condBtnsHtml}</div>
     ${!isGM() ? '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:4px;font-style:italic;">GM controls conditions.</div>' : ''}`;
 
+  const charMaxSpeed = calcMaxSpeed(attrs, 0);
+  const charSpeedStr = charMaxSpeed != null ? Math.round(charMaxSpeed) + ' ft/s' : '—';
+  const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
+  const charCombatantId = 'char::' + t.entity_id;
   el.innerHTML = `
     ${backBtn}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -7267,8 +7308,13 @@ async function showTokenInfo(tokenId) {
       <div style="flex:1;min-width:0;">
         <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${row.name || '—'}</div>
         <div style="font-size:0.72rem;color:var(--text-dim);">${[row.species, row.body_type].filter(Boolean).join(' · ')}</div>
+        <div style="display:flex;gap:12px;margin-top:5px;">
+          <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${charSpeedStr}</div></div>
+          <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">${charSizeStr}</div></div>
+        </div>
       </div>
     </div>
+    ${buildCombatSection(charCombatantId, section)}
     ${section('conds',  'Conditions', condContent)}
     ${section('stats',  'Stats',      statsContent)}
     ${section('equip',  'Equipment',  equipContent)}
