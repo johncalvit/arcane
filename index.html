@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709d';
+const VERSION = 'v0.1.20260709e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7318,9 +7318,18 @@ async function addCharacterToken(charId, charName, avatarPath) {
 
 async function removeToken(tokenId) {
   // optimistic update — don't wait for Realtime (DELETE old record may lack campaign_id)
+  const removed = mapTokens[tokenId];
   delete mapTokens[tokenId];
   document.getElementById('token-' + tokenId)?.remove();
   refreshTokenPanel();
+  // remove from action tracker
+  if (removed) {
+    const combatantId = removed.entity_type === 'character'
+      ? 'char::' + removed.entity_id
+      : 'creature::' + removed.id;
+    const idx = atCombatants.findIndex(c => c.id === combatantId);
+    if (idx !== -1) { atCombatants.splice(idx, 1); renderAtList(); }
+  }
   await sb.from('map_tokens').delete().eq('id', tokenId);
 }
 
