@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709b';
+const VERSION = 'v0.1.20260709c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6491,6 +6491,7 @@ async function loadMapTokens(mapId) {
     renderAllTokens();
     if (isGM()) refreshTokenPanel();
   }
+  await loadSessionCreatureCache();
 }
 
 // ── Token drag ────────────────────────────────────────────────────────────────
@@ -6612,6 +6613,17 @@ async function loadPlayCharCache() {
     .eq('campaign_id', currentCampaignId);
   playCharCache = {};
   (data || []).forEach(row => { playCharCache[row.id] = row; });
+}
+
+let sessionCreatureCache = {}; // entity_id → session_creatures row
+
+async function loadSessionCreatureCache() {
+  if (!currentCampaignId) return;
+  const { data } = await sb.from('session_creatures')
+    .select('id, species, label, stats, held_items, armor, body_type, sex, age, height, build, social, mental')
+    .eq('campaign_id', currentCampaignId);
+  sessionCreatureCache = {};
+  (data || []).forEach(row => { sessionCreatureCache[row.id] = row; });
 }
 
 // ── Attack mode ───────────────────────────────────────────────────────────────
@@ -7006,22 +7018,23 @@ async function showTokenInfo(tokenId) {
   const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← My Character</button>`;
 
   if (t.entity_type === 'creature') {
-    // Default raw stats to 10 for any unset value (humanoid baseline)
+    // Pull full creature data from cache (populated by loadSessionCreatureCache)
+    const sc = sessionCreatureCache[t.entity_id] || {};
     const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
-    const rawStats = Object.assign({}, DEFAULT_STATS, t.stats || {});
+    const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
     const creatureData = {
-      race:    t.species    || '',
-      bodyType:t.body_type  || 'Humanoid',
-      sex:     t.sex        || '',
-      age:     t.age        || 'Adult',
-      height:  t.height     || 'Average',
-      build:   t.build      || 'Average',
-      social:  t.social     || '',
-      mental:  t.mental     || '',
+      race:    sc.species   || '',
+      bodyType:sc.body_type || 'Humanoid',
+      sex:     sc.sex       || '',
+      age:     sc.age       || 'Adult',
+      height:  sc.height    || 'Average',
+      build:   sc.build     || 'Average',
+      social:  sc.social    || 'Balanced',
+      mental:  sc.mental    || 'Balanced',
       stats:   rawStats,
     };
     const cAttrs = calcAttributesFromData(creatureData);
-    const sizeAdj = calcTargetAdjFromRow({ species: t.species, body_type: t.body_type, build: t.build, height: t.height });
+    const sizeAdj = calcTargetAdjFromRow({ species: sc.species, body_type: sc.body_type, build: sc.build || 'Average', height: sc.height || 'Average' });
 
     const avatarHtml = t.avatar_url
       ? `<img src="${t.avatar_url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='👾'">`
@@ -7042,7 +7055,7 @@ async function showTokenInfo(tokenId) {
       </div>`).join('');
 
     // Weapons with calculated hit
-    const held = t.held_items || {};
+    const held = sc.held_items || t.held_items || {};
     let weaponRows = '';
     for (const side of ['right','left']) {
       const itemName = held[side];
@@ -7065,7 +7078,7 @@ async function showTokenInfo(tokenId) {
     }
     if (!weaponRows) weaponRows = `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No weapons.</div>`;
 
-    const armor = t.armor || {};
+    const armor = sc.armor || t.armor || {};
     const armorSlots  = ['head','torso','rarm','larm','rleg','lleg'];
     const armorLabels = {head:'Head',torso:'Torso',rarm:'R.Arm',larm:'L.Arm',rleg:'R.Leg',lleg:'L.Leg'};
     const armorRows = armorSlots.map(s =>
@@ -7095,7 +7108,7 @@ async function showTokenInfo(tokenId) {
         <div class="ps-compact-avatar">${avatarHtml}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${t.label}</div>
-          <div style="font-size:0.72rem;color:var(--text-dim);">${[t.species, t.body_type].filter(Boolean).join(' · ') || 'Creature'}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim);">${[sc.species, sc.body_type].filter(Boolean).join(' · ') || 'Creature'}</div>
           <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">Size ×${sizeAdj}</div>
         </div>
       </div>
