@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709f';
+const VERSION = 'v0.1.20260709g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4956,15 +4956,21 @@ function atRollInitiative(combatantId) {
   if (c.type === 'char') {
     const charId = combatantId.split('::')[1];
     const row = playCharCache[charId];
-    if (row) {
-      const attrs = calcAttributesFromData({
+    let initAttrs = null;
+    if (charId === currentCharacterId) {
+      // use live DOM values for the currently loaded character
+      initAttrs = calcAttributes();
+    } else if (row) {
+      initAttrs = calcAttributesFromData({
         race: row.species || '', bodyType: row.body_type || '',
         sex: row.sex || '', age: row.age || '',
         height: row.height || '', build: row.build || '',
         social: row.social || '', mental: row.mental || '',
         stats: row.stats || {},
       });
-      base = Math.round((attrs.Speed || 0) + (attrs.PhysCoord || 0) + (attrs.Intuition || 0));
+    }
+    if (initAttrs) {
+      base = Math.round((initAttrs.Speed || 0) + (initAttrs.PhysCoord || 0) + (initAttrs.Intuition || 0));
     }
     openRoller({
       label: `${c.name} — Initiative`,
@@ -4981,6 +4987,21 @@ function atRollInitiative(combatantId) {
       },
     });
   } else {
+    // creature — derive base from session_creatures stats
+    const creatureId = combatantId.split('::')[1];
+    const sc = sessionCreatureCache[creatureId];
+    if (sc) {
+      const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+      const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
+      const creatureAttrs = calcAttributesFromData({
+        race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
+        sex: sc.sex || '', age: sc.age || 'Adult',
+        height: sc.height || 'Average', build: sc.build || 'Average',
+        social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
+        stats: rawStats,
+      });
+      base = Math.round((creatureAttrs.Speed || 0) + (creatureAttrs.PhysCoord || 0) + (creatureAttrs.Intuition || 0));
+    }
     const roll    = Math.floor(Math.random() * 10) + 1;
     c.initiative  = base + roll;
     c.tieBreak    = Math.floor(Math.random() * 10) + 1;
