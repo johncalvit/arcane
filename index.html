@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709a';
+const VERSION = 'v0.1.20260709b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5803,7 +5803,8 @@ function _rollerShowResult() {
     document.getElementById('roller-status').textContent = '';
     if (success && _roller.locContext) {
       const { bodyType, partKey } = _roller.locContext;
-      const hitPart = rollHitLocation(bodyType, partKey);
+      // Critical success on a called shot = hit exactly the aimed location
+      const hitPart = (critSuccess && partKey) ? partKey : rollHitLocation(bodyType, partKey);
       const locData = getHitLocData(bodyType);
       const partLabel = locData.parts[hitPart]?.label || hitPart;
       const locEl = document.getElementById('roller-hit-location');
