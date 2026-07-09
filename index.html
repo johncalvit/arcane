@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709c';
+const VERSION = 'v0.1.20260709d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6619,9 +6619,10 @@ let sessionCreatureCache = {}; // entity_id → session_creatures row
 
 async function loadSessionCreatureCache() {
   if (!currentCampaignId) return;
-  const { data } = await sb.from('session_creatures')
-    .select('id, species, label, stats, held_items, armor, body_type, sex, age, height, build, social, mental')
+  const { data, error } = await sb.from('session_creatures')
+    .select('*')
     .eq('campaign_id', currentCampaignId);
+  if (error) { console.warn('loadSessionCreatureCache:', error.message); return; }
   sessionCreatureCache = {};
   (data || []).forEach(row => { sessionCreatureCache[row.id] = row; });
 }
