@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709e';
+const VERSION = 'v0.1.20260709f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5497,12 +5497,21 @@ function renderPlayCharacter() {
       <button class="at-btn primary" onclick="atOpenModal('${safeId}')" style="margin-top:5px;width:100%;">+ Queue Action</button>`;
   }
 
+  const { total: playCarried } = getCarriedWeight(attrs);
+  const playMaxSpeed = calcMaxSpeed(attrs, playCarried);
+  const playSpeedStr = playMaxSpeed != null ? Math.round(playMaxSpeed) + ' ft/s' : '—';
+  const playSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
+
   el.innerHTML = `
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
       <div class="ps-compact-avatar">${avatarHtml}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${charName || 'No Character'}</div>
         <div style="font-size:0.72rem;color:var(--text-dim);" id="play-char-sub"></div>
+        <div style="display:flex;gap:12px;margin-top:5px;">
+          <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${playSpeedStr}</div></div>
+          <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">${playSizeStr}</div></div>
+        </div>
       </div>
     </div>
     ${section('combat', 'Combat',    combatContent)}
