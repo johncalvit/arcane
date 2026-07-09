@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709i';
+const VERSION = 'v0.1.20260709j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4988,8 +4988,9 @@ function atRollInitiative(combatantId) {
     });
   } else {
     // creature — derive base from session_creatures stats
-    const creatureId = combatantId.split('::')[1];
-    const sc = sessionCreatureCache[creatureId];
+    const tokenId = combatantId.split('::')[1];
+    const token = mapTokens[tokenId];
+    const sc = token ? sessionCreatureCache[token.entity_id] : null;
     if (sc) {
       const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
       const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
