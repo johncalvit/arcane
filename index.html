@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260708c';
+const VERSION = 'v0.1.20260709a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5383,10 +5383,15 @@ function renderPlayCharacter() {
     : `<span style="font-size:1.4rem;opacity:0.4;">🧙</span>`;
 
   // Held items with hit/dmg/power
-  const rightSel = document.getElementById('ps-hand-right');
-  const leftSel  = document.getElementById('ps-hand-left');
+  const rightSel  = document.getElementById('ps-hand-right');
+  const leftSel   = document.getElementById('ps-hand-left');
   const rightItem = rightSel ? rightSel.value : '';
   const leftItem  = leftSel  ? leftSel.value  : '';
+  const loadoutItems = getLoadoutItemNames();
+  const handOpts = (cur) => ['', ...loadoutItems]
+    .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'Bare Hand'}</option>`).join('');
+  const handSelStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
+  const dimLabel = (t) => `<div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${t}</div>`;
 
   // Armor summary
   const armorSlots = ['head','torso','rarm','larm','rleg','lleg'];
@@ -5428,8 +5433,16 @@ function renderPlayCharacter() {
     </div>`).join('');
 
   const equipContent = `
-    <div id="play-hit-right"></div>
-    <div id="play-hit-left"></div>`;
+    <div style="margin-bottom:6px;">
+      ${dimLabel('Right Hand')}
+      <select style="${handSelStyle}" onchange="_playSetHand('right',this.value)">${handOpts(rightItem)}</select>
+      <div id="play-hit-right"></div>
+    </div>
+    <div>
+      ${dimLabel('Left Hand')}
+      <select style="${handSelStyle}" onchange="_playSetHand('left',this.value)">${handOpts(leftItem)}</select>
+      <div id="play-hit-left"></div>
+    </div>`;
 
   // ── Combat section (initiative + actions) ──────────────────────────────────
   const myCombatantId = currentCharacterId ? 'char::' + currentCharacterId : null;
@@ -5528,6 +5541,13 @@ function renderPlayHandHit(side, attrs) {
       ${label}: <span style="color:var(--gold2);font-weight:bold;">${itemName}</span>
     </div>
     ${actionsHtml}`;
+}
+
+// ── Play-panel hand selector ─────────────────────────────────────────────────
+async function _playSetHand(side, value) {
+  const sel = document.getElementById('ps-hand-' + side);
+  if (sel) { sel.value = value; recalc(); }
+  await saveCharacter();
 }
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
@@ -6985,16 +7005,103 @@ async function showTokenInfo(tokenId) {
   const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← My Character</button>`;
 
   if (t.entity_type === 'creature') {
-    const race = RACE_DATA[t.species] || {};
+    // Default raw stats to 10 for any unset value (humanoid baseline)
+    const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+    const rawStats = Object.assign({}, DEFAULT_STATS, t.stats || {});
+    const creatureData = {
+      race:    t.species    || '',
+      bodyType:t.body_type  || 'Humanoid',
+      sex:     t.sex        || '',
+      age:     t.age        || 'Adult',
+      height:  t.height     || 'Average',
+      build:   t.build      || 'Average',
+      social:  t.social     || '',
+      mental:  t.mental     || '',
+      stats:   rawStats,
+    };
+    const cAttrs = calcAttributesFromData(creatureData);
+    const sizeAdj = calcTargetAdjFromRow({ species: t.species, body_type: t.body_type, build: t.build, height: t.height });
+
+    const avatarHtml = t.avatar_url
+      ? `<img src="${t.avatar_url}" style="width:100%;height:100%;object-fit:cover;" onerror="this.parentElement.innerHTML='👾'">`
+      : `<span style="font-size:1.4rem;opacity:0.4;">👾</span>`;
+
+    const groups = [
+      { label:'Physical',  keys: ATTRIBUTES.filter(a => a.group==='physical') },
+      { label:'Cognitive', keys: ATTRIBUTES.filter(a => a.group==='cognitive') },
+      { label:'Senses',    keys: ATTRIBUTES.filter(a => a.group==='senses') },
+    ];
+    const statRow = a => `<div class="ps-stat-row">
+      <span class="ps-stat-label">${a.label}</span>
+      <span class="ps-stat-val">${Math.round(cAttrs[a.key] ?? 0)}</span></div>`;
+    const statsContent = groups.map(g => `
+      <div style="margin-bottom:8px;">
+        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${g.label}</div>
+        ${g.keys.map(statRow).join('')}
+      </div>`).join('');
+
+    // Weapons with calculated hit
+    const held = t.held_items || {};
+    let weaponRows = '';
+    for (const side of ['right','left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      const norm = normalizeWeaponName(itemName);
+      const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon)===norm && r.damageMax>0);
+      const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon)===norm);
+      const rows = [...meleeRows, ...rangedRows];
+      if (rows.length) {
+        rows.forEach(r => {
+          const hit = calcHitValue(r.hitFormula, cAttrs);
+          const adj = hit != null ? Math.round(hit * sizeAdj) : null;
+          weaponRows += `<div class="ps-stat-row">
+            <span class="ps-stat-label">${r.action} (${itemName})</span>
+            <span class="ps-stat-val">${adj != null ? `HIT ${adj}` : '—'} · DMG ${r.damageMax}</span></div>`;
+        });
+      } else {
+        weaponRows += `<div class="ps-stat-row"><span class="ps-stat-label">${itemName}</span><span class="ps-stat-val" style="color:var(--text-dim);">—</span></div>`;
+      }
+    }
+    if (!weaponRows) weaponRows = `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No weapons.</div>`;
+
+    const armor = t.armor || {};
+    const armorSlots  = ['head','torso','rarm','larm','rleg','lleg'];
+    const armorLabels = {head:'Head',torso:'Torso',rarm:'R.Arm',larm:'L.Arm',rleg:'R.Leg',lleg:'L.Leg'};
+    const armorRows = armorSlots.map(s =>
+      `<div class="ps-stat-row"><span class="ps-stat-label">${armorLabels[s]}</span>
+       <span class="ps-stat-val" style="font-size:0.72rem;">${armor[s]||'None'}</span></div>`).join('');
+
+    const activeConds = getConditions(t.id);
+    const condHtml = CONDITION_DEFS.map(def => {
+      const active = activeConds.has(def.key);
+      const activeStyle = active ? `background:${def.color}22;border-color:${def.color};color:${def.color};` : 'background:var(--bg3);border-color:var(--border);color:var(--text-dim);';
+      const gmClick = isGM() ? `onclick="setCondition('${t.id}','${def.key}',${!active}).then(()=>showTokenInfo('${t.id}'))"` : '';
+      return `<div title="${def.desc}" style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${activeStyle}${isGM()?'cursor:pointer;':'cursor:default;'}" ${gmClick}>
+        <span>${def.icon}</span><span>${def.label}</span></div>`;
+    }).join('');
+
+    const cid = (s) => `cs-${t.id}-${s}`;
+    const csec = (key, title, content) => `
+      <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+        <div onclick="(function(el){el.style.display=el.style.display==='none'?'block':'none'})(document.getElementById('${cid(key)}'))"
+             style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;cursor:pointer;background:var(--bg3);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">
+          ${title}<span style="font-size:0.7rem;opacity:0.5;">▾</span></div>
+        <div id="${cid(key)}" style="padding:6px 8px;">${content}</div>
+      </div>`;
+
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
-        <div class="ps-compact-avatar" style="display:flex;align-items:center;justify-content:center;font-size:2rem;">👾</div>
-        <div>
+        <div class="ps-compact-avatar">${avatarHtml}</div>
+        <div style="flex:1;min-width:0;">
           <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${t.label}</div>
-          <div style="font-size:0.72rem;color:var(--text-dim);">${t.species || 'Creature'}</div>
+          <div style="font-size:0.72rem;color:var(--text-dim);">${[t.species, t.body_type].filter(Boolean).join(' · ') || 'Creature'}</div>
+          <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">Size ×${sizeAdj}</div>
         </div>
       </div>
-      <div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No stat sheet for creature tokens.</div>`;
+      ${csec('stats',  'Stats',      statsContent)}
+      ${csec('equip',  'Equipment',  weaponRows)}
+      ${csec('armor',  'Armor',      armorRows)}
+      ${csec('conds',  'Conditions', `<div style="display:flex;flex-wrap:wrap;gap:5px;">${condHtml}</div>`)}`;
     return;
   }
 
