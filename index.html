@@ -3945,7 +3945,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709h';
+const VERSION = 'v0.1.20260709i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7035,6 +7035,20 @@ function calcAttributesFromData(data) {
     const mM = getModifier({Logical:MENTAL_DATA.Logical,Balanced:MENTAL_DATA.Balanced,Intuitive:MENTAL_DATA.Intuitive}, mental, attr.key);
     results[attr.key] = rawVal * rM * gM * aM * hM * bM * sM * mM;
   }
+  // Height / weight / target size (mirrors calcAttributes)
+  const raceH = (RACE_DATA[race] || {}).Height || 66;
+  const gH    = (GENDER_DATA[gender] || {}).Height || 1;
+  const aH    = (AGE_DATA[age]    || {}).Height || 1;
+  const hH    = (HEIGHT_DATA[height] || {}).Height || 1;
+  results._heightInches = raceH * gH * aH * hH;
+  const baseW = baseWeightFromHeight(results._heightInches);
+  const rW = (RACE_DATA[race]   || {}).Weight || 1;
+  const gW = (GENDER_DATA[gender] || {}).Weight || 1;
+  const aW = (AGE_DATA[age]    || {}).Weight || 1;
+  const bW = (BUILD_DATA[build] || {}).Weight || 1;
+  results._weight = baseW * rW * gW * aW * bW;
+  const buildTA = (BUILD_DATA[build] || {}).TargetAdj || 1;
+  results._targetAdj = Math.round(results._heightInches / 12 * buildTA);
   return results;
 }
 
