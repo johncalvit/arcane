@@ -3965,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710b';
+const VERSION = 'v0.1.20260710c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8112,10 +8112,16 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
     .select('*').eq('id', templateId).single();
   if (error || !tmpl) { alert('Failed to load template: ' + (error?.message || 'unknown')); return; }
 
-  // Auto-number duplicates: count existing creatures with same base name
+  // Always number spawned tokens: Goblin Warrior 1, Goblin Warrior 2, etc.
   const baseName = tmpl.name;
-  const existing = Object.values(mapTokens).filter(t => t.entity_type === 'creature' && t.label.startsWith(baseName));
-  const label = existing.length ? `${baseName} ${existing.length + 1}` : baseName;
+  const usedNumbers = new Set(
+    Object.values(mapTokens)
+      .filter(t => t.entity_type === 'creature' && t.label.startsWith(baseName))
+      .map(t => parseInt(t.label.slice(baseName.length).trim()) || 0)
+  );
+  let n = 1;
+  while (usedNumbers.has(n)) n++;
+  const label = `${baseName} ${n}`;
 
   const { data: creature, error: scErr } = await sb.from('session_creatures').insert({
     campaign_id: currentCampaignId,
