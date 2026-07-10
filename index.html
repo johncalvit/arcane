@@ -885,6 +885,9 @@
       <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
       <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
       <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
+      <label id="is-template-row" style="display:none;align-items:center;gap:6px;padding:2px 18px 6px;font-size:0.75rem;color:var(--text-dim);cursor:pointer;">
+        <input type="checkbox" id="is-template-chk"> Monster Template
+      </label>
       <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
       <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
@@ -3730,6 +3733,7 @@ async function saveCharacter() {
     armor:       data.armor,
     held_items:  data.heldItems,
     avatar_url:  avatarStoragePath || data.avatarUrl || '',
+    is_template: document.getElementById('is-template-chk')?.checked || false,
   };
 
   let error;
@@ -3775,6 +3779,7 @@ async function showCharacterListModal() {
     .from('characters')
     .select('id, name, species, sex, updated_at')
     .eq('campaign_id', currentCampaignId)
+    .eq('is_template', false)
     .order('updated_at', { ascending: false });
   // Players only see their own characters; GMs see all in the campaign
   if (!isGM()) query = query.eq('user_id', currentUser.id);
@@ -3841,6 +3846,8 @@ async function loadCharacter(id) {
   avatarStoragePath = (data.avatar_url && !data.avatar_url.startsWith('data:') && !data.avatar_url.startsWith('http'))
     ? data.avatar_url : '';
 
+  const tmplChk = document.getElementById('is-template-chk');
+  if (tmplChk) tmplChk.checked = data.is_template || false;
   setCharSaveStatus('Loaded: ' + data.name, true);
 }
 
@@ -3865,6 +3872,8 @@ function _doNewCharacter() {
   setCharSaveStatus('', false);
   avatarUrl = '';
   avatarStoragePath = '';
+  const tmplChk = document.getElementById('is-template-chk');
+  if (tmplChk) tmplChk.checked = false;
   setAvatarUrl('');
   applySpeciesDefaultAvatar();
   document.getElementById('char-name').value = '';
@@ -3956,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709o';
+const VERSION = 'v0.1.20260710a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4040,6 +4049,7 @@ async function _landingLoadCharacters() {
     .from('characters')
     .select('id, name, species, avatar_url, campaign_id')
     .eq('user_id', currentUser.id)
+    .eq('is_template', false)
     .order('updated_at', { ascending: false });
   if (error) { el.innerHTML = `<span class="landing-dim">${error.message}</span>`; return; }
   if (!chars.length) { el.innerHTML = '<span class="landing-dim">No saved characters yet.</span>'; return; }
@@ -4421,6 +4431,8 @@ function isConfigOwner() {
 function updateOwnerButtonVisibility() {
   const btn = document.getElementById('save-owner-default-btn');
   if (btn) btn.style.display = isConfigOwner() ? '' : 'none';
+  const tmplRow = document.getElementById('is-template-row');
+  if (tmplRow) tmplRow.style.display = isGM() ? 'flex' : 'none';
 }
 
 async function writeConfigToSupabase() {
@@ -7462,6 +7474,7 @@ async function toggleTokenVisibility(tokenId) {
 async function refreshTokenPanel() {
   renderOnMapTokens();
   await loadCampaignCharactersForTokens();
+  await loadTemplatesForTokens();
 }
 
 function renderOnMapTokens() {
@@ -8065,6 +8078,87 @@ function populateCreatureSpecies() {
   if (species.includes(prev)) sel.value = prev;
 }
 
+async function loadTemplatesForTokens() {
+  const el = document.getElementById('tokens-template-list');
+  if (!el || !currentCampaignId) return;
+  el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);">Loading…</div>';
+
+  const { data, error } = await sb.from('characters')
+    .select('id, name, species, avatar_url')
+    .eq('campaign_id', currentCampaignId)
+    .eq('is_template', true)
+    .order('name');
+
+  if (error) { el.innerHTML = `<div style="padding:8px 10px;font-size:0.72rem;color:#e06060;">${error.message}</div>`; return; }
+  if (!data?.length) {
+    el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No templates yet — create a character and check "Monster Template" before saving.</div>';
+    return;
+  }
+
+  el.innerHTML = data.map(t => `
+    <div class="token-add-row">
+      <div style="flex:1;min-width:0;">
+        <div class="t-name">${t.name}</div>
+        <div class="t-sub">${t.species || ''}</div>
+      </div>
+      <button class="token-add-btn" onclick="spawnTemplate('${t.id}','${t.name.replace(/'/g,"\\'")}','${(t.avatar_url||'').replace(/'/g,"\\'")}')">Spawn</button>
+    </div>`).join('');
+}
+
+async function spawnTemplate(templateId, templateName, avatarPath) {
+  if (!activeMapId || !currentCampaignId) return;
+
+  const { data: tmpl, error } = await sb.from('characters')
+    .select('*').eq('id', templateId).single();
+  if (error || !tmpl) { alert('Failed to load template: ' + (error?.message || 'unknown')); return; }
+
+  // Auto-number duplicates: count existing creatures with same base name
+  const baseName = tmpl.name;
+  const existing = Object.values(mapTokens).filter(t => t.entity_type === 'creature' && t.label.startsWith(baseName));
+  const label = existing.length ? `${baseName} ${existing.length + 1}` : baseName;
+
+  const { data: creature, error: scErr } = await sb.from('session_creatures').insert({
+    campaign_id: currentCampaignId,
+    species:     tmpl.species    || '',
+    body_type:   tmpl.body_type  || 'Humanoid',
+    label,
+    sex:         tmpl.sex        || '',
+    age:         tmpl.age        || 'Adult',
+    height:      tmpl.height     || 'Average',
+    build:       tmpl.build      || 'Average',
+    social:      tmpl.social     || 'Balanced',
+    mental:      tmpl.mental     || 'Balanced',
+    stats:       tmpl.stats      || {},
+    skills:      tmpl.skills     || {},
+    held_items:  tmpl.held_items || {},
+    armor:       tmpl.armor      || {},
+  }).select('id').single();
+
+  if (scErr || !creature) { alert('Failed to spawn creature: ' + (scErr?.message || 'unknown')); return; }
+
+  let avatar_url = '';
+  if (avatarPath) {
+    if (avatarPath.startsWith('data:') || avatarPath.startsWith('http')) {
+      avatar_url = avatarPath;
+    } else {
+      const { data: u } = sb.storage.from('avatars').getPublicUrl(avatarPath);
+      avatar_url = u.publicUrl;
+    }
+  }
+
+  await sb.from('map_tokens').insert({
+    map_id:      activeMapId,
+    campaign_id: currentCampaignId,
+    entity_type: 'creature',
+    entity_id:   creature.id,
+    label,
+    avatar_url,
+    ...findTokenPlacement(),
+    visible:     true,
+  });
+  // Realtime INSERT → upsertTokenElement + refreshTokenPanel
+}
+
 async function addCreatureToken() {
   if (!activeMapId || !currentCampaignId) return;
   const speciesSel = document.getElementById('creature-species-sel');
@@ -8416,6 +8510,11 @@ switchGmTab = function(tab) {
             <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Characters</div>
           </div>
           <div id="tokens-char-list"></div>
+
+          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
+            <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Templates</div>
+          </div>
+          <div id="tokens-template-list"></div>
 
           <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
             <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Add Creature</div>
