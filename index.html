@@ -3761,6 +3761,14 @@ async function showCharacterListModal() {
   const err   = document.getElementById('character-list-error');
   err.style.display = 'none';
   modal.style.display = 'flex';
+
+  if (!currentCampaignId || !currentUser) {
+    list.innerHTML = '';
+    err.textContent = 'Sign in and select a campaign first.';
+    err.style.display = '';
+    return;
+  }
+
   list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
 
   const { data, error } = await sb
@@ -3945,7 +3953,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709j';
+const VERSION = 'v0.1.20260709k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
