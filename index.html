@@ -3993,7 +3993,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710i';
+const VERSION = 'v0.1.20260710j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5030,11 +5030,11 @@ function atRollInitiative(combatantId) {
     }
     openRoller({
       label: `${c.name} — Initiative`,
-      min: 1, max: 10, target: null,
-      targetLabel: `Speed + PhysCoord + Intuition (${base}) + roll`,
+      min: 1, max: Math.max(1, base), target: null,
+      targetLabel: `Roll 1–${Math.max(1, base)} (Speed + PhysCoord + Intuition)`,
       onComplete: n => {
-        c.initiative = base + n;
-        c.tieBreak   = Math.floor(Math.random() * 10) + 1;
+        c.initiative = n;
+        c.tieBreak   = Math.floor(Math.random() * base) + 1;
         if (!isGM() && mapChannel)
           mapChannel.send({ type: 'broadcast', event: 'at-initiative',
             payload: { combatantId, initiative: c.initiative, tieBreak: c.tieBreak } });
@@ -5059,11 +5059,35 @@ function atRollInitiative(combatantId) {
       });
       base = Math.round((creatureAttrs.Speed || 0) + (creatureAttrs.PhysCoord || 0) + (creatureAttrs.Intuition || 0));
     }
-    const roll    = Math.floor(Math.random() * 10) + 1;
-    c.initiative  = base + roll;
-    c.tieBreak    = Math.floor(Math.random() * 10) + 1;
+    const max     = Math.max(1, base);
+    c.initiative  = Math.floor(Math.random() * max) + 1;
+    c.tieBreak    = Math.floor(Math.random() * max) + 1;
     renderAtList();
   }
+}
+
+function atRollAllMonsters() {
+  atCombatants.filter(c => c.type === 'creature').forEach(c => {
+    const tokenId = c.id.split('::')[1];
+    const token = mapTokens[tokenId];
+    const sc = token ? sessionCreatureCache[token.entity_id] : null;
+    let base = 1;
+    if (sc) {
+      const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+      const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
+      const attrs = calcAttributesFromData({
+        race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
+        sex: sc.sex || '', age: sc.age || 'Adult',
+        height: sc.height || 'Average', build: sc.build || 'Average',
+        social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
+        stats: rawStats,
+      });
+      base = Math.max(1, Math.round((attrs.Speed || 0) + (attrs.PhysCoord || 0) + (attrs.Intuition || 0)));
+    }
+    c.initiative = Math.floor(Math.random() * base) + 1;
+    c.tieBreak   = Math.floor(Math.random() * base) + 1;
+  });
+  renderAtList();
 }
 
 function atAcceptAction(combatantId) {
@@ -5288,6 +5312,8 @@ function atCancelAction(combatantId, idx) {
 function renderAtList() {
   document.getElementById('at-clock-display').textContent = 'Round ' + atRound;
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
+  const monstersBtn = document.getElementById('at-roll-monsters-btn');
+  if (monstersBtn) monstersBtn.style.display = (isGM() && atCombatants.some(c => c.type === 'creature')) ? '' : 'none';
 
   const list = document.getElementById('at-list');
   if (!atCombatants.length) {
@@ -8576,6 +8602,7 @@ switchGmTab = function(tab) {
           <button class="at-next-btn" id="at-next-btn" onclick="atNext()" title="Advance to next combatant">⏭ Next</button>
           <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative" style="margin-left:4px;">↺ Round</button>
           <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative" style="margin-left:2px;">↺ All</button>
+          <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="margin-left:6px;display:none;">🎲 Monsters</button>
         </div>
         <!-- add combatant row -->
         <div class="at-add-row">
