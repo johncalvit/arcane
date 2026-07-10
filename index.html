@@ -3804,6 +3804,34 @@ async function showCharacterListModal() {
       </div>
       <button class="remove-btn" title="Delete character" onclick="deleteCharacter('${c.id}','${c.name.replace(/'/g,"\\'")}')">✕</button>
     </div>`).join('');
+
+  // Templates section — GMs only
+  const tmplSection = document.getElementById('template-list-section');
+  const tmplList    = document.getElementById('template-list');
+  if (isGM()) {
+    const { data: tmpls } = await sb
+      .from('characters')
+      .select('id, name, species, updated_at')
+      .eq('campaign_id', currentCampaignId)
+      .eq('is_template', true)
+      .order('name', { ascending: true });
+    if (tmpls && tmpls.length) {
+      tmplSection.style.display = '';
+      tmplList.innerHTML = tmpls.map(c => `
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          padding:10px 14px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;">
+          <div style="cursor:pointer;flex:1;" onclick="loadCharacter('${c.id}')">
+            <div style="color:var(--text-bright);font-size:0.9rem;">${c.name}</div>
+            <div style="color:var(--text-dim);font-size:0.72rem;">${c.species || ''} · Template · Saved ${new Date(c.updated_at).toLocaleDateString()}</div>
+          </div>
+          <button class="remove-btn" title="Delete template" onclick="deleteCharacter('${c.id}','${c.name.replace(/'/g,"\\'")}')">✕</button>
+        </div>`).join('');
+    } else {
+      tmplSection.style.display = 'none';
+    }
+  } else {
+    tmplSection.style.display = 'none';
+  }
 }
 
 function hideCharacterListModal() {
@@ -3965,7 +3993,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710f';
+const VERSION = 'v0.1.20260710g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8324,7 +8352,11 @@ switchGmTab = function(tab) {
     padding:28px 32px; width:460px; max-width:94vw;">
     <h2 style="margin-bottom:16px;">Load Character</h2>
     <div id="character-list-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:12px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
-    <div id="character-list" style="max-height:320px; overflow-y:auto; margin-bottom:16px;"></div>
+    <div id="character-list" style="max-height:240px; overflow-y:auto; margin-bottom:16px;"></div>
+    <div id="template-list-section" style="display:none;">
+      <div style="font-size:0.75rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Monster Templates</div>
+      <div id="template-list" style="max-height:180px; overflow-y:auto; margin-bottom:16px;"></div>
+    </div>
     <div style="text-align:right;">
       <button class="btn-sm" onclick="hideCharacterListModal()">Cancel</button>
     </div>
