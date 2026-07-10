@@ -3965,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710d';
+const VERSION = 'v0.1.20260710e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6442,22 +6442,30 @@ function switchGmTab(tab) {
 
 // ── Token rendering ───────────────────────────────────────────────────────────
 function getTokenSize(t) {
+  let race = '', gender = '', age = '', height = '';
   if (t && t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
-    const row   = playCharCache[t.entity_id];
-    const race   = row.race   || row.species || '';
-    const gender = row.sex    || '';
-    const age    = row.age    || '';
-    const height = row.height || '';
-    const raceH  = (RACE_DATA[race]     || {}).Height || 60;
-    const gH     = (GENDER_DATA[gender] || {}).Height || 1;
-    const aH     = (AGE_DATA[age]       || {}).Height || 1;
-    const hH     = (HEIGHT_DATA[height] || {}).Height || 1;
-    const heightIn  = raceH * gH * aH * hH;
-    const roundedFt = Math.round((heightIn / 12) / 2.5) * 2.5;
-    const clamped   = Math.max(2.5, Math.min(10, roundedFt));
-    return Math.round(TOKEN_SIZE * clamped / 5.0);
+    const row = playCharCache[t.entity_id];
+    race   = row.race   || row.species || '';
+    gender = row.sex    || '';
+    age    = row.age    || '';
+    height = row.height || '';
+  } else if (t && t.entity_type === 'creature' && t.entity_id && sessionCreatureCache[t.entity_id]) {
+    const sc = sessionCreatureCache[t.entity_id];
+    race   = sc.species   || '';
+    gender = sc.sex       || '';
+    age    = sc.age       || 'Adult';
+    height = sc.height    || 'Average';
+  } else {
+    return TOKEN_SIZE;
   }
-  return TOKEN_SIZE;
+  const raceH    = (RACE_DATA[race]     || {}).Height || 60;
+  const gH       = (GENDER_DATA[gender] || {}).Height || 1;
+  const aH       = (AGE_DATA[age]       || {}).Height || 1;
+  const hH       = (HEIGHT_DATA[height] || {}).Height || 1;
+  const heightIn  = raceH * gH * aH * hH;
+  const roundedFt = Math.round((heightIn / 12) / 2.5) * 2.5;
+  const clamped   = Math.max(2.5, Math.min(10, roundedFt));
+  return Math.round(TOKEN_SIZE * clamped / 5.0);
 }
 
 function tokenHtml(t) {
