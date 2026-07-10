@@ -3953,7 +3953,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709l';
+const VERSION = 'v0.1.20260709m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6457,7 +6457,10 @@ function tokenHtml(t) {
     }
     return '';
   })();
-  const displayUrl = t.avatar_url || speciesAvatar;
+  // For character tokens, prefer the live avatar from playCharCache over the stale map_tokens copy
+  const liveAvatar = (t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id])
+    ? resolveAvatarUrl(playCharCache[t.entity_id].avatar_url) : null;
+  const displayUrl = liveAvatar || t.avatar_url || speciesAvatar;
   const inner = displayUrl
     ? `<img src="${displayUrl}" alt=""
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
@@ -6510,6 +6513,12 @@ function upsertTokenElement(t) {
     el.style.top     = t.y_pct + '%';
     el.style.opacity = t.visible ? '' : '0.35';
     el.style.filter  = t.visible ? '' : 'grayscale(60%)';
+    // refresh avatar in case the character updated their image
+    if (t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
+      const liveUrl = resolveAvatarUrl(playCharCache[t.entity_id].avatar_url);
+      const img = el.querySelector('img');
+      if (img && liveUrl && img.src !== liveUrl) img.src = liveUrl;
+    }
     _refreshTokenBadges(t.id);
   } else {
     canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
