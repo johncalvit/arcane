@@ -3993,7 +3993,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710g';
+const VERSION = 'v0.1.20260710h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6592,10 +6592,10 @@ async function loadMapTokens(mapId) {
 
   if (data) {
     data.forEach(t => { mapTokens[t.id] = t; });
-    renderAllTokens();
     if (isGM()) refreshTokenPanel();
   }
   await loadSessionCreatureCache();
+  if (data) renderAllTokens();
 }
 
 // ── Token drag ────────────────────────────────────────────────────────────────
