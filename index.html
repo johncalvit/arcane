@@ -3953,7 +3953,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709k';
+const VERSION = 'v0.1.20260709l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4094,10 +4094,12 @@ async function _landingLoadCampaigns() {
   _campaignCache = data || [];
 
   const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
-  const gmCol  = document.getElementById('landing-gm-col');
+  const gmCol   = document.getElementById('landing-gm-col');
   const campCol = document.getElementById('landing-camp-col');
-  if (gmCol)   gmCol.style.display   = userIsGmAnywhere ? '' : 'none';
-  if (campCol) campCol.style.display = userIsGmAnywhere ? '' : 'none';
+  const campCreate = document.getElementById('landing-camp-create');
+  if (gmCol)     gmCol.style.display     = userIsGmAnywhere ? '' : 'none';
+  if (campCol)   campCol.style.display   = data.length ? '' : 'none'; // show if user has any campaigns
+  if (campCreate) campCreate.style.display = userIsGmAnywhere ? '' : 'none'; // create input GM-only
 
   if (!data.length) {
     el.innerHTML = '<span class="landing-dim">No campaigns yet — create one below.</span>';
@@ -8502,7 +8504,7 @@ switchGmTab = function(tab) {
         <div class="landing-scroll" id="landing-camp-list">
           <span class="landing-dim">Loading…</span>
         </div>
-        <div style="display:flex; gap:8px; margin-top:2px;">
+        <div id="landing-camp-create" style="display:flex; gap:8px; margin-top:2px;">
           <input type="text" id="landing-new-camp-name" placeholder="New campaign name…"
             style="flex:1; font-size:0.82rem;" onkeydown="if(event.key==='Enter')_landingCreateCampaign()">
           <button class="btn-sm btn-text" onclick="_landingCreateCampaign()">Create</button>
