@@ -3953,7 +3953,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709m';
+const VERSION = 'v0.1.20260709n';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4098,8 +4098,8 @@ async function _landingLoadCampaigns() {
   const campCol = document.getElementById('landing-camp-col');
   const campCreate = document.getElementById('landing-camp-create');
   if (gmCol)     gmCol.style.display     = userIsGmAnywhere ? '' : 'none';
-  if (campCol)   campCol.style.display   = data.length ? '' : 'none'; // show if user has any campaigns
-  if (campCreate) campCreate.style.display = userIsGmAnywhere ? '' : 'none'; // create input GM-only
+  if (campCol)   campCol.style.display   = ''; // always show so players can select or create
+  if (campCreate) campCreate.style.display = ''; // all users can create (limit enforced in JS)
 
   if (!data.length) {
     el.innerHTML = '<span class="landing-dim">No campaigns yet — create one below.</span>';
@@ -4173,6 +4173,9 @@ async function _landingCreateCampaign() {
   const name = inp.value.trim();
   if (!name) return;
   setCampaignError('');
+  // Enforce 2-campaign limit per user
+  const { count } = await sb.from('campaigns').select('id', { count: 'exact', head: true }).eq('gm_id', currentUser.id);
+  if (count >= 2) { setCampaignError('Campaign limit reached (max 2). Delete an existing campaign to create a new one.'); return; }
   const { data, error } = await sb
     .from('campaigns')
     .insert({ name, gm_id: currentUser.id })
