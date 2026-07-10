@@ -3993,7 +3993,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710k';
+const VERSION = 'v0.1.20260710l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5709,7 +5709,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
       targetLabel: locSubtitle,
       defenseOptions,
       strayContext,
-      locContext: partKey ? { bodyType, partKey } : null,
+      locContext: { bodyType, partKey: partKey || null },
     });
   }
 
@@ -7035,6 +7035,31 @@ function attackTokenClick(tokenId) {
         }
       }
       if (bestBlock) bestBlock.preSelected = true;
+    }
+  }
+
+  // Creature defense options (Evade/Retreat based on PhysCoord)
+  if (target.entity_type === 'creature' && sessionCreatureCache[target.entity_id]) {
+    const sc = sessionCreatureCache[target.entity_id];
+    const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+    const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
+    const defAttrs = calcAttributesFromData({
+      race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
+      sex: sc.sex || '', age: sc.age || 'Adult',
+      height: sc.height || 'Average', build: sc.build || 'Average',
+      social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
+      stats: rawStats,
+    });
+    const defSize = Math.round((defAttrs._heightInches || 66) / 12 * ((BUILD_DATA[sc.build || 'Average'] || {}).TargetAdj || 1));
+    const physCoord = defAttrs.PhysCoord || 0;
+    const conds = getConditions(target.id);
+    if (!conds.has('prone')) {
+      defenseOptions.push({ label: `Retreat (−${Math.round(physCoord * defSize)}) [3 sec]`,   reduction: Math.round(physCoord * defSize) });
+      defenseOptions.push({ label: `Evade (−${Math.round(physCoord * defSize / 2)}) [3 sec]`, reduction: Math.round(physCoord * defSize / 2) });
+    }
+    if (wasRanged && !conds.has('prone') && rawThreshold != null) {
+      const proneReduction = Math.round(rawThreshold / 2);
+      defenseOptions.push({ label: `Go Prone — half size (−${proneReduction}) [3 sec]`, reduction: proneReduction, onSelect: () => _setProne(target.id, true) });
     }
   }
 
