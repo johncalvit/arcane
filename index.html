@@ -3965,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710c';
+const VERSION = 'v0.1.20260710d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8522,18 +8522,6 @@ switchGmTab = function(tab) {
           </div>
           <div id="tokens-template-list"></div>
 
-          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
-            <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Add Creature</div>
-          </div>
-          <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
-            <select id="creature-species-sel" style="width:100%;margin-bottom:5px;font-size:0.8rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;"></select>
-            <div style="display:flex;gap:6px;">
-              <input type="text" id="creature-label-input" placeholder="Label, e.g. Goblin 3"
-                style="flex:1;font-size:0.8rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;"
-                onkeydown="if(event.key==='Enter')addCreatureToken()">
-              <button class="token-add-btn" onclick="addCreatureToken()">+ Add</button>
-            </div>
-          </div>
         </div>
       </div>
 
