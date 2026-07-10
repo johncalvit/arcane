@@ -3965,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710e';
+const VERSION = 'v0.1.20260710f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6462,10 +6462,10 @@ function getTokenSize(t) {
   const gH       = (GENDER_DATA[gender] || {}).Height || 1;
   const aH       = (AGE_DATA[age]       || {}).Height || 1;
   const hH       = (HEIGHT_DATA[height] || {}).Height || 1;
-  const heightIn  = raceH * gH * aH * hH;
-  const roundedFt = Math.round((heightIn / 12) / 2.5) * 2.5;
-  const clamped   = Math.max(2.5, Math.min(10, roundedFt));
-  return Math.round(TOKEN_SIZE * clamped / 5.0);
+  const heightIn = raceH * gH * aH * hH;
+  // Scale continuously relative to baseline human height (66"); clamp to 50%–200%
+  const scale = Math.max(0.5, Math.min(2.0, heightIn / 66));
+  return Math.round(TOKEN_SIZE * scale);
 }
 
 function tokenHtml(t) {
