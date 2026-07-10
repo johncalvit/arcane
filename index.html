@@ -3965,7 +3965,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710a';
+const VERSION = 'v0.1.20260710b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4432,7 +4432,7 @@ function updateOwnerButtonVisibility() {
   const btn = document.getElementById('save-owner-default-btn');
   if (btn) btn.style.display = isConfigOwner() ? '' : 'none';
   const tmplRow = document.getElementById('is-template-row');
-  if (tmplRow) tmplRow.style.display = isGM() ? 'flex' : 'none';
+  if (tmplRow) tmplRow.style.display = currentUser ? 'flex' : 'none';
 }
 
 async function writeConfigToSupabase() {
