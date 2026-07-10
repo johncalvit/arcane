@@ -3771,11 +3771,14 @@ async function showCharacterListModal() {
 
   list.innerHTML = '<span style="color:var(--text-dim);font-size:0.82rem;">Loading…</span>';
 
-  const { data, error } = await sb
+  let query = sb
     .from('characters')
     .select('id, name, species, sex, updated_at')
     .eq('campaign_id', currentCampaignId)
     .order('updated_at', { ascending: false });
+  // Players only see their own characters; GMs see all in the campaign
+  if (!isGM()) query = query.eq('user_id', currentUser.id);
+  const { data, error } = await query;
 
   if (error) {
     err.textContent = error.message; err.style.display = '';
@@ -3953,7 +3956,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260709n';
+const VERSION = 'v0.1.20260709o';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
