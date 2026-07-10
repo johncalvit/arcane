@@ -211,6 +211,19 @@
   .at-freeform  { display: flex; gap: 6px; margin-bottom: 12px; }
   .at-freeform input { flex: 1; font-size: 0.8rem; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 4px 8px; }
   .at-freeform input[type=number] { width: 60px; flex: none; }
+  /* slot rows */
+  .at-slots { display:flex; flex-direction:column; gap:3px; margin:4px 0; }
+  .at-slot { display:flex; align-items:center; gap:5px; padding:3px 6px; background:var(--bg3); border-radius:3px; min-height:24px; }
+  .at-slot.at-slot-locked { opacity:0.4; pointer-events:none; }
+  .at-slot-icon { font-size:0.82rem; width:1.2em; text-align:center; flex-shrink:0; }
+  .at-slot-action { flex:1; font-size:0.76rem; color:var(--text-bright); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .at-slot-action.empty { color:var(--text-dim); font-style:italic; }
+  .at-slot-dur { font-size:0.65rem; color:var(--gold2); flex-shrink:0; padding:0 3px; }
+  .at-slot-set-btn { font-size:0.64rem !important; padding:1px 6px !important; }
+  .at-slot-clr-btn { font-size:0.64rem !important; padding:1px 5px !important; }
+  /* slot modal sections */
+  .at-section-header { font-size:0.64rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--gold2); padding:6px 0 3px; grid-column:1/-1; border-top:1px solid var(--border); margin-top:2px; }
+  .at-section-header:first-child { border-top:none; margin-top:0; padding-top:0; }
 
   /* compact play-sheet inside play mode */
   .ps-compact-avatar {
@@ -3993,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710l';
+const VERSION = 'v0.1.20260710m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4918,18 +4931,31 @@ function _refreshTokenBadges(tokenId) {
   }
 }
 
-const GENERAL_ACTIONS = [
-  { label: 'Move',         dur: 2 },
-  { label: 'Sprint',       dur: 3 },
-  { label: 'Dodge',        dur: 2 },
-  { label: 'Block',        dur: 1 },
-  { label: 'Stand Up',     dur: 2 },
-  { label: 'Draw Weapon',  dur: 2 },
-  { label: 'Search',       dur: 4 },
-  { label: 'Hide',         dur: 3 },
-  { label: 'Use Item',     dur: 2 },
-  { label: 'Interact',     dur: 2 },
-  { label: 'Wait',         dur: 3 },
+// ── Action slot definitions ───────────────────────────────────────────────────
+const AT_UNARMED = [
+  { label: 'Punch',   dur: 1 },
+  { label: 'Grab',    dur: 2 },
+  { label: 'Push',    dur: 2 },
+  { label: 'Grapple', dur: 3 },
+  { label: 'Hold',    dur: 99 },
+];
+const AT_MOVE = [
+  { label: 'Hold Position', dur: 99 },
+  { label: 'Step',          dur: 1  },
+  { label: 'Move',          dur: 2  },
+  { label: 'Sprint',        dur: 3  },
+  { label: 'Retreat',       dur: 2  },
+  { label: 'Stand Up',      dur: 2  },
+];
+const AT_FULLBODY = [
+  { label: 'Evade',       dur: 2  },
+  { label: 'Dodge',       dur: 2  },
+  { label: 'Charge',      dur: 3  },
+  { label: 'Go Prone',    dur: 1  },
+  { label: 'Use Item',    dur: 2  },
+  { label: 'Draw Weapon', dur: 2  },
+  { label: 'Search',      dur: 4  },
+  { label: 'Hide',        dur: 3  },
 ];
 
 const WEAPON_ACTIONS = {
@@ -4957,7 +4983,10 @@ const SPELL_ACTIONS = [
   { label: 'Dismiss Spell', dur: 1 },
 ];
 
-// combatant: { id, name, avatar, type, initiative, tieBreak, actions: [{label, startRound, durationRounds}] }
+// combatant: { id, name, avatar, type, initiative, tieBreak,
+//   slots: { right: null|{label,startRound,durationRounds,locksAll},
+//            left:  null|{...}, move: null|{...} } }
+function _newSlots() { return { right: null, left: null, move: null }; }
 let atCombatants  = [];
 let atRound       = 1;
 let atActiveIdx   = 0;
@@ -4981,7 +5010,19 @@ function atNext() {
   const sorted = atSortedCombatants();
   if (!sorted.length) return;
   atActiveIdx++;
-  if (atActiveIdx >= sorted.length) { atActiveIdx = 0; atRound++; }
+  if (atActiveIdx >= sorted.length) {
+    atActiveIdx = 0;
+    atRound++;
+    // Expire finished slot actions at round boundary
+    atCombatants.forEach(c => {
+      if (!c.slots) return;
+      for (const s of ['right', 'left', 'move']) {
+        const sl = c.slots[s];
+        if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound)
+          c.slots[s] = null;
+      }
+    });
+  }
   _atUpdateBlink();
   renderAtList();
 }
@@ -4990,7 +5031,7 @@ function atReset() {
   if (!confirm('Reset to Round 1 and clear all actions? Initiative order will be kept.')) return;
   atRound = 1;
   atActiveIdx = 0;
-  atCombatants.forEach(c => c.actions = []);
+  atCombatants.forEach(c => c.slots = _newSlots());
   _atUpdateBlink();
   renderAtList();
 }
@@ -4999,7 +5040,7 @@ function atResetFull() {
   if (!confirm('Reset everything including initiative?')) return;
   atRound = 1;
   atActiveIdx = 0;
-  atCombatants.forEach(c => { c.actions = []; c.initiative = null; c.tieBreak = null; });
+  atCombatants.forEach(c => { c.slots = _newSlots(); c.initiative = null; c.tieBreak = null; });
   _atUpdateBlink();
   renderAtList();
 }
@@ -5133,7 +5174,7 @@ function atAddCombatant() {
   const [type, id] = val.split('::');
   const name   = opt.dataset.name   || id;
   const avatar = opt.dataset.avatar || null;
-  atCombatants.push({ id: val, name, avatar, type, initiative: null, tieBreak: null, actions: [] });
+  atCombatants.push({ id: val, name, avatar, type, initiative: null, tieBreak: null, slots: _newSlots() });
   renderAtList();
 }
 
@@ -5142,171 +5183,147 @@ function atRemoveCombatant(id) {
   renderAtList();
 }
 
-async function atOpenModal(combatantId) {
+let atModalSlot = null; // 'right' | 'left' | 'move'
+
+async function atOpenSlotModal(combatantId, slot) {
   atModalTarget = combatantId;
+  atModalSlot   = slot;
   const c = atCombatants.find(x => x.id === combatantId);
-  document.getElementById('at-modal-title').textContent = `${c?.name || 'Combatant'} — Choose Action`;
+  const slotTitles = { right: '⚔ Right Arm', left: '🛡 Left Arm', move: '🏃 Move' };
+  document.getElementById('at-modal-title').textContent =
+    `${c?.name || ''} — ${slotTitles[slot] || slot}`;
   document.getElementById('at-free-label').value = '';
-  document.getElementById('at-free-dur').value = '3';
+  document.getElementById('at-free-dur').value = '1';
   document.getElementById('at-action-modal').style.display = 'flex';
 
   const grid = document.getElementById('at-action-grid');
-  grid.innerHTML = '<div style="color:var(--text-dim);font-size:0.8rem;grid-column:1/-1;">Loading…</div>';
-  const actions = [...GENERAL_ACTIONS];
-
-  if (c?.type === 'char') {
-    const charId = combatantId.split('::')[1];
-    const { data: row } = await sb.from('characters').select('held_items, skills').eq('id', charId).single();
-    const heldItems = row?.held_items || {};
-    const heldNames = [...new Set([heldItems.right, heldItems.left].filter(Boolean))];
-    heldNames.forEach(itemName => {
-      const itemActions = getActionsForItem(itemName);
-      itemActions.forEach(actionLabel => {
-        const lc = actionLabel.toLowerCase();
-        const dur = lc.includes('parry') || lc.includes('block') ? 1
-                  : lc.includes('nock') || lc.includes('load')   ? 3
-                  : lc.includes('aim')                           ? 2
-                  : lc.includes('throw') || lc.includes('fire')  ? 1
-                  : 2;
-        actions.push({ label: `${actionLabel} (${itemName})`, dur });
-      });
-    });
-    // spell actions if any Arcane skill invested
-    const inv = row?.skills || {};
-    const hasArcane = Object.keys(inv).some(k => {
-      const sk = SKILLS.find(s => s.name === k);
-      return sk && sk.type === 'Arcane';
-    });
-    if (hasArcane) actions.push(...SPELL_ACTIONS);
-  }
-
   grid.innerHTML = '';
 
-  // General actions
-  actions.forEach(a => {
-    const btn = document.createElement('button');
-    btn.className = 'at-action-pick-btn';
-    const r = Math.max(1, Math.ceil(a.dur / 3));
-    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${r}r</div>`;
-    btn.onclick = () => atPickAction(a.label, a.dur);
-    grid.appendChild(btn);
-  });
-
-  // Weapon attack groups (melee + ranged)
+  // Resolve held items from cache (no DB call needed)
+  let rightItem = '', leftItem = '', hasArcane = false;
   if (c?.type === 'char') {
-    const charId = combatantId.split('::')[1];
-    const cached = playCharCache[charId];
-    const heldItems = cached?.held_items || {};
-    const heldNames = [...new Set([heldItems.right, heldItems.left].filter(Boolean))];
+    const row = playCharCache[combatantId.split('::')[1]];
+    rightItem = row?.held_items?.right || '';
+    leftItem  = row?.held_items?.left  || '';
+    const inv = row?.skills || {};
+    hasArcane = Object.keys(inv).some(k => (SKILLS.find(s => s.name === k) || {}).type === 'Arcane');
+  } else if (c?.type === 'creature') {
+    const token = mapTokens[combatantId.split('::')[1]];
+    const sc = token ? sessionCreatureCache[token.entity_id] : null;
+    rightItem = sc?.held_items?.right || '';
+    leftItem  = sc?.held_items?.left  || '';
+  }
 
-    heldNames.forEach(itemName => {
-      const norm = normalizeWeaponName(itemName);
+  if (slot === 'move') {
+    _atSection(grid, '🏃 Movement', AT_MOVE, combatantId, slot, false);
+  } else {
+    const heldItem = slot === 'right' ? rightItem : leftItem;
+    if (heldItem) {
+      const norm = normalizeWeaponName(heldItem);
       const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
       const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
-
-      if (meleeRows.length) {
-        const maxReach = Math.max(...meleeRows.map(r => r.reach));
-        const group = _buildAttackGroup(`⚔ ${itemName}`, meleeRows, combatantId, false, maxReach);
-        grid.appendChild(group);
+      if (meleeRows.length || rangedRows.length) {
+        _atWeaponSection(grid, `⚔ ${heldItem}`, meleeRows, rangedRows, combatantId, slot, heldItem);
       }
-      if (rangedRows.length) {
-        const maxRange = Math.max(...rangedRows.map(r => r.rangeIncrement));
-        const group = _buildAttackGroup(`🏹 ${itemName}`, rangedRows, combatantId, true, maxRange);
-        grid.appendChild(group);
-      }
-    });
+    }
+    _atSection(grid, '✊ Unarmed', AT_UNARMED, combatantId, slot, false);
+    if (hasArcane) _atSection(grid, '✨ Arcane', SPELL_ACTIONS, combatantId, slot, false);
+    _atSection(grid, '⚡ Full Body — locks all slots', AT_FULLBODY, combatantId, slot, true);
   }
 }
 
-function _buildAttackGroup(title, weaponRows, combatantId, isRanged, rangeFt) {
-  const wrap = document.createElement('div');
-  wrap.className = 'at-weapon-group';
-  wrap.style.gridColumn = '1 / -1';
-
-  const header = document.createElement('div');
-  header.className = 'at-weapon-header';
-  header.innerHTML = `<span>${title}</span><span class="at-pick-dur" style="margin-left:6px;font-size:0.68rem;">${rangeFt} ft</span><span class="at-weapon-chevron">▾</span>`;
-
-  const actionsDiv = document.createElement('div');
-  actionsDiv.className = 'at-weapon-actions';
-
-  // If only one attack action, skip the submenu and go straight to targeting
-  const attackRows = isRanged ? weaponRows : weaponRows.filter(r => r.damageMax > 0);
-  const rows = attackRows.length ? attackRows : weaponRows;
-
-  rows.forEach(r => {
+function _atSection(grid, title, actions, combatantId, slot, locksAll) {
+  const hdr = document.createElement('div');
+  hdr.className = 'at-section-header';
+  hdr.textContent = title;
+  grid.appendChild(hdr);
+  actions.forEach(a => {
     const btn = document.createElement('button');
-    btn.className = 'at-weapon-action-btn';
-    btn.textContent = `${r.action} (dmg ${r.damageMax})`;
-    btn.onclick = () => {
-      atCloseModal();
-      enterAttackMode(combatantId, r.weapon, r.action, isRanged, rangeFt);
-    };
-    actionsDiv.appendChild(btn);
+    btn.className = 'at-action-pick-btn';
+    const durLabel = a.dur >= 99 ? '∞' : `${Math.max(1, Math.ceil(a.dur / 3))}r`;
+    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${durLabel}</div>`;
+    btn.onclick = () => atSetSlot(combatantId, slot, a.label, a.dur, locksAll);
+    grid.appendChild(btn);
   });
+}
 
-  header.onclick = () => {
-    if (rows.length === 1) {
-      // single action — go straight to attack targeting
-      atCloseModal();
-      enterAttackMode(combatantId, rows[0].weapon, rows[0].action, isRanged, rangeFt);
-      return;
-    }
-    const open = header.classList.toggle('open');
-    actionsDiv.classList.toggle('open', open);
-  };
-
-  wrap.appendChild(header);
-  wrap.appendChild(actionsDiv);
-  return wrap;
+function _atWeaponSection(grid, title, meleeRows, rangedRows, combatantId, slot, itemName) {
+  const hdr = document.createElement('div');
+  hdr.className = 'at-section-header';
+  hdr.textContent = title;
+  grid.appendChild(hdr);
+  const allRows = [
+    ...meleeRows.map(r => ({ r, isRanged: false })),
+    ...rangedRows.map(r => ({ r, isRanged: true })),
+  ];
+  allRows.forEach(({ r, isRanged }) => {
+    const btn = document.createElement('button');
+    btn.className = 'at-action-pick-btn';
+    const extra = r.damageMax ? ` · dmg ${r.damageMax}` : r.rangeIncrement ? ` · ${r.rangeIncrement}ft` : '';
+    const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
+              : r.action.toLowerCase().includes('aim') ? 2 : 1;
+    btn.innerHTML = `<div class="at-pick-name">${r.action}${extra}</div><div class="at-pick-dur">${dur}r</div>`;
+    btn.onclick = () => {
+      atSetSlot(combatantId, slot, `${r.action} — ${itemName}`, dur * 3, false);
+      const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach || 5);
+      enterAttackMode(combatantId, itemName, r.action, isRanged, rangeFt);
+    };
+    grid.appendChild(btn);
+  });
 }
 
 function atCloseModal() {
   document.getElementById('at-action-modal').style.display = 'none';
   atModalTarget = null;
+  atModalSlot   = null;
 }
 
-function atPickAction(label, dur) {
-  const c = atCombatants.find(x => x.id === atModalTarget);
+function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
+  const c = atCombatants.find(x => x.id === combatantId);
   if (!c) return;
-  const token = _pathFindToken(atModalTarget);
-  const conds = token ? getConditions(token.id) : new Set();
+  if (!c.slots) c.slots = _newSlots();
 
-  // Block actions for incapacitated conditions
+  const token = _pathFindToken(combatantId);
+  const conds = token ? getConditions(token.id) : new Set();
   if (conds.has('stunned') || conds.has('paralyzed') || conds.has('unconscious')) {
     const which = conds.has('paralyzed') ? 'paralyzed' : conds.has('unconscious') ? 'unconscious' : 'stunned';
-    if (label !== 'Stand Up') {
-      alert(`${c.name} is ${which} and cannot act.`);
-      return;
-    }
+    if (label !== 'Stand Up') { alert(`${c.name} is ${which} and cannot act.`); return; }
   }
 
-  const durationRounds = Math.max(1, Math.ceil(dur / 3));
-  c.actions.push({ label, startRound: atRound, durationRounds });
+  const durationRounds = dur >= 99 ? 9999 : Math.max(1, Math.ceil(dur / 3));
+  const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
+
+  if (locksAll) {
+    c.slots.right = entry;
+    c.slots.left  = null;
+    c.slots.move  = null;
+  } else {
+    c.slots[slot] = entry;
+  }
 
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
 
   if (!isGM() && mapChannel)
-    mapChannel.send({ type: 'broadcast', event: 'at-add-action',
-      payload: { combatantId: atModalTarget, label, startRound: atRound, durationRounds } });
+    mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
+      payload: { combatantId, slot, label, startRound: atRound, durationRounds, locksAll: !!locksAll } });
 
   atCloseModal();
   renderAtList();
   renderPlayCharacter();
 }
 
+function atClearSlot(combatantId, slot) {
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c || !c.slots) return;
+  c.slots[slot] = null;
+  renderAtList();
+}
+
 function atPickFreeform() {
   const label  = document.getElementById('at-free-label').value.trim();
   const rounds = parseInt(document.getElementById('at-free-dur').value) || 1;
-  if (!label) return;
-  atPickAction(label, rounds * 3); // convert rounds → seconds for atPickAction
-}
-
-function atCancelAction(combatantId, idx) {
-  const c = atCombatants.find(x => x.id === combatantId);
-  if (!c) return;
-  c.actions.splice(idx, 1);
-  renderAtList();
+  if (!label || !atModalSlot) return;
+  atSetSlot(atModalTarget, atModalSlot, label, rounds * 3, false);
 }
 
 function renderAtList() {
@@ -5333,62 +5350,61 @@ function renderAtList() {
     const c        = sorted[i];
     const safeId   = c.id.replace(/'/g, "\\'");
     const isActive = c === activeC;
-
-    // Action active this round
-    const curAction = c.actions.find(a =>
-      a.startRound <= atRound && atRound < a.startRound + a.durationRounds);
-    // Actions queued for future rounds
-    const futureActions = c.actions.filter(a => a.startRound > atRound);
+    if (!c.slots) c.slots = _newSlots();
 
     const div = document.createElement('div');
     div.className = 'at-combatant' + (isActive ? ' at-active' : '');
 
-    // Header
     const initBadge = c.initiative != null
       ? `<span class="at-comb-init">Init ${c.initiative}</span>`
       : `<span class="at-comb-init" style="color:var(--text-dim)">—</span>`;
     const nameEl = `<span class="at-comb-name">${isActive ? '▶ ' : ''}${c.name}</span>`;
 
-    // Status area
-    let statusHtml = '';
-    if (c.initiative == null) {
-      statusHtml = `<button class="at-btn primary" style="margin-bottom:4px;" onclick="atRollInitiative('${safeId}')">🎲 Roll Initiative</button>`;
-    } else if (isActive) {
-      if (curAction) {
-        const roundsLeft = curAction.startRound + curAction.durationRounds - atRound;
-        const tag = roundsLeft > 1 ? ` <span style="color:var(--text-dim);font-size:0.7rem;">(${roundsLeft}r left)</span>` : '';
-        statusHtml = `<div class="at-action-row">
-          <span class="at-action-label">▶ ${curAction.label}${tag}</span>
-          <button class="at-btn primary" onclick="atAcceptAction('${safeId}')">✓ Accept</button>
-          <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(curAction)})" title="Cancel">✕</button>
+    const rollBtn = c.initiative == null
+      ? `<button class="at-btn primary" style="width:100%;margin-bottom:4px;" onclick="atRollInitiative('${safeId}')">🎲 Roll Initiative</button>`
+      : '';
+
+    // Build three slot rows
+    const slotDefs = [
+      { key: 'right', icon: '⚔', label: 'R' },
+      { key: 'left',  icon: '🛡', label: 'L' },
+      { key: 'move',  icon: '🏃', label: 'M' },
+    ];
+    const slotsHtml = slotDefs.map(({ key, icon }) => {
+      const sl = c.slots[key];
+      const locked = key !== 'right' && c.slots.right?.locksAll;
+      if (locked) {
+        return `<div class="at-slot at-slot-locked">
+          <span class="at-slot-icon">🔒</span>
+          <span class="at-slot-action empty">${c.slots.right?.label || ''}</span>
         </div>`;
-      } else {
-        statusHtml = `<div style="font-size:0.78rem;color:var(--gold);margin-bottom:4px;">⬡ Awaiting action</div>`;
       }
-    } else if (curAction) {
-      const roundsLeft = curAction.startRound + curAction.durationRounds - atRound;
-      const tag = roundsLeft > 1 ? ` (+${roundsLeft - 1}r)` : '';
-      statusHtml = `<div class="at-action-row">
-        <span class="at-action-label at-action-pending">${curAction.label}${tag}</span>
-        <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(curAction)})" title="Cancel">✕</button>
-      </div>`;
-    }
+      let durTag = '';
+      if (sl) {
+        if (sl.durationRounds < 9999) {
+          const left = sl.startRound + sl.durationRounds - atRound;
+          if (sl.durationRounds > 1) durTag = `<span class="at-slot-dur">${left}r</span>`;
+        } else {
+          durTag = `<span class="at-slot-dur">∞</span>`;
+        }
+      }
+      const actionSpan = sl
+        ? `<span class="at-slot-action">${sl.label}</span>${durTag}`
+        : `<span class="at-slot-action empty">—</span>`;
+      const setBtn = `<button class="at-btn at-slot-set-btn" onclick="atOpenSlotModal('${safeId}','${key}')">${sl ? '⚙' : '+'}</button>`;
+      const clrBtn = sl ? `<button class="at-btn danger at-slot-clr-btn" onclick="atClearSlot('${safeId}','${key}')">✕</button>` : '';
+      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
+    }).join('');
 
-    // Future queued actions
-    const futureHtml = futureActions.map(a => `
-      <div class="at-action-row">
-        <span class="at-action-label at-action-pending" style="font-size:0.72rem;">Rd${a.startRound}: ${a.label}</span>
-        <button class="at-btn danger" onclick="atCancelAction('${safeId}',${c.actions.indexOf(a)})" title="Cancel">✕</button>
-      </div>`).join('');
-
-    const addBtn    = `<button class="at-btn primary" onclick="atOpenModal('${safeId}')">+ Action</button>`;
-    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Draw movement path">🏃</button>`;
+    const acceptBtn = isActive ? `<button class="at-btn primary" onclick="atAcceptAction('${safeId}')">✓ Accept</button>` : '';
+    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Path">🏃</button>`;
     const removeBtn = `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>`;
 
     div.innerHTML = `
       <div class="at-comb-header">${nameEl}${initBadge}</div>
-      ${statusHtml}${futureHtml}
-      <div class="at-comb-btns">${addBtn}${pathBtn}${removeBtn}</div>`;
+      ${rollBtn}
+      <div class="at-slots">${slotsHtml}</div>
+      <div class="at-comb-btns">${acceptBtn}${pathBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -5452,7 +5468,7 @@ async function atAutoAddMapTokens() {
     if (atCombatants.find(c => c.id === id)) continue;
     const name   = t.entity_type === 'character' ? (charMap[t.entity_id]?.name || t.label || t.entity_id) : (t.label || t.id);
     const avatar = t.entity_type === 'character' ? (charMap[t.entity_id]?.avatar_url || null) : (t.avatar_url || null);
-    atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', initiative: null, tieBreak: null, actions: [] });
+    atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', initiative: null, tieBreak: null, slots: _newSlots() });
   }
   renderAtList();
 }
@@ -5557,38 +5573,47 @@ function renderPlayCharacter() {
       t => t.entity_type === 'character' && t.entity_id === currentCharacterId);
     if (onMap) {
       const entry = { id: myCombatantId, name: charName, avatar: avatarUrl || null,
-                      type: 'char', initiative: null, tieBreak: null, actions: [] };
+                      type: 'char', initiative: null, tieBreak: null, slots: _newSlots() };
       atCombatants.push(entry);
       myCombatant = entry;
     }
   }
-  const isMyTurn      = _atStateFromGM && myCombatantId && _atStateFromGM.activeId === myCombatantId;
-  const roundLabel    = _atStateFromGM ? `Round ${_atStateFromGM.round}` : (atRound > 1 ? `Round ${atRound}` : '');
+  const isMyTurn   = _atStateFromGM && myCombatantId && _atStateFromGM.activeId === myCombatantId;
+  const roundLabel = _atStateFromGM ? `Round ${_atStateFromGM.round}` : (atRound > 1 ? `Round ${atRound}` : '');
 
   let combatContent = '';
   if (!myCombatant) {
     combatContent = `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">Add your character to the map to join combat.</div>`;
   } else {
-    const initVal   = myCombatant.initiative;
+    if (!myCombatant.slots) myCombatant.slots = _newSlots();
+    const initVal  = myCombatant.initiative;
+    const safeId   = myCombatantId.replace(/'/g, "\\'");
     const initBadge = initVal != null
       ? `<span style="color:var(--gold2);font-weight:bold;font-size:0.95rem;">${initVal}</span>`
       : `<span style="color:var(--text-dim);font-style:italic;">Not rolled</span>`;
-    const safeId    = myCombatantId.replace(/'/g, "\\'");
-    const rollBtn   = initVal == null
+    const rollBtn = initVal == null
       ? `<button class="at-btn primary" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;">🎲 Roll</button>`
       : `<button class="at-btn" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;" title="Re-roll">↺</button>`;
-
-    const myActions  = myCombatant.actions.filter(a => a.startRound + a.durationRounds > (atRound || 1));
-    const actionsHtml = myActions.length
-      ? myActions.map(a => {
-          const status = a.startRound <= (atRound || 1) ? '▶' : `Rd${a.startRound}:`;
-          return `<div class="at-action-row"><span class="at-action-label">${status} ${a.label}${a.durationRounds > 1 ? ` (${a.durationRounds}r)` : ''}</span></div>`;
-        }).join('')
-      : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No actions queued.</div>`;
 
     const turnBanner = isMyTurn
       ? `<div style="background:rgba(201,168,76,0.18);border:1px solid var(--gold);border-radius:4px;padding:5px 8px;text-align:center;font-size:0.85rem;color:var(--gold2);font-weight:bold;margin-bottom:6px;">⚔ YOUR TURN</div>`
       : '';
+
+    const slotDefs = [{ key:'right', icon:'⚔' }, { key:'left', icon:'🛡' }, { key:'move', icon:'🏃' }];
+    const slotsHtml = slotDefs.map(({ key, icon }) => {
+      const sl = myCombatant.slots[key];
+      const locked = key !== 'right' && myCombatant.slots.right?.locksAll;
+      if (locked) return `<div class="at-slot at-slot-locked"><span class="at-slot-icon">🔒</span><span class="at-slot-action empty">${myCombatant.slots.right?.label || ''}</span></div>`;
+      let durTag = '';
+      if (sl) {
+        if (sl.durationRounds < 9999) { if (sl.durationRounds > 1) durTag = `<span class="at-slot-dur">${sl.startRound + sl.durationRounds - atRound}r</span>`; }
+        else durTag = `<span class="at-slot-dur">∞</span>`;
+      }
+      const actionSpan = sl ? `<span class="at-slot-action">${sl.label}</span>${durTag}` : `<span class="at-slot-action empty">—</span>`;
+      const setBtn = `<button class="at-btn at-slot-set-btn" onclick="atOpenSlotModal('${safeId}','${key}')">${sl ? '⚙' : '+'}</button>`;
+      const clrBtn = sl ? `<button class="at-btn danger at-slot-clr-btn" onclick="atClearSlot('${safeId}','${key}')">✕</button>` : '';
+      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
+    }).join('');
 
     combatContent = `
       ${roundLabel ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:5px;text-transform:uppercase;letter-spacing:0.08em;">${roundLabel}</div>` : ''}
@@ -5597,8 +5622,7 @@ function renderPlayCharacter() {
         <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
         ${initBadge}${rollBtn}
       </div>
-      ${actionsHtml}
-      <button class="at-btn primary" onclick="atOpenModal('${safeId}')" style="margin-top:5px;width:100%;">+ Queue Action</button>`;
+      <div class="at-slots">${slotsHtml}</div>`;
   }
 
   const { total: playCarried } = getCarriedWeight(attrs);
@@ -6146,11 +6170,14 @@ function subscribeMapRealtime() {
         if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); }
       }
     })
-    .on('broadcast', { event: 'at-add-action' }, ({ payload }) => {
+    .on('broadcast', { event: 'at-set-slot' }, ({ payload }) => {
       if (isGM()) {
         const c = atCombatants.find(x => x.id === payload.combatantId);
         if (c) {
-          c.actions.push({ label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds });
+          if (!c.slots) c.slots = _newSlots();
+          const entry = { label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds, locksAll: payload.locksAll };
+          if (payload.locksAll) { c.slots.right = entry; c.slots.left = null; c.slots.move = null; }
+          else { c.slots[payload.slot] = entry; }
           renderAtList();
         }
       }
@@ -6927,7 +6954,8 @@ function attackTokenClick(tokenId) {
   const actionLabel = `${attackActionLabel} → ${target.label}`;
   const c = atCombatants.find(x => x.id === attackCombatantId);
   if (c) {
-    c.actions.push({ label: actionLabel, startRound: atRound, durationRounds: 1 });
+    if (!c.slots) c.slots = _newSlots();
+    c.slots.right = { label: actionLabel, startRound: atRound, durationRounds: 1, locksAll: false };
     renderAtList();
     switchGmTab('actions');
   }
@@ -7201,20 +7229,28 @@ async function showTokenInfo(tokenId) {
     const rollBtn   = initVal == null
       ? `<button class="at-btn primary" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;">🎲 Roll</button>`
       : `<button class="at-btn" onclick="atRollInitiative('${safeId}')" style="margin-left:auto;" title="Re-roll">↺</button>`;
-    const myActions   = c.actions.filter(a => a.startRound + a.durationRounds > (atRound || 1));
-    const actionsHtml = myActions.length
-      ? myActions.map(a => {
-          const status = a.startRound <= (atRound || 1) ? '▶' : `Rd${a.startRound}:`;
-          return `<div class="at-action-row"><span class="at-action-label">${status} ${a.label}${a.durationRounds > 1 ? ` (${a.durationRounds}r)` : ''}</span></div>`;
-        }).join('')
-      : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No actions queued.</div>`;
+    if (!c.slots) c.slots = _newSlots();
+    const slotDefs = [{ key:'right', icon:'⚔' }, { key:'left', icon:'🛡' }, { key:'move', icon:'🏃' }];
+    const slotsHtml = slotDefs.map(({ key, icon }) => {
+      const sl = c.slots[key];
+      const locked = key !== 'right' && c.slots.right?.locksAll;
+      if (locked) return `<div class="at-slot at-slot-locked"><span class="at-slot-icon">🔒</span><span class="at-slot-action empty">${c.slots.right?.label || ''}</span></div>`;
+      let durTag = '';
+      if (sl) {
+        if (sl.durationRounds < 9999) { if (sl.durationRounds > 1) durTag = `<span class="at-slot-dur">${sl.startRound + sl.durationRounds - atRound}r</span>`; }
+        else durTag = `<span class="at-slot-dur">∞</span>`;
+      }
+      const actionSpan = sl ? `<span class="at-slot-action">${sl.label}</span>${durTag}` : `<span class="at-slot-action empty">—</span>`;
+      const setBtn = `<button class="at-btn at-slot-set-btn" onclick="atOpenSlotModal('${safeId}','${key}')">${sl ? '⚙' : '+'}</button>`;
+      const clrBtn = sl ? `<button class="at-btn danger at-slot-clr-btn" onclick="atClearSlot('${safeId}','${key}')">✕</button>` : '';
+      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
+    }).join('');
     const content = `
       <div class="at-action-row" style="margin-bottom:6px;">
         <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
         ${initBadge}${rollBtn}
       </div>
-      ${actionsHtml}
-      <button class="at-btn primary" onclick="atOpenModal('${safeId}')" style="margin-top:5px;width:100%;">+ Queue Action</button>`;
+      <div class="at-slots">${slotsHtml}</div>`;
     return secFn('combat', 'Combat', content);
   }
 
@@ -8069,8 +8105,9 @@ function pathCommit() {
   // add Move action to the action tracker
   const c = atCombatants.find(x => x.id === combId);
   if (c) {
+    if (!c.slots) c.slots = _newSlots();
     const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
-    c.actions.push({ label, startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)) });
+    c.slots.move = { label, startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)), locksAll: false };
     renderAtList();
     // switch to Actions tab so player sees it
     switchGmTab('actions');
