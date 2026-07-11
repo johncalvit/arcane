@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710o';
+const VERSION = 'v0.1.20260710p';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5014,6 +5014,14 @@ function atStartCombat() {
   atCombatActive = true;
   _atUpdateBlink();
   renderAtList();
+  renderPlayCharacter();
+}
+
+function atStopCombat() {
+  atCombatActive = false;
+  _atUpdateBlink();
+  renderAtList();
+  renderPlayCharacter();
 }
 
 function atNext() {
@@ -5224,8 +5232,29 @@ async function atOpenSlotModal(combatantId, slot) {
     leftItem  = sc?.held_items?.left  || '';
   }
 
+  // Check prone condition for this combatant
+  const _token = _pathFindToken(combatantId);
+  const _conds = _token ? getConditions(_token.id) : new Set();
+  const isProne = _conds.has('prone');
+
   if (slot === 'move') {
-    _atSection(grid, '🏃 Movement', AT_MOVE, combatantId, slot, false);
+    const moveActions = isProne
+      ? [{ label: 'Stand Up', dur: 2 }, ...AT_MOVE.filter(a => a.label !== 'Stand Up')]
+      : AT_MOVE;
+    if (isProne) {
+      const proneHdr = document.createElement('div');
+      proneHdr.className = 'at-section-header';
+      proneHdr.style.cssText = 'color:var(--gold2);border-top:none;padding-top:0;';
+      proneHdr.textContent = '⬇ Prone — Stand Up first!';
+      grid.appendChild(proneHdr);
+      const standBtn = document.createElement('button');
+      standBtn.className = 'at-action-pick-btn';
+      standBtn.style.cssText = 'border-color:var(--gold);background:rgba(201,168,76,0.15);grid-column:1/-1;';
+      standBtn.innerHTML = `<div class="at-pick-name">Stand Up</div><div class="at-pick-dur">1r</div>`;
+      standBtn.onclick = () => atSetSlot(combatantId, slot, 'Stand Up', 2, false);
+      grid.appendChild(standBtn);
+    }
+    _atSection(grid, '🏃 Movement', moveActions.filter(a => !(isProne && a.label === 'Stand Up')), combatantId, slot, false);
   } else {
     const heldItem = slot === 'right' ? rightItem : leftItem;
     if (heldItem) {
@@ -5378,7 +5407,20 @@ function renderAtList() {
   const monstersBtn = document.getElementById('at-roll-monsters-btn');
   if (monstersBtn) monstersBtn.style.display = (isGM() && atCombatants.some(c => c.type === 'creature')) ? '' : 'none';
   const startBtn = document.getElementById('at-start-combat-btn');
-  if (startBtn) startBtn.style.display = (isGM() && atCombatants.length > 0) ? '' : 'none';
+  if (startBtn) {
+    startBtn.style.display = (isGM() && atCombatants.length > 0) ? '' : 'none';
+    if (atCombatActive) {
+      startBtn.textContent = '⛔ Stop';
+      startBtn.onclick = atStopCombat;
+      startBtn.classList.add('danger');
+      startBtn.classList.remove('primary');
+    } else {
+      startBtn.textContent = '⚔ Start';
+      startBtn.onclick = atStartCombat;
+      startBtn.classList.add('primary');
+      startBtn.classList.remove('danger');
+    }
+  }
 
   const list = document.getElementById('at-list');
   if (!atCombatants.length) {
@@ -5678,7 +5720,37 @@ function renderPlayCharacter() {
   const playSpeedStr = playMaxSpeed != null ? Math.round(playMaxSpeed) + ' ft/s' : '—';
   const playSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
 
+  // Active combatant banner (GM only, during combat)
+  let activeBannerHtml = '';
+  if (isGM() && atCombatActive) {
+    const ac = _atActiveCombatant();
+    if (ac) {
+      let acAvatar = '';
+      if (ac.type === 'char') {
+        const row = playCharCache[ac.id.split('::')[1]];
+        acAvatar = row?.avatar_url || ac.avatar || '';
+      } else {
+        const token = mapTokens[ac.id.split('::')[1]];
+        const sc = token ? sessionCreatureCache[token.entity_id] : null;
+        acAvatar = sc?.avatar_url || token?.avatar_url || '';
+      }
+      const acImg = acAvatar
+        ? `<img src="${acAvatar}" style="width:36px;height:36px;object-fit:cover;object-position:top center;border-radius:50%;border:2px solid var(--gold);flex-shrink:0;">`
+        : `<div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⚔</div>`;
+      activeBannerHtml = `
+        <div style="display:flex;align-items:center;gap:10px;background:rgba(201,168,76,0.12);border:1px solid var(--gold);border-radius:6px;padding:8px 10px;margin-bottom:12px;">
+          ${acImg}
+          <div style="min-width:0;">
+            <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${atRound}</div>
+            <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ac.name}</div>
+          </div>
+          <button class="at-btn primary" style="margin-left:auto;flex-shrink:0;" onclick="atOpenSlotModal('${ac.id.replace(/'/g,"\\'")}','right')">⚔ Act</button>
+        </div>`;
+    }
+  }
+
   el.innerHTML = `
+    ${activeBannerHtml}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
       <div class="ps-compact-avatar">${avatarHtml}</div>
       <div style="flex:1;min-width:0;">
