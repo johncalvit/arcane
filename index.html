@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711s';
+const VERSION = 'v0.1.20260711t';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5197,6 +5197,26 @@ function atAddCombatant() {
   renderAtList();
 }
 
+function atAddTokenToCombat(tokenId) {
+  const t = mapTokens[tokenId];
+  if (!t || t.entity_type === 'item') return;
+  const combatantId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+  if (atCombatants.find(c => c.id === combatantId)) return;
+  let name = t.label || tokenId;
+  let avatar = null;
+  if (t.entity_type === 'character') {
+    const row = playCharCache[t.entity_id];
+    avatar = row?.avatar_url || null;
+  } else {
+    const sc = sessionCreatureCache[t.entity_id];
+    avatar = sc?.avatar_url || null;
+  }
+  const type = t.entity_type === 'character' ? 'char' : 'creature';
+  atCombatants.push({ id: combatantId, name, avatar, type, initiative: null, tieBreak: null, slots: _newSlots() });
+  renderAtList();
+  renderOnMapTokens();
+}
+
 function atRemoveCombatant(id) {
   atCombatants = atCombatants.filter(c => c.id !== id);
   renderAtList();
@@ -5453,54 +5473,13 @@ function renderAtList() {
       : `<span class="at-comb-init" style="color:var(--text-dim)">—</span>`;
     const nameEl = `<span class="at-comb-name">${isActive ? '▶ ' : ''}${c.name}</span>`;
 
-    const rollBtn = c.initiative == null
-      ? `<button class="at-btn primary" style="width:100%;margin-bottom:4px;" onclick="atRollInitiative('${safeId}')">🎲 Roll Initiative</button>`
+    const rollBtn  = c.initiative == null
+      ? `<button class="at-btn primary" style="margin-left:auto;" onclick="atRollInitiative('${safeId}')">🎲 Roll</button>`
       : '';
-
-    // Build three slot rows
-    const slotDefs = [
-      { key: 'right', icon: '⚔', label: 'R' },
-      { key: 'left',  icon: '🛡', label: 'L' },
-      { key: 'move',  icon: '🏃', label: 'M' },
-    ];
-    const slotsHtml = slotDefs.map(({ key, icon }) => {
-      const sl = c.slots[key];
-      const locked = key !== 'right' && c.slots.right?.locksAll;
-      if (locked) {
-        return `<div class="at-slot at-slot-locked">
-          <span class="at-slot-icon">🔒</span>
-          <span class="at-slot-action empty">${c.slots.right?.label || ''}</span>
-        </div>`;
-      }
-      let durTag = '';
-      if (sl) {
-        if (sl.durationRounds < 9999) {
-          const left = sl.startRound + sl.durationRounds - atRound;
-          if (sl.durationRounds > 1) durTag = `<span class="at-slot-dur">${left}r</span>`;
-        } else {
-          durTag = `<span class="at-slot-dur">∞</span>`;
-        }
-      }
-      const actionSpan = sl
-        ? `<span class="at-slot-action">${sl.label}</span>${durTag}`
-        : `<span class="at-slot-action empty">—</span>`;
-      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}</div>`;
-    }).join('');
-
-    const actBtns   = (isActive && atCombatActive) ? `
-      <button class="at-btn primary" style="padding:2px 8px;" title="Right arm" onclick="atOpenSlotModal('${safeId}','right')">⚔ R</button>
-      <button class="at-btn" style="padding:2px 8px;" title="Left arm" onclick="atOpenSlotModal('${safeId}','left')">🛡 L</button>
-      <button class="at-btn" style="padding:2px 8px;" title="Movement" onclick="atOpenSlotModal('${safeId}','move')">🏃 M</button>
-    ` : '';
-    const hasAction = c.slots.right || c.slots.left || c.slots.move;
-    const acceptBtn = isActive ? `<button class="at-btn${hasAction ? ' primary' : ''}" onclick="atAcceptAction('${safeId}')">✓ Done</button>` : '';
-    const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>` : '';
+    const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">✕</button>` : '';
 
     div.innerHTML = `
-      <div class="at-comb-header">${nameEl}${initBadge}</div>
-      ${rollBtn}
-      <div class="at-slots">${slotsHtml}</div>
-      <div class="at-comb-btns">${actBtns}${acceptBtn}${removeBtn}</div>`;
+      <div class="at-comb-header">${nameEl}${initBadge}${rollBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -5743,14 +5722,23 @@ function renderPlayCharacter() {
       const acImg = acAvatar
         ? `<img src="${acAvatar}" style="width:36px;height:36px;object-fit:cover;object-position:top center;border-radius:50%;border:2px solid var(--gold);flex-shrink:0;">`
         : `<div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⚔</div>`;
+      const acSafeId = ac.id.replace(/'/g, "\\'");
+      const acHasAction = ac.slots?.right || ac.slots?.left || ac.slots?.move;
       activeBannerHtml = `
-        <div style="display:flex;align-items:center;gap:10px;background:rgba(201,168,76,0.12);border:1px solid var(--gold);border-radius:6px;padding:8px 10px;margin-bottom:12px;">
-          ${acImg}
-          <div style="min-width:0;">
-            <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${atRound}</div>
-            <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ac.name}</div>
+        <div style="background:rgba(201,168,76,0.12);border:1px solid var(--gold);border-radius:6px;padding:8px 10px;margin-bottom:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            ${acImg}
+            <div style="min-width:0;flex:1;">
+              <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${atRound}</div>
+              <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ac.name}</div>
+            </div>
           </div>
-          <button class="at-btn primary" style="margin-left:auto;flex-shrink:0;" onclick="atOpenSlotModal('${ac.id.replace(/'/g,"\\'")}','right')">⚔ Act</button>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="at-btn primary" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','right')" title="Right arm">⚔ R</button>
+            <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','left')" title="Left arm">🛡 L</button>
+            <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','move')" title="Movement">🏃 M</button>
+            <button class="at-btn${acHasAction ? ' primary' : ''}" style="flex:1;" onclick="atAcceptAction('${acSafeId}')">✓ Done</button>
+          </div>
         </div>`;
     }
   }
@@ -7774,9 +7762,15 @@ function renderOnMapTokens() {
     const dot = t.entity_type === 'creature' ? '#b03030'
               : t.entity_type === 'item'     ? '#708090' : 'var(--gold)';
     const eye = t.visible ? '👁' : '🚫';
+    const combatantId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+    const inCombat = atCombatants.some(c => c.id === combatantId);
+    const combatBtn = (t.entity_type !== 'item')
+      ? `<button class="btn-sm" onclick="atAddTokenToCombat('${t.id}')" title="${inCombat ? 'In combat' : 'Add to combat'}" style="padding:2px 6px;${inCombat ? 'color:var(--gold2);' : ''}">${inCombat ? '⚔' : '+'}</button>`
+      : '';
     return `<div class="token-on-map-row">
       <span class="t-dot" style="background:${dot};"></span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.label}</span>
+      ${combatBtn}
       <button class="btn-sm" onclick="toggleTokenVisibility('${t.id}')" title="${t.visible ? 'Hide from players' : 'Show to players'}" style="padding:2px 6px;">${eye}</button>
       <button class="token-remove-btn" onclick="removeToken('${t.id}')">✕</button>
     </div>`;
@@ -8842,21 +8836,16 @@ switchGmTab = function(tab) {
       <!-- ACTIONS TAB -->
       <div id="gm-tab-content-actions" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
         <!-- clock bar -->
-        <div class="at-clock">
-          <div>
-            <div class="at-clock-label">Combat Round</div>
-            <div class="at-clock-time" id="at-clock-display">Round 1</div>
+        <div style="padding:8px 10px;border-bottom:1px solid var(--border);">
+          <div class="at-clock-label" style="margin-bottom:4px;">Combat Round</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;">
+            <div class="at-clock-time" id="at-clock-display" style="margin-right:4px;">Round 1</div>
+            <button class="at-next-btn" id="at-next-btn" onclick="atNext()" title="Advance to next combatant">⏭ Next</button>
+            <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative">↺ Round</button>
+            <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative">↺ All</button>
+            <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="display:none;">🎲 Monsters</button>
+            <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
           </div>
-          <button class="at-next-btn" id="at-next-btn" onclick="atNext()" title="Advance to next combatant">⏭ Next</button>
-          <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative" style="margin-left:4px;">↺ Round</button>
-          <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative" style="margin-left:2px;">↺ All</button>
-          <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="margin-left:6px;display:none;">🎲 Monsters</button>
-          <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat — blink first token" style="margin-left:6px;display:none;">⚔ Start</button>
-        </div>
-        <!-- add combatant row -->
-        <div class="at-add-row">
-          <select id="at-add-sel" style="flex:1;"></select>
-          <button class="token-add-btn" onclick="atAddCombatant()" title="Add to tracker">+ Add</button>
         </div>
         <!-- combatant list -->
         <div id="at-list" style="flex:1;overflow-y:auto;"></div>
