@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711t';
+const VERSION = 'v0.1.20260711u';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5175,6 +5175,7 @@ function _atUpdateBlink() {
     if (el) el.classList.remove('token-blink');
     _atBlinkTokenId = null;
   }
+  if (!atCombatActive) return;
   const active = _atActiveCombatant();
   if (!active) return;
   const tokenId = _atFindTokenId(active.id);
@@ -5280,7 +5281,7 @@ async function atOpenSlotModal(combatantId, slot) {
     const heldItem = slot === 'right' ? rightItem : leftItem;
     if (heldItem) {
       const norm = normalizeWeaponName(heldItem);
-      const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
+      const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
       const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
       if (meleeRows.length || rangedRows.length) {
         _atWeaponSection(grid, `⚔ ${heldItem}`, meleeRows, rangedRows, combatantId, slot, heldItem);
@@ -5423,7 +5424,7 @@ function atPickFreeform() {
 }
 
 function renderAtList() {
-  document.getElementById('at-clock-display').textContent = 'Round ' + atRound;
+  document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
   const monstersBtn = document.getElementById('at-roll-monsters-btn');
   if (monstersBtn) monstersBtn.style.display = (isGM() && atCombatants.some(c => c.type === 'creature')) ? '' : 'none';
@@ -5740,6 +5741,57 @@ function renderPlayCharacter() {
             <button class="at-btn${acHasAction ? ' primary' : ''}" style="flex:1;" onclick="atAcceptAction('${acSafeId}')">✓ Done</button>
           </div>
         </div>`;
+    }
+  }
+
+  // When GM is in active combat, replace the body with the active combatant's info
+  if (isGM() && atCombatActive) {
+    const ac = _atActiveCombatant();
+    if (ac) {
+      let acAttrs = null, acRow = null, acSc = null;
+      if (ac.type === 'char') {
+        acRow = playCharCache[ac.id.split('::')[1]];
+        if (acRow) acAttrs = calcAttributesFromData({
+          race: acRow.species||'', bodyType: acRow.body_type||'',
+          sex: acRow.sex||'', age: acRow.age||'',
+          height: acRow.height||'', build: acRow.build||'',
+          social: acRow.social||'', mental: acRow.mental||'',
+          stats: acRow.stats||{},
+        });
+      } else {
+        const tok = mapTokens[ac.id.split('::')[1]];
+        acSc = tok ? sessionCreatureCache[tok.entity_id] : null;
+        if (acSc) {
+          const DS = {Strength:10,Endurance:10,Agility:10,Memory:10,Intellect:10,Senses:10,Quintessence:0};
+          acAttrs = calcAttributesFromData({
+            race: acSc.species||'', bodyType: acSc.body_type||'Humanoid',
+            sex: acSc.sex||'', age: acSc.age||'Adult',
+            height: acSc.height||'Average', build: acSc.build||'Average',
+            social: acSc.social||'Balanced', mental: acSc.mental||'Balanced',
+            stats: Object.assign({}, DS, acSc.stats||{}),
+          });
+        }
+      }
+      if (acAttrs) {
+        const acSpeed = calcMaxSpeed(acAttrs, 0);
+        const acSpeedStr = acSpeed != null ? Math.round(acSpeed) + ' ft/s' : '—';
+        const acSize = acAttrs._targetAdj ?? '—';
+        const acSub = ac.type === 'char'
+          ? [acRow?.species, acRow?.body_type].filter(Boolean).join(' · ')
+          : [acSc?.species, acSc?.body_type].filter(Boolean).join(' · ');
+        const statRow = (label, key) =>
+          `<div class="ps-stat-row"><span class="ps-stat-label">${label}</span><span class="ps-stat-val">${acAttrs[key] != null ? Math.round(acAttrs[key]) : '—'}</span></div>`;
+        const acStatsHtml = ATTRIBUTES.map(a => statRow(a.label, a.key)).join('');
+        el.innerHTML = `
+          ${activeBannerHtml}
+          <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${acSub}</div>
+          <div style="display:flex;gap:12px;margin-bottom:10px;">
+            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${acSpeedStr}</div></div>
+            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${acSize}</div></div>
+          </div>
+          ${section('ac-stats', 'Stats', acStatsHtml)}`;
+        return;
+      }
     }
   }
 
@@ -7051,6 +7103,11 @@ function attackTokenClick(tokenId) {
   // ── Attacker HIT value ────────────────────────────────────────────────────
   const [atkType, atkId] = attackCombatantId.split('::');
   let hitValue = null;
+  const _resolveHitValue = (atkAttrs) => {
+    const weaponRows = getWeaponRows(attackWeaponName);
+    const actionRow  = weaponRows.find(r => r.action === attackActionLabel);
+    if (actionRow) hitValue = calcHitValue(actionRow.hitFormula, atkAttrs);
+  };
   if (atkType === 'char') {
     const atkRow = playCharCache[atkId];
     if (atkRow) {
@@ -7061,9 +7118,21 @@ function attackTokenClick(tokenId) {
         social: atkRow.social || '', mental: atkRow.mental || '',
         stats: atkRow.stats || {},
       });
-      const weaponRows = getWeaponRows(attackWeaponName);
-      const actionRow  = weaponRows.find(r => r.action === attackActionLabel);
-      if (actionRow) hitValue = calcHitValue(actionRow.hitFormula, atkAttrs);
+      _resolveHitValue(atkAttrs);
+    }
+  } else if (atkType === 'creature') {
+    const atkToken = mapTokens[atkId];
+    const sc = atkToken ? sessionCreatureCache[atkToken.entity_id] : null;
+    if (sc) {
+      const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+      const atkAttrs = calcAttributesFromData({
+        race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
+        sex: sc.sex || '', age: sc.age || 'Adult',
+        height: sc.height || 'Average', build: sc.build || 'Average',
+        social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
+        stats: Object.assign({}, DEFAULT_STATS, sc.stats || {}),
+      });
+      _resolveHitValue(atkAttrs);
     }
   }
 
@@ -8444,6 +8513,13 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
   }).select('id').single();
 
   if (scErr || !creature) { alert('Failed to spawn creature: ' + (scErr?.message || 'unknown')); return; }
+
+  // Keep cache current so defense/attack lookups work without a full reload
+  sessionCreatureCache[creature.id] = { id: creature.id, campaign_id: currentCampaignId,
+    species: tmpl.species||'', body_type: tmpl.body_type||'Humanoid', label,
+    sex: tmpl.sex||'', age: tmpl.age||'Adult', height: tmpl.height||'Average',
+    build: tmpl.build||'Average', social: tmpl.social||'Balanced', mental: tmpl.mental||'Balanced',
+    stats: tmpl.stats||{}, skills: tmpl.skills||{}, held_items: tmpl.held_items||{}, armor: tmpl.armor||{} };
 
   let avatar_url = '';
   if (avatarPath) {
