@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710m';
+const VERSION = 'v0.1.20260710n';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4948,14 +4948,14 @@ const AT_MOVE = [
   { label: 'Stand Up',      dur: 2  },
 ];
 const AT_FULLBODY = [
-  { label: 'Evade',       dur: 2  },
-  { label: 'Dodge',       dur: 2  },
-  { label: 'Charge',      dur: 3  },
-  { label: 'Go Prone',    dur: 1  },
-  { label: 'Use Item',    dur: 2  },
-  { label: 'Draw Weapon', dur: 2  },
-  { label: 'Search',      dur: 4  },
-  { label: 'Hide',        dur: 3  },
+  { label: 'Evade',          dur: 2 },
+  { label: 'Change Item Held', dur: 1 },
+  { label: 'Go Prone',       dur: 1 },
+  { label: 'Search',         dur: 1 },
+  { label: 'Hide',           dur: 1 },
+  { label: 'Charge',         dur: 3 },
+  { label: 'Use Item',       dur: 2 },
+  { label: 'Draw Weapon',    dur: 2 },
 ];
 
 const WEAPON_ACTIONS = {
@@ -4991,6 +4991,7 @@ let atCombatants  = [];
 let atRound       = 1;
 let atActiveIdx   = 0;
 let atModalTarget = null; // combatant id receiving next action
+let atCombatActive = false;
 let _atStateFromGM = null; // { round, activeId } — received by players from GM broadcast
 
 function atSortedCombatants() {
@@ -5004,6 +5005,15 @@ function atSortedCombatants() {
 
 function _atActiveCombatant() {
   return atSortedCombatants()[atActiveIdx] || null;
+}
+
+function atStartCombat() {
+  if (!atCombatants.length) return;
+  atActiveIdx = 0;
+  atRound = 1;
+  atCombatActive = true;
+  _atUpdateBlink();
+  renderAtList();
 }
 
 function atNext() {
@@ -5293,6 +5303,22 @@ function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   const durationRounds = dur >= 99 ? 9999 : Math.max(1, Math.ceil(dur / 3));
   const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
 
+  if (locksAll && c._preMoveX != null) {
+    const cancelMove = confirm(`"${label}" cancels movement. Move token back to original position?`);
+    if (cancelMove) {
+      const tokenEl = c._preMoveTokenId ? document.getElementById('token-' + c._preMoveTokenId) : null;
+      if (tokenEl) { tokenEl.style.left = c._preMoveX + '%'; tokenEl.style.top = c._preMoveY + '%'; }
+      if (c._preMoveTokenId && mapTokens[c._preMoveTokenId]) {
+        mapTokens[c._preMoveTokenId].x_pct = c._preMoveX;
+        mapTokens[c._preMoveTokenId].y_pct = c._preMoveY;
+        sb.from('map_tokens').update({ x_pct: c._preMoveX, y_pct: c._preMoveY }).eq('id', c._preMoveTokenId);
+        tokenChannel?.send({ type: 'broadcast', event: 'token-move',
+          payload: { id: c._preMoveTokenId, x_pct: c._preMoveX, y_pct: c._preMoveY } });
+      }
+    }
+    delete c._preMoveX; delete c._preMoveY; delete c._preMoveTokenId;
+  }
+
   if (locksAll) {
     c.slots.right = entry;
     c.slots.left  = null;
@@ -5331,6 +5357,8 @@ function renderAtList() {
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
   const monstersBtn = document.getElementById('at-roll-monsters-btn');
   if (monstersBtn) monstersBtn.style.display = (isGM() && atCombatants.some(c => c.type === 'creature')) ? '' : 'none';
+  const startBtn = document.getElementById('at-start-combat-btn');
+  if (startBtn) startBtn.style.display = (isGM() && atCombatants.length > 0) ? '' : 'none';
 
   const list = document.getElementById('at-list');
   if (!atCombatants.length) {
@@ -5345,6 +5373,8 @@ function renderAtList() {
   if (isGM() && atCombatants.length && mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-state',
       payload: { round: atRound, activeId: activeC?.id || null } });
+
+  _atUpdateBlink();
 
   for (let i = 0; i < sorted.length; i++) {
     const c        = sorted[i];
@@ -5391,20 +5421,18 @@ function renderAtList() {
       const actionSpan = sl
         ? `<span class="at-slot-action">${sl.label}</span>${durTag}`
         : `<span class="at-slot-action empty">—</span>`;
-      const setBtn = `<button class="at-btn at-slot-set-btn" onclick="atOpenSlotModal('${safeId}','${key}')">${sl ? '⚙' : '+'}</button>`;
-      const clrBtn = sl ? `<button class="at-btn danger at-slot-clr-btn" onclick="atClearSlot('${safeId}','${key}')">✕</button>` : '';
-      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
+      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}</div>`;
     }).join('');
 
-    const acceptBtn = isActive ? `<button class="at-btn primary" onclick="atAcceptAction('${safeId}')">✓ Accept</button>` : '';
-    const pathBtn   = `<button class="at-btn" onclick="enterPathMode('${safeId}')" title="Path">🏃</button>`;
-    const removeBtn = `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>`;
+    const actBtn    = (isActive && atCombatActive) ? `<button class="at-btn primary" onclick="atOpenSlotModal('${safeId}','right')">⚔ Act</button>` : '';
+    const acceptBtn = isActive ? `<button class="at-btn" onclick="atAcceptAction('${safeId}')">✓ Done</button>` : '';
+    const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>` : '';
 
     div.innerHTML = `
       <div class="at-comb-header">${nameEl}${initBadge}</div>
       ${rollBtn}
       <div class="at-slots">${slotsHtml}</div>
-      <div class="at-comb-btns">${acceptBtn}${pathBtn}${removeBtn}</div>`;
+      <div class="at-comb-btns">${actBtn}${acceptBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -6587,7 +6615,8 @@ function tokenHtml(t) {
   return `<div class="map-token" id="token-${t.id}"
     data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
     style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
-    onmousedown="startTokenDrag(event,'${t.id}')">
+    onmousedown="startTokenDrag(event,'${t.id}')"
+    ondblclick="onTokenDblClick(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label">${t.label}</div>
     ${badgeHtml}
@@ -6663,6 +6692,21 @@ let _tokenDragStartX  = 0;
 let _tokenDragStartY  = 0;
 let _tokenClickId     = null; // id of token that started the mousedown
 
+function onTokenDblClick(e, tokenId) {
+  e.stopPropagation();
+  if (!atCombatActive) return;
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const combatantId = t.entity_type === 'character'
+    ? 'char::' + t.entity_id : 'creature::' + t.id;
+  const isActive = _atActiveCombatant()?.id === combatantId;
+  const canControl = isGM() || (t.entity_type === 'character' && t.entity_id === currentCharacterId);
+  if (isActive && canControl) {
+    if (pathMode) { pathCommit(); return; }
+    atOpenSlotModal(combatantId, 'right');
+  }
+}
+
 function startTokenDrag(e, tokenId) {
   e.stopPropagation();
   // In attack mode a token click selects the target
@@ -6723,8 +6767,18 @@ async function onTokenMouseUp(e) {
   _tokenClickId = null;
 
   if (!dragTokenId) {
-    // no drag started (non-moveable token) — still treat as click
-    if (clickedId && !_tokenDragMoved) showTokenInfo(clickedId);
+    if (clickedId && !_tokenDragMoved) {
+      const t = mapTokens[clickedId];
+      const combatantId = t?.entity_type === 'character'
+        ? 'char::' + t.entity_id : 'creature::' + t?.id;
+      const isActive = _atActiveCombatant()?.id === combatantId;
+      const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
+      if (isActive && canControl && !pathMode && atCombatActive) {
+        enterPathMode(combatantId);
+      } else {
+        showTokenInfo(clickedId);
+      }
+    }
     return;
   }
 
@@ -6734,9 +6788,17 @@ async function onTokenMouseUp(e) {
   el.classList.remove('dragging');
 
   if (!_tokenDragMoved) {
-    // click, not a drag — show info
     dragTokenId = null;
-    showTokenInfo(clickedId);
+    const t = mapTokens[clickedId];
+    const combatantId = t?.entity_type === 'character'
+      ? 'char::' + t.entity_id : 'creature::' + t?.id;
+    const isActive = _atActiveCombatant()?.id === combatantId;
+    const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
+    if (isActive && canControl && !pathMode && atCombatActive) {
+      enterPathMode(combatantId);
+    } else {
+      showTokenInfo(clickedId);
+    }
     return;
   }
 
@@ -7932,16 +7994,18 @@ function enterPathMode(combatantId) {
   const svg = document.getElementById('path-svg');
   if (svg) { svg.style.display = 'block'; svg.innerHTML = ''; }
 
-  // Seed first waypoint at the combatant's token centre
+  // Seed first waypoint at the combatant's token centre; record pre-move position
   if (combatantId) {
     const token = _pathFindToken(combatantId);
     if (token) {
-      // x_pct/y_pct are % of image dimensions → convert to viewport coords
       const imgX = (token.x_pct / 100) * mapImgW;
       const imgY = (token.y_pct / 100) * mapImgH;
       const vpX  = imgX * mapScale + mapOffsetX;
       const vpY  = imgY * mapScale + mapOffsetY;
       pathPoints.push({ x: vpX, y: vpY });
+      // Store pre-move pct so full-body actions can cancel movement
+      const c = atCombatants.find(x => x.id === combatantId);
+      if (c) { c._preMoveX = token.x_pct; c._preMoveY = token.y_pct; c._preMoveTokenId = token.id; }
       pathRenderSvg(null, null);
     }
   }
@@ -8039,7 +8103,7 @@ function pathRenderSvg(mouseX, mouseY) {
     const spd  = pathGetSpeed();
     const secs = feet / spd;
     const secRound = Math.round(secs * 10) / 10;
-    const timeStr  = secRound <= 4 ? secRound + 's' : secRound + 's ⚠';
+    const timeStr  = secRound <= 3 ? secRound + 's' : secRound + 's ⚠';
     const fillClr  = secs <= 2 ? '#4de080' : secs <= 4 ? '#f0d080' : '#e06060';
     const label = `${Math.round(feet)} ft · ${timeStr}`;
 
@@ -8095,23 +8159,44 @@ function pathMouseMove(e) {
   pathRenderSvg(e.clientX - rect.left, e.clientY - rect.top);
 }
 
-function pathCommit() {
-  const feet = pathTotalFeet();
-  const spd  = pathGetSpeed();
-  const secs = feet != null ? Math.max(1, Math.round(feet / spd)) : 2;
+async function pathCommit() {
+  const feet   = pathTotalFeet();
+  const spd    = pathGetSpeed();
+  const secs   = feet != null ? Math.max(1, Math.round(feet / spd)) : 2;
   const combId = pathCharId;
+
+  // Move token to last waypoint
+  if (pathPoints.length >= 2) {
+    const last  = pathPoints[pathPoints.length - 1];
+    const imgX  = (last.x - mapOffsetX) / mapScale;
+    const imgY  = (last.y - mapOffsetY) / mapScale;
+    const x_pct = Math.min(100, Math.max(0, (imgX / mapImgW) * 100));
+    const y_pct = Math.min(100, Math.max(0, (imgY / mapImgH) * 100));
+    const token = combId ? _pathFindToken(combId) : null;
+    if (token) {
+      const el = document.getElementById('token-' + token.id);
+      if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
+      token.x_pct = x_pct; token.y_pct = y_pct;
+      tokenChannel?.send({ type:'broadcast', event:'token-move', payload:{ id:token.id, x_pct, y_pct } });
+      await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', token.id);
+    }
+  }
+
   exitPathMode();
   if (!combId) return;
-  // add Move action to the action tracker
+
   const c = atCombatants.find(x => x.id === combId);
   if (c) {
     if (!c.slots) c.slots = _newSlots();
     const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
-    c.slots.move = { label, startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)), locksAll: false };
+    const warned = feet != null && secs > 3;
+    c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)), locksAll: false };
     renderAtList();
-    // switch to Actions tab so player sees it
     switchGmTab('actions');
   }
+
+  // Open action dialog after movement
+  if (combId) atOpenSlotModal(combId, 'right');
 }
 
 // Hook calibration into the existing mouse event listeners in initMapInteraction
@@ -8667,6 +8752,7 @@ switchGmTab = function(tab) {
           <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative" style="margin-left:4px;">↺ Round</button>
           <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative" style="margin-left:2px;">↺ All</button>
           <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="margin-left:6px;display:none;">🎲 Monsters</button>
+          <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat — blink first token" style="margin-left:6px;display:none;">⚔ Start</button>
         </div>
         <!-- add combatant row -->
         <div class="at-add-row">
