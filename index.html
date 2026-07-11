@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710n';
+const VERSION = 'v0.1.20260710o';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5288,7 +5288,27 @@ function atCloseModal() {
   atModalSlot   = null;
 }
 
-function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
+function styledConfirm(message) {
+  return new Promise(resolve => {
+    const modal  = document.getElementById('confirm-modal');
+    document.getElementById('confirm-modal-msg').textContent = message;
+    modal.style.display = 'flex';
+    const ok  = document.getElementById('confirm-modal-ok');
+    const cancel = document.getElementById('confirm-modal-cancel');
+    function cleanup(result) {
+      modal.style.display = 'none';
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onOk()     { cleanup(true);  }
+    function onCancel() { cleanup(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+  });
+}
+
+async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c) return;
   if (!c.slots) c.slots = _newSlots();
@@ -5304,7 +5324,7 @@ function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
 
   if (locksAll && c._preMoveX != null) {
-    const cancelMove = confirm(`"${label}" cancels movement. Move token back to original position?`);
+    const cancelMove = await styledConfirm(`"${label}" cancels movement. Move token back to original position?`);
     if (cancelMove) {
       const tokenEl = c._preMoveTokenId ? document.getElementById('token-' + c._preMoveTokenId) : null;
       if (tokenEl) { tokenEl.style.left = c._preMoveX + '%'; tokenEl.style.top = c._preMoveY + '%'; }
@@ -8765,6 +8785,17 @@ switchGmTab = function(tab) {
 
     </div>
 
+  </div>
+</div>
+
+<!-- Styled confirm dialog -->
+<div id="confirm-modal" class="at-modal-overlay" style="display:none;">
+  <div class="at-modal" style="max-width:360px;text-align:center;">
+    <p id="confirm-modal-msg" style="color:var(--text-bright);font-size:0.9rem;margin-bottom:18px;line-height:1.5;"></p>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button id="confirm-modal-ok"  class="at-btn primary" style="min-width:80px;">OK</button>
+      <button id="confirm-modal-cancel" class="at-btn" style="min-width:80px;">Cancel</button>
+    </div>
   </div>
 </div>
 
