@@ -927,6 +927,16 @@
     <div class="nav-section">Account</div>
     <div id="nav-user" style="padding:6px 18px;font-size:0.76rem;color:var(--text-dim);"></div>
     <div id="nav-campaign" style="padding:2px 18px 6px;font-size:0.72rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
+    <div id="nav-join-campaign" style="padding:4px 18px 6px;display:none;">
+      <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:4px;">Join a Campaign</div>
+      <div style="display:flex;gap:4px;">
+        <input type="text" id="nav-invite-input" placeholder="Invite code" maxlength="6"
+          style="flex:1;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.1em;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;"
+          onkeydown="if(event.key==='Enter')navRedeemInviteCode()">
+        <button class="nav-btn" style="padding:2px 8px;margin:0;" onclick="navRedeemInviteCode()">Join</button>
+      </div>
+      <div id="nav-join-status" style="font-size:0.66rem;color:var(--gold2);min-height:1em;margin-top:3px;"></div>
+    </div>
     <button class="nav-btn" onclick="submitSignOut()">Sign Out</button>
   </nav>
 
@@ -4006,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711u';
+const VERSION = 'v0.1.20260711v';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4313,6 +4323,27 @@ async function redeemInviteCode() {
   // Auto-select the joined campaign
   const campEl = document.querySelector(`.landing-campaign-item[data-id="${data.campaign_id}"]`);
   if (campEl) campEl.click();
+}
+
+async function navRedeemInviteCode() {
+  const input  = document.getElementById('nav-invite-input');
+  const status = document.getElementById('nav-join-status');
+  const code   = input.value.trim().toUpperCase();
+  if (!code) return;
+  if (!currentUser) { status.textContent = 'Sign in required.'; return; }
+  status.textContent = 'Checking…';
+  const { data, error } = await sb.from('campaign_invites')
+    .select('campaign_id, expires_at').eq('code', code).single();
+  if (error || !data) { status.textContent = 'Invalid code.'; return; }
+  if (new Date(data.expires_at) < new Date()) { status.textContent = 'Code expired.'; return; }
+  const { error: memErr } = await sb.from('campaign_members').upsert(
+    { campaign_id: data.campaign_id, user_id: currentUser.id, role: 'player' },
+    { onConflict: 'campaign_id,user_id' }
+  );
+  if (memErr) { status.textContent = 'Error: ' + memErr.message; return; }
+  status.textContent = '✓ Joined!';
+  input.value = '';
+  await selectCampaign(data.campaign_id);
 }
 
 async function _landingDeleteChar(id, name) {
@@ -4758,6 +4789,8 @@ sb.auth.onAuthStateChange(async (event, session) => {
       session.user.user_metadata?.display_name || session.user.email;
     updateOwnerButtonVisibility();
     if (!currentCampaignId) showLandingModal();
+    // Show campaign join input for non-GM users who aren't in a campaign yet
+    if ($('nav-join-campaign')) $('nav-join-campaign').style.display = '';
   } else {
     currentUser         = null;
     currentCampaignId   = null;
@@ -5326,7 +5359,7 @@ function _atWeaponSection(grid, title, meleeRows, rangedRows, combatantId, slot,
     btn.innerHTML = `<div class="at-pick-name">${r.action}${extra}</div><div class="at-pick-dur">${dur}r</div>`;
     btn.onclick = () => {
       atSetSlot(combatantId, slot, `${r.action} — ${itemName}`, dur * 3, false);
-      const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach || 5);
+      const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach ?? 0);
       enterAttackMode(combatantId, itemName, r.action, isRanged, rangeFt);
     };
     grid.appendChild(btn);
@@ -5782,6 +5815,14 @@ function renderPlayCharacter() {
         const statRow = (label, key) =>
           `<div class="ps-stat-row"><span class="ps-stat-label">${label}</span><span class="ps-stat-val">${acAttrs[key] != null ? Math.round(acAttrs[key]) : '—'}</span></div>`;
         const acStatsHtml = ATTRIBUTES.map(a => statRow(a.label, a.key)).join('');
+        const acHeld = ac.type === 'char' ? (acRow?.held_items || {}) : (acSc?.held_items || {});
+        const acHeldHtml = ['right','left'].map(hand => {
+          const item = acHeld[hand];
+          return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
+            <span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${hand==='right'?'R':'L'}</span>
+            <span style="font-size:0.78rem;">${item || '<span style="color:var(--text-dim)">—</span>'}</span>
+          </div>`;
+        }).join('');
         el.innerHTML = `
           ${activeBannerHtml}
           <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${acSub}</div>
@@ -5789,6 +5830,7 @@ function renderPlayCharacter() {
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${acSpeedStr}</div></div>
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${acSize}</div></div>
           </div>
+          ${section('ac-held', 'Held Items', acHeldHtml)}
           ${section('ac-stats', 'Stats', acStatsHtml)}`;
         return;
       }
