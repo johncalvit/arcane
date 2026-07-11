@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710p';
+const VERSION = 'v0.1.20260710q';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5487,7 +5487,8 @@ function renderAtList() {
     }).join('');
 
     const actBtn    = (isActive && atCombatActive) ? `<button class="at-btn primary" onclick="atOpenSlotModal('${safeId}','right')">⚔ Act</button>` : '';
-    const acceptBtn = isActive ? `<button class="at-btn" onclick="atAcceptAction('${safeId}')">✓ Done</button>` : '';
+    const hasAction = c.slots.right || c.slots.left || c.slots.move;
+    const acceptBtn = isActive ? `<button class="at-btn${hasAction ? ' primary' : ''}" onclick="atAcceptAction('${safeId}')">✓ Done</button>` : '';
     const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>` : '';
 
     div.innerHTML = `
