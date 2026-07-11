@@ -4006,7 +4006,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260710q';
+const VERSION = 'v0.1.20260710r';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5043,6 +5043,7 @@ function atNext() {
   }
   _atUpdateBlink();
   renderAtList();
+  renderPlayCharacter();
 }
 
 function atReset() {
@@ -5486,7 +5487,11 @@ function renderAtList() {
       return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}</div>`;
     }).join('');
 
-    const actBtn    = (isActive && atCombatActive) ? `<button class="at-btn primary" onclick="atOpenSlotModal('${safeId}','right')">⚔ Act</button>` : '';
+    const actBtns   = (isActive && atCombatActive) ? `
+      <button class="at-btn primary" style="padding:2px 8px;" title="Right arm" onclick="atOpenSlotModal('${safeId}','right')">⚔ R</button>
+      <button class="at-btn" style="padding:2px 8px;" title="Left arm" onclick="atOpenSlotModal('${safeId}','left')">🛡 L</button>
+      <button class="at-btn" style="padding:2px 8px;" title="Movement" onclick="atOpenSlotModal('${safeId}','move')">🏃 M</button>
+    ` : '';
     const hasAction = c.slots.right || c.slots.left || c.slots.move;
     const acceptBtn = isActive ? `<button class="at-btn${hasAction ? ' primary' : ''}" onclick="atAcceptAction('${safeId}')">✓ Done</button>` : '';
     const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">Remove</button>` : '';
@@ -5495,7 +5500,7 @@ function renderAtList() {
       <div class="at-comb-header">${nameEl}${initBadge}</div>
       ${rollBtn}
       <div class="at-slots">${slotsHtml}</div>
-      <div class="at-comb-btns">${actBtn}${acceptBtn}${removeBtn}</div>`;
+      <div class="at-comb-btns">${actBtns}${acceptBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -6787,7 +6792,6 @@ let _tokenClickId     = null; // id of token that started the mousedown
 
 function onTokenDblClick(e, tokenId) {
   e.stopPropagation();
-  if (!atCombatActive) return;
   const t = mapTokens[tokenId];
   if (!t) return;
   const combatantId = t.entity_type === 'character'
@@ -6796,7 +6800,7 @@ function onTokenDblClick(e, tokenId) {
   const canControl = isGM() || (t.entity_type === 'character' && t.entity_id === currentCharacterId);
   if (isActive && canControl) {
     if (pathMode) { pathCommit(); return; }
-    atOpenSlotModal(combatantId, 'right');
+    if (atCombatActive) atOpenSlotModal(combatantId, 'right');
   }
 }
 
@@ -6861,12 +6865,13 @@ async function onTokenMouseUp(e) {
 
   if (!dragTokenId) {
     if (clickedId && !_tokenDragMoved) {
+      if (pathMode) return;
       const t = mapTokens[clickedId];
       const combatantId = t?.entity_type === 'character'
         ? 'char::' + t.entity_id : 'creature::' + t?.id;
       const isActive = _atActiveCombatant()?.id === combatantId;
       const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
-      if (isActive && canControl && !pathMode && atCombatActive) {
+      if (isActive && canControl && atCombatActive) {
         enterPathMode(combatantId);
       } else {
         showTokenInfo(clickedId);
@@ -6882,12 +6887,13 @@ async function onTokenMouseUp(e) {
 
   if (!_tokenDragMoved) {
     dragTokenId = null;
+    if (pathMode) return; // map click handler owns waypoints; ignore token clicks in path mode
     const t = mapTokens[clickedId];
     const combatantId = t?.entity_type === 'character'
       ? 'char::' + t.entity_id : 'creature::' + t?.id;
     const isActive = _atActiveCombatant()?.id === combatantId;
     const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
-    if (isActive && canControl && !pathMode && atCombatActive) {
+    if (isActive && canControl && atCombatActive) {
       enterPathMode(combatantId);
     } else {
       showTokenInfo(clickedId);
