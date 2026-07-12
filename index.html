@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711x';
+const VERSION = 'v0.1.20260711y';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5861,24 +5861,12 @@ function renderPlayCharacter() {
           `<div class="ps-stat-row"><span class="ps-stat-label">${label}</span><span class="ps-stat-val">${acAttrs[key] != null ? Math.round(acAttrs[key]) : '—'}</span></div>`;
         const acStatsHtml = ATTRIBUTES.map(a => statRow(a.label, a.key)).join('');
         const acHeld = ac.type === 'char' ? (acRow?.held_items || {}) : (acSc?.held_items || {});
-        // Held items — chars get dropdowns to change; creatures get text
-        let acEquipHtml;
-        if (ac.type === 'char' && acRow) {
-          const loadout = Object.values(acRow.loadout || {}).flat().filter(Boolean);
-          const charOpts = (cur) => ['', ...loadout]
-            .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'Bare Hand'}</option>`).join('');
-          const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
-          const dim = (t) => `<div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${t}</div>`;
-          acEquipHtml = `
-            <div style="margin-bottom:6px;">${dim('Right Hand')}<select style="${selStyle}" onchange="_acSetHand('${acRow.id}','right',this.value)">${charOpts(acHeld.right)}</select></div>
-            <div>${dim('Left Hand')}<select style="${selStyle}" onchange="_acSetHand('${acRow.id}','left',this.value)">${charOpts(acHeld.left)}</select></div>`;
-        } else {
-          const dim = (t) => `<span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${t}</span>`;
-          acEquipHtml = ['right','left'].map(hand => {
-            const item = acHeld[hand];
-            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">${dim(hand==='right'?'R':'L')}<span style="font-size:0.78rem;">${item||'<span style="color:var(--text-dim)">—</span>'}</span></div>`;
-          }).join('');
-        }
+        // Held items — read-only display
+        const dim = (t) => `<span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${t}</span>`;
+        const acEquipHtml = ['right','left'].map(hand => {
+          const item = acHeld[hand];
+          return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">${dim(hand==='right'?'R':'L')}<span style="font-size:0.78rem;">${item||'<span style="color:var(--text-dim)">—</span>'}</span></div>`;
+        }).join('');
 
         // Armor
         const acArmor = ac.type === 'char' ? (acRow?.armor || {}) : (acSc?.armor || {});
