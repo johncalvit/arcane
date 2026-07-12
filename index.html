@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712b';
+const VERSION = 'v0.1.20260712c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5443,6 +5443,7 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
 
   if (locksAll && c._preMoveX != null) {
+    atCloseModal(); // dismiss action chooser before confirm dialog appears
     const cancelMove = await styledConfirm(`"${label}" cancels movement. Move token back to original position?`);
     if (cancelMove) {
       const tokenEl = c._preMoveTokenId ? document.getElementById('token-' + c._preMoveTokenId) : null;
