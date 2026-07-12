@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711y';
+const VERSION = 'v0.1.20260712a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5861,11 +5861,34 @@ function renderPlayCharacter() {
           `<div class="ps-stat-row"><span class="ps-stat-label">${label}</span><span class="ps-stat-val">${acAttrs[key] != null ? Math.round(acAttrs[key]) : '—'}</span></div>`;
         const acStatsHtml = ATTRIBUTES.map(a => statRow(a.label, a.key)).join('');
         const acHeld = ac.type === 'char' ? (acRow?.held_items || {}) : (acSc?.held_items || {});
-        // Held items — read-only display
-        const dim = (t) => `<span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${t}</span>`;
+        // Build available item list for held-item dropdowns
+        let acItemOptions;
+        if (ac.type === 'char' && acRow) {
+          const names = [
+            ...(acRow.weapons   || []).map(w => w.name),
+            ...(acRow.equipment || []).map(e => e.name),
+          ].filter(Boolean);
+          acItemOptions = [...new Set(names)];
+        } else {
+          // Creatures: all known melee + ranged weapon names
+          acItemOptions = [...new Set([
+            ...MELEE_WEAPONS.map(r => r.weapon),
+            ...RANGED_WEAPONS.map(r => r.weapon),
+          ])].sort();
+        }
+        const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
+        const acOpts = (cur) => ['', ...acItemOptions]
+          .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'— Bare Hand —'}</option>`).join('');
         const acEquipHtml = ['right','left'].map(hand => {
-          const item = acHeld[hand];
-          return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">${dim(hand==='right'?'R':'L')}<span style="font-size:0.78rem;">${item||'<span style="color:var(--text-dim)">—</span>'}</span></div>`;
+          const safeCharId = ac.type === 'char' ? acRow.id : null;
+          const safeScId   = ac.type === 'creature' ? (acSc?.id || '') : null;
+          const onchg = safeCharId
+            ? `_acSetHand('char','${safeCharId}','${hand}',this.value)`
+            : `_acSetHand('creature','${safeScId}','${hand}',this.value)`;
+          return `<div style="margin-bottom:6px;">
+            <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${hand==='right'?'Right Hand':'Left Hand'}</div>
+            <select style="${selStyle}" onchange="${onchg}">${acOpts(acHeld[hand] || '')}</select>
+          </div>`;
         }).join('');
 
         // Armor
@@ -5971,12 +5994,21 @@ async function _playSetHand(side, value) {
 }
 
 // ── Active combatant hand change (GM left panel) ──────────────────────────────
-async function _acSetHand(charId, side, value) {
-  const row = playCharCache[charId];
-  if (!row) return;
-  if (!row.held_items) row.held_items = {};
-  row.held_items[side] = value || null;
-  await sb.from('characters').update({ held_items: row.held_items }).eq('id', charId);
+async function _acSetHand(entityType, entityId, side, value) {
+  const item = value || null;
+  if (entityType === 'char') {
+    const row = playCharCache[entityId];
+    if (!row) return;
+    if (!row.held_items) row.held_items = {};
+    row.held_items[side] = item;
+    await sb.from('characters').update({ held_items: row.held_items }).eq('id', entityId);
+  } else {
+    const sc = sessionCreatureCache[entityId];
+    if (!sc) return;
+    if (!sc.held_items) sc.held_items = {};
+    sc.held_items[side] = item;
+    await sb.from('session_creatures').update({ held_items: sc.held_items }).eq('id', entityId);
+  }
   renderPlayCharacter();
 }
 
