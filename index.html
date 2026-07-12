@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711v';
+const VERSION = 'v0.1.20260711w';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5320,7 +5320,7 @@ async function atOpenSlotModal(combatantId, slot) {
         _atWeaponSection(grid, `⚔ ${heldItem}`, meleeRows, rangedRows, combatantId, slot, heldItem);
       }
     }
-    _atSection(grid, '✊ Unarmed', AT_UNARMED, combatantId, slot, false);
+    if (!heldItem) _atSection(grid, '✊ Unarmed', AT_UNARMED, combatantId, slot, false);
     if (hasArcane) _atSection(grid, '✨ Arcane', SPELL_ACTIONS, combatantId, slot, false);
     _atSection(grid, '⚡ Full Body — locks all slots', AT_FULLBODY, combatantId, slot, true);
   }
@@ -5350,6 +5350,7 @@ function _atWeaponSection(grid, title, meleeRows, rangedRows, combatantId, slot,
     ...meleeRows.map(r => ({ r, isRanged: false })),
     ...rangedRows.map(r => ({ r, isRanged: true })),
   ];
+  const DEFENSIVE_ACTIONS = new Set(['Block', 'Parry']);
   allRows.forEach(({ r, isRanged }) => {
     const btn = document.createElement('button');
     btn.className = 'at-action-pick-btn';
@@ -5357,10 +5358,14 @@ function _atWeaponSection(grid, title, meleeRows, rangedRows, combatantId, slot,
     const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
               : r.action.toLowerCase().includes('aim') ? 2 : 1;
     btn.innerHTML = `<div class="at-pick-name">${r.action}${extra}</div><div class="at-pick-dur">${dur}r</div>`;
+    const isDefensive = DEFENSIVE_ACTIONS.has(r.action);
     btn.onclick = () => {
       atSetSlot(combatantId, slot, `${r.action} — ${itemName}`, dur * 3, false);
-      const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach ?? 0);
-      enterAttackMode(combatantId, itemName, r.action, isRanged, rangeFt);
+      if (!isDefensive) {
+        const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach ?? 0);
+        enterAttackMode(combatantId, itemName, r.action, isRanged, rangeFt);
+      }
+      // Defensive actions: just set the slot; incoming attacks auto-detect via conditions
     };
     grid.appendChild(btn);
   });
@@ -5816,13 +5821,52 @@ function renderPlayCharacter() {
           `<div class="ps-stat-row"><span class="ps-stat-label">${label}</span><span class="ps-stat-val">${acAttrs[key] != null ? Math.round(acAttrs[key]) : '—'}</span></div>`;
         const acStatsHtml = ATTRIBUTES.map(a => statRow(a.label, a.key)).join('');
         const acHeld = ac.type === 'char' ? (acRow?.held_items || {}) : (acSc?.held_items || {});
-        const acHeldHtml = ['right','left'].map(hand => {
-          const item = acHeld[hand];
-          return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">
-            <span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${hand==='right'?'R':'L'}</span>
-            <span style="font-size:0.78rem;">${item || '<span style="color:var(--text-dim)">—</span>'}</span>
-          </div>`;
-        }).join('');
+        // Held items — chars get dropdowns to change; creatures get text
+        let acEquipHtml;
+        if (ac.type === 'char' && acRow) {
+          const loadout = Object.values(acRow.loadout || {}).flat().filter(Boolean);
+          const charOpts = (cur) => ['', ...loadout]
+            .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'Bare Hand'}</option>`).join('');
+          const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
+          const dim = (t) => `<div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${t}</div>`;
+          acEquipHtml = `
+            <div style="margin-bottom:6px;">${dim('Right Hand')}<select style="${selStyle}" onchange="_acSetHand('${acRow.id}','right',this.value)">${charOpts(acHeld.right)}</select></div>
+            <div>${dim('Left Hand')}<select style="${selStyle}" onchange="_acSetHand('${acRow.id}','left',this.value)">${charOpts(acHeld.left)}</select></div>`;
+        } else {
+          const dim = (t) => `<span style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;min-width:28px;">${t}</span>`;
+          acEquipHtml = ['right','left'].map(hand => {
+            const item = acHeld[hand];
+            return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:4px;">${dim(hand==='right'?'R':'L')}<span style="font-size:0.78rem;">${item||'<span style="color:var(--text-dim)">—</span>'}</span></div>`;
+          }).join('');
+        }
+
+        // Armor
+        const acArmor = ac.type === 'char' ? (acRow?.armor || {}) : (acSc?.armor || {});
+        const acArmorSlots = ['head','torso','rarm','larm','rleg','lleg'];
+        const acArmorLabels = {head:'Head',torso:'Torso',rarm:'R.Arm',larm:'L.Arm',rleg:'R.Leg',lleg:'L.Leg'};
+        const acArmorHtml = acArmorSlots.map(s =>
+          `<div class="ps-stat-row"><span class="ps-stat-label">${acArmorLabels[s]}</span><span class="ps-stat-val" style="font-size:0.72rem;">${acArmor[s]||'None'}</span></div>`
+        ).join('');
+
+        // Skills
+        const acSkills = ac.type === 'char' ? (acRow?.skills || {}) : (acSc?.skills || {});
+        const acInvested = Object.entries(acSkills).filter(([,pts]) => pts > 0);
+        const acSkillsHtml = acInvested.length
+          ? acInvested.map(([name, pts]) => {
+              const skill = SKILLS.find(s => s.name === name);
+              const pct = calcSkillSuccess(skill, acAttrs, pts);
+              const safeLabel = name.replace(/'/g, "\\'");
+              return `<div class="ps-stat-row"><span class="ps-stat-label" style="flex:1;">${name}</span><span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" onclick="openRoller({label:'${safeLabel}',target:${pct},targetLabel:'or less'})">${pct}%</span></div>`;
+            }).join('')
+          : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
+
+        // Conditions
+        const acToken = _pathFindToken(ac.id);
+        const acConds = acToken ? [...getConditions(acToken.id)] : [];
+        const acCondsHtml = acConds.length
+          ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${acConds.map(c => `<span style="background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:3px;padding:2px 7px;font-size:0.7rem;">${c}</span>`).join('')}</div>`
+          : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">None</div>`;
+
         el.innerHTML = `
           ${activeBannerHtml}
           <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${acSub}</div>
@@ -5830,8 +5874,11 @@ function renderPlayCharacter() {
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${acSpeedStr}</div></div>
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${acSize}</div></div>
           </div>
-          ${section('ac-held', 'Held Items', acHeldHtml)}
-          ${section('ac-stats', 'Stats', acStatsHtml)}`;
+          ${section('ac-equip', 'Equipment', acEquipHtml)}
+          ${section('ac-armor', 'Armor', acArmorHtml)}
+          ${section('ac-stats', 'Stats', acStatsHtml)}
+          ${section('ac-skills', 'Skills', acSkillsHtml)}
+          ${section('ac-conds', 'Conditions', acCondsHtml)}`;
         return;
       }
     }
@@ -5893,6 +5940,16 @@ async function _playSetHand(side, value) {
   const sel = document.getElementById('ps-hand-' + side);
   if (sel) { sel.value = value; recalc(); }
   await saveCharacter();
+}
+
+// ── Active combatant hand change (GM left panel) ──────────────────────────────
+async function _acSetHand(charId, side, value) {
+  const row = playCharCache[charId];
+  if (!row) return;
+  if (!row.held_items) row.held_items = {};
+  row.held_items[side] = value || null;
+  await sb.from('characters').update({ held_items: row.held_items }).eq('id', charId);
+  renderPlayCharacter();
 }
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
