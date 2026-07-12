@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260711w';
+const VERSION = 'v0.1.20260711x';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4914,6 +4914,10 @@ const CONDITION_DEFS = [
     desc:'Halves effective size vs ranged; cannot melee attack, evade, or retreat. Stand Up to clear.' },
   { key:'blocking',    label:'Blocking',    icon:'🛡', color:'#4488ff',
     desc:'Actively blocking. Block defense is pre-applied to incoming attacks.' },
+  { key:'parrying',    label:'Parrying',    icon:'⚔', color:'#44bbff',
+    desc:'Actively parrying. Parry defense is pre-applied to incoming attacks.' },
+  { key:'evading',     label:'Evading',     icon:'💨', color:'#88ff88',
+    desc:'Actively evading. Evade defense is pre-applied to incoming attacks.' },
   { key:'sentinel',    label:'Sentinel',    icon:'👁', color:'#ff8c00',
     desc:'Ready to attack any enemy that enters melee range.' },
   { key:'stunned',     label:'Stunned',     icon:'💫', color:'#ff5555',
@@ -4931,6 +4935,24 @@ const CONDITION_DEFS = [
 function getConditions(tokenId) {
   const t = mapTokens[tokenId];
   return new Set(Array.isArray(t?.conditions) ? t.conditions : []);
+}
+
+// Returns which defensive condition a slot label implies, or null
+function _defCondFromLabel(label) {
+  if (!label) return null;
+  if (label.startsWith('Block')) return 'blocking';
+  if (label.startsWith('Parry')) return 'parrying';
+  if (label === 'Evade') return 'evading';
+  return null;
+}
+
+// Clear all three defensive conditions from a token
+function _clearDefConds(token) {
+  if (!token) return;
+  const conds = getConditions(token.id);
+  for (const c of ['blocking', 'parrying', 'evading']) {
+    if (conds.has(c)) setCondition(token.id, c, false);
+  }
 }
 
 async function setCondition(tokenId, condition, active) {
@@ -5052,6 +5074,11 @@ function atStartCombat() {
 
 function atStopCombat() {
   atCombatActive = false;
+  // Clear all defensive conditions from all combatants
+  atCombatants.forEach(c => {
+    const token = _pathFindToken(c.id);
+    if (token) _clearDefConds(token);
+  });
   _atUpdateBlink();
   renderAtList();
   renderPlayCharacter();
@@ -5067,10 +5094,13 @@ function atNext() {
     // Expire finished slot actions at round boundary
     atCombatants.forEach(c => {
       if (!c.slots) return;
+      const token = _pathFindToken(c.id);
       for (const s of ['right', 'left', 'move']) {
         const sl = c.slots[s];
-        if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound)
+        if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound) {
+          if (token && _defCondFromLabel(sl.label)) _clearDefConds(token);
           c.slots[s] = null;
+        }
       }
     });
   }
@@ -5438,6 +5468,14 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
 
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
 
+  // Set or clear defensive conditions based on what was just assigned
+  if (token) {
+    const prevSlot = locksAll ? c.slots.right : (c.slots[slot] || null); // already overwritten above — captured before
+    const newCond = _defCondFromLabel(label);
+    _clearDefConds(token);
+    if (newCond) setCondition(token.id, newCond, true);
+  }
+
   if (!isGM() && mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
       payload: { combatantId, slot, label, startRound: atRound, durationRounds, locksAll: !!locksAll } });
@@ -5450,6 +5488,8 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
 function atClearSlot(combatantId, slot) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c || !c.slots) return;
+  const token = _pathFindToken(combatantId);
+  if (token && _defCondFromLabel(c.slots[slot]?.label)) _clearDefConds(token);
   c.slots[slot] = null;
   renderAtList();
 }
@@ -7341,9 +7381,11 @@ function attackTokenClick(tokenId) {
       }
     }
 
-    const targetConds   = getConditions(target.id);
-    const targetIsProne = targetConds.has('prone');
+    const targetConds      = getConditions(target.id);
+    const targetIsProne    = targetConds.has('prone');
     const targetIsBlocking = targetConds.has('blocking');
+    const targetIsParrying = targetConds.has('parrying');
+    const targetIsEvading  = targetConds.has('evading');
     const physCoord = defAttrs.PhysCoord || 0;
 
     // Retreat and Evade — unavailable while prone
@@ -7370,16 +7412,18 @@ function attackTokenClick(tokenId) {
       });
     }
 
-    // Pre-select best block option if character has Blocking condition
-    if (targetIsBlocking) {
-      let bestBlock = null;
+    // Pre-select defensive option based on active conditions
+    if (targetIsBlocking || targetIsParrying) {
+      const keyword = targetIsBlocking ? 'Block' : 'Parry';
+      let best = null;
       for (const opt of defenseOptions) {
-        if ((opt.label.startsWith('Block') || opt.label.startsWith('Parry')) &&
-            (!bestBlock || opt.reduction > bestBlock.reduction)) {
-          bestBlock = opt;
-        }
+        if (opt.label.startsWith(keyword) && (!best || opt.reduction > best.reduction)) best = opt;
       }
-      if (bestBlock) bestBlock.preSelected = true;
+      if (best) best.preSelected = true;
+    }
+    if (targetIsEvading && !targetIsProne) {
+      const evadeOpt = defenseOptions.find(o => o.label.startsWith('Evade'));
+      if (evadeOpt) evadeOpt.preSelected = true;
     }
   }
 
