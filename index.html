@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712a';
+const VERSION = 'v0.1.20260712b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5784,9 +5784,9 @@ function renderPlayCharacter() {
   const playSpeedStr = playMaxSpeed != null ? Math.round(playMaxSpeed) + ' ft/s' : '—';
   const playSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
 
-  // Active combatant banner (GM only, during combat)
+  // Active combatant banner — visible to everyone during combat
   let activeBannerHtml = '';
-  if (isGM() && atCombatActive) {
+  if (atCombatActive) {
     const ac = _atActiveCombatant();
     if (ac) {
       let acAvatar = '';
@@ -5803,27 +5803,31 @@ function renderPlayCharacter() {
         : `<div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⚔</div>`;
       const acSafeId = ac.id.replace(/'/g, "\\'");
       const acHasAction = ac.slots?.right || ac.slots?.left || ac.slots?.move;
+      // Action buttons only for GM or the combatant's own player
+      const canControlActive = isGM() || (ac.type === 'char' && ac.id.split('::')[1] === currentCharacterId);
+      const actionBtns = canControlActive ? `
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;">
+          <button class="at-btn primary" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','right')" title="Right arm">⚔ R</button>
+          <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','left')" title="Left arm">🛡 L</button>
+          <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','move')" title="Movement">🏃 M</button>
+          <button class="at-btn${acHasAction ? ' primary' : ''}" style="flex:1;" onclick="atAcceptAction('${acSafeId}')">✓ Done</button>
+        </div>` : '';
       activeBannerHtml = `
         <div style="background:rgba(201,168,76,0.12);border:1px solid var(--gold);border-radius:6px;padding:8px 10px;margin-bottom:12px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <div style="display:flex;align-items:center;gap:10px;">
             ${acImg}
             <div style="min-width:0;flex:1;">
               <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${atRound}</div>
               <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ac.name}</div>
             </div>
           </div>
-          <div style="display:flex;gap:4px;flex-wrap:wrap;">
-            <button class="at-btn primary" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','right')" title="Right arm">⚔ R</button>
-            <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','left')" title="Left arm">🛡 L</button>
-            <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','move')" title="Movement">🏃 M</button>
-            <button class="at-btn${acHasAction ? ' primary' : ''}" style="flex:1;" onclick="atAcceptAction('${acSafeId}')">✓ Done</button>
-          </div>
+          ${actionBtns}
         </div>`;
     }
   }
 
-  // When GM is in active combat, replace the body with the active combatant's info
-  if (isGM() && atCombatActive) {
+  // Active combatant full sheet — shown to all users during combat
+  if (atCombatActive) {
     const ac = _atActiveCombatant();
     if (ac) {
       let acAttrs = null, acRow = null, acSc = null;
@@ -5851,6 +5855,7 @@ function renderPlayCharacter() {
         }
       }
       if (acAttrs) {
+        const canEdit = isGM() || (ac.type === 'char' && ac.id.split('::')[1] === currentCharacterId);
         const acSpeed = calcMaxSpeed(acAttrs, 0);
         const acSpeedStr = acSpeed != null ? Math.round(acSpeed) + ' ft/s' : '—';
         const acSize = acAttrs._targetAdj ?? '—';
@@ -5870,7 +5875,6 @@ function renderPlayCharacter() {
           ].filter(Boolean);
           acItemOptions = [...new Set(names)];
         } else {
-          // Creatures: all known melee + ranged weapon names
           acItemOptions = [...new Set([
             ...MELEE_WEAPONS.map(r => r.weapon),
             ...RANGED_WEAPONS.map(r => r.weapon),
@@ -5880,15 +5884,21 @@ function renderPlayCharacter() {
         const acOpts = (cur) => ['', ...acItemOptions]
           .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'— Bare Hand —'}</option>`).join('');
         const acEquipHtml = ['right','left'].map(hand => {
-          const safeCharId = ac.type === 'char' ? acRow.id : null;
-          const safeScId   = ac.type === 'creature' ? (acSc?.id || '') : null;
-          const onchg = safeCharId
-            ? `_acSetHand('char','${safeCharId}','${hand}',this.value)`
-            : `_acSetHand('creature','${safeScId}','${hand}',this.value)`;
-          return `<div style="margin-bottom:6px;">
-            <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${hand==='right'?'Right Hand':'Left Hand'}</div>
-            <select style="${selStyle}" onchange="${onchg}">${acOpts(acHeld[hand] || '')}</select>
-          </div>`;
+          const label = hand === 'right' ? 'Right Hand' : 'Left Hand';
+          const cur = acHeld[hand] || '';
+          if (canEdit) {
+            const safeId  = ac.type === 'char' ? acRow.id : (acSc?.id || '');
+            const type    = ac.type === 'char' ? 'char' : 'creature';
+            return `<div style="margin-bottom:6px;">
+              <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${label}</div>
+              <select style="${selStyle}" onchange="_acSetHand('${type}','${safeId}','${hand}',this.value)">${acOpts(cur)}</select>
+            </div>`;
+          } else {
+            return `<div style="margin-bottom:6px;">
+              <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${label}</div>
+              <div style="font-size:0.78rem;padding:3px 0;">${cur || '<span style="color:var(--text-dim)">— Bare Hand —</span>'}</div>
+            </div>`;
+          }
         }).join('');
 
         // Armor
