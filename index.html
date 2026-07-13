@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712e';
+const VERSION = 'v0.1.20260712f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5039,6 +5039,34 @@ async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
     await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
   }
   renderPlayCharacter();
+}
+
+function healthBarsHtml(toughnessMax, staminaMax, damage) {
+  damage = damage || {};
+  const tMax = Math.max(1, Math.round(toughnessMax || 10));
+  const sMax = Math.max(1, Math.round(staminaMax   || 10));
+  const tCur = Math.max(0, tMax - (damage.toughness || 0));
+  const sCur = Math.max(0, sMax - (damage.stamina   || 0));
+  const tPct = Math.round((tCur / tMax) * 100);
+  const sPct = Math.round((sCur / sMax) * 100);
+  const tColor = tPct > 50 ? '#c94040' : tPct > 25 ? '#c97040' : '#c04040';
+  return `
+    <div style="margin-bottom:4px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
+        <span>Toughness</span><span>${tCur} / ${tMax}</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
+        <div style="width:${tPct}%;height:100%;background:${tColor};transition:width 0.3s;"></div>
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
+        <span>Stamina</span><span>${sCur} / ${sMax}</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
+        <div style="width:${sPct}%;height:100%;background:#4070c9;transition:width 0.3s;"></div>
+      </div>
+    </div>`;
 }
 
 // Called from roller after a successful attack hit resolves location
@@ -6065,30 +6093,7 @@ function renderPlayCharacter() {
 
         // Health bars
         const acDamage = ac.type === 'char' ? (acRow?.damage || {}) : (acSc?.damage || {});
-        const toughnessMax = Math.max(1, Math.round(acAttrs.Toughness || 10));
-        const staminaMax   = Math.max(1, Math.round(acAttrs.Stamina   || 10));
-        const toughCur = Math.max(0, toughnessMax - (acDamage.toughness || 0));
-        const stamCur  = Math.max(0, staminaMax   - (acDamage.stamina   || 0));
-        const toughPct = Math.round((toughCur / toughnessMax) * 100);
-        const stamPct  = Math.round((stamCur  / staminaMax)   * 100);
-        const toughColor = toughPct > 50 ? '#c94040' : toughPct > 25 ? '#c97040' : '#c04040';
-        const acHealthHtml = `
-          <div style="margin-bottom:4px;">
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-              <span>Toughness</span><span>${toughCur} / ${toughnessMax}</span>
-            </div>
-            <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
-              <div style="width:${toughPct}%;height:100%;background:${toughColor};transition:width 0.3s;"></div>
-            </div>
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-              <span>Stamina</span><span>${stamCur} / ${staminaMax}</span>
-            </div>
-            <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
-              <div style="width:${stamPct}%;height:100%;background:#4070c9;transition:width 0.3s;"></div>
-            </div>
-          </div>`;
+        const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage);
 
         el.innerHTML = `
           ${activeBannerHtml}
@@ -6108,6 +6113,9 @@ function renderPlayCharacter() {
     }
   }
 
+  const myDamage = currentCharacterId ? (playCharCache[currentCharacterId]?.damage || {}) : {};
+  const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage);
+
   el.innerHTML = `
     ${activeBannerHtml}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -6121,6 +6129,7 @@ function renderPlayCharacter() {
         </div>
       </div>
     </div>
+    ${section('health', 'Health',    myHealthHtml)}
     ${section('combat', 'Combat',    combatContent)}
     ${section('stats',  'Stats',     statsContent)}
     ${section('equip',  'Equipment', equipContent)}
@@ -7918,6 +7927,7 @@ async function showTokenInfo(tokenId) {
     const cMaxSpeed = calcMaxSpeed(cAttrs, 0);
     const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
     const creatureCombatantId = 'creature::' + t.id;
+    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage) : null;
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
         <div class="ps-compact-avatar">${avatarHtml}</div>
@@ -7930,6 +7940,7 @@ async function showTokenInfo(tokenId) {
           </div>
         </div>
       </div>
+      ${creatureHealthHtml ? csec('health', 'Health', creatureHealthHtml) : ''}
       ${buildCombatSection(creatureCombatantId, csec)}
       ${csec('stats',  'Stats',      statsContent)}
       ${csec('equip',  'Equipment',  weaponRows)}
@@ -8052,6 +8063,7 @@ async function showTokenInfo(tokenId) {
   const charSpeedStr = charMaxSpeed != null ? Math.round(charMaxSpeed) + ' ft/s' : '—';
   const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const charCombatantId = 'char::' + t.entity_id;
+  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage);
   el.innerHTML = `
     ${backBtn}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -8065,6 +8077,7 @@ async function showTokenInfo(tokenId) {
         </div>
       </div>
     </div>
+    ${section('health', 'Health',     charHealthHtml)}
     ${buildCombatSection(charCombatantId, section)}
     ${section('conds',  'Conditions', condContent)}
     ${section('stats',  'Stats',      statsContent)}
