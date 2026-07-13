@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712f';
+const VERSION = 'v0.1.20260712g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4928,6 +4928,8 @@ const CONDITION_DEFS = [
     desc:'Cannot see; attack penalties apply.' },
   { key:'unconscious', label:'Unconscious', icon:'💤', color:'#888888',
     desc:'Unconscious or asleep; cannot act.' },
+  { key:'dead',        label:'Dead',        icon:'☠', color:'#cc2222',
+    desc:'Killed in combat.' },
   { key:'deafened',    label:'Deafened',    icon:'🔇', color:'#888888',
     desc:'Cannot hear.' },
 ];
@@ -5041,6 +5043,42 @@ async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
   renderPlayCharacter();
 }
 
+async function recoverStamina(entityType, entityId, amount) {
+  if (entityType === 'character') {
+    const row = playCharCache[entityId];
+    if (!row) return;
+    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
+    row.damage.stamina = Math.max(0, (row.damage.stamina || 0) - amount);
+    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
+  } else {
+    const sc = sessionCreatureCache[entityId];
+    if (!sc) return;
+    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
+    sc.damage.stamina = Math.max(0, (sc.damage.stamina || 0) - amount);
+    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
+  }
+  renderPlayCharacter();
+}
+
+function _staminaCostForLabel(label) {
+  const action = label.split(' —')[0].trim();
+  if (action === 'Evade' || action === 'Sprint' || action === 'Charge') return 2;
+  if (/^(Move|Retreat|Block|Parry)$/.test(action)) return 1;
+  if (/^(Swing|Thrust|Slash|Stab|Chop|Smash|Sweep|Bash|Punch|Grab|Push|Grapple|Fire|Throw|Aim)$/.test(action)) return 1;
+  return 0;
+}
+
+async function _deductStamina(combatantId, amount) {
+  if (!amount) return;
+  const [type, rawId] = combatantId.split('::');
+  if (type === 'char') {
+    await applyDamage('character', rawId, 0, amount);
+  } else {
+    const token = mapTokens[rawId];
+    if (token) await applyDamage('creature', token.entity_id, 0, amount);
+  }
+}
+
 function healthBarsHtml(toughnessMax, staminaMax, damage) {
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
@@ -5138,12 +5176,13 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
       }
     }
     const totalToughDmg = dmgRecord.toughness || 0;
-    if (totalToughDmg >= toughnessMax && targetTokenId) {
-      await setCondition(targetTokenId, 'unconscious', true);
-      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">⬇ UNCONSCIOUS</div>`;
-    }
     if (totalToughDmg >= toughnessMax * 2 && targetTokenId) {
-      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#ff2222;font-weight:bold;">☠ DEAD</div>`;
+      await setCondition(targetTokenId, 'unconscious', true);
+      await setCondition(targetTokenId, 'dead', true);
+      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
+    } else if (totalToughDmg >= toughnessMax && targetTokenId) {
+      await setCondition(targetTokenId, 'unconscious', true);
+      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
     }
   }
 }
@@ -5252,6 +5291,18 @@ function atNext() {
   atActiveIdx++;
   if (atActiveIdx >= sorted.length) {
     atActiveIdx = 0;
+    // Stamina recovery: +1 for combatants who took no actions this round
+    atCombatants.forEach(c => {
+      if (!c.slots || (!c.slots.right && !c.slots.left && !c.slots.move)) {
+        const [type, rawId] = c.id.split('::');
+        if (type === 'char') {
+          recoverStamina('character', rawId, 1);
+        } else {
+          const tok = mapTokens[rawId];
+          if (tok) recoverStamina('creature', tok.entity_id, 1);
+        }
+      }
+    });
     atRound++;
     // Expire finished slot actions at round boundary
     atCombatants.forEach(c => {
@@ -5642,6 +5693,9 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   if (!isGM() && mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
       payload: { combatantId, slot, label, startRound: atRound, durationRounds, locksAll: !!locksAll } });
+
+  const staminaCost = _staminaCostForLabel(label);
+  if (staminaCost) _deductStamina(combatantId, staminaCost);
 
   atCloseModal();
   renderAtList();
