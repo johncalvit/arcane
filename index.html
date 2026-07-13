@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712d';
+const VERSION = 'v0.1.20260712e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5069,11 +5069,16 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   const dmgEl = document.getElementById('roller-damage-display');
   if (dmgEl) {
     dmgEl.style.display = 'block';
-    const drNote = dr > 0 ? ` − ${dr} armor` : '';
+    const rawDisplay  = Math.round(rawRoll);
+    const capNote     = afterArmor > (weaponRow.damageMax || 10) ? ` (capped at ${weaponRow.damageMax})` : '';
+    const rollLine    = dr > 0
+      ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
+      : `Roll ${rawDisplay}${capNote}`;
     dmgEl.innerHTML = `
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:4px;">${armorType} (${category}${drNote})</div>
-      <div style="font-size:1.6rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
-      <div style="font-size:0.72rem;color:var(--text-dim);">Toughness &amp; Stamina</div>`;
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}</div>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
+      <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness &amp; Stamina</div>`;
   }
 
   // Apply and check for unconscious
