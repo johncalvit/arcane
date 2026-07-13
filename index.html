@@ -4016,7 +4016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712c';
+const VERSION = 'v0.1.20260712d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4986,6 +4986,135 @@ function _refreshTokenBadges(tokenId) {
   }
 }
 
+// ── Damage system ─────────────────────────────────────────────────────────────
+
+// Armor damage reduction per attack category
+const ARMOR_DR = {
+  'None':               { slash:0, pierce:0, crush:0 },
+  'Cloth':              { slash:1, pierce:1, crush:0 },
+  'Leather/Hide':       { slash:2, pierce:2, crush:1 },
+  'Reinforced Leather': { slash:3, pierce:2, crush:2 },
+  'Chain':              { slash:4, pierce:2, crush:3 },
+  'Scale':              { slash:4, pierce:3, crush:3 },
+  'Plate':              { slash:6, pierce:4, crush:5 },
+};
+
+function getAttackCategory(actionLabel) {
+  const l = (actionLabel || '').toLowerCase();
+  if (/slash|swing|chop|hook|sweep/.test(l)) return 'slash';
+  if (/stab|thrust|fire|aim|pierce/.test(l)) return 'pierce';
+  return 'crush'; // smash, bash, crush, grab, push, etc.
+}
+
+function getArmorDR(armorType, category) {
+  return (ARMOR_DR[armorType] || ARMOR_DR['None'])[category] || 0;
+}
+
+// Hit location part key → armor slot on the character
+const PART_TO_ARMOR_SLOT = {
+  head:'head', neck:'head',
+  torso:'torso', chest:'torso', abdomen:'torso',
+  rarm:'rarm', rhand:'rarm', rshoulder:'rarm',
+  larm:'larm', lhand:'larm', lshoulder:'larm',
+  rleg:'rleg', rfoot:'rleg', rthigh:'rleg',
+  lleg:'lleg', lfoot:'lleg', lthigh:'lleg',
+};
+
+// Write damage to cache + DB, refresh UI
+async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
+  staminaDmg = staminaDmg != null ? staminaDmg : toughnessDmg; // default same as toughness
+  if (entityType === 'character') {
+    const row = playCharCache[entityId];
+    if (!row) return;
+    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
+    row.damage.toughness = Math.max(0, (row.damage.toughness || 0) + toughnessDmg);
+    row.damage.stamina   = Math.max(0, (row.damage.stamina   || 0) + staminaDmg);
+    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
+  } else {
+    const sc = sessionCreatureCache[entityId];
+    if (!sc) return;
+    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
+    sc.damage.toughness = Math.max(0, (sc.damage.toughness || 0) + toughnessDmg);
+    sc.damage.stamina   = Math.max(0, (sc.damage.stamina   || 0) + staminaDmg);
+    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
+  }
+  renderPlayCharacter();
+}
+
+// Called from roller after a successful attack hit resolves location
+async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
+  const { targetEntityType, targetEntityId, targetTokenId,
+          atkPower, weaponRow, actionLabel } = ctx;
+  if (!weaponRow) return;
+
+  // Armor on the hit location
+  let targetArmor = {};
+  if (targetEntityType === 'character') {
+    targetArmor = playCharCache[targetEntityId]?.armor || {};
+  } else {
+    targetArmor = sessionCreatureCache[targetEntityId]?.armor || {};
+  }
+  const armorSlot = PART_TO_ARMOR_SLOT[hitPart] || 'torso';
+  const armorType = targetArmor[armorSlot] || 'None';
+  const category  = getAttackCategory(actionLabel);
+  const dr        = getArmorDR(armorType, category);
+
+  // Roll damage: random 0–(Power × maxPowerMod), subtract armor DR, cap at damageMax
+  const maxRoll     = (atkPower || 1) * (weaponRow.maxPowerMod || 0.5);
+  const rawRoll     = Math.random() * maxRoll;
+  const afterArmor  = Math.max(0, rawRoll - dr);
+  const finalDamage = Math.round(Math.min(afterArmor, weaponRow.damageMax || 10));
+
+  // Show result in roller
+  const dmgEl = document.getElementById('roller-damage-display');
+  if (dmgEl) {
+    dmgEl.style.display = 'block';
+    const drNote = dr > 0 ? ` − ${dr} armor` : '';
+    dmgEl.innerHTML = `
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:4px;">${armorType} (${category}${drNote})</div>
+      <div style="font-size:1.6rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
+      <div style="font-size:0.72rem;color:var(--text-dim);">Toughness &amp; Stamina</div>`;
+  }
+
+  // Apply and check for unconscious
+  await applyDamage(targetEntityType, targetEntityId, finalDamage);
+
+  if (finalDamage > 0) {
+    // Determine max toughness to check for unconscious / dead
+    let toughnessMax = 10;
+    let dmgRecord = { toughness: 0 };
+    if (targetEntityType === 'character') {
+      const row = playCharCache[targetEntityId];
+      if (row) {
+        const attrs = calcAttributesFromData({ race:row.species||'', bodyType:row.body_type||'',
+          sex:row.sex||'', age:row.age||'', height:row.height||'', build:row.build||'',
+          social:row.social||'', mental:row.mental||'', stats:row.stats||{} });
+        toughnessMax = Math.round(attrs.Toughness || 10);
+        dmgRecord = row.damage || {};
+      }
+    } else {
+      const sc = sessionCreatureCache[targetEntityId];
+      if (sc) {
+        const DS = {Strength:10,Endurance:10,Agility:10,Memory:10,Intellect:10,Senses:10,Quintessence:0};
+        const attrs = calcAttributesFromData({ race:sc.species||'', bodyType:sc.body_type||'Humanoid',
+          sex:sc.sex||'', age:sc.age||'Adult', height:sc.height||'Average', build:sc.build||'Average',
+          social:sc.social||'Balanced', mental:sc.mental||'Balanced',
+          stats:Object.assign({},DS,sc.stats||{}) });
+        toughnessMax = Math.round(attrs.Toughness || 10);
+        dmgRecord = sc.damage || {};
+      }
+    }
+    const totalToughDmg = dmgRecord.toughness || 0;
+    if (totalToughDmg >= toughnessMax && targetTokenId) {
+      await setCondition(targetTokenId, 'unconscious', true);
+      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">⬇ UNCONSCIOUS</div>`;
+    }
+    if (totalToughDmg >= toughnessMax * 2 && targetTokenId) {
+      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#ff2222;font-weight:bold;">☠ DEAD</div>`;
+    }
+  }
+}
+
 // ── Action slot definitions ───────────────────────────────────────────────────
 const AT_UNARMED = [
   { label: 'Punch',   dur: 1 },
@@ -5929,6 +6058,33 @@ function renderPlayCharacter() {
           ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${acConds.map(c => `<span style="background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:3px;padding:2px 7px;font-size:0.7rem;">${c}</span>`).join('')}</div>`
           : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">None</div>`;
 
+        // Health bars
+        const acDamage = ac.type === 'char' ? (acRow?.damage || {}) : (acSc?.damage || {});
+        const toughnessMax = Math.max(1, Math.round(acAttrs.Toughness || 10));
+        const staminaMax   = Math.max(1, Math.round(acAttrs.Stamina   || 10));
+        const toughCur = Math.max(0, toughnessMax - (acDamage.toughness || 0));
+        const stamCur  = Math.max(0, staminaMax   - (acDamage.stamina   || 0));
+        const toughPct = Math.round((toughCur / toughnessMax) * 100);
+        const stamPct  = Math.round((stamCur  / staminaMax)   * 100);
+        const toughColor = toughPct > 50 ? '#c94040' : toughPct > 25 ? '#c97040' : '#c04040';
+        const acHealthHtml = `
+          <div style="margin-bottom:4px;">
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
+              <span>Toughness</span><span>${toughCur} / ${toughnessMax}</span>
+            </div>
+            <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
+              <div style="width:${toughPct}%;height:100%;background:${toughColor};transition:width 0.3s;"></div>
+            </div>
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
+              <span>Stamina</span><span>${stamCur} / ${staminaMax}</span>
+            </div>
+            <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
+              <div style="width:${stamPct}%;height:100%;background:#4070c9;transition:width 0.3s;"></div>
+            </div>
+          </div>`;
+
         el.innerHTML = `
           ${activeBannerHtml}
           <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${acSub}</div>
@@ -5936,6 +6092,7 @@ function renderPlayCharacter() {
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${acSpeedStr}</div></div>
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${acSize}</div></div>
           </div>
+          ${section('ac-health', 'Health', acHealthHtml)}
           ${section('ac-equip', 'Equipment', acEquipHtml)}
           ${section('ac-armor', 'Armor', acArmorHtml)}
           ${section('ac-stats', 'Stats', acStatsHtml)}
@@ -6025,7 +6182,7 @@ async function _acSetHand(entityType, entityId, side, value) {
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
 // ── Called-shot picker ────────────────────────────────────────────────────────
-function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext }) {
+function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext }) {
   const locData = getHitLocData(bodyType);
   const existing = document.getElementById('called-shot-modal');
   if (existing) existing.remove();
@@ -6070,6 +6227,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
       defenseOptions,
       strayContext,
       locContext: { bodyType, partKey: partKey || null },
+      damageContext,
     });
   }
 
@@ -6120,10 +6278,12 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, onComplete = null }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
-              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, onComplete };
+              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, damageContext, onComplete };
 
+  const dmgElReset = document.getElementById('roller-damage-display');
+  if (dmgElReset) { dmgElReset.style.display = 'none'; dmgElReset.innerHTML = ''; }
   document.getElementById('roller-label').textContent = label;
   document.getElementById('roller-range').textContent = `Range: ${min} – ${max}`;
   document.getElementById('roller-number').textContent = '—';
@@ -6277,13 +6437,15 @@ function _rollerShowResult() {
     document.getElementById('roller-status').textContent = '';
     if (success && _roller.locContext) {
       const { bodyType, partKey } = _roller.locContext;
-      // Critical success on a called shot = hit exactly the aimed location
       const hitPart = (critSuccess && partKey) ? partKey : rollHitLocation(bodyType, partKey);
       const locData = getHitLocData(bodyType);
       const partLabel = locData.parts[hitPart]?.label || hitPart;
       const locEl = document.getElementById('roller-hit-location');
       locEl.textContent = `HIT: ${partLabel}`;
       locEl.style.color = '#f0c060';
+      if (_roller.damageContext) {
+        _applyDamageAfterHit(_roller.damageContext, hitPart, partLabel);
+      }
     } else if (!success && _roller.locContext) {
       document.getElementById('roller-hit-location').textContent = '';
     }
@@ -7270,13 +7432,19 @@ function attackTokenClick(tokenId) {
     exitAttackMode(); return true;
   }
 
-  // ── Attacker HIT value ────────────────────────────────────────────────────
+  // ── Attacker HIT value + damage context ──────────────────────────────────
   const [atkType, atkId] = attackCombatantId.split('::');
   let hitValue = null;
+  let atkPower = 1;
+  let attackWeaponRow = null;
   const _resolveHitValue = (atkAttrs) => {
     const weaponRows = getWeaponRows(attackWeaponName);
     const actionRow  = weaponRows.find(r => r.action === attackActionLabel);
-    if (actionRow) hitValue = calcHitValue(actionRow.hitFormula, atkAttrs);
+    if (actionRow) {
+      hitValue = calcHitValue(actionRow.hitFormula, atkAttrs);
+      attackWeaponRow = actionRow;
+    }
+    atkPower = atkAttrs.Power || 1;
   };
   if (atkType === 'char') {
     const atkRow = playCharCache[atkId];
@@ -7305,6 +7473,15 @@ function attackTokenClick(tokenId) {
       _resolveHitValue(atkAttrs);
     }
   }
+  // Build damage context — captured before exitAttackMode clears attack state
+  const damageContext = {
+    targetEntityType: target.entity_type,
+    targetEntityId:   target.entity_id,
+    targetTokenId:    target.id,
+    atkPower,
+    weaponRow:   attackWeaponRow,
+    actionLabel: attackActionLabel,
+  };
 
   // ── Range penalty (ranged weapons only) ───────────────────────────────────
   let rangePenalty    = 0;
@@ -7499,6 +7676,7 @@ function attackTokenClick(tokenId) {
     actionLabel,
     defenseOptions,
     strayContext,
+    damageContext,
   });
 
   return true;
@@ -8792,6 +8970,7 @@ switchGmTab = function(tab) {
     <div id="roller-status">Click to stop</div>
     <div id="roller-result-label"></div>
     <div id="roller-hit-location" style="font-size:1.05rem;font-weight:bold;margin-top:4px;min-height:1.4em;"></div>
+    <div id="roller-damage-display" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;text-align:center;"></div>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
 </div>
