@@ -4956,6 +4956,7 @@ function _defCondFromLabel(label) {
   if (label.startsWith('Block')) return 'blocking';
   if (label.startsWith('Parry')) return 'parrying';
   if (label === 'Evade') return 'evading';
+  if (label === 'Sentinel') return 'sentinel';
   return null;
 }
 
@@ -5165,9 +5166,9 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   const category  = getAttackCategory(actionLabel);
   const dr        = getArmorDR(armorType, category);
 
-  // Roll damage: random 0–(Power × maxPowerMod), subtract armor DR, cap at damageMax
-  const maxRoll     = (atkPower || 1) * (weaponRow.maxPowerMod || 0.5);
-  const rawRoll     = Math.random() * maxRoll;
+  // Roll damage: random 1–(Power × maxPowerMod), subtract armor DR, cap at damageMax
+  const maxRoll     = Math.max(1, (atkPower || 1) * (weaponRow.maxPowerMod || 0.5));
+  const rawRoll     = Math.random() * (maxRoll - 1) + 1;
   const afterArmor  = Math.max(0, rawRoll - dr);
   const finalDamage = Math.round(Math.min(afterArmor, weaponRow.damageMax || 10));
 
@@ -5245,6 +5246,7 @@ const AT_MOVE = [
 ];
 const AT_FULLBODY = [
   { label: 'Evade',          dur: 2 },
+  { label: 'Sentinel',       dur: 99 },
   { label: 'Change Item Held', dur: 1 },
   { label: 'Go Prone',       dur: 1 },
   { label: 'Search',         dur: 1 },
@@ -5498,6 +5500,7 @@ function _atUpdateBlink() {
   if (tokenId) {
     const el = document.getElementById('token-' + tokenId);
     if (el) { el.classList.add('token-blink'); _atBlinkTokenId = tokenId; }
+    _panToToken(tokenId);
   }
 }
 
@@ -5914,11 +5917,22 @@ function renderPlayCharacter() {
     : `<span style="font-size:1.4rem;opacity:0.4;">🧙</span>`;
 
   // Held items with hit/dmg/power
+  // Prefer live DOM selects (own character, character sheet loaded); fall back to cache
   const rightSel  = document.getElementById('ps-hand-right');
   const leftSel   = document.getElementById('ps-hand-left');
-  const rightItem = rightSel ? rightSel.value : '';
-  const leftItem  = leftSel  ? leftSel.value  : '';
-  const loadoutItems = getLoadoutItemNames();
+  const cacheRow  = currentCharacterId ? playCharCache[currentCharacterId] : null;
+  const cacheHeld = cacheRow?.held_items || {};
+  const rightItem = (rightSel?.value) || cacheHeld.right || '';
+  const leftItem  = (leftSel?.value)  || cacheHeld.left  || '';
+  // Build loadout item list: prefer DOM tables (character sheet loaded), fall back to cache arrays
+  let loadoutItems = getLoadoutItemNames();
+  if (!loadoutItems.length && cacheRow) {
+    const names = [
+      ...(cacheRow.weapons   || []).map(w => w.name),
+      ...(cacheRow.equipment || []).map(e => e.name),
+    ].filter(Boolean);
+    loadoutItems = [...new Set(names)];
+  }
   const handOpts = (cur) => ['', ...loadoutItems]
     .map(n => `<option value="${n}"${n===cur?' selected':''}>${n||'Bare Hand'}</option>`).join('');
   const handSelStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
@@ -6918,6 +6932,36 @@ async function onMapFileSelected(input) {
   setTimeout(() => { statusEl.textContent = ''; }, 4000);
 }
 
+// ─── Smooth pan to token ─────────────────────────────────────────────────────
+function _panToToken(tokenId) {
+  const t = mapTokens[tokenId];
+  if (!t || mapImgW === 0 || mapImgH === 0) return;
+  const vp = document.getElementById('map-viewport');
+  if (!vp) return;
+  const vpW = vp.clientWidth;
+  const vpH = vp.clientHeight;
+  const tokenImgX = (t.x_pct / 100) * mapImgW;
+  const tokenImgY = (t.y_pct / 100) * mapImgH;
+  const targetOffsetX = vpW  / 2 - tokenImgX * mapScale;
+  const targetOffsetY = vpH  / 2 - tokenImgY * mapScale;
+  const startX = mapOffsetX;
+  const startY = mapOffsetY;
+  const dx = targetOffsetX - startX;
+  const dy = targetOffsetY - startY;
+  if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+  const duration = 420;
+  const startTime = performance.now();
+  function step(now) {
+    const t = Math.min(1, (now - startTime) / duration);
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+    mapOffsetX = startX + dx * ease;
+    mapOffsetY = startY + dy * ease;
+    applyMapTransform();
+    if (t < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
 // ─── Pan / zoom ───────────────────────────────────────────────────────────────
 function applyMapTransform() {
   const canvas = document.getElementById('map-canvas');
@@ -7406,7 +7450,7 @@ let playCharCache = {}; // entity_id → full row
 async function loadPlayCharCache() {
   if (!currentCampaignId) return;
   const { data } = await sb.from('characters')
-    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url, damage')
+    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url, damage, weapons, equipment')
     .eq('campaign_id', currentCampaignId);
   playCharCache = {};
   (data || []).forEach(row => { playCharCache[row.id] = row; });
