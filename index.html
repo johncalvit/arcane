@@ -6957,6 +6957,8 @@ function _panToToken(tokenId) {
     mapOffsetX = startX + dx * ease;
     mapOffsetY = startY + dy * ease;
     applyMapTransform();
+    drawSentinelRanges();
+    refreshAttackCircle();
     if (t < 1) requestAnimationFrame(step);
   }
   requestAnimationFrame(step);
