@@ -5120,7 +5120,47 @@ async function _deductStamina(combatantId, amount) {
   }
 }
 
-function healthBarsHtml(toughnessMax, staminaMax, damage) {
+// Set current HP for an entity by writing the derived damage value to the DB
+async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax, refreshFn) {
+  const newDmg = Math.max(0, Math.min(statMax, statMax - Math.round(newCurrent)));
+  if (entityType === 'character') {
+    const row = playCharCache[entityId];
+    if (!row) return;
+    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
+    row.damage[stat] = newDmg;
+    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
+  } else {
+    const sc = sessionCreatureCache[entityId];
+    if (!sc) return;
+    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
+    sc.damage[stat] = newDmg;
+    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
+  }
+  renderPlayCharacter();
+  if (refreshFn) refreshFn();
+}
+
+// Inline HP editor — replaces the "cur / max" label with an input on click
+function _hpEditClick(el, entityType, entityId, stat, curVal, statMax, refreshCall) {
+  if (el.querySelector('input')) return; // already editing
+  const span = el.querySelector('.hp-cur');
+  if (!span) return;
+  const inp = document.createElement('input');
+  inp.type = 'number'; inp.min = 0; inp.max = statMax;
+  inp.value = curVal;
+  inp.style.cssText = 'width:36px;font-size:0.65rem;background:var(--bg2);color:var(--text);border:1px solid var(--gold);border-radius:2px;padding:0 2px;text-align:center;';
+  span.replaceWith(inp);
+  inp.focus(); inp.select();
+  const commit = () => {
+    const v = parseFloat(inp.value);
+    if (!isNaN(v)) _setCurrentHp(entityType, entityId, stat, v, statMax, refreshCall ? () => eval(refreshCall) : null);
+    else renderPlayCharacter();
+  };
+  inp.addEventListener('blur', commit);
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { renderPlayCharacter(); } });
+}
+
+function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, refreshCall) {
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
   const sMax = Math.max(1, Math.round(staminaMax   || 10));
@@ -5129,10 +5169,22 @@ function healthBarsHtml(toughnessMax, staminaMax, damage) {
   const tPct = Math.round((tCur / tMax) * 100);
   const sPct = Math.round((sCur / sMax) * 100);
   const tColor = tPct > 50 ? '#c94040' : tPct > 25 ? '#c97040' : '#c04040';
+  const editable = !!(entityType && entityId);
+  const tId = editable ? `hp-t-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
+  const sId = editable ? `hp-s-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
+  const rc = refreshCall ? refreshCall.replace(/'/g, '&apos;') : '';
+  const tClickAttr = editable
+    ? `id="${tId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','toughness',${tCur},${tMax},'${rc}')" title="Click to edit" style="cursor:pointer;"`
+    : '';
+  const sClickAttr = editable
+    ? `id="${sId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','stamina',${sCur},${sMax},'${rc}')" title="Click to edit" style="cursor:pointer;"`
+    : '';
+  const tValHtml = editable ? `<span ${tClickAttr}><span class="hp-cur">${tCur}</span> / ${tMax}${editable ? ' ✎' : ''}</span>` : `<span>${tCur} / ${tMax}</span>`;
+  const sValHtml = editable ? `<span ${sClickAttr}><span class="hp-cur">${sCur}</span> / ${sMax}${editable ? ' ✎' : ''}</span>` : `<span>${sCur} / ${sMax}</span>`;
   return `
     <div style="margin-bottom:4px;">
       <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-        <span>Toughness</span><span>${tCur} / ${tMax}</span>
+        <span>Toughness</span>${tValHtml}
       </div>
       <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
         <div style="width:${tPct}%;height:100%;background:${tColor};transition:width 0.3s;"></div>
@@ -5140,7 +5192,7 @@ function healthBarsHtml(toughnessMax, staminaMax, damage) {
     </div>
     <div>
       <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-        <span>Stamina</span><span>${sCur} / ${sMax}</span>
+        <span>Stamina</span>${sValHtml}
       </div>
       <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
         <div style="width:${sPct}%;height:100%;background:#4070c9;transition:width 0.3s;"></div>
@@ -6195,7 +6247,9 @@ function renderPlayCharacter() {
         // Health bars
         const acToken = _pathFindToken(ac.id);
         const acDamage = ac.type === 'char' ? (acRow?.damage || {}) : (acSc?.damage || {});
-        const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage);
+        const acEntityType = ac.type === 'char' ? 'character' : 'creature';
+        const acEntityId   = ac.type === 'char' ? acRow?.id : acSc?.id;
+        const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage, acEntityType, acEntityId, 'renderPlayCharacter()');
         const acCondsHtml = _condChooserHtml(acToken?.id || null, canEdit, 'renderPlayCharacter()');
 
         el.innerHTML = `
@@ -6217,7 +6271,7 @@ function renderPlayCharacter() {
   }
 
   const myDamage = currentCharacterId ? (playCharCache[currentCharacterId]?.damage || {}) : {};
-  const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage);
+  const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage, 'character', currentCharacterId, 'renderPlayCharacter()');
   const myToken = currentCharacterId ? _pathFindToken('char::' + currentCharacterId) : null;
   const myCondsHtml = _condChooserHtml(myToken?.id || null, isGM(), 'renderPlayCharacter()');
 
@@ -8086,7 +8140,7 @@ async function showTokenInfo(tokenId) {
     const cMaxSpeed = calcMaxSpeed(cAttrs, 0);
     const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
     const creatureCombatantId = 'creature::' + t.id;
-    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage) : null;
+    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage, 'creature', sc.id, `showTokenInfo('${safeCreatureTokenId}')`) : null;
     const safeCreatureTokenId = t.id.replace(/'/g, "\\'");
     const creatureCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeCreatureTokenId}')`);
     el.innerHTML = `${backBtn}
@@ -8224,7 +8278,7 @@ async function showTokenInfo(tokenId) {
   const charSpeedStr = charMaxSpeed != null ? Math.round(charMaxSpeed) + ' ft/s' : '—';
   const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const charCombatantId = 'char::' + t.entity_id;
-  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage);
+  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage, 'character', t.entity_id, `showTokenInfo('${safeTokenId}')`);
   const safeTokenId = t.id.replace(/'/g, "\\'");
   const charCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeTokenId}')`);
   el.innerHTML = `
