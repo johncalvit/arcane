@@ -428,12 +428,23 @@
   }
   .token-ring img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
   .token-icon { font-size: 1.2rem; }
-  .token-condition-badge {
+  .token-cond-overlay {
     position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.6rem;
+    line-height: 1;
+    text-shadow: 0 0 6px #000, 0 0 14px #000, 0 2px 4px rgba(0,0,0,0.9);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .token-cond-strip {
+    position: absolute;
+    top: calc(100% + 2px);
     left: 50%;
     transform: translateX(-50%);
-    font-size: 8px;
-    font-weight: bold;
+    font-size: 0.78rem;
+    line-height: 1;
     text-shadow: 0 0 4px #000, 0 0 8px #000;
     white-space: nowrap;
     pointer-events: none;
@@ -4016,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260712g';
+const VERSION = 'v0.1.20260713a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4948,6 +4959,24 @@ function _defCondFromLabel(label) {
   return null;
 }
 
+function _condChooserHtml(tokenId, canEdit, refreshCall) {
+  if (!tokenId) return `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No token on map.</div>`;
+  const active = getConditions(tokenId);
+  return `<div style="display:flex;flex-wrap:wrap;gap:4px;">${
+    CONDITION_DEFS.map(def => {
+      const on = active.has(def.key);
+      const bg     = on ? `${def.color}22` : 'var(--bg3)';
+      const border = on ? def.color : 'var(--border)';
+      const color  = on ? def.color : 'var(--text-dim)';
+      const opacity = on ? '1' : '0.55';
+      const click  = canEdit
+        ? `onclick="setCondition('${tokenId}','${def.key}',${!on}).then(()=>${refreshCall})"`
+        : '';
+      return `<div title="${def.desc}" style="display:flex;align-items:center;gap:4px;padding:3px 7px;border-radius:4px;border:1px solid ${border};background:${bg};color:${color};font-size:0.7rem;cursor:${canEdit?'pointer':'default'};user-select:none;opacity:${opacity};" ${click}>${def.icon} ${def.label}</div>`;
+    }).join('')
+  }</div>`;
+}
+
 // Clear all three defensive conditions from a token
 function _clearDefConds(token) {
   if (!token) return;
@@ -4974,17 +5003,28 @@ async function setCondition(tokenId, condition, active) {
 function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
-  el.querySelectorAll('.token-condition-badge').forEach(b => b.remove());
+  el.querySelectorAll('.token-cond-overlay, .token-cond-strip').forEach(b => b.remove());
   const conds = getConditions(tokenId);
-  let offsetY = 14;
-  for (const def of CONDITION_DEFS) {
-    if (!conds.has(def.key)) continue;
-    const badge = document.createElement('div');
-    badge.className = 'token-condition-badge';
-    badge.textContent = def.icon + ' ' + def.label.toUpperCase();
-    badge.style.cssText = `top:calc(100% + ${offsetY}px);color:${def.color};`;
-    el.appendChild(badge);
-    offsetY += 12;
+  if (!conds.size) return;
+
+  // Most severe critical condition gets a large centered overlay on the token image
+  const CRIT_ORDER = ['dead', 'unconscious', 'stunned', 'paralyzed'];
+  const topCrit = CRIT_ORDER.find(k => conds.has(k));
+  if (topCrit) {
+    const def = CONDITION_DEFS.find(d => d.key === topCrit);
+    const overlay = document.createElement('div');
+    overlay.className = 'token-cond-overlay';
+    overlay.textContent = def.icon;
+    el.appendChild(overlay);
+  }
+
+  // All other active conditions: icon strip below the token
+  const others = CONDITION_DEFS.filter(d => !CRIT_ORDER.includes(d.key) && conds.has(d.key));
+  if (others.length) {
+    const strip = document.createElement('div');
+    strip.className = 'token-cond-strip';
+    strip.textContent = others.map(d => d.icon).join('');
+    el.appendChild(strip);
   }
 }
 
@@ -5144,11 +5184,11 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
       <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}</div>
       <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
       <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
-      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness &amp; Stamina</div>`;
+      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
   }
 
-  // Apply and check for unconscious
-  await applyDamage(targetEntityType, targetEntityId, finalDamage);
+  // Apply to Toughness only — stamina is spent on actions, not from being hit
+  await applyDamage(targetEntityType, targetEntityId, finalDamage, 0);
 
   if (finalDamage > 0) {
     // Determine max toughness to check for unconscious / dead
@@ -6138,16 +6178,11 @@ function renderPlayCharacter() {
             }).join('')
           : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
 
-        // Conditions
-        const acToken = _pathFindToken(ac.id);
-        const acConds = acToken ? [...getConditions(acToken.id)] : [];
-        const acCondsHtml = acConds.length
-          ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${acConds.map(c => `<span style="background:rgba(201,168,76,0.15);border:1px solid var(--gold);border-radius:3px;padding:2px 7px;font-size:0.7rem;">${c}</span>`).join('')}</div>`
-          : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">None</div>`;
-
         // Health bars
+        const acToken = _pathFindToken(ac.id);
         const acDamage = ac.type === 'char' ? (acRow?.damage || {}) : (acSc?.damage || {});
         const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage);
+        const acCondsHtml = _condChooserHtml(acToken?.id || null, canEdit, 'renderPlayCharacter()');
 
         el.innerHTML = `
           ${activeBannerHtml}
@@ -6157,11 +6192,11 @@ function renderPlayCharacter() {
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${acSize}</div></div>
           </div>
           ${section('ac-health', 'Health', acHealthHtml)}
+          ${section('ac-conds', 'Conditions', acCondsHtml)}
           ${section('ac-equip', 'Equipment', acEquipHtml)}
           ${section('ac-armor', 'Armor', acArmorHtml)}
           ${section('ac-stats', 'Stats', acStatsHtml)}
-          ${section('ac-skills', 'Skills', acSkillsHtml)}
-          ${section('ac-conds', 'Conditions', acCondsHtml)}`;
+          ${section('ac-skills', 'Skills', acSkillsHtml)}`;
         return;
       }
     }
@@ -6169,6 +6204,8 @@ function renderPlayCharacter() {
 
   const myDamage = currentCharacterId ? (playCharCache[currentCharacterId]?.damage || {}) : {};
   const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage);
+  const myToken = currentCharacterId ? _pathFindToken('char::' + currentCharacterId) : null;
+  const myCondsHtml = _condChooserHtml(myToken?.id || null, isGM(), 'renderPlayCharacter()');
 
   el.innerHTML = `
     ${activeBannerHtml}
@@ -6183,12 +6220,13 @@ function renderPlayCharacter() {
         </div>
       </div>
     </div>
-    ${section('health', 'Health',    myHealthHtml)}
-    ${section('combat', 'Combat',    combatContent)}
-    ${section('stats',  'Stats',     statsContent)}
-    ${section('equip',  'Equipment', equipContent)}
-    ${section('armor',  'Armor',     armorRows)}
-    ${section('skills', 'Skills',    skillsHtml)}
+    ${section('health', 'Health',     myHealthHtml)}
+    ${section('conds',  'Conditions', myCondsHtml)}
+    ${section('combat', 'Combat',     combatContent)}
+    ${section('stats',  'Stats',      statsContent)}
+    ${section('equip',  'Equipment',  equipContent)}
+    ${section('armor',  'Armor',      armorRows)}
+    ${section('skills', 'Skills',     skillsHtml)}
   `;
 
   // Populate sub (species / body type)
@@ -7982,6 +8020,8 @@ async function showTokenInfo(tokenId) {
     const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
     const creatureCombatantId = 'creature::' + t.id;
     const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage) : null;
+    const safeCreatureTokenId = t.id.replace(/'/g, "\\'");
+    const creatureCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeCreatureTokenId}')`);
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
         <div class="ps-compact-avatar">${avatarHtml}</div>
@@ -7995,11 +8035,11 @@ async function showTokenInfo(tokenId) {
         </div>
       </div>
       ${creatureHealthHtml ? csec('health', 'Health', creatureHealthHtml) : ''}
+      ${csec('conds',  'Conditions', creatureCondsHtml)}
       ${buildCombatSection(creatureCombatantId, csec)}
       ${csec('stats',  'Stats',      statsContent)}
       ${csec('equip',  'Equipment',  weaponRows)}
-      ${csec('armor',  'Armor',      armorRows)}
-      ${csec('conds',  'Conditions', `<div style="display:flex;flex-wrap:wrap;gap:5px;">${condHtml}</div>`)}`;
+      ${csec('armor',  'Armor',      armorRows)}`;
     return;
   }
 
@@ -8118,6 +8158,8 @@ async function showTokenInfo(tokenId) {
   const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const charCombatantId = 'char::' + t.entity_id;
   const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage);
+  const safeTokenId = t.id.replace(/'/g, "\\'");
+  const charCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeTokenId}')`);
   el.innerHTML = `
     ${backBtn}
     <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -8132,8 +8174,8 @@ async function showTokenInfo(tokenId) {
       </div>
     </div>
     ${section('health', 'Health',     charHealthHtml)}
+    ${section('conds',  'Conditions', charCondsHtml)}
     ${buildCombatSection(charCombatantId, section)}
-    ${section('conds',  'Conditions', condContent)}
     ${section('stats',  'Stats',      statsContent)}
     ${section('equip',  'Equipment',  equipContent)}
     ${section('armor',  'Armor',      armorRows)}
