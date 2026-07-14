@@ -4999,6 +4999,7 @@ async function setCondition(tokenId, condition, active) {
   drawSentinelRanges();
   await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
   // Realtime UPDATE will sync to other clients automatically
+  renderPlayCharacter();
 }
 
 function _refreshTokenBadges(tokenId) {
@@ -8293,8 +8294,8 @@ async function showTokenInfo(tokenId) {
   const charSpeedStr = charMaxSpeed != null ? Math.round(charMaxSpeed) + ' ft/s' : '—';
   const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const charCombatantId = 'char::' + t.entity_id;
-  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage, 'character', t.entity_id, `showTokenInfo('${safeTokenId}')`);
   const safeTokenId = t.id.replace(/'/g, "\\'");
+  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage, 'character', t.entity_id, `showTokenInfo('${safeTokenId}')`);
   const charCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeTokenId}')`);
   el.innerHTML = `
     ${backBtn}
