@@ -5136,6 +5136,18 @@ async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax, re
     sc.damage[stat] = newDmg;
     await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
   }
+  // Auto-clear unconscious/dead when toughness is healed above 0
+  if (stat === 'toughness' && Math.round(newCurrent) > 0) {
+    const tok = Object.values(mapTokens).find(t =>
+      entityType === 'character'
+        ? (t.entity_type === 'character' && t.entity_id === entityId)
+        : (t.entity_type === 'creature'  && t.entity_id === entityId));
+    if (tok) {
+      const conds = getConditions(tok.id);
+      if (conds.has('unconscious')) await setCondition(tok.id, 'unconscious', false);
+      if (conds.has('dead'))        await setCondition(tok.id, 'dead', false);
+    }
+  }
   renderPlayCharacter();
   if (refreshFn) refreshFn();
 }
@@ -7465,12 +7477,15 @@ async function onTokenMouseUp(e) {
 
   if (!_tokenDragMoved) {
     dragTokenId = null;
-    if (pathMode) return; // map click handler owns waypoints; ignore token clicks in path mode
     const t = mapTokens[clickedId];
     const combatantId = t?.entity_type === 'character'
       ? 'char::' + t.entity_id : 'creature::' + t?.id;
     const isActive = _atActiveCombatant()?.id === combatantId;
     const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
+    // In path mode, only the active-combatant's own token drives waypoints (handled by map click);
+    // clicking a DIFFERENT token exits path mode and shows that token's info instead.
+    if (pathMode && !isActive) { exitPathMode(); showTokenInfo(clickedId); return; }
+    if (pathMode) return;
     if (isActive && canControl && atCombatActive) {
       enterPathMode(combatantId);
     } else {
