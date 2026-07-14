@@ -7406,7 +7406,7 @@ let playCharCache = {}; // entity_id → full row
 async function loadPlayCharCache() {
   if (!currentCampaignId) return;
   const { data } = await sb.from('characters')
-    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, held_items, armor, avatar_url')
+    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url, damage')
     .eq('campaign_id', currentCampaignId);
   playCharCache = {};
   (data || []).forEach(row => { playCharCache[row.id] = row; });
@@ -7726,12 +7726,33 @@ function attackTokenClick(tokenId) {
       });
     }
 
-    // Pre-select defensive option based on active conditions
+    // Pre-select defensive option based on active conditions.
+    // If the blocking/parrying condition is set but no matching option was generated
+    // from held_items (e.g. cache stale or weapon name mismatch), synthesize one
+    // from the combatant's active action slot.
     if (targetIsBlocking || targetIsParrying) {
       const keyword = targetIsBlocking ? 'Block' : 'Parry';
-      let best = null;
-      for (const opt of defenseOptions) {
-        if (opt.label.startsWith(keyword) && (!best || opt.reduction > best.reduction)) best = opt;
+      let best = defenseOptions.find(o => o.label.startsWith(keyword));
+      if (!best) {
+        // Synthesize from the active slot label ("Block — Shield, Small" etc.)
+        const defCombatantId = 'char::' + target.entity_id;
+        const defC = atCombatants.find(c => c.id === defCombatantId);
+        if (defC?.slots) {
+          for (const slotKey of ['right', 'left']) {
+            const sl = defC.slots[slotKey];
+            if (!sl || !sl.label.startsWith(keyword)) continue;
+            const weaponName = sl.label.replace(/^(Block|Parry)\s*[—–-]\s*/i, '').trim();
+            const wRows = getWeaponRows(weaponName);
+            const wRow  = wRows.find(r => r.action === keyword);
+            if (wRow) {
+              const defVal   = calcHitValue(wRow.hitFormula, defAttrs);
+              const reduction = defVal != null ? Math.round(defVal * defSize) : 0;
+              best = { label: `${keyword} — ${weaponName} (−${reduction})`, reduction };
+              defenseOptions.unshift(best);
+            }
+            break;
+          }
+        }
       }
       if (best) best.preSelected = true;
     }
