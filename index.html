@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260714c';
+const VERSION = 'v0.1.20260715a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5054,6 +5054,123 @@ function getArmorDR(armorType, category) {
   return (ARMOR_DR[armorType] || ARMOR_DR['None'])[category] || 0;
 }
 
+// ═══ ENTITY DATA LAYER (Phase 1 refactor — see REFACTOR_SPEC.md) ═══════════════
+// The caches (playCharCache / sessionCreatureCache) are the single runtime
+// truth. Panels and combat logic read through getEntity(); all writes go
+// through updateEntity(). Entity refs: 'char::<charId>' | 'creature::<tokenId>'
+// (creature refs also accept a session_creature id for legacy call sites).
+
+// Single source of truth for which character columns exist — used by every
+// SELECT so cache rows can never be missing a column again.
+const CHAR_COLUMNS = 'id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, features, weapons, equipment, held_items, armor, avatar_url, damage';
+
+const _CREATURE_DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+
+// Resolve a ref to its raw cache row (characters row or session_creatures row)
+function _entityCacheRow(ref) {
+  if (!ref) return null;
+  const [type, rawId] = ref.split('::');
+  if (type === 'char') return playCharCache[rawId] || null;
+  // creature: rawId is normally a map token id; fall back to session_creature id
+  const token = mapTokens[rawId];
+  return sessionCreatureCache[token ? token.entity_id : rawId] || null;
+}
+
+// Find the map token for a ref (null if the entity isn't on the map)
+function _entityToken(ref) {
+  if (!ref) return null;
+  const [type, rawId] = ref.split('::');
+  if (type === 'char') {
+    return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === rawId) || null;
+  }
+  if (mapTokens[rawId]) return mapTokens[rawId];
+  return Object.values(mapTokens).find(t => t.entity_type === 'creature' && t.entity_id === rawId) || null;
+}
+
+// Synchronous, DOM-free entity accessor. Returns null if not cached yet
+// (callers show a loading state and await ensureEntityLoaded).
+function getEntity(ref) {
+  const row = _entityCacheRow(ref);
+  if (!row) return null;
+  const [type] = ref.split('::');
+  const isChar = type === 'char';
+  const token  = _entityToken(ref);
+
+  // Memoize computed attributes on the cache row; invalidated by updateEntity
+  if (!row._attrs) {
+    row._attrs = calcAttributesFromData(isChar ? {
+      race: row.species || '', bodyType: row.body_type || '',
+      sex: row.sex || '', age: row.age || '',
+      height: row.height || '', build: row.build || '',
+      social: row.social || '', mental: row.mental || '',
+      stats: row.stats || {},
+    } : {
+      race: row.species || '', bodyType: row.body_type || 'Humanoid',
+      sex: row.sex || '', age: row.age || 'Adult',
+      height: row.height || 'Average', build: row.build || 'Average',
+      social: row.social || 'Balanced', mental: row.mental || 'Balanced',
+      stats: Object.assign({}, _CREATURE_DEFAULT_STATS, row.stats || {}),
+    });
+  }
+
+  const loadout = isChar
+    ? [...new Set([
+        ...(row.weapons   || []).map(w => w.name),
+        ...(row.equipment || []).map(e => e.name),
+      ].filter(Boolean))]
+    : [];
+
+  return {
+    ref, type,
+    id:        row.id,
+    tokenId:   token?.id || null,
+    name:      row.name || token?.label || '',
+    species:   row.species || '',
+    bodyType:  row.body_type || (isChar ? '' : 'Humanoid'),
+    avatarUrl: row.avatar_url || token?.avatar_url || '',
+    attrs:     row._attrs,
+    held:      row.held_items || {},
+    armor:     row.armor || {},
+    damage:    row.damage || { toughness: 0, stamina: 0 },
+    skills:    row.skills || {},
+    stats:     row.stats || {},
+    loadout,
+    conditions: token ? getConditions(token.id) : new Set(),
+  };
+}
+
+// Fetch a character into the cache if it isn't there yet. Creatures are
+// always bulk-loaded with the session, so only characters need this.
+async function ensureEntityLoaded(ref) {
+  if (_entityCacheRow(ref)) return true;
+  const [type, rawId] = ref.split('::');
+  if (type !== 'char') return false;
+  const { data } = await sb.from('characters').select(CHAR_COLUMNS).eq('id', rawId).single();
+  if (!data) return false;
+  playCharCache[data.id] = data;
+  return true;
+}
+
+// The single write path: merge patch into the cache row, persist the patch
+// columns to the DB, invalidate memoized attrs, refresh the UI.
+async function updateEntity(ref, patch) {
+  const row = _entityCacheRow(ref);
+  if (!row) return false;
+  Object.assign(row, patch);
+  delete row._attrs;
+  const table = ref.startsWith('char::') ? 'characters' : 'session_creatures';
+  await sb.from(table).update(patch).eq('id', row.id);
+  renderPlayCharacter();
+  return true;
+}
+
+// Legacy (entityType, entityId) → ref. entityType: 'character' | 'creature';
+// entityId is a characters.id or session_creatures.id.
+function _entityRef(entityType, entityId) {
+  return (entityType === 'character' ? 'char::' : 'creature::') + entityId;
+}
+// ═══ END ENTITY DATA LAYER ═════════════════════════════════════════════════════
+
 // Hit location part key → armor slot on the character
 const PART_TO_ARMOR_SLOT = {
   head:'head', neck:'head',
@@ -5067,39 +5184,23 @@ const PART_TO_ARMOR_SLOT = {
 // Write damage to cache + DB, refresh UI
 async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
   staminaDmg = staminaDmg != null ? staminaDmg : toughnessDmg; // default same as toughness
-  if (entityType === 'character') {
-    const row = playCharCache[entityId];
-    if (!row) return;
-    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
-    row.damage.toughness = Math.max(0, (row.damage.toughness || 0) + toughnessDmg);
-    row.damage.stamina   = Math.max(0, (row.damage.stamina   || 0) + staminaDmg);
-    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
-  } else {
-    const sc = sessionCreatureCache[entityId];
-    if (!sc) return;
-    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
-    sc.damage.toughness = Math.max(0, (sc.damage.toughness || 0) + toughnessDmg);
-    sc.damage.stamina   = Math.max(0, (sc.damage.stamina   || 0) + staminaDmg);
-    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
-  }
-  renderPlayCharacter();
+  const ref = _entityRef(entityType, entityId);
+  const ent = getEntity(ref);
+  if (!ent) return;
+  await updateEntity(ref, { damage: {
+    toughness: Math.max(0, (ent.damage.toughness || 0) + toughnessDmg),
+    stamina:   Math.max(0, (ent.damage.stamina   || 0) + staminaDmg),
+  }});
 }
 
 async function recoverStamina(entityType, entityId, amount) {
-  if (entityType === 'character') {
-    const row = playCharCache[entityId];
-    if (!row) return;
-    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
-    row.damage.stamina = Math.max(0, (row.damage.stamina || 0) - amount);
-    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
-  } else {
-    const sc = sessionCreatureCache[entityId];
-    if (!sc) return;
-    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
-    sc.damage.stamina = Math.max(0, (sc.damage.stamina || 0) - amount);
-    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
-  }
-  renderPlayCharacter();
+  const ref = _entityRef(entityType, entityId);
+  const ent = getEntity(ref);
+  if (!ent) return;
+  await updateEntity(ref, { damage: {
+    toughness: ent.damage.toughness || 0,
+    stamina:   Math.max(0, (ent.damage.stamina || 0) - amount),
+  }});
 }
 
 function _staminaCostForLabel(label) {
@@ -5112,44 +5213,24 @@ function _staminaCostForLabel(label) {
 
 async function _deductStamina(combatantId, amount) {
   if (!amount) return;
-  const [type, rawId] = combatantId.split('::');
-  if (type === 'char') {
-    await applyDamage('character', rawId, 0, amount);
-  } else {
-    const token = mapTokens[rawId];
-    if (token) await applyDamage('creature', token.entity_id, 0, amount);
-  }
+  const ent = getEntity(combatantId); // combatant ids are valid entity refs
+  if (!ent) return;
+  await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, 0, amount);
 }
 
 // Set current HP for an entity by writing the derived damage value to the DB
 async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax, refreshFn) {
-  const newDmg = Math.max(0, Math.min(statMax, statMax - Math.round(newCurrent)));
-  if (entityType === 'character') {
-    const row = playCharCache[entityId];
-    if (!row) return;
-    if (!row.damage) row.damage = { toughness: 0, stamina: 0 };
-    row.damage[stat] = newDmg;
-    await sb.from('characters').update({ damage: row.damage }).eq('id', entityId);
-  } else {
-    const sc = sessionCreatureCache[entityId];
-    if (!sc) return;
-    if (!sc.damage) sc.damage = { toughness: 0, stamina: 0 };
-    sc.damage[stat] = newDmg;
-    await sb.from('session_creatures').update({ damage: sc.damage }).eq('id', entityId);
-  }
+  const ref = _entityRef(entityType, entityId);
+  const ent = getEntity(ref);
+  if (!ent) return;
+  const newDamage = Object.assign({ toughness: 0, stamina: 0 }, ent.damage);
+  newDamage[stat] = Math.max(0, Math.min(statMax, statMax - Math.round(newCurrent)));
+  await updateEntity(ref, { damage: newDamage });
   // Auto-clear unconscious/dead when toughness is healed above 0
-  if (stat === 'toughness' && Math.round(newCurrent) > 0) {
-    const tok = Object.values(mapTokens).find(t =>
-      entityType === 'character'
-        ? (t.entity_type === 'character' && t.entity_id === entityId)
-        : (t.entity_type === 'creature'  && t.entity_id === entityId));
-    if (tok) {
-      const conds = getConditions(tok.id);
-      if (conds.has('unconscious')) await setCondition(tok.id, 'unconscious', false);
-      if (conds.has('dead'))        await setCondition(tok.id, 'dead', false);
-    }
+  if (stat === 'toughness' && Math.round(newCurrent) > 0 && ent.tokenId) {
+    if (ent.conditions.has('unconscious')) await setCondition(ent.tokenId, 'unconscious', false);
+    if (ent.conditions.has('dead'))        await setCondition(ent.tokenId, 'dead', false);
   }
-  renderPlayCharacter();
   if (refreshFn) refreshFn();
 }
 
@@ -7522,7 +7603,7 @@ let playCharCache = {}; // entity_id → full row
 async function loadPlayCharCache() {
   if (!currentCampaignId) return;
   const { data } = await sb.from('characters')
-    .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url, damage, weapons, equipment')
+    .select(CHAR_COLUMNS)
     .eq('campaign_id', currentCampaignId);
   playCharCache = {};
   (data || []).forEach(row => { playCharCache[row.id] = row; });
@@ -8186,15 +8267,12 @@ async function showTokenInfo(tokenId) {
   let row = playCharCache[t.entity_id];
   if (!row) {
     el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Loading…</div>`;
-    const { data } = await sb.from('characters')
-      .select('id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, held_items, armor, avatar_url')
-      .eq('id', t.entity_id).single();
-    if (!data) {
+    const ok = await ensureEntityLoaded('char::' + t.entity_id);
+    if (!ok) {
       el.innerHTML = `${backBtn}<div style="color:var(--text-dim);font-size:0.8rem;">Could not load character.</div>`;
       return;
     }
-    playCharCache[data.id] = data;
-    row = data;
+    row = playCharCache[t.entity_id];
   }
 
   const charData = {
