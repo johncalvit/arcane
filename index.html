@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715c';
+const VERSION = 'v0.1.20260715d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5238,8 +5238,9 @@ async function _deductStamina(combatantId, amount) {
   await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, 0, amount);
 }
 
-// Set current HP for an entity by writing the derived damage value to the DB
-async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax, refreshFn) {
+// Set current HP for an entity by writing the derived damage value to the DB.
+// updateEntity → refreshUI() re-renders whichever panel is showing.
+async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax) {
   const ref = _entityRef(entityType, entityId);
   const ent = getEntity(ref);
   if (!ent) return;
@@ -5251,11 +5252,10 @@ async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax, re
     if (ent.conditions.has('unconscious')) await setCondition(ent.tokenId, 'unconscious', false);
     if (ent.conditions.has('dead'))        await setCondition(ent.tokenId, 'dead', false);
   }
-  if (refreshFn) refreshFn();
 }
 
 // Inline HP editor — replaces the "cur / max" label with an input on click
-function _hpEditClick(el, entityType, entityId, stat, curVal, statMax, refreshCall) {
+function _hpEditClick(el, entityType, entityId, stat, curVal, statMax) {
   if (el.querySelector('input')) return; // already editing
   const span = el.querySelector('.hp-cur');
   if (!span) return;
@@ -5267,14 +5267,14 @@ function _hpEditClick(el, entityType, entityId, stat, curVal, statMax, refreshCa
   inp.focus(); inp.select();
   const commit = () => {
     const v = parseFloat(inp.value);
-    if (!isNaN(v)) _setCurrentHp(entityType, entityId, stat, v, statMax, refreshCall ? () => eval(refreshCall) : null);
+    if (!isNaN(v)) _setCurrentHp(entityType, entityId, stat, v, statMax);
     else refreshUI();
   };
   inp.addEventListener('blur', commit);
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { refreshUI(); } });
 }
 
-function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, refreshCall) {
+function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) {
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
   const sMax = Math.max(1, Math.round(staminaMax   || 10));
@@ -5286,12 +5286,11 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, 
   const editable = !!(entityType && entityId);
   const tId = editable ? `hp-t-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
   const sId = editable ? `hp-s-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
-  const rc = refreshCall ? refreshCall.replace(/'/g, '&apos;') : '';
   const tClickAttr = editable
-    ? `id="${tId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','toughness',${tCur},${tMax},'${rc}')" title="Click to edit" style="cursor:pointer;"`
+    ? `id="${tId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','toughness',${tCur},${tMax})" title="Click to edit" style="cursor:pointer;"`
     : '';
   const sClickAttr = editable
-    ? `id="${sId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','stamina',${sCur},${sMax},'${rc}')" title="Click to edit" style="cursor:pointer;"`
+    ? `id="${sId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','stamina',${sCur},${sMax})" title="Click to edit" style="cursor:pointer;"`
     : '';
   const tValHtml = editable ? `<span ${tClickAttr}><span class="hp-cur">${tCur}</span> / ${tMax}${editable ? ' ✎' : ''}</span>` : `<span>${tCur} / ${tMax}</span>`;
   const sValHtml = editable ? `<span ${sClickAttr}><span class="hp-cur">${sCur}</span> / ${sMax}${editable ? ' ✎' : ''}</span>` : `<span>${sCur} / ${sMax}</span>`;
@@ -6363,7 +6362,7 @@ function renderPlayCharacter() {
         const acDamage = ac.type === 'char' ? (acRow?.damage || {}) : (acSc?.damage || {});
         const acEntityType = ac.type === 'char' ? 'character' : 'creature';
         const acEntityId   = ac.type === 'char' ? acRow?.id : acSc?.id;
-        const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage, acEntityType, acEntityId, 'renderPlayCharacter()');
+        const acHealthHtml = healthBarsHtml(acAttrs.Toughness, acAttrs.Stamina, acDamage, acEntityType, acEntityId);
         const acCondsHtml = _condChooserHtml(acToken?.id || null, canEdit, 'renderPlayCharacter()');
 
         el.innerHTML = `
@@ -6385,7 +6384,7 @@ function renderPlayCharacter() {
   }
 
   const myDamage = currentCharacterId ? (playCharCache[currentCharacterId]?.damage || {}) : {};
-  const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage, 'character', currentCharacterId, 'renderPlayCharacter()');
+  const myHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, myDamage, 'character', currentCharacterId);
   const myToken = currentCharacterId ? _pathFindToken('char::' + currentCharacterId) : null;
   const myCondsHtml = _condChooserHtml(myToken?.id || null, isGM(), 'renderPlayCharacter()');
 
@@ -7385,14 +7384,7 @@ function tokenHtml(t) {
     : `<span class="token-icon">${fallbackIcon}</span>`;
 
   const hiddenStyle = !t.visible ? 'opacity:0.35;filter:grayscale(60%);' : '';
-  const conds = new Set(Array.isArray(t.conditions) ? t.conditions : []);
-  let badgeHtml = '';
-  let offsetY = 14;
-  for (const def of CONDITION_DEFS) {
-    if (!conds.has(def.key)) continue;
-    badgeHtml += `<div class="token-condition-badge" style="top:calc(100% + ${offsetY}px);color:${def.color};">${def.icon} ${def.label.toUpperCase()}</div>`;
-    offsetY += 12;
-  }
+  // Conditions are rendered by _refreshTokenBadges (overlay + strip) after insert
   return `<div class="map-token" id="token-${t.id}"
     data-id="${t.id}" data-type="${t.entity_type}" data-entity="${t.entity_id || ''}"
     style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
@@ -7400,7 +7392,6 @@ function tokenHtml(t) {
     ondblclick="onTokenDblClick(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label">${t.label}</div>
-    ${badgeHtml}
   </div>`;
 }
 
@@ -7414,7 +7405,10 @@ function renderAllTokens() {
   Object.values(mapTokens).forEach(t => {
     if (!t.visible && !isGM()) return;
     const canvas = document.getElementById('map-canvas');
-    if (canvas) canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
+    if (canvas) {
+      canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
+      _refreshTokenBadges(t.id);
+    }
   });
 }
 
@@ -7440,6 +7434,7 @@ function upsertTokenElement(t) {
     _refreshTokenBadges(t.id);
   } else {
     canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
+    _refreshTokenBadges(t.id);
   }
 }
 
@@ -8251,7 +8246,7 @@ async function showTokenInfo(tokenId) {
     const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
     const creatureCombatantId = 'creature::' + t.id;
     const safeCreatureTokenId = t.id.replace(/'/g, "\\'");
-    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage, 'creature', sc.id, `showTokenInfo('${safeCreatureTokenId}')`) : null;
+    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage, 'creature', sc.id) : null;
     const creatureCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeCreatureTokenId}')`);
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
@@ -8386,7 +8381,7 @@ async function showTokenInfo(tokenId) {
   const charSizeStr  = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const charCombatantId = 'char::' + t.entity_id;
   const safeTokenId = t.id.replace(/'/g, "\\'");
-  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage, 'character', t.entity_id, `showTokenInfo('${safeTokenId}')`);
+  const charHealthHtml = healthBarsHtml(attrs.Toughness, attrs.Stamina, row.damage, 'character', t.entity_id);
   const charCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeTokenId}')`);
   el.innerHTML = `
     ${backBtn}
