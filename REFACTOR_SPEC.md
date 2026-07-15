@@ -210,14 +210,11 @@ Reorder the launch experience around what the user is trying to do:
 | Data | Lives on | Rationale |
 |---|---|---|
 | Identity, stats, skills, loadout, armor, avatar | `characters` (travels) | The character sheet is the player's |
-| `damage` (toughness/stamina) | `campaign_characters.damage jsonb` (per-campaign) | Being wounded in one campaign shouldn't bleed into another |
+| `damage` (toughness/stamina) | `characters` (travels) | **DECIDED:** wounds follow the character; easy to heal/clear manually, and per-campaign copies would be hard to keep straight |
 | Conditions | `map_tokens.conditions` (already per-campaign) | No change |
 | Held items (`held_items`) | `characters` (travels) | It's part of the loadout; acceptable simplification |
 
-This moves the `damage` column added earlier from `characters` to
-`campaign_characters`. Migration: copy values across during backfill.
-(If per-campaign damage feels like overkill for now, keeping `damage` on
-`characters` is fine — flagged as a decision point.)
+No `damage` migration needed — the column stays on `characters` as-is.
 
 ---
 
@@ -235,7 +232,7 @@ when no session is imminent).
 
 ## Decision points for review
 
-1. **Per-campaign damage** (3.3) — move `damage` to the join table, or keep on `characters`?
+1. ~~**Per-campaign damage** (3.3)~~ — **DECIDED: damage stays on `characters` and travels with the character.**
 2. **Drop `characters.campaign_id`** after one release, or keep indefinitely as "home campaign"?
 3. **File split** — during Phase 2 the panel/section builders could move to a
    `panels.js` loaded by index.html (GitHub Pages serves multiple files fine).
