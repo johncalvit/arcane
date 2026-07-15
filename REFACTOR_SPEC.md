@@ -1,6 +1,6 @@
 # Arcane VTT — Refactor Spec
 
-**Status:** Draft for review
+**Status:** Approved — all decision points resolved (2026-07-15)
 **Scope:** Data layer unification, panel render consolidation, campaign/character decoupling
 **Non-goals:** Feature work (combat/magic additions), visual redesign, security hardening
 
@@ -230,12 +230,18 @@ Phases 1–2 unblock combat/magic feature work; Phase 3 is independent and can
 be scheduled around playtest sessions (it touches sign-in flow, so best done
 when no session is imminent).
 
-## Decision points for review
+## Decision points — all resolved
 
-1. ~~**Per-campaign damage** (3.3)~~ — **DECIDED: damage stays on `characters` and travels with the character.**
-2. **Drop `characters.campaign_id`** after one release, or keep indefinitely as "home campaign"?
-3. **File split** — during Phase 2 the panel/section builders could move to a
-   `panels.js` loaded by index.html (GitHub Pages serves multiple files fine).
-   Zero functional impact; improves navigability. Do it then, later, or never?
-4. **Inline onclick strings → event listeners** — Phase 2 proposes this for the
-   new section builders only, leaving the rest of the app as-is. Agreed?
+1. **Per-campaign damage** (3.3) — **DECIDED:** damage stays on `characters` and
+   travels with the character. No migration needed.
+2. **`characters.campaign_id`** — **DECIDED:** keep it, renamed to
+   `last_campaign_id` ("home campaign"). Its only job is auto-selecting the
+   campaign at sign-in; characters with no campaign links live under
+   My Characters as a stable for later use. Near-zero added complexity.
+3. **File split** — **DECIDED:** do it. During Phase 2, panel/section builders
+   move to `panels.js` loaded by index.html. Single-file portability no longer
+   matters now that GitHub Pages hosts the app.
+4. **Inline onclick strings → event listeners** — **DECIDED:** yes, for the new
+   section builders (rest of the app converts opportunistically as code is
+   touched). Eliminates the quote-escaping fragility that caused the
+   `safeTokenId` crash.
