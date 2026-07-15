@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715b';
+const VERSION = 'v0.1.20260715c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8250,8 +8250,8 @@ async function showTokenInfo(tokenId) {
     const cMaxSpeed = calcMaxSpeed(cAttrs, 0);
     const cSpeedStr = cMaxSpeed != null ? Math.round(cMaxSpeed) + ' ft/s' : '—';
     const creatureCombatantId = 'creature::' + t.id;
-    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage, 'creature', sc.id, `showTokenInfo('${safeCreatureTokenId}')`) : null;
     const safeCreatureTokenId = t.id.replace(/'/g, "\\'");
+    const creatureHealthHtml = isGM() ? healthBarsHtml(cAttrs.Toughness, cAttrs.Stamina, sc.damage, 'creature', sc.id, `showTokenInfo('${safeCreatureTokenId}')`) : null;
     const creatureCondsHtml = _condChooserHtml(t.id, isGM(), `showTokenInfo('${safeCreatureTokenId}')`);
     el.innerHTML = `${backBtn}
       <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
