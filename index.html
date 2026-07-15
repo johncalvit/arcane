@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715a';
+const VERSION = 'v0.1.20260715b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4999,7 +4999,7 @@ async function setCondition(tokenId, condition, active) {
   drawSentinelRanges();
   await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
   // Realtime UPDATE will sync to other clients automatically
-  renderPlayCharacter();
+  refreshUI();
 }
 
 function _refreshTokenBadges(tokenId) {
@@ -5160,8 +5160,28 @@ async function updateEntity(ref, patch) {
   delete row._attrs;
   const table = ref.startsWith('char::') ? 'characters' : 'session_creatures';
   await sb.from(table).update(patch).eq('id', row.id);
-  renderPlayCharacter();
+  refreshUI();
   return true;
+}
+
+// Which token's info panel is currently displayed (null = own character view).
+// Lets refreshUI() re-render the panel the user is actually looking at
+// instead of always flipping back to the own-character view.
+let _tokenInfoViewId = null;
+
+function backToMyCharacter() {
+  _tokenInfoViewId = null;
+  renderPlayCharacter();
+}
+
+// Re-render the left panel in place after any entity data change.
+function refreshUI() {
+  if (_tokenInfoViewId && mapTokens[_tokenInfoViewId]) {
+    showTokenInfo(_tokenInfoViewId);
+  } else {
+    _tokenInfoViewId = null;
+    renderPlayCharacter();
+  }
 }
 
 // Legacy (entityType, entityId) → ref. entityType: 'character' | 'creature';
@@ -5248,10 +5268,10 @@ function _hpEditClick(el, entityType, entityId, stat, curVal, statMax, refreshCa
   const commit = () => {
     const v = parseFloat(inp.value);
     if (!isNaN(v)) _setCurrentHp(entityType, entityId, stat, v, statMax, refreshCall ? () => eval(refreshCall) : null);
-    else renderPlayCharacter();
+    else refreshUI();
   };
   inp.addEventListener('blur', commit);
-  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { renderPlayCharacter(); } });
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { refreshUI(); } });
 }
 
 function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, refreshCall) {
@@ -6431,21 +6451,12 @@ async function _playSetHand(side, value) {
 
 // ── Active combatant hand change (GM left panel) ──────────────────────────────
 async function _acSetHand(entityType, entityId, side, value) {
-  const item = value || null;
-  if (entityType === 'char') {
-    const row = playCharCache[entityId];
-    if (!row) return;
-    if (!row.held_items) row.held_items = {};
-    row.held_items[side] = item;
-    await sb.from('characters').update({ held_items: row.held_items }).eq('id', entityId);
-  } else {
-    const sc = sessionCreatureCache[entityId];
-    if (!sc) return;
-    if (!sc.held_items) sc.held_items = {};
-    sc.held_items[side] = item;
-    await sb.from('session_creatures').update({ held_items: sc.held_items }).eq('id', entityId);
-  }
-  renderPlayCharacter();
+  const ref = (entityType === 'char' ? 'char::' : 'creature::') + entityId;
+  const ent = getEntity(ref);
+  if (!ent) return;
+  const held = Object.assign({}, ent.held);
+  held[side] = value || null;
+  await updateEntity(ref, { held_items: held });
 }
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
@@ -8107,9 +8118,11 @@ async function showTokenInfo(tokenId) {
   const el = document.getElementById('play-char-content');
   if (!el) return;
 
+  _tokenInfoViewId = tokenId; // refreshUI() re-renders this view on data changes
+
   // Header with back button
   const backLabel = isGM() ? '← Back' : '← My Character';
-  const backBtn = `<button onclick="renderPlayCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">${backLabel}</button>`;
+  const backBtn = `<button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">${backLabel}</button>`;
 
   // Build combat section for any combatant
   function buildCombatSection(combatantId, secFn) {
@@ -8430,6 +8443,21 @@ function subscribeTokenRealtime() {
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
       mapTokens[t.id] = t;
       if (t.id !== dragTokenId) upsertTokenElement(t);
+      _refreshTokenBadges(t.id);
+    })
+    // Entity data changes (damage, stats, held items…) from other clients —
+    // replace the cache row (fresh row has no _attrs, so attributes recompute)
+    // and re-render whichever panel is showing. Requires characters and
+    // session_creatures to be in the supabase_realtime publication.
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
+      playCharCache[row.id] = row;
+      refreshUI();
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'session_creatures',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
+      sessionCreatureCache[row.id] = row;
+      refreshUI();
     })
     .subscribe();
 }
