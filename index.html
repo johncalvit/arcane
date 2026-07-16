@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715e';
+const VERSION = 'v0.1.20260715f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5470,6 +5470,22 @@ function _atActiveCombatant() {
   return atSortedCombatants()[atActiveIdx] || null;
 }
 
+// ── Shared combat state ───────────────────────────────────────────────────────
+// GM owns combat state (atCombatActive / atActiveIdx); players mirror it from
+// the at-state broadcast. These helpers give every client the same view.
+function _atIsCombatActive() {
+  return isGM() ? atCombatActive : !!(_atStateFromGM && _atStateFromGM.active);
+}
+function _atSharedActive() {
+  if (isGM()) return _atActiveCombatant();
+  return _atStateFromGM?.activeId
+    ? (atCombatants.find(c => c.id === _atStateFromGM.activeId) || null)
+    : null;
+}
+function _atSharedRound() {
+  return isGM() ? atRound : (_atStateFromGM?.round || atRound);
+}
+
 function atStartCombat() {
   if (!atCombatants.length) return;
   atActiveIdx = 0;
@@ -5641,6 +5657,12 @@ function atRollAllMonsters() {
 }
 
 function atAcceptAction(combatantId) {
+  // Players don't own turn order — relay Done to the GM, who advances
+  if (!isGM()) {
+    if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-done',
+      payload: { combatantId } });
+    return;
+  }
   const sorted = atSortedCombatants();
   const idx = sorted.findIndex(c => c.id === combatantId);
   if (idx !== -1) atActiveIdx = idx;
@@ -5665,8 +5687,8 @@ function _atUpdateBlink() {
     if (el) el.classList.remove('token-blink');
     _atBlinkTokenId = null;
   }
-  if (!atCombatActive) return;
-  const active = _atActiveCombatant();
+  if (!_atIsCombatActive()) return;
+  const active = _atSharedActive();
   if (!active) return;
   const tokenId = _atFindTokenId(active.id);
   if (tokenId) {
@@ -5969,7 +5991,7 @@ function renderAtList() {
 
   if (isGM() && atCombatants.length && mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-state',
-      payload: { round: atRound, activeId: activeC?.id || null } });
+      payload: { round: atRound, activeId: activeC?.id || null, active: atCombatActive } });
 
   _atUpdateBlink();
 
@@ -6232,8 +6254,8 @@ function renderPlayCharacter() {
 
   // Active combatant banner — visible to everyone during combat
   let activeBannerHtml = '';
-  if (atCombatActive) {
-    const ac = _atActiveCombatant();
+  if (_atIsCombatActive()) {
+    const ac = _atSharedActive();
     if (ac) {
       let acAvatar = '';
       if (ac.type === 'char') {
@@ -6263,7 +6285,7 @@ function renderPlayCharacter() {
           <div style="display:flex;align-items:center;gap:10px;">
             ${acImg}
             <div style="min-width:0;flex:1;">
-              <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${atRound}</div>
+              <div style="font-size:0.6rem;color:var(--gold2);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${_atSharedRound()}</div>
               <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${ac.name}</div>
             </div>
           </div>
@@ -6273,8 +6295,8 @@ function renderPlayCharacter() {
   }
 
   // Active combatant full sheet — shown to all users during combat
-  if (atCombatActive) {
-    const ac = _atActiveCombatant();
+  if (_atIsCombatActive()) {
+    const ac = _atSharedActive();
     if (ac) {
       let acAttrs = null, acRow = null, acSc = null;
       if (ac.type === 'char') {
@@ -6970,7 +6992,10 @@ function subscribeMapRealtime() {
       if (c && c.slots) { c.slots[payload.slot] = null; renderAtList(); renderPlayCharacter(); }
     })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
-      if (!isGM()) { _atStateFromGM = payload; renderPlayCharacter(); }
+      if (!isGM()) { _atStateFromGM = payload; _atUpdateBlink(); renderPlayCharacter(); }
+    })
+    .on('broadcast', { event: 'at-done' }, ({ payload }) => {
+      if (isGM()) atAcceptAction(payload.combatantId);
     })
     .subscribe();
 }
@@ -7485,11 +7510,11 @@ function onTokenDblClick(e, tokenId) {
   if (!t) return;
   const combatantId = t.entity_type === 'character'
     ? 'char::' + t.entity_id : 'creature::' + t.id;
-  const isActive = _atActiveCombatant()?.id === combatantId;
+  const isActive = _atSharedActive()?.id === combatantId;
   const canControl = isGM() || (t.entity_type === 'character' && t.entity_id === currentCharacterId);
   if (isActive && canControl) {
     if (pathMode) { pathCommit(); return; }
-    if (atCombatActive) atOpenSlotModal(combatantId, 'right');
+    if (_atIsCombatActive()) atOpenSlotModal(combatantId, 'right');
   }
 }
 
@@ -7558,9 +7583,9 @@ async function onTokenMouseUp(e) {
       const t = mapTokens[clickedId];
       const combatantId = t?.entity_type === 'character'
         ? 'char::' + t.entity_id : 'creature::' + t?.id;
-      const isActive = _atActiveCombatant()?.id === combatantId;
+      const isActive = _atSharedActive()?.id === combatantId;
       const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
-      if (isActive && canControl && atCombatActive) {
+      if (isActive && canControl && _atIsCombatActive()) {
         showTokenInfo(clickedId); // show the panel too, not just move mode
         enterPathMode(combatantId);
       } else {
@@ -7580,13 +7605,13 @@ async function onTokenMouseUp(e) {
     const t = mapTokens[clickedId];
     const combatantId = t?.entity_type === 'character'
       ? 'char::' + t.entity_id : 'creature::' + t?.id;
-    const isActive = _atActiveCombatant()?.id === combatantId;
+    const isActive = _atSharedActive()?.id === combatantId;
     const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
     // In path mode, only the active-combatant's own token drives waypoints (handled by map click);
     // clicking a DIFFERENT token exits path mode and shows that token's info instead.
     if (pathMode && !isActive) { exitPathMode(); showTokenInfo(clickedId); return; }
     if (pathMode) return;
-    if (isActive && canControl && atCombatActive) {
+    if (isActive && canControl && _atIsCombatActive()) {
       showTokenInfo(clickedId); // show the panel too, not just move mode
       enterPathMode(combatantId);
     } else {
