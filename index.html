@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715d';
+const VERSION = 'v0.1.20260715e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5548,6 +5548,13 @@ function atResetFull() {
 }
 
 // ── Initiative rolling ────────────────────────────────────────────────────────
+// Broadcast a combatant's initiative so every client's tracker stays in sync.
+// Supabase broadcast doesn't echo to the sender, so this can't loop.
+function _atBroadcastInit(c) {
+  if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-initiative',
+    payload: { combatantId: c.id, initiative: c.initiative, tieBreak: c.tieBreak } });
+}
+
 function atRollInitiative(combatantId) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c) return;
@@ -5578,9 +5585,7 @@ function atRollInitiative(combatantId) {
       onComplete: n => {
         c.initiative = n;
         c.tieBreak   = Math.floor(Math.random() * base) + 1;
-        if (!isGM() && mapChannel)
-          mapChannel.send({ type: 'broadcast', event: 'at-initiative',
-            payload: { combatantId, initiative: c.initiative, tieBreak: c.tieBreak } });
+        _atBroadcastInit(c);
         renderAtList();
         renderPlayCharacter();
       },
@@ -5605,6 +5610,7 @@ function atRollInitiative(combatantId) {
     const max     = Math.max(1, base);
     c.initiative  = Math.floor(Math.random() * max) + 1;
     c.tieBreak    = Math.floor(Math.random() * max) + 1;
+    _atBroadcastInit(c);
     renderAtList();
   }
 }
@@ -5629,6 +5635,7 @@ function atRollAllMonsters() {
     }
     c.initiative = Math.floor(Math.random() * base) + 1;
     c.tieBreak   = Math.floor(Math.random() * base) + 1;
+    _atBroadcastInit(c);
   });
   renderAtList();
 }
@@ -5898,7 +5905,7 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
     if (newCond) setCondition(token.id, newCond, true);
   }
 
-  if (!isGM() && mapChannel)
+  if (mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
       payload: { combatantId, slot, label, startRound: atRound, durationRounds, locksAll: !!locksAll } });
 
@@ -5916,6 +5923,9 @@ function atClearSlot(combatantId, slot) {
   const token = _pathFindToken(combatantId);
   if (token && _defCondFromLabel(c.slots[slot]?.label)) _clearDefConds(token);
   c.slots[slot] = null;
+  if (mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-clear-slot',
+      payload: { combatantId, slot } });
   renderAtList();
 }
 
@@ -6941,22 +6951,23 @@ function subscribeMapRealtime() {
       clearStrayRay();
     })
     .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
-      if (isGM()) {
-        const c = atCombatants.find(x => x.id === payload.combatantId);
-        if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); }
-      }
+      const c = atCombatants.find(x => x.id === payload.combatantId);
+      if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); renderPlayCharacter(); }
     })
     .on('broadcast', { event: 'at-set-slot' }, ({ payload }) => {
-      if (isGM()) {
-        const c = atCombatants.find(x => x.id === payload.combatantId);
-        if (c) {
-          if (!c.slots) c.slots = _newSlots();
-          const entry = { label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds, locksAll: payload.locksAll };
-          if (payload.locksAll) { c.slots.right = entry; c.slots.left = null; c.slots.move = null; }
-          else { c.slots[payload.slot] = entry; }
-          renderAtList();
-        }
+      const c = atCombatants.find(x => x.id === payload.combatantId);
+      if (c) {
+        if (!c.slots) c.slots = _newSlots();
+        const entry = { label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds, locksAll: payload.locksAll };
+        if (payload.locksAll) { c.slots.right = entry; c.slots.left = null; c.slots.move = null; }
+        else { c.slots[payload.slot] = entry; }
+        renderAtList();
+        renderPlayCharacter();
       }
+    })
+    .on('broadcast', { event: 'at-clear-slot' }, ({ payload }) => {
+      const c = atCombatants.find(x => x.id === payload.combatantId);
+      if (c && c.slots) { c.slots[payload.slot] = null; renderAtList(); renderPlayCharacter(); }
     })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
       if (!isGM()) { _atStateFromGM = payload; renderPlayCharacter(); }
@@ -7550,6 +7561,7 @@ async function onTokenMouseUp(e) {
       const isActive = _atActiveCombatant()?.id === combatantId;
       const canControl = isGM() || (t?.entity_type === 'character' && t?.entity_id === currentCharacterId);
       if (isActive && canControl && atCombatActive) {
+        showTokenInfo(clickedId); // show the panel too, not just move mode
         enterPathMode(combatantId);
       } else {
         showTokenInfo(clickedId);
@@ -7575,6 +7587,7 @@ async function onTokenMouseUp(e) {
     if (pathMode && !isActive) { exitPathMode(); showTokenInfo(clickedId); return; }
     if (pathMode) return;
     if (isActive && canControl && atCombatActive) {
+      showTokenInfo(clickedId); // show the panel too, not just move mode
       enterPathMode(combatantId);
     } else {
       showTokenInfo(clickedId);
