@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715f';
+const VERSION = 'v0.1.20260715g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6997,7 +6997,36 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'at-done' }, ({ payload }) => {
       if (isGM()) atAcceptAction(payload.combatantId);
     })
-    .subscribe();
+    // Late-joiner sync: a player asks for state on connect; GM answers with
+    // the full tracker so refreshing mid-combat self-heals.
+    .on('broadcast', { event: 'at-sync-request' }, () => {
+      if (isGM() && mapChannel) {
+        const sorted = atSortedCombatants();
+        mapChannel.send({ type: 'broadcast', event: 'at-full-state', payload: {
+          round: atRound,
+          activeId: sorted[atActiveIdx]?.id || null,
+          active: atCombatActive,
+          combatants: atCombatants.map(c => ({
+            id: c.id, name: c.name, avatar: c.avatar, type: c.type,
+            initiative: c.initiative, tieBreak: c.tieBreak, slots: c.slots,
+          })),
+        }});
+      }
+    })
+    .on('broadcast', { event: 'at-full-state' }, ({ payload }) => {
+      if (!isGM()) {
+        atCombatants = (payload.combatants || []).map(c => ({ ...c, slots: c.slots || _newSlots() }));
+        _atStateFromGM = { round: payload.round, activeId: payload.activeId, active: payload.active };
+        atRound = payload.round || 1;
+        _atUpdateBlink();
+        renderAtList();
+        renderPlayCharacter();
+      }
+    })
+    .subscribe(status => {
+      if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
+        mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
+    });
 }
 
 // ─── Map loading ──────────────────────────────────────────────────────────────
