@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260716a';
+const VERSION = 'v0.1.20260716b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5571,28 +5571,33 @@ function _atBroadcastInit(c) {
     payload: { combatantId: c.id, initiative: c.initiative, tieBreak: c.tieBreak } });
 }
 
-function atRollInitiative(combatantId) {
+// Initiative base = Speed + PhysCoord + Intuition, computed through the
+// entity layer so it works for anyone in the caches. On a cache miss
+// (entity created after this client loaded), fetch before rolling.
+async function _atInitBase(combatantId) {
+  let ent = getEntity(combatantId);
+  if (!ent) {
+    if (combatantId.startsWith('char::')) await ensureEntityLoaded(combatantId);
+    else await loadSessionCreatureCache();
+    ent = getEntity(combatantId);
+  }
+  if (!ent) return 0;
+  const a = ent.attrs || {};
+  return Math.round((a.Speed || 0) + (a.PhysCoord || 0) + (a.Intuition || 0));
+}
+
+async function atRollInitiative(combatantId) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c) return;
-  let base = 0;
   if (c.type === 'char') {
     const charId = combatantId.split('::')[1];
-    const row = playCharCache[charId];
-    let initAttrs = null;
+    let base = 0;
     if (charId === currentCharacterId) {
       // use live DOM values for the currently loaded character
-      initAttrs = calcAttributes();
-    } else if (row) {
-      initAttrs = calcAttributesFromData({
-        race: row.species || '', bodyType: row.body_type || '',
-        sex: row.sex || '', age: row.age || '',
-        height: row.height || '', build: row.build || '',
-        social: row.social || '', mental: row.mental || '',
-        stats: row.stats || {},
-      });
-    }
-    if (initAttrs) {
+      const initAttrs = calcAttributes();
       base = Math.round((initAttrs.Speed || 0) + (initAttrs.PhysCoord || 0) + (initAttrs.Intuition || 0));
+    } else {
+      base = await _atInitBase(combatantId);
     }
     openRoller({
       label: `${c.name} — Initiative`,
@@ -5600,30 +5605,15 @@ function atRollInitiative(combatantId) {
       targetLabel: `Roll 1–${Math.max(1, base)} (Speed + PhysCoord + Intuition)`,
       onComplete: n => {
         c.initiative = n;
-        c.tieBreak   = Math.floor(Math.random() * base) + 1;
+        c.tieBreak   = Math.floor(Math.random() * Math.max(1, base)) + 1;
         _atBroadcastInit(c);
         renderAtList();
         renderPlayCharacter();
       },
     });
   } else {
-    // creature — derive base from session_creatures stats
-    const tokenId = combatantId.split('::')[1];
-    const token = mapTokens[tokenId];
-    const sc = token ? sessionCreatureCache[token.entity_id] : null;
-    if (sc) {
-      const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
-      const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
-      const creatureAttrs = calcAttributesFromData({
-        race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
-        sex: sc.sex || '', age: sc.age || 'Adult',
-        height: sc.height || 'Average', build: sc.build || 'Average',
-        social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
-        stats: rawStats,
-      });
-      base = Math.round((creatureAttrs.Speed || 0) + (creatureAttrs.PhysCoord || 0) + (creatureAttrs.Intuition || 0));
-    }
-    const max     = Math.max(1, base);
+    const base = await _atInitBase(combatantId);
+    const max  = Math.max(1, base);
     c.initiative  = Math.floor(Math.random() * max) + 1;
     c.tieBreak    = Math.floor(Math.random() * max) + 1;
     _atBroadcastInit(c);
@@ -5631,28 +5621,13 @@ function atRollInitiative(combatantId) {
   }
 }
 
-function atRollAllMonsters() {
-  atCombatants.filter(c => c.type === 'creature').forEach(c => {
-    const tokenId = c.id.split('::')[1];
-    const token = mapTokens[tokenId];
-    const sc = token ? sessionCreatureCache[token.entity_id] : null;
-    let base = 1;
-    if (sc) {
-      const DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
-      const rawStats = Object.assign({}, DEFAULT_STATS, sc.stats || {});
-      const attrs = calcAttributesFromData({
-        race: sc.species || '', bodyType: sc.body_type || 'Humanoid',
-        sex: sc.sex || '', age: sc.age || 'Adult',
-        height: sc.height || 'Average', build: sc.build || 'Average',
-        social: sc.social || 'Balanced', mental: sc.mental || 'Balanced',
-        stats: rawStats,
-      });
-      base = Math.max(1, Math.round((attrs.Speed || 0) + (attrs.PhysCoord || 0) + (attrs.Intuition || 0)));
-    }
+async function atRollAllMonsters() {
+  for (const c of atCombatants.filter(x => x.type === 'creature')) {
+    const base = Math.max(1, await _atInitBase(c.id));
     c.initiative = Math.floor(Math.random() * base) + 1;
     c.tieBreak   = Math.floor(Math.random() * base) + 1;
     _atBroadcastInit(c);
-  });
+  }
   renderAtList();
 }
 
@@ -8541,6 +8516,23 @@ function subscribeTokenRealtime() {
       sessionCreatureCache[row.id] = row;
       refreshUI();
     })
+    // New entities created after this client loaded (a player makes a new
+    // character, the GM spawns a creature) must enter the cache immediately —
+    // otherwise initiative/attack math sees no data until a full reload.
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'characters',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
+      playCharCache[row.id] = row;
+      refreshUI();
+    })
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'session_creatures',
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
+      sessionCreatureCache[row.id] = row;
+      refreshUI();
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'characters' },
+      ({ old: row }) => { if (row?.id) { delete playCharCache[row.id]; refreshUI(); } })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'session_creatures' },
+      ({ old: row }) => { if (row?.id) { delete sessionCreatureCache[row.id]; refreshUI(); } })
     .subscribe();
 }
 
