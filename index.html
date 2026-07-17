@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260716c';
+const VERSION = 'v0.1.20260716d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8503,13 +8503,12 @@ function subscribeTokenRealtime() {
       }
       refreshUI(); // panel may show "no token on map" for this entity
     })
-    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'map_tokens',
-        filter: `campaign_id=eq.${currentCampaignId}` }, ({ old: t }) => {
-      delete mapTokens[t.id];
-      document.getElementById('token-' + t.id)?.remove();
-      if (isGM()) refreshTokenPanel();
-      refreshUI();
-    })
+    // NOTE: no filter — Postgres DELETE payloads only carry the primary key,
+    // so a campaign_id filter never matches and the event is never delivered.
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'map_tokens' },
+      ({ old: t }) => { if (t?.id) _removeTokenLocal(t.id); })
+    .on('broadcast', { event: 'token-removed' },
+      ({ payload }) => { if (payload?.id) _removeTokenLocal(payload.id); })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'map_tokens',
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
       mapTokens[t.id] = t;
@@ -8584,20 +8583,28 @@ async function addCharacterToken(charId, charName, avatarPath) {
   // INSERT triggers Realtime → upsertTokenElement + refreshTokenPanel
 }
 
-async function removeToken(tokenId) {
-  // optimistic update — don't wait for Realtime (DELETE old record may lack campaign_id)
+// Remove a token from local state (map element, cache, action tracker) —
+// used by the GM's own removal and by remote delete events. Idempotent.
+function _removeTokenLocal(tokenId) {
   const removed = mapTokens[tokenId];
+  if (!removed) return;
   delete mapTokens[tokenId];
   document.getElementById('token-' + tokenId)?.remove();
-  refreshTokenPanel();
-  // remove from action tracker
-  if (removed) {
-    const combatantId = removed.entity_type === 'character'
-      ? 'char::' + removed.entity_id
-      : 'creature::' + removed.id;
-    const idx = atCombatants.findIndex(c => c.id === combatantId);
-    if (idx !== -1) { atCombatants.splice(idx, 1); renderAtList(); }
-  }
+  if (isGM()) refreshTokenPanel();
+  const combatantId = removed.entity_type === 'character'
+    ? 'char::' + removed.entity_id
+    : 'creature::' + removed.id;
+  const idx = atCombatants.findIndex(c => c.id === combatantId);
+  if (idx !== -1) { atCombatants.splice(idx, 1); renderAtList(); }
+  refreshUI();
+}
+
+async function removeToken(tokenId) {
+  _removeTokenLocal(tokenId); // optimistic — don't wait for Realtime
+  // Broadcast removal explicitly: filtered postgres DELETE events are
+  // unreliable (payload only carries the primary key), so the unfiltered
+  // DELETE handler plus this broadcast make removal reach every client.
+  tokenChannel?.send({ type: 'broadcast', event: 'token-removed', payload: { id: tokenId } });
   await sb.from('map_tokens').delete().eq('id', tokenId);
 }
 
