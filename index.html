@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260716b';
+const VERSION = 'v0.1.20260716c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8489,18 +8489,33 @@ function subscribeTokenRealtime() {
       mapTokens[t.id] = t;
       upsertTokenElement(t);
       if (isGM()) refreshTokenPanel();
+      // Join the action tracker immediately (same as atAutoAddMapTokens at load)
+      if (t.entity_type === 'character' || t.entity_type === 'creature') {
+        const cid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+        if (!atCombatants.find(c => c.id === cid)) {
+          const name = t.entity_type === 'character'
+            ? (playCharCache[t.entity_id]?.name || t.label || '?') : (t.label || t.id);
+          atCombatants.push({ id: cid, name, avatar: t.avatar_url || null,
+            type: t.entity_type === 'character' ? 'char' : 'creature',
+            initiative: null, tieBreak: null, slots: _newSlots() });
+          renderAtList();
+        }
+      }
+      refreshUI(); // panel may show "no token on map" for this entity
     })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'map_tokens',
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ old: t }) => {
       delete mapTokens[t.id];
       document.getElementById('token-' + t.id)?.remove();
       if (isGM()) refreshTokenPanel();
+      refreshUI();
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'map_tokens',
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
       mapTokens[t.id] = t;
       if (t.id !== dragTokenId) upsertTokenElement(t);
       _refreshTokenBadges(t.id);
+      if (t.id !== dragTokenId) refreshUI(); // conditions arrive via UPDATE
     })
     // Entity data changes (damage, stats, held items…) from other clients —
     // replace the cache row (fresh row has no _attrs, so attributes recompute)
