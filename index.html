@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260715g';
+const VERSION = 'v0.1.20260716a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6088,6 +6088,10 @@ async function atAutoAddMapTokens() {
 function renderPlayCharacter() {
   const el = document.getElementById('play-char-content');
   if (!el) return;
+
+  // Phase 2a: unified renderer in panels.js. Legacy body below is a fallback
+  // that only runs if panels.js failed to load; delete after rollout.
+  if (typeof renderPlayPanel === 'function') { renderPlayPanel(el); return; }
 
   // Pull live values from the builder
   const nameEl  = document.getElementById('char-name');
@@ -8182,6 +8186,22 @@ async function showTokenInfo(tokenId) {
 
   _tokenInfoViewId = tokenId; // refreshUI() re-renders this view on data changes
 
+  // Phase 2a: unified renderer in panels.js. Legacy body below is a fallback
+  // that only runs if panels.js failed to load; delete after rollout.
+  if (typeof renderEntityPanel === 'function') {
+    const ref = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + tokenId;
+    if (t.entity_type === 'character' && !playCharCache[t.entity_id]) {
+      el.innerHTML = `<div style="color:var(--text-dim);font-size:0.8rem;">Loading…</div>`;
+      const ok = await ensureEntityLoaded(ref);
+      if (!ok) {
+        el.innerHTML = `<div style="color:var(--text-dim);font-size:0.8rem;">Could not load character.</div>`;
+        return;
+      }
+    }
+    renderEntityPanel(ref, { header: 'back' });
+    return;
+  }
+
   // Header with back button
   const backLabel = isGM() ? '← Back' : '← My Character';
   const backBtn = `<button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">${backLabel}</button>`;
@@ -9835,5 +9855,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
+<script src="panels.js"></script>
 </body>
 </html>
