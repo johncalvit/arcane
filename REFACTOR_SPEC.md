@@ -143,6 +143,75 @@ One entry point: `refreshUI(ref?)`. If the currently displayed panel shows
 that entity (or no ref given), re-render it; always refresh token badges and
 health-related overlays. `updateEntity` and the realtime handler call this.
 
+### 2.4 Combat action dialog (approved design, 2026-07-16)
+
+Replaces the three per-slot modals (R / L / M) with **one dialog** whose layout
+*is* the body hierarchy. Guiding principle: **a VTT manages details, it does
+not enforce rules** — the tool records what the table decides; it warns, it
+never refuses.
+
+#### Body plans
+
+Channels (independently usable body systems) are data, keyed by body type.
+Channels cover attack/defense systems only — **locomotion is not a channel**;
+movement is defined on the map (path mode), not in the dialog.
+
+```js
+const BODY_PLANS = {
+  Humanoid:   [{key:'right', label:'Right arm'}, {key:'left', label:'Left arm'}],
+  Serpentine: [{key:'bite',  label:'Bite'},      {key:'body', label:'Constrict'}],
+  Dragon:     [{key:'bite'}, {key:'claws'}, {key:'breath'}, {key:'tail'}],
+  Insectoid:  [{key:'mandibles'}, {key:'forelimbs'}],
+  // adding a creature type is a data edit, not new UI
+};
+```
+
+`slots` generalizes from hardcoded `right/left/move` to `slots[channelKey]`,
+plus the existing `move` slot which is auto-populated by map movement (path
+commit), never assigned from the dialog. Natural weapons (bite/claw/sting
+rows with reach, damage, hit formulas) join the same tables MELEE_WEAPONS
+uses, so the attack/defense/damage pipeline is unchanged for any creature.
+
+#### Dialog layout (top to bottom)
+
+1. **Header** — name, round, summary of current selections + stamina cost,
+   close button. If the entity has a blocking condition (unconscious,
+   stunned…), show a soft banner here; everything stays clickable (GM
+   narrates exceptions, the tool records them).
+2. **Movement indicator** — read-only: how much of this round's movement is
+   already used (from path mode). Not a section of options.
+3. **Full body** section — Evade, Retreat, Sentinel, Charge, Go prone, Hide,
+   etc. Header states the consequence inline: "replaces arm actions".
+   **Movement interaction rule: if ≥50% of the round's movement is already
+   used, Evade and Retreat are disabled for that round** (grayed with the
+   reason shown — the one deliberate exception to never-disable, because it
+   reflects already-spent movement, not a rules judgment).
+4. **One section per channel** from the body plan — actions derived from the
+   held item in that channel (or natural weapon), with damage tags.
+5. **Custom action** free-text field — the escape hatch is the point.
+6. **End turn** button (also stays on the active-turn banner).
+
+#### Selection semantics — toggles, not gates
+
+- Selecting a full-body action lights it and visibly clears channel
+  selections; selecting a channel action clears any full-body selection.
+  Always one click to change your mind; nothing refuses.
+- Simultaneous channel actions (Stab + Block) are just two lit chips in two
+  sections.
+- Multi-round durations shown on the chip; occupied channels gray with
+  remaining rounds instead of the lock icon.
+- The `alert()` on unconscious/stunned becomes the header banner (see above).
+
+Entry points: one "Choose actions" button on the active-turn banner, or
+clicking a body-strip chip opens the dialog scrolled to that section.
+Everything else (slot data model, broadcasts, durations, stamina costs,
+defensive-condition mapping) carries over untouched.
+
+Build order within Phase 2: **2a** — consolidate panels into `panels.js` as
+specced in 2.1–2.3; **2b** — replace the combat section with this dialog +
+BODY_PLANS. Building the dialog before consolidation would mean building it
+twice.
+
 ---
 
 ## Part 3 — Campaigns and character portability
