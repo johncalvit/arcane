@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717a';
+const VERSION = 'v0.1.20260717b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5376,6 +5376,7 @@ const AT_MOVE = [
 ];
 const AT_FULLBODY = [
   { label: 'Evade',          dur: 2 },
+  { label: 'Retreat',        dur: 2 },
   { label: 'Sentinel',       dur: 99 },
   { label: 'Change Item Held', dur: 1 },
   { label: 'Go Prone',       dur: 1 },
@@ -5414,7 +5415,10 @@ const SPELL_ACTIONS = [
 // combatant: { id, name, avatar, type, initiative, tieBreak,
 //   slots: { right: null|{label,startRound,durationRounds,locksAll},
 //            left:  null|{...}, move: null|{...} } }
-function _newSlots() { return { right: null, left: null, move: null }; }
+// Slot keys are body-plan channels (right/left for humanoids, bite/claws/…
+// for other body types) plus 'move' (set by map path mode) and 'full'
+// (full-body actions that occupy every channel).
+function _newSlots() { return { full: null, right: null, left: null, move: null }; }
 let atCombatants  = [];
 let atRound       = 1;
 let atActiveIdx   = 0;
@@ -5481,7 +5485,7 @@ function atNext() {
     atActiveIdx = 0;
     // Stamina recovery: +1 for combatants who took no actions this round
     atCombatants.forEach(c => {
-      if (!c.slots || (!c.slots.right && !c.slots.left && !c.slots.move)) {
+      if (!c.slots || Object.values(c.slots).every(s => !s)) {
         const [type, rawId] = c.id.split('::');
         if (type === 'char') {
           recoverStamina('character', rawId, 1);
@@ -5496,7 +5500,7 @@ function atNext() {
     atCombatants.forEach(c => {
       if (!c.slots) return;
       const token = _pathFindToken(c.id);
-      for (const s of ['right', 'left', 'move']) {
+      for (const s of Object.keys(c.slots)) {
         const sl = c.slots[s];
         if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound) {
           if (token && _defCondFromLabel(sl.label)) _clearDefConds(token);
@@ -5678,117 +5682,12 @@ function atRemoveCombatant(id) {
 
 let atModalSlot = null; // 'right' | 'left' | 'move'
 
+// Phase 2b: the per-slot modals are replaced by the unified action dialog
+// (atOpenActionDialog in panels.js). Kept as an alias for existing callers.
 async function atOpenSlotModal(combatantId, slot) {
   atModalTarget = combatantId;
   atModalSlot   = slot;
-  const c = atCombatants.find(x => x.id === combatantId);
-  const slotTitles = { right: '⚔ Right Arm', left: '🛡 Left Arm', move: '🏃 Move' };
-  document.getElementById('at-modal-title').textContent =
-    `${c?.name || ''} — ${slotTitles[slot] || slot}`;
-  document.getElementById('at-free-label').value = '';
-  document.getElementById('at-free-dur').value = '1';
-  document.getElementById('at-action-modal').style.display = 'flex';
-
-  const grid = document.getElementById('at-action-grid');
-  grid.innerHTML = '';
-
-  // Resolve held items from cache (no DB call needed)
-  let rightItem = '', leftItem = '', hasArcane = false;
-  if (c?.type === 'char') {
-    const row = playCharCache[combatantId.split('::')[1]];
-    rightItem = row?.held_items?.right || '';
-    leftItem  = row?.held_items?.left  || '';
-    const inv = row?.skills || {};
-    hasArcane = Object.keys(inv).some(k => (SKILLS.find(s => s.name === k) || {}).type === 'Arcane');
-  } else if (c?.type === 'creature') {
-    const token = mapTokens[combatantId.split('::')[1]];
-    const sc = token ? sessionCreatureCache[token.entity_id] : null;
-    rightItem = sc?.held_items?.right || '';
-    leftItem  = sc?.held_items?.left  || '';
-  }
-
-  // Check prone condition for this combatant
-  const _token = _pathFindToken(combatantId);
-  const _conds = _token ? getConditions(_token.id) : new Set();
-  const isProne = _conds.has('prone');
-
-  if (slot === 'move') {
-    const moveActions = isProne
-      ? [{ label: 'Stand Up', dur: 2 }, ...AT_MOVE.filter(a => a.label !== 'Stand Up')]
-      : AT_MOVE;
-    if (isProne) {
-      const proneHdr = document.createElement('div');
-      proneHdr.className = 'at-section-header';
-      proneHdr.style.cssText = 'color:var(--gold2);border-top:none;padding-top:0;';
-      proneHdr.textContent = '⬇ Prone — Stand Up first!';
-      grid.appendChild(proneHdr);
-      const standBtn = document.createElement('button');
-      standBtn.className = 'at-action-pick-btn';
-      standBtn.style.cssText = 'border-color:var(--gold);background:rgba(201,168,76,0.15);grid-column:1/-1;';
-      standBtn.innerHTML = `<div class="at-pick-name">Stand Up</div><div class="at-pick-dur">1r</div>`;
-      standBtn.onclick = () => atSetSlot(combatantId, slot, 'Stand Up', 2, false);
-      grid.appendChild(standBtn);
-    }
-    _atSection(grid, '🏃 Movement', moveActions.filter(a => !(isProne && a.label === 'Stand Up')), combatantId, slot, false);
-  } else {
-    const heldItem = slot === 'right' ? rightItem : leftItem;
-    if (heldItem) {
-      const norm = normalizeWeaponName(heldItem);
-      const meleeRows  = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
-      const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
-      if (meleeRows.length || rangedRows.length) {
-        _atWeaponSection(grid, `⚔ ${heldItem}`, meleeRows, rangedRows, combatantId, slot, heldItem);
-      }
-    }
-    if (!heldItem) _atSection(grid, '✊ Unarmed', AT_UNARMED, combatantId, slot, false);
-    if (hasArcane) _atSection(grid, '✨ Arcane', SPELL_ACTIONS, combatantId, slot, false);
-    _atSection(grid, '⚡ Full Body — locks all slots', AT_FULLBODY, combatantId, slot, true);
-  }
-}
-
-function _atSection(grid, title, actions, combatantId, slot, locksAll) {
-  const hdr = document.createElement('div');
-  hdr.className = 'at-section-header';
-  hdr.textContent = title;
-  grid.appendChild(hdr);
-  actions.forEach(a => {
-    const btn = document.createElement('button');
-    btn.className = 'at-action-pick-btn';
-    const durLabel = a.dur >= 99 ? '∞' : `${Math.max(1, Math.ceil(a.dur / 3))}r`;
-    btn.innerHTML = `<div class="at-pick-name">${a.label}</div><div class="at-pick-dur">${durLabel}</div>`;
-    btn.onclick = () => atSetSlot(combatantId, slot, a.label, a.dur, locksAll);
-    grid.appendChild(btn);
-  });
-}
-
-function _atWeaponSection(grid, title, meleeRows, rangedRows, combatantId, slot, itemName) {
-  const hdr = document.createElement('div');
-  hdr.className = 'at-section-header';
-  hdr.textContent = title;
-  grid.appendChild(hdr);
-  const allRows = [
-    ...meleeRows.map(r => ({ r, isRanged: false })),
-    ...rangedRows.map(r => ({ r, isRanged: true })),
-  ];
-  const DEFENSIVE_ACTIONS = new Set(['Block', 'Parry']);
-  allRows.forEach(({ r, isRanged }) => {
-    const btn = document.createElement('button');
-    btn.className = 'at-action-pick-btn';
-    const extra = r.damageMax ? ` · dmg ${r.damageMax}` : r.rangeIncrement ? ` · ${r.rangeIncrement}ft` : '';
-    const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
-              : r.action.toLowerCase().includes('aim') ? 2 : 1;
-    btn.innerHTML = `<div class="at-pick-name">${r.action}${extra}</div><div class="at-pick-dur">${dur}r</div>`;
-    const isDefensive = DEFENSIVE_ACTIONS.has(r.action);
-    btn.onclick = () => {
-      atSetSlot(combatantId, slot, `${r.action} — ${itemName}`, dur * 3, false);
-      if (!isDefensive) {
-        const rangeFt = isRanged ? (r.rangeIncrement || 5) : (r.reach ?? 0);
-        enterAttackMode(combatantId, itemName, r.action, isRanged, rangeFt);
-      }
-      // Defensive actions: just set the slot; incoming attacks auto-detect via conditions
-    };
-    grid.appendChild(btn);
-  });
+  atOpenActionDialog(combatantId, slot);
 }
 
 function atCloseModal() {
@@ -5823,11 +5722,8 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   if (!c.slots) c.slots = _newSlots();
 
   const token = _pathFindToken(combatantId);
-  const conds = token ? getConditions(token.id) : new Set();
-  if (conds.has('stunned') || conds.has('paralyzed') || conds.has('unconscious')) {
-    const which = conds.has('paralyzed') ? 'paralyzed' : conds.has('unconscious') ? 'unconscious' : 'stunned';
-    if (label !== 'Stand Up') { alert(`${c.name} is ${which} and cannot act.`); return; }
-  }
+  // Manage, don't enforce: blocking conditions (unconscious/stunned/…) show
+  // as a banner in the action dialog; the tool never refuses an assignment.
 
   const durationRounds = dur >= 99 ? 9999 : Math.max(1, Math.ceil(dur / 3));
   const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
@@ -5850,18 +5746,18 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   }
 
   if (locksAll) {
-    c.slots.right = entry;
-    c.slots.left  = null;
-    c.slots.move  = null;
+    // Full-body action claims every channel
+    for (const k of Object.keys(c.slots)) c.slots[k] = null;
+    c.slots.full = entry;
   } else {
     c.slots[slot] = entry;
+    if (slot !== 'move') c.slots.full = null; // channel action releases full-body
   }
 
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
 
   // Set or clear defensive conditions based on what was just assigned
   if (token) {
-    const prevSlot = locksAll ? c.slots.right : (c.slots[slot] || null); // already overwritten above — captured before
     const newCond = _defCondFromLabel(label);
     _clearDefConds(token);
     if (newCond) setCondition(token.id, newCond, true);
@@ -5874,7 +5770,6 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   const staminaCost = _staminaCostForLabel(label);
   if (staminaCost) _deductStamina(combatantId, staminaCost);
 
-  atCloseModal();
   renderAtList();
   renderPlayCharacter();
 }
@@ -5891,12 +5786,6 @@ function atClearSlot(combatantId, slot) {
   renderAtList();
 }
 
-function atPickFreeform() {
-  const label  = document.getElementById('at-free-label').value.trim();
-  const rounds = parseInt(document.getElementById('at-free-dur').value) || 1;
-  if (!label || !atModalSlot) return;
-  atSetSlot(atModalTarget, atModalSlot, label, rounds * 3, false);
-}
 
 function renderAtList() {
   document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
@@ -6537,8 +6426,14 @@ function subscribeMapRealtime() {
       if (c) {
         if (!c.slots) c.slots = _newSlots();
         const entry = { label: payload.label, startRound: payload.startRound, durationRounds: payload.durationRounds, locksAll: payload.locksAll };
-        if (payload.locksAll) { c.slots.right = entry; c.slots.left = null; c.slots.move = null; }
-        else { c.slots[payload.slot] = entry; }
+        if (payload.feet != null) entry.feet = payload.feet;
+        if (payload.locksAll) {
+          for (const k of Object.keys(c.slots)) c.slots[k] = null;
+          c.slots.full = entry;
+        } else {
+          c.slots[payload.slot] = entry;
+          if (payload.slot !== 'move') c.slots.full = null;
+        }
         renderAtList();
         renderPlayCharacter();
       }
@@ -8440,7 +8335,13 @@ async function pathCommit() {
     if (!c.slots) c.slots = _newSlots();
     const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
     const warned = feet != null && secs > 3;
-    c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds: Math.max(1, Math.ceil(secs / 3)), locksAll: false };
+    const durationRounds = Math.max(1, Math.ceil(secs / 3));
+    c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds,
+                     locksAll: false, feet: feet != null ? Math.round(feet) : 0 };
+    if (mapChannel)
+      mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
+        payload: { combatantId: combId, slot: 'move', label: c.slots.move.label,
+                   startRound: atRound, durationRounds, locksAll: false, feet: c.slots.move.feet } });
     renderAtList();
     switchGmTab('actions');
   }
@@ -9034,18 +8935,7 @@ switchGmTab = function(tab) {
 
 <!-- Action Picker Modal -->
 <div id="at-action-modal" class="at-modal-overlay" style="display:none;" onclick="if(event.target===this)atCloseModal()">
-  <div class="at-modal">
-    <h3 id="at-modal-title">Choose Next Action</h3>
-    <div class="at-action-grid" id="at-action-grid"></div>
-    <div class="at-freeform">
-      <input type="text" id="at-free-label" placeholder="Custom action…">
-      <input type="number" id="at-free-dur" placeholder="rounds" min="1" max="40" value="1">
-      <button class="at-btn primary" onclick="atPickFreeform()">Add</button>
-    </div>
-    <div style="display:flex;gap:8px;justify-content:flex-end;">
-      <button class="at-btn" onclick="atCloseModal()">Cancel</button>
-    </div>
-  </div>
+  <div class="at-modal" id="at-dialog-body"><!-- built by atOpenActionDialog (panels.js) --></div>
 </div>
 
 <!-- ─── MOVE TO CAMPAIGN MODAL ──────────────────────────────────────────── -->
@@ -9152,6 +9042,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js"></script>
+<script src="panels.js?v=20260717b"></script>
 </body>
 </html>

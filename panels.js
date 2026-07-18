@@ -78,28 +78,43 @@ function _paSecCombat(ent, canEdit, prefixHtml) {
   const rollBtn = !canEdit ? '' : (c.initiative == null
     ? `<button class="at-btn primary" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🎲 Roll</button>`
     : `<button class="at-btn" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;" title="Re-roll">↺</button>`);
-  const slotDefs = [{ key: 'right', icon: '⚔' }, { key: 'left', icon: '🛡' }, { key: 'move', icon: '🏃' }];
-  const slotsHtml = slotDefs.map(({ key, icon }) => {
-    const sl = c.slots[key];
-    const locked = key !== 'right' && c.slots.right?.locksAll;
-    if (locked) return `<div class="at-slot at-slot-locked"><span class="at-slot-icon">🔒</span><span class="at-slot-action empty">${_paEsc(c.slots.right?.label || '')}</span></div>`;
-    let durTag = '';
-    if (sl) {
-      if (sl.durationRounds < 9999) { if (sl.durationRounds > 1) durTag = `<span class="at-slot-dur">${sl.startRound + sl.durationRounds - round}r</span>`; }
-      else durTag = `<span class="at-slot-dur">∞</span>`;
-    }
-    const actionSpan = sl ? `<span class="at-slot-action">${_paEsc(sl.label)}</span>${durTag}` : `<span class="at-slot-action empty">—</span>`;
-    const setBtn = canEdit ? `<button class="at-btn at-slot-set-btn" data-pa="open-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">${sl ? '⚙' : '+'}</button>` : '';
-    const clrBtn = (canEdit && sl) ? `<button class="at-btn danger at-slot-clr-btn" data-pa="clear-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">✕</button>` : '';
-    return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
-  }).join('');
+  const durTagOf = (sl) => {
+    if (!sl) return '';
+    if (sl.durationRounds >= 9999) return `<span class="at-slot-dur">∞</span>`;
+    return sl.durationRounds > 1 ? `<span class="at-slot-dur">${sl.startRound + sl.durationRounds - round}r</span>` : '';
+  };
+  const full = c.slots.full;
+  // Channel rows come from the entity's body plan, plus movement
+  const slotDefs = [
+    ..._paBodyPlan(ent.bodyType).map(ch => ({ key: ch.key, icon: ch.icon || '⚔' })),
+    { key: 'move', icon: '🏃' },
+  ];
+  let slotsHtml = '';
+  if (full) {
+    const clrBtn = canEdit ? `<button class="at-btn danger at-slot-clr-btn" data-pa="clear-slot" data-id="${_paEsc(ent.ref)}" data-slot="full">✕</button>` : '';
+    slotsHtml += `<div class="at-slot"><span class="at-slot-icon">⚡</span><span class="at-slot-action">${_paEsc(full.label)}</span>${durTagOf(full)}${clrBtn}</div>`;
+    slotsHtml += slotDefs.map(({ icon }) =>
+      `<div class="at-slot at-slot-locked"><span class="at-slot-icon">${icon}</span><span class="at-slot-action empty">— full body —</span></div>`).join('');
+  } else {
+    slotsHtml += slotDefs.map(({ key, icon }) => {
+      const sl = c.slots[key];
+      const actionSpan = sl ? `<span class="at-slot-action">${_paEsc(sl.label)}</span>${durTagOf(sl)}` : `<span class="at-slot-action empty">—</span>`;
+      const setBtn = canEdit ? `<button class="at-btn at-slot-set-btn" data-pa="open-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">${sl ? '⚙' : '+'}</button>` : '';
+      const clrBtn = (canEdit && sl) ? `<button class="at-btn danger at-slot-clr-btn" data-pa="clear-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">✕</button>` : '';
+      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
+    }).join('');
+  }
+  const actionsBtn = canEdit
+    ? `<button class="at-btn primary" data-pa="open-slot" data-id="${_paEsc(ent.ref)}" data-slot="" style="width:100%;margin-top:6px;">⚡ Choose Actions</button>`
+    : '';
   return _paSection('Combat', `
     ${prefixHtml || ''}
     <div class="at-action-row" style="margin-bottom:6px;">
       <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
       ${initBadge}${rollBtn}
     </div>
-    <div class="at-slots">${slotsHtml}</div>`);
+    <div class="at-slots">${slotsHtml}</div>
+    ${actionsBtn}`);
 }
 
 function _paSecStats(attrs) {
@@ -303,13 +318,11 @@ function _paActiveBanner() {
     ? `<img src="${_paEsc(acAvatar)}" style="width:36px;height:36px;object-fit:cover;object-position:top center;border-radius:50%;border:2px solid var(--gold);flex-shrink:0;">`
     : `<div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⚔</div>`;
   const acSafeId = ac.id.replace(/'/g, "\\'");
-  const acHasAction = ac.slots?.right || ac.slots?.left || ac.slots?.move;
+  const acHasAction = Object.values(ac.slots || {}).some(Boolean);
   const canControl = isGM() || (ac.type === 'char' && ac.id.split('::')[1] === currentCharacterId);
   const actionBtns = canControl ? `
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;">
-      <button class="at-btn primary" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','right')" title="Right arm">⚔ R</button>
-      <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','left')" title="Left arm">🛡 L</button>
-      <button class="at-btn" style="flex:1;" onclick="atOpenSlotModal('${acSafeId}','move')" title="Movement">🏃 M</button>
+      <button class="at-btn primary" style="flex:2;" onclick="atOpenSlotModal('${acSafeId}','')">⚡ Actions</button>
       <button class="at-btn${acHasAction ? ' primary' : ''}" style="flex:1;" onclick="atAcceptAction('${acSafeId}')">✓ Done</button>
     </div>` : '';
   return `
@@ -394,4 +407,262 @@ function renderPlayPanel(el) {
     loadout,
     combatPrefix,
   });
+}
+
+// ═══ Combat action dialog (Phase 2b — spec §2.4) ══════════════════════════════
+// One dialog whose layout is the body hierarchy: full-body actions on top,
+// then one section per body-plan channel. Movement is defined on the map;
+// the dialog only shows how much of the round's movement is already used.
+// Principle: manage details, don't enforce rules — conditions are a banner,
+// not a gate. The one deliberate exception: ≥50% movement used disables
+// Evade/Retreat, because it reflects movement already spent.
+
+const BODY_PLANS = {
+  Humanoid:   [ { key: 'right',     label: 'Right Arm', icon: '⚔' },
+                { key: 'left',      label: 'Left Arm',  icon: '🛡' } ],
+  Quadruped:  [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
+                { key: 'claws',     label: 'Claws',     icon: '🐾' } ],
+  Serpentine: [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
+                { key: 'constrict', label: 'Constrict', icon: '🐍' } ],
+  Avian:      [ { key: 'beak',      label: 'Beak',      icon: '🦅' },
+                { key: 'talons',    label: 'Talons',    icon: '🐾' } ],
+  Insectoid:  [ { key: 'mandibles', label: 'Mandibles', icon: '🪲' },
+                { key: 'forelimbs', label: 'Forelimbs', icon: '🦗' } ],
+  Draconic:   [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
+                { key: 'claws',     label: 'Claws',     icon: '🐾' },
+                { key: 'breath',    label: 'Breath',    icon: '🔥' },
+                { key: 'tail',      label: 'Tail',      icon: '🐉' } ],
+};
+function _paBodyPlan(bodyType) { return BODY_PLANS[bodyType] || BODY_PLANS.Humanoid; }
+
+let _dlgCombatantId = null;
+
+function atOpenActionDialog(combatantId /*, focusKey */) {
+  _dlgCombatantId = combatantId;
+  const overlay = document.getElementById('at-action-modal');
+  const body    = document.getElementById('at-dialog-body');
+  if (!overlay || !body) return;
+  overlay.style.display = 'flex';
+  _dlgRender(body);
+}
+
+function _dlgDurLabel(dur) {
+  return dur >= 99 ? '∞' : `${Math.max(1, Math.ceil(dur / 3))}r`;
+}
+
+// One selectable chip. data-dact carries the click behavior.
+function _dlgChip({ label, sub, lit, disabled, title, data }) {
+  const base = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;font-size:0.78rem;font-family:Georgia,serif;user-select:none;border:1px solid ';
+  const style = disabled
+    ? base + 'var(--border);background:var(--bg3);color:var(--text-dim);opacity:0.4;cursor:not-allowed;'
+    : lit
+      ? base + 'var(--gold);background:rgba(201,168,76,0.18);color:var(--gold2);cursor:pointer;'
+      : base + 'var(--border);background:var(--bg3);color:var(--text);cursor:pointer;';
+  const attrs = disabled ? '' : Object.entries(data || {})
+    .map(([k, v]) => `data-${k}="${_paEsc(v)}"`).join(' ');
+  return `<div ${attrs} title="${_paEsc(title || '')}" style="${style}">
+    ${_paEsc(label)}${sub ? `<span style="font-size:0.68rem;color:${lit ? 'var(--gold2)' : 'var(--text-dim)'};">${_paEsc(sub)}</span>` : ''}${lit ? ' ✓' : ''}
+  </div>`;
+}
+
+function _dlgSection(title, chipsHtml, dimmed) {
+  return `
+    <div style="margin-top:12px;${dimmed ? 'opacity:0.5;' : ''}">
+      <div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:5px;">${title}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;">${chipsHtml}</div>
+    </div>`;
+}
+
+function _dlgRender(body) {
+  const combatantId = _dlgCombatantId;
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c) { atCloseModal(); return; }
+  if (!c.slots) c.slots = _newSlots();
+  const ent = getEntity(combatantId);
+  const attrs = ent?.attrs || {};
+  const conds = ent?.conditions || new Set();
+  const plan  = _paBodyPlan(ent?.bodyType);
+  const round = _atSharedRound();
+
+  // ── Header + condition banner ──────────────────────────────────────────────
+  const picked = Object.entries(c.slots).filter(([, s]) => s).map(([, s]) => s.label);
+  const staminaCost = picked.reduce((sum, l) => sum + _staminaCostForLabel(l), 0);
+  const summary = picked.length
+    ? `${picked.join(' · ')}${staminaCost ? ` — ${staminaCost} stamina` : ''}`
+    : 'No actions chosen yet';
+  const blockers = ['unconscious', 'dead', 'stunned', 'paralyzed'].filter(k => conds.has(k));
+  const banner = blockers.length
+    ? `<div style="background:rgba(224,85,85,0.12);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.75rem;color:#e05555;margin-bottom:8px;">
+        ${_paEsc(c.name)} is ${blockers.join(', ')} — actions recorded anyway; the table decides.
+      </div>`
+    : '';
+
+  // ── Movement indicator (read-only; movement happens on the map) ────────────
+  const mv = c.slots.move;
+  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, 0) || 5) * 3));
+  const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft\)/) || [])[1] || '0', 10)) : 0;
+  const movePct  = Math.min(100, Math.round((usedFeet / maxFeet) * 100));
+  const halfUsed = usedFeet >= maxFeet / 2;
+  const moveHtml = `
+    <div style="margin-top:10px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
+        <span>🏃 Movement this round</span><span>${usedFeet} / ${maxFeet} ft</span>
+      </div>
+      <div style="background:var(--bg3);border-radius:3px;height:6px;overflow:hidden;">
+        <div style="width:${movePct}%;height:100%;background:${halfUsed ? '#c97040' : 'var(--gold)'};"></div>
+      </div>
+      ${halfUsed ? `<div style="font-size:0.62rem;color:#c97040;margin-top:2px;">Over half movement used — Evade and Retreat unavailable this round.</div>` : ''}
+    </div>`;
+
+  // ── Full body section ──────────────────────────────────────────────────────
+  const isProne = conds.has('prone');
+  let fullChips = '';
+  if (isProne) {
+    fullChips += _dlgChip({
+      label: 'Stand Up', sub: '1r', lit: c.slots.move?.label === 'Stand Up',
+      title: 'Prone — stand up first!',
+      data: { dact: 'set', slot: 'move', label: 'Stand Up', dur: 2, locks: 0 },
+    });
+  }
+  fullChips += AT_FULLBODY.map(a => {
+    const lit = c.slots.full?.label === a.label;
+    const disabled = halfUsed && (a.label === 'Evade' || a.label === 'Retreat');
+    return _dlgChip({
+      label: a.label, sub: _dlgDurLabel(a.dur), lit, disabled,
+      title: disabled ? 'Over half movement used this round' : '',
+      data: lit ? { dact: 'off', slot: 'full' }
+                : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 },
+    });
+  }).join('');
+
+  // ── Channel sections from the body plan ────────────────────────────────────
+  const fullActive = !!c.slots.full;
+  const channelHtml = plan.map(ch => {
+    const cur = c.slots[ch.key];
+    let chips = '';
+    if (cur) {
+      chips += _dlgChip({
+        label: cur.label, sub: _dlgDurLabel(cur.durationRounds * 3), lit: true,
+        title: 'Click to clear',
+        data: { dact: 'off', slot: ch.key },
+      });
+    }
+    const held = (ch.key === 'right' || ch.key === 'left') ? (ent?.held?.[ch.key] || '') : '';
+    if (held) {
+      const norm = normalizeWeaponName(held);
+      const rows = [
+        ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
+        ...RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: true })),
+      ];
+      chips += rows.map(({ r, ranged }) => {
+        const lbl = `${r.action} — ${held}`;
+        if (cur?.label === lbl) return ''; // already shown as the lit chip
+        const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
+                  : r.action.toLowerCase().includes('aim') ? 2 : 1;
+        const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
+        const defensive = r.action === 'Block' || r.action === 'Parry';
+        return _dlgChip({
+          label: r.action, sub,
+          data: defensive
+            ? { dact: 'set', slot: ch.key, label: lbl, dur: dur * 3, locks: 0 }
+            : { dact: 'attack', slot: ch.key, label: lbl, dur: dur * 3,
+                item: held, action: r.action, ranged: ranged ? 1 : 0,
+                range: ranged ? (r.rangeIncrement || 5) : (r.reach ?? 0) },
+        });
+      }).join('');
+    } else if (ch.key === 'right' || ch.key === 'left') {
+      chips += AT_UNARMED.map(a => cur?.label === a.label ? '' : _dlgChip({
+        label: a.label, sub: _dlgDurLabel(a.dur),
+        data: { dact: 'set', slot: ch.key, label: a.label, dur: a.dur, locks: 0 },
+      })).join('');
+    } else {
+      // Natural attack channel — generic entries until natural weapons get
+      // their own table alongside MELEE_WEAPONS
+      chips += [{ label: `${ch.label} Attack`, dur: 1 }, { label: `${ch.label} Grab`, dur: 2 }, { label: 'Hold', dur: 99 }]
+        .map(a => cur?.label === a.label ? '' : _dlgChip({
+          label: a.label, sub: _dlgDurLabel(a.dur),
+          data: { dact: 'set', slot: ch.key, label: a.label, dur: a.dur, locks: 0 },
+        })).join('');
+    }
+    const heldNote = held ? ` — ${held}` : '';
+    return _dlgSection(`${ch.icon || '⚔'} ${_paEsc(ch.label)}${_paEsc(heldNote)}`, chips, fullActive);
+  }).join('');
+
+  // ── Arcane section (characters with arcane skills) ─────────────────────────
+  let arcaneHtml = '';
+  if (ent?.type === 'char' && typeof SPELL_ACTIONS !== 'undefined') {
+    const hasArcane = Object.keys(ent.skills || {}).some(k => (SKILLS.find(s => s.name === k) || {}).type === 'Arcane');
+    if (hasArcane) {
+      const target = plan.find(ch => !c.slots[ch.key])?.key || plan[0].key;
+      arcaneHtml = _dlgSection('✨ Arcane', SPELL_ACTIONS.map(a => _dlgChip({
+        label: a.label, sub: _dlgDurLabel(a.dur),
+        data: { dact: 'set', slot: target, label: a.label, dur: a.dur, locks: 0 },
+      })).join(''), fullActive);
+    }
+  }
+
+  // ── Custom action + footer ─────────────────────────────────────────────────
+  const channelOpts = [`<option value="full">Full body</option>`]
+    .concat(plan.map(ch => `<option value="${_paEsc(ch.key)}">${_paEsc(ch.label)}</option>`)).join('');
+  const selStyle = 'font-size:0.75rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:Georgia,serif;';
+
+  body.innerHTML = `
+    <h3 style="margin:0 0 2px;">${_paEsc(c.name)} — Round ${round}</h3>
+    <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">${_paEsc(summary)}</div>
+    ${banner}
+    ${moveHtml}
+    ${_dlgSection('⚡ Full Body — replaces arm and movement actions', fullChips, false)}
+    ${channelHtml}
+    ${arcaneHtml}
+    <div style="display:flex;gap:6px;margin-top:14px;">
+      <input type="text" id="dlg-custom-label" placeholder="Custom action…" style="${selStyle}flex:1;">
+      <select id="dlg-custom-slot" style="${selStyle}">${channelOpts}</select>
+      <input type="number" id="dlg-custom-dur" min="1" max="40" value="1" title="rounds" style="${selStyle}width:52px;">
+      <button class="at-btn" data-dact="custom">Add</button>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="at-btn" data-dact="close">Close</button>
+      <button class="at-btn primary" data-dact="end-turn">✓ End Turn</button>
+    </div>`;
+
+  body.onclick = _dlgClick;
+}
+
+async function _dlgClick(e) {
+  const t = e.target.closest('[data-dact]');
+  if (!t) return;
+  const d = t.dataset;
+  const id = _dlgCombatantId;
+  const body = document.getElementById('at-dialog-body');
+  switch (d.dact) {
+    case 'set':
+      await atSetSlot(id, d.slot, d.label, +d.dur, d.locks === '1');
+      _dlgRender(body);
+      break;
+    case 'off':
+      atClearSlot(id, d.slot);
+      _dlgRender(body);
+      break;
+    case 'attack':
+      await atSetSlot(id, d.slot, d.label, +d.dur, false);
+      atCloseModal();
+      enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range);
+      break;
+    case 'custom': {
+      const label  = document.getElementById('dlg-custom-label')?.value.trim();
+      const slot   = document.getElementById('dlg-custom-slot')?.value || 'full';
+      const rounds = parseInt(document.getElementById('dlg-custom-dur')?.value) || 1;
+      if (!label) return;
+      await atSetSlot(id, slot, label, rounds * 3, slot === 'full');
+      _dlgRender(body);
+      break;
+    }
+    case 'end-turn':
+      atAcceptAction(id);
+      atCloseModal();
+      break;
+    case 'close':
+      atCloseModal();
+      break;
+  }
 }
