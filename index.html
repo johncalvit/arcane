@@ -4028,7 +4028,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717c';
+const VERSION = 'v0.1.20260717d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4959,6 +4959,15 @@ function _defCondFromLabel(label) {
   if (label === 'Evade') return 'evading';
   if (label === 'Sentinel') return 'sentinel';
   return null;
+}
+
+// Clear all defensive conditions from a token (the set _defCondFromLabel maps to)
+function _clearDefConds(token) {
+  if (!token) return;
+  const conds = getConditions(token.id);
+  for (const c of ['blocking', 'parrying', 'evading', 'sentinel']) {
+    if (conds.has(c)) setCondition(token.id, c, false);
+  }
 }
 
 async function setCondition(tokenId, condition, active) {
