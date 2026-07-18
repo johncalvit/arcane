@@ -4027,7 +4027,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260716e';
+const VERSION = 'v0.1.20260717a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5175,14 +5175,29 @@ const PART_TO_ARMOR_SLOT = {
 };
 
 // Write damage to cache + DB, refresh UI
+// Blood pool: starts at half of max Toughness. Damage past a depleted
+// Toughness spills into Blood; death is Blood <= 0 (Toughness 0 is only
+// unconsciousness).
+function _bloodMax(toughnessMax) {
+  return Math.max(1, Math.round((toughnessMax || 10) * 0.5));
+}
+
 async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
   staminaDmg = staminaDmg != null ? staminaDmg : toughnessDmg; // default same as toughness
   const ref = _entityRef(entityType, entityId);
   const ent = getEntity(ref);
   if (!ent) return;
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+  let newTough = Math.max(0, (ent.damage.toughness || 0) + toughnessDmg);
+  let newBlood = ent.damage.blood || 0;
+  if (newTough > tMax) {           // overflow past depleted Toughness drains Blood
+    newBlood += newTough - tMax;
+    newTough = tMax;
+  }
   await updateEntity(ref, { damage: {
-    toughness: Math.max(0, (ent.damage.toughness || 0) + toughnessDmg),
-    stamina:   Math.max(0, (ent.damage.stamina   || 0) + staminaDmg),
+    toughness: newTough,
+    stamina:   Math.max(0, (ent.damage.stamina || 0) + staminaDmg),
+    blood:     newBlood,
   }});
 }
 
@@ -5193,6 +5208,7 @@ async function recoverStamina(entityType, entityId, amount) {
   await updateEntity(ref, { damage: {
     toughness: ent.damage.toughness || 0,
     stamina:   Math.max(0, (ent.damage.stamina || 0) - amount),
+    blood:     ent.damage.blood || 0,
   }});
 }
 
@@ -5217,13 +5233,15 @@ async function _setCurrentHp(entityType, entityId, stat, newCurrent, statMax) {
   const ref = _entityRef(entityType, entityId);
   const ent = getEntity(ref);
   if (!ent) return;
-  const newDamage = Object.assign({ toughness: 0, stamina: 0 }, ent.damage);
+  const newDamage = Object.assign({ toughness: 0, stamina: 0, blood: 0 }, ent.damage);
   newDamage[stat] = Math.max(0, Math.min(statMax, statMax - Math.round(newCurrent)));
   await updateEntity(ref, { damage: newDamage });
-  // Auto-clear unconscious/dead when toughness is healed above 0
-  if (stat === 'toughness' && Math.round(newCurrent) > 0 && ent.tokenId) {
-    if (ent.conditions.has('unconscious')) await setCondition(ent.tokenId, 'unconscious', false);
-    if (ent.conditions.has('dead'))        await setCondition(ent.tokenId, 'dead', false);
+  // Auto-clear conditions on heal: Toughness > 0 wakes; Blood > 0 un-dies
+  if (Math.round(newCurrent) > 0 && ent.tokenId) {
+    if (stat === 'toughness' && ent.conditions.has('unconscious'))
+      await setCondition(ent.tokenId, 'unconscious', false);
+    if (stat === 'blood' && ent.conditions.has('dead'))
+      await setCondition(ent.tokenId, 'dead', false);
   }
 }
 
@@ -5251,39 +5269,32 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) 
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
   const sMax = Math.max(1, Math.round(staminaMax   || 10));
+  const bMax = _bloodMax(tMax);
   const tCur = Math.max(0, tMax - (damage.toughness || 0));
   const sCur = Math.max(0, sMax - (damage.stamina   || 0));
+  const bCur = Math.max(0, bMax - (damage.blood     || 0));
   const tPct = Math.round((tCur / tMax) * 100);
   const sPct = Math.round((sCur / sMax) * 100);
-  const tColor = tPct > 50 ? '#c94040' : tPct > 25 ? '#c97040' : '#c04040';
+  const bPct = Math.round((bCur / bMax) * 100);
   const editable = !!(entityType && entityId);
-  const tId = editable ? `hp-t-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
-  const sId = editable ? `hp-s-${entityType}-${entityId}`.replace(/[^a-z0-9-]/gi,'_') : '';
-  const tClickAttr = editable
-    ? `id="${tId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','toughness',${tCur},${tMax})" title="Click to edit" style="cursor:pointer;"`
-    : '';
-  const sClickAttr = editable
-    ? `id="${sId}" onclick="_hpEditClick(this,'${entityType}','${entityId}','stamina',${sCur},${sMax})" title="Click to edit" style="cursor:pointer;"`
-    : '';
-  const tValHtml = editable ? `<span ${tClickAttr}><span class="hp-cur">${tCur}</span> / ${tMax}${editable ? ' ✎' : ''}</span>` : `<span>${tCur} / ${tMax}</span>`;
-  const sValHtml = editable ? `<span ${sClickAttr}><span class="hp-cur">${sCur}</span> / ${sMax}${editable ? ' ✎' : ''}</span>` : `<span>${sCur} / ${sMax}</span>`;
-  return `
+  const valHtml = (stat, cur, max) => {
+    if (!editable) return `<span>${cur} / ${max}</span>`;
+    return `<span onclick="_hpEditClick(this,'${entityType}','${entityId}','${stat}',${cur},${max})" title="Click to edit" style="cursor:pointer;"><span class="hp-cur">${cur}</span> / ${max} ✎</span>`;
+  };
+  // Toughness blue · Stamina green · Blood red. The Blood track is half the
+  // Toughness track's width so one point spans the same distance on both.
+  const bar = (label, valSpan, pct, color, trackWidthPct) => `
     <div style="margin-bottom:4px;">
       <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-        <span>Toughness</span>${tValHtml}
+        <span>${label}</span>${valSpan}
       </div>
-      <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
-        <div style="width:${tPct}%;height:100%;background:${tColor};transition:width 0.3s;"></div>
-      </div>
-    </div>
-    <div>
-      <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
-        <span>Stamina</span>${sValHtml}
-      </div>
-      <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;">
-        <div style="width:${sPct}%;height:100%;background:#4070c9;transition:width 0.3s;"></div>
+      <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;width:${trackWidthPct}%;">
+        <div style="width:${pct}%;height:100%;background:${color};transition:width 0.3s;"></div>
       </div>
     </div>`;
+  return bar('Toughness', valHtml('toughness', tCur, tMax), tPct, '#4070c9', 100)
+       + bar('Blood',     valHtml('blood',     bCur, bMax), bPct, '#c04040', 50)
+       + bar('Stamina',   valHtml('stamina',   sCur, sMax), sPct, '#3f9d4f', 100);
 }
 
 // Called from roller after a successful attack hit resolves location
@@ -5329,39 +5340,20 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   // Apply to Toughness only — stamina is spent on actions, not from being hit
   await applyDamage(targetEntityType, targetEntityId, finalDamage, 0);
 
-  if (finalDamage > 0) {
-    // Determine max toughness to check for unconscious / dead
-    let toughnessMax = 10;
-    let dmgRecord = { toughness: 0 };
-    if (targetEntityType === 'character') {
-      const row = playCharCache[targetEntityId];
-      if (row) {
-        const attrs = calcAttributesFromData({ race:row.species||'', bodyType:row.body_type||'',
-          sex:row.sex||'', age:row.age||'', height:row.height||'', build:row.build||'',
-          social:row.social||'', mental:row.mental||'', stats:row.stats||{} });
-        toughnessMax = Math.round(attrs.Toughness || 10);
-        dmgRecord = row.damage || {};
+  if (finalDamage > 0 && targetTokenId) {
+    // Toughness 0 = unconscious; Blood 0 = dead (applyDamage spilled overflow)
+    const ent = getEntity(_entityRef(targetEntityType, targetEntityId));
+    if (ent) {
+      const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+      const bMax = _bloodMax(tMax);
+      if ((ent.damage.blood || 0) >= bMax) {
+        await setCondition(targetTokenId, 'unconscious', true);
+        await setCondition(targetTokenId, 'dead', true);
+        if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
+      } else if ((ent.damage.toughness || 0) >= tMax) {
+        await setCondition(targetTokenId, 'unconscious', true);
+        if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
       }
-    } else {
-      const sc = sessionCreatureCache[targetEntityId];
-      if (sc) {
-        const DS = {Strength:10,Endurance:10,Agility:10,Memory:10,Intellect:10,Senses:10,Quintessence:0};
-        const attrs = calcAttributesFromData({ race:sc.species||'', bodyType:sc.body_type||'Humanoid',
-          sex:sc.sex||'', age:sc.age||'Adult', height:sc.height||'Average', build:sc.build||'Average',
-          social:sc.social||'Balanced', mental:sc.mental||'Balanced',
-          stats:Object.assign({},DS,sc.stats||{}) });
-        toughnessMax = Math.round(attrs.Toughness || 10);
-        dmgRecord = sc.damage || {};
-      }
-    }
-    const totalToughDmg = dmgRecord.toughness || 0;
-    if (totalToughDmg >= toughnessMax * 2 && targetTokenId) {
-      await setCondition(targetTokenId, 'unconscious', true);
-      await setCondition(targetTokenId, 'dead', true);
-      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
-    } else if (totalToughDmg >= toughnessMax && targetTokenId) {
-      await setCondition(targetTokenId, 'unconscious', true);
-      if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
     }
   }
 }
