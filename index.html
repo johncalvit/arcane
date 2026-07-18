@@ -192,11 +192,12 @@
   /* action-pick modal */
   .at-modal-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.65);
-    display: flex; align-items: center; justify-content: center; z-index: 900;
+    display: flex; align-items: center; justify-content: center; z-index: 3000;
   }
   .at-modal {
     background: var(--bg2); border: 1px solid var(--gold);
     border-radius: 10px; padding: 20px 24px; min-width: 320px; max-width: 480px;
+    max-height: 88vh; overflow-y: auto;
   }
   .at-modal h3 { color: var(--gold2); margin-bottom: 14px; font-size: 0.95rem; }
   .at-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-bottom: 14px; }
@@ -4027,7 +4028,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717b';
+const VERSION = 'v0.1.20260717c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9042,6 +9043,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260717b"></script>
+<script src="panels.js?v=20260717c"></script>
 </body>
 </html>

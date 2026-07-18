@@ -634,6 +634,19 @@ async function _dlgClick(e) {
   const d = t.dataset;
   const id = _dlgCombatantId;
   const body = document.getElementById('at-dialog-body');
+  try {
+    await _dlgAct(d, id, body);
+  } catch (err) {
+    console.error('action dialog:', err);
+    // Surface the failure instead of dying silently — spec: manage, don't hide
+    const note = document.createElement('div');
+    note.style.cssText = 'background:rgba(224,85,85,0.15);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.72rem;color:#e05555;margin-top:8px;';
+    note.textContent = 'Action failed: ' + (err?.message || err);
+    body?.appendChild(note);
+  }
+}
+
+async function _dlgAct(d, id, body) {
   switch (d.dact) {
     case 'set':
       await atSetSlot(id, d.slot, d.label, +d.dur, d.locks === '1');
