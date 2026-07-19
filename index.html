@@ -442,13 +442,13 @@
   .token-cond-overlay-img {
     /* Sized inline (per-token, in _refreshTokenBadges) to match the token's
        own diameter — art is drawn across the full square canvas, so it
-       should drape over the whole token rather than sit in a small fixed
-       circle. The source PNGs have an opaque white background rather than
-       real alpha, so multiply blend is used instead of CSS opacity: white
-       pixels multiply out to nothing (i.e. "transparent"), while the
-       gold/orange design tints through onto the token underneath. */
+       drapes over the whole token rather than sitting in a small fixed
+       circle. The source PNGs ship with an opaque white background, so the
+       white is keyed out to real alpha at load time (_getProcessedCondIcon)
+       — no blend-mode tricks, which don't reach through the token's
+       stacking context reliably. */
     object-fit: contain;
-    mix-blend-mode: multiply;
+    filter: drop-shadow(0 0 3px #000) drop-shadow(0 1px 2px rgba(0,0,0,0.7));
   }
   .token-cond-strip {
     position: absolute;
@@ -4039,7 +4039,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717k';
+const VERSION = 'v0.1.20260717l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4996,6 +4996,38 @@ async function setCondition(tokenId, condition, active) {
   refreshUI();
 }
 
+// Condition-icon PNGs ship with an opaque white background. Key the white
+// out to real alpha once, via canvas, and cache the resulting data URL —
+// alpha = 255 − min(r,g,b), so pure white → transparent and the saturated
+// gold/orange design stays opaque. Same-origin image, so the canvas is not
+// tainted. Falls back to the raw PNG if processing fails.
+const _condIconCache = {}; // path → dataURL | 'pending' | null(failed)
+function _getProcessedCondIcon(path, cb) {
+  const cached = _condIconCache[path];
+  if (cached === 'pending') return;
+  if (cached !== undefined) { if (cached) cb(cached); return; }
+  _condIconCache[path] = 'pending';
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const id = ctx.getImageData(0, 0, c.width, c.height);
+      const d = id.data;
+      for (let i = 0; i < d.length; i += 4) {
+        d[i + 3] = 255 - Math.min(d[i], d[i + 1], d[i + 2]);
+      }
+      ctx.putImageData(id, 0, 0);
+      _condIconCache[path] = c.toDataURL('image/png');
+      cb(_condIconCache[path]);
+    } catch (e) { _condIconCache[path] = null; }
+  };
+  img.onerror = () => { _condIconCache[path] = null; };
+  img.src = path;
+}
+
 function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
@@ -5012,7 +5044,6 @@ function _refreshTokenBadges(tokenId) {
     overlay.className = 'token-cond-overlay';
     if (def.iconImg) {
       const img = document.createElement('img');
-      img.src = def.iconImg;
       img.alt = def.label;
       img.className = 'token-cond-overlay-img';
       // Match the token's own diameter so the design drapes across the
@@ -5021,6 +5052,14 @@ function _refreshTokenBadges(tokenId) {
       img.style.width  = tokenPx + 'px';
       img.style.height = tokenPx + 'px';
       img.onerror = () => { overlay.textContent = def.icon; }; // fall back to emoji if the asset fails to load
+      // Prefer the white-keyed (transparent) version; process it if needed.
+      const cached = _condIconCache[def.iconImg];
+      if (cached && cached !== 'pending') {
+        img.src = cached;
+      } else {
+        img.src = def.iconImg; // show raw immediately; swap when keyed version is ready
+        _getProcessedCondIcon(def.iconImg, url => { if (url) img.src = url; });
+      }
       overlay.appendChild(img);
     } else {
       overlay.textContent = def.icon;
