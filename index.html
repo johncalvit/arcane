@@ -4028,7 +4028,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717d';
+const VERSION = 'v0.1.20260717e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6032,7 +6032,10 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   cancel.style.cssText = `padding:5px 16px;border-radius:5px;cursor:pointer;
     font-family:Georgia,serif;font-size:0.75rem;align-self:center;
     border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
-  cancel.onclick = () => overlay.remove();
+  cancel.onclick = () => {
+    overlay.remove();
+    if (typeof _dlgMaybeReopen === 'function') _dlgMaybeReopen(); // return to the action dialog on abort
+  };
   card.appendChild(cancel);
 
   overlay.appendChild(card);
@@ -7876,7 +7879,10 @@ document.addEventListener('mousemove', onTokenMouseMove);
 document.addEventListener('mouseup',   onTokenMouseUp);
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (attackMode) { exitAttackMode(); e.stopPropagation(); }
+    if (attackMode) {
+      exitAttackMode(); e.stopPropagation();
+      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null; // manual abort — don't reopen later
+    }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
   }
 });
@@ -9052,6 +9058,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260717c"></script>
+<script src="panels.js?v=20260717e"></script>
 </body>
 </html>

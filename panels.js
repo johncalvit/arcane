@@ -340,14 +340,37 @@ function _paActiveBanner() {
 
 // ── Top-level play panel (replaces legacy renderPlayCharacter body) ───────────
 
+// If the active combatant's data isn't cached yet (e.g. a creature whose
+// session_creatures row hasn't loaded on this client), fetch it and
+// re-render — instead of silently falling back to the own-character view,
+// which made "Next" look like it wasn't updating the panel at all.
+let _paLoadingActiveId = null;
+async function _paEnsureActiveLoaded(ac) {
+  if (_paLoadingActiveId === ac.id) return; // already fetching
+  _paLoadingActiveId = ac.id;
+  if (ac.type === 'char') await ensureEntityLoaded(ac.id);
+  else await loadSessionCreatureCache();
+  if (_paLoadingActiveId === ac.id) _paLoadingActiveId = null;
+  refreshUI();
+}
+
 function renderPlayPanel(el) {
   const banner = _paActiveBanner();
 
   // During combat everyone sees the active combatant's sheet
   if (_atIsCombatActive()) {
     const ac = _atSharedActive();
-    if (ac && getEntity(ac.id)) {
-      renderEntityPanel(ac.id, { container: el, header: 'mini', prefixHtml: banner });
+    if (ac) {
+      const ent = getEntity(ac.id);
+      if (ent) {
+        renderEntityPanel(ac.id, { container: el, header: 'mini', prefixHtml: banner });
+        return;
+      }
+      // Not cached yet — show a loading state for THIS combatant, not a
+      // fallback to someone else's sheet, and fetch the missing data.
+      el.innerHTML = banner +
+        `<div style="color:var(--text-dim);font-size:0.8rem;font-style:italic;">Loading ${_paEsc(ac.name)}…</div>`;
+      _paEnsureActiveLoaded(ac);
       return;
     }
   }
@@ -436,6 +459,34 @@ const BODY_PLANS = {
 function _paBodyPlan(bodyType) { return BODY_PLANS[bodyType] || BODY_PLANS.Humanoid; }
 
 let _dlgCombatantId = null;
+
+// Set when an attack is picked from the dialog (which must close so the
+// user can click a target on the map). Cleared and consumed by
+// _dlgMaybeReopen once the attack flow ends — hit, miss, or cancelled —
+// so the dialog reappears for the next channel instead of stranding the
+// user on the Combat section's small per-slot buttons.
+let _dlgReopenId = null;
+
+function _dlgMaybeReopen() {
+  if (!_dlgReopenId) return;
+  const id = _dlgReopenId;
+  _dlgReopenId = null;
+  const c = atCombatants.find(x => x.id === id);
+  if (!c) return;
+  // Only reopen if it's still meaningfully this combatant's moment
+  if (_atIsCombatActive() && _atSharedActive()?.id === id) atOpenActionDialog(id);
+}
+
+// closeRoller is defined in index.html, loaded before this file — wrap it
+// so any attack-resolution roller (hit, miss, stray-shot follow-up) hands
+// control back to the action dialog when it finishes.
+if (typeof closeRoller === 'function') {
+  const _origCloseRoller = closeRoller;
+  closeRoller = function () {
+    _origCloseRoller();
+    _dlgMaybeReopen();
+  };
+}
 
 function atOpenActionDialog(combatantId /*, focusKey */) {
   _dlgCombatantId = combatantId;
@@ -658,6 +709,7 @@ async function _dlgAct(d, id, body) {
       break;
     case 'attack':
       await atSetSlot(id, d.slot, d.label, +d.dur, false);
+      _dlgReopenId = id; // reopen once targeting + the roll resolve
       atCloseModal();
       enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range);
       break;
