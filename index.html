@@ -441,11 +441,14 @@
   }
   .token-cond-overlay-img {
     /* Sized inline (per-token, in _refreshTokenBadges) to match the token's
-       own diameter — art is a mostly-transparent PNG with the design drawn
-       across the full square canvas, so it should drape over the whole
-       token rather than sit in a small fixed circle. */
+       own diameter — art is drawn across the full square canvas, so it
+       should drape over the whole token rather than sit in a small fixed
+       circle. The source PNGs have an opaque white background rather than
+       real alpha, so multiply blend is used instead of CSS opacity: white
+       pixels multiply out to nothing (i.e. "transparent"), while the
+       gold/orange design tints through onto the token underneath. */
     object-fit: contain;
-    filter: drop-shadow(0 0 4px #000) drop-shadow(0 1px 2px rgba(0,0,0,0.8));
+    mix-blend-mode: multiply;
   }
   .token-cond-strip {
     position: absolute;
@@ -4036,7 +4039,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717j';
+const VERSION = 'v0.1.20260717k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
