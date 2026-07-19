@@ -440,12 +440,12 @@
     z-index: 5;
   }
   .token-cond-overlay-img {
-    width: 1.9em;
-    height: 1.9em;
-    object-fit: cover;
-    border-radius: 50%;   /* clip to a circle regardless of the source PNG's canvas/background */
-    opacity: 0.82;        /* let the token underneath show through faintly */
-    filter: drop-shadow(0 0 4px #000) drop-shadow(0 0 8px #000) drop-shadow(0 2px 3px rgba(0,0,0,0.9));
+    /* Sized inline (per-token, in _refreshTokenBadges) to match the token's
+       own diameter — art is a mostly-transparent PNG with the design drawn
+       across the full square canvas, so it should drape over the whole
+       token rather than sit in a small fixed circle. */
+    object-fit: contain;
+    filter: drop-shadow(0 0 4px #000) drop-shadow(0 1px 2px rgba(0,0,0,0.8));
   }
   .token-cond-strip {
     position: absolute;
@@ -4036,7 +4036,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717i';
+const VERSION = 'v0.1.20260717j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5012,6 +5012,11 @@ function _refreshTokenBadges(tokenId) {
       img.src = def.iconImg;
       img.alt = def.label;
       img.className = 'token-cond-overlay-img';
+      // Match the token's own diameter so the design drapes across the
+      // whole character rather than sitting in a small fixed badge.
+      const tokenPx = getTokenSize(mapTokens[tokenId]);
+      img.style.width  = tokenPx + 'px';
+      img.style.height = tokenPx + 'px';
       img.onerror = () => { overlay.textContent = def.icon; }; // fall back to emoji if the asset fails to load
       overlay.appendChild(img);
     } else {
