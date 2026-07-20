@@ -4039,7 +4039,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717l';
+const VERSION = 'v0.1.20260717m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4949,7 +4949,7 @@ const CONDITION_DEFS = [
     desc:'Cannot act or move.' },
   { key:'blinded',     label:'Blinded',     icon:'🚫', color:'#ff5555',
     desc:'Cannot see; attack penalties apply.' },
-  { key:'unconscious', label:'Unconscious', icon:'💤', iconImg:'unconscious4.png', color:'#888888',
+  { key:'unconscious', label:'Unconscious', icon:'💤', iconImg:'unconscious5.png', color:'#888888',
     desc:'Unconscious or asleep; cannot act.' },
   { key:'dead',        label:'Dead',        icon:'☠', color:'#cc2222',
     desc:'Killed in combat.' },
@@ -4996,11 +4996,14 @@ async function setCondition(tokenId, condition, active) {
   refreshUI();
 }
 
-// Condition-icon PNGs ship with an opaque white background. Key the white
-// out to real alpha once, via canvas, and cache the resulting data URL —
-// alpha = 255 − min(r,g,b), so pure white → transparent and the saturated
-// gold/orange design stays opaque. Same-origin image, so the canvas is not
-// tainted. Falls back to the raw PNG if processing fails.
+// Normalize a condition-icon PNG to real alpha once, via canvas, caching the
+// result as a data URL. Auto-detects the source type:
+//  • already has real transparency (some alpha < 250) → used as-is
+//  • fully opaque (white-background art) → white is keyed out with
+//    alpha = 255 − min(r,g,b), so white → transparent while a saturated /
+//    dark design stays opaque
+// Same-origin image, so the canvas is not tainted. Falls back to the raw
+// PNG if processing fails.
 const _condIconCache = {}; // path → dataURL | 'pending' | null(failed)
 function _getProcessedCondIcon(path, cb) {
   const cached = _condIconCache[path];
@@ -5016,10 +5019,15 @@ function _getProcessedCondIcon(path, cb) {
       ctx.drawImage(img, 0, 0);
       const id = ctx.getImageData(0, 0, c.width, c.height);
       const d = id.data;
-      for (let i = 0; i < d.length; i += 4) {
-        d[i + 3] = 255 - Math.min(d[i], d[i + 1], d[i + 2]);
+      // Does the source already carry meaningful transparency?
+      let hasAlpha = false;
+      for (let i = 3; i < d.length; i += 4) { if (d[i] < 250) { hasAlpha = true; break; } }
+      if (!hasAlpha) {
+        for (let i = 0; i < d.length; i += 4) {
+          d[i + 3] = 255 - Math.min(d[i], d[i + 1], d[i + 2]);
+        }
+        ctx.putImageData(id, 0, 0);
       }
-      ctx.putImageData(id, 0, 0);
       _condIconCache[path] = c.toDataURL('image/png');
       cb(_condIconCache[path]);
     } catch (e) { _condIconCache[path] = null; }
