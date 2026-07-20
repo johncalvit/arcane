@@ -4051,7 +4051,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260718c';
+const VERSION = 'v0.1.20260718d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4878,7 +4878,10 @@ document.addEventListener('DOMContentLoaded', () => {
   recalc();
 
   if (!session) {
-    document.getElementById('modal-login').style.display = 'flex';
+    // Reliable login display is handled by onAuthStateChange (guarded); guard
+    // here too since this init block can run before modal-login is parsed
+    const ml = document.getElementById('modal-login');
+    if (ml) ml.style.display = 'flex';
   } else {
     // Logged in — load shared config; applyConfigData will rebuild selects with real data
     await loadConfigFromSupabase();
