@@ -3800,9 +3800,21 @@ async function saveCharacter() {
     setCharSaveStatus('Save failed: ' + error.message, false);
   } else {
     setCharSaveStatus('Saved ' + new Date().toLocaleTimeString(), true);
+    // Ensure a campaign_characters link exists (Phase 3: characters are
+    // user-owned and join campaigns via the join table; campaign_id is kept
+    // in sync as the home campaign for now).
+    await _ensureCampaignLink(currentCharacterId, currentCampaignId);
     // refresh cache so token info panel reflects latest data
     if (document.getElementById('play-mode')?.classList.contains('active')) loadPlayCharCache();
   }
+}
+
+// Link a character into a campaign (idempotent). Owner or GM per RLS.
+async function _ensureCampaignLink(characterId, campaignId) {
+  if (!characterId || !campaignId) return;
+  await sb.from('campaign_characters')
+    .upsert({ campaign_id: campaignId, character_id: characterId },
+            { onConflict: 'campaign_id,character_id', ignoreDuplicates: true });
 }
 
 async function showCharacterListModal() {
@@ -4039,7 +4051,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717n';
+const VERSION = 'v0.1.20260718a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4420,9 +4432,10 @@ async function moveCharToCampaign(campId, campName) {
   const status = document.getElementById('move-camp-status');
   status.textContent = 'Moving…';
   const { error } = await sb.from('characters')
-    .update({ campaign_id: campId })
+    .update({ campaign_id: campId, last_campaign_id: campId })
     .eq('id', _moveCampCharId);
   if (error) { status.textContent = 'Error: ' + error.message; return; }
+  await _ensureCampaignLink(_moveCampCharId, campId); // join the destination campaign
   status.textContent = `✓ Moved to "${campName}"`;
   setTimeout(() => {
     closeMoveCampaignModal();
@@ -7255,11 +7268,21 @@ let playCharCache = {}; // entity_id → full row
 
 async function loadPlayCharCache() {
   if (!currentCampaignId) return;
-  const { data } = await sb.from('characters')
-    .select(CHAR_COLUMNS)
-    .eq('campaign_id', currentCampaignId);
+  const rows = [];
+  // Characters linked to this campaign via the join table (portable membership)
+  const { data: links } = await sb.from('campaign_characters')
+    .select('character_id').eq('campaign_id', currentCampaignId);
+  const linkedIds = (links || []).map(l => l.character_id);
+  if (linkedIds.length) {
+    const { data } = await sb.from('characters').select(CHAR_COLUMNS).in('id', linkedIds);
+    (data || []).forEach(r => rows.push(r));
+  }
+  // Transition safety net: also pull anything still bound only by campaign_id
+  const { data: byCamp } = await sb.from('characters')
+    .select(CHAR_COLUMNS).eq('campaign_id', currentCampaignId);
+  (byCamp || []).forEach(r => { if (!rows.find(x => x.id === r.id)) rows.push(r); });
   playCharCache = {};
-  (data || []).forEach(row => { playCharCache[row.id] = row; });
+  rows.forEach(row => { playCharCache[row.id] = row; });
 }
 
 let sessionCreatureCache = {}; // entity_id → session_creatures row
