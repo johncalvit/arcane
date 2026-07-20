@@ -4051,7 +4051,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260718a';
+const VERSION = 'v0.1.20260718b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4193,15 +4193,11 @@ async function _landingLoadCampaigns() {
   _campaignCache = data || [];
 
   const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
-  const gmCol   = document.getElementById('landing-gm-col');
-  const campCol = document.getElementById('landing-camp-col');
-  const campCreate = document.getElementById('landing-camp-create');
-  if (gmCol)     gmCol.style.display     = userIsGmAnywhere ? '' : 'none';
-  if (campCol)   campCol.style.display   = ''; // always show so players can select or create
-  if (campCreate) campCreate.style.display = ''; // all users can create (limit enforced in JS)
+  const gmTools = document.getElementById('landing-gm-tools');
+  if (gmTools) gmTools.style.display = userIsGmAnywhere ? '' : 'none';
 
   if (!data.length) {
-    el.innerHTML = '<span class="landing-dim">No campaigns yet — create one below.</span>';
+    el.innerHTML = '<span class="landing-dim">No campaigns yet. Name one above to run it as GM, or paste a friend’s invite code to join theirs.</span>';
     return;
   }
 
@@ -4231,6 +4227,16 @@ async function _landingLoadCampaigns() {
 function _landingUpdateContinue() {
   const btn = document.getElementById('landing-continue-btn');
   if (btn) btn.disabled = !currentCampaignId;
+}
+
+// GM Tools disclosure (collapsed by default so new players aren't shown config)
+function _toggleGmTools() {
+  const body  = document.getElementById('landing-gm-body');
+  const caret = document.getElementById('landing-gm-caret');
+  if (!body) return;
+  const open = body.style.display === 'none';
+  body.style.display = open ? 'block' : 'none';
+  if (caret) caret.textContent = open ? '▾' : '▸';
 }
 
 async function _landingPickChar(id, name) {
@@ -4286,6 +4292,10 @@ async function _landingCreateCampaign() {
   inp.value = '';
   await selectCampaign(data.id, data.name, data.gm_id);
   _landingLoadCampaigns();
+  // New GM will likely want to invite players — surface GM Tools + invite now
+  const gmBody = document.getElementById('landing-gm-body');
+  const caret  = document.getElementById('landing-gm-caret');
+  if (gmBody && gmBody.style.display === 'none') { gmBody.style.display = 'block'; if (caret) caret.textContent = '▾'; }
 }
 
 function _genInviteCode() {
@@ -4493,13 +4503,11 @@ async function selectCampaign(id, name, gmId) {
   currentCampaignGmId = gmId || null;
   document.getElementById('nav-campaign').textContent = name;
   const userIsGm = currentUser && gmId === currentUser.id;
-  const gmCol = document.getElementById('landing-gm-col');
-  if (gmCol && userIsGm) gmCol.style.display = '';  // show if GM of this campaign, never force-hide
-  // Show invite section for GMs, join col for players
+  const gmTools = document.getElementById('landing-gm-tools');
+  if (gmTools && userIsGm) gmTools.style.display = '';  // GM of this campaign — reveal tools disclosure
+  // Invite section (inside GM Tools) only applies to the GM of the selected campaign
   const inviteSection = document.getElementById('landing-invite-section');
-  const joinCol       = document.getElementById('landing-join-col');
   if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
-  if (joinCol)       joinCol.style.display        = userIsGm ? 'none' : '';
   // Reset invite result on campaign change
   const inviteResult = document.getElementById('landing-invite-result');
   if (inviteResult) inviteResult.style.display = 'none';
@@ -6962,9 +6970,9 @@ selectCampaign = async function(id, name, gmId) {
     // Re-run invite/join visibility now that we have the authoritative gm_id
     const userIsGm = currentUser && data.gm_id === currentUser.id;
     const inviteSection = document.getElementById('landing-invite-section');
-    const joinCol       = document.getElementById('landing-join-col');
     if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
-    if (joinCol)       joinCol.style.display        = userIsGm ? 'none' : '';
+    const gmTools = document.getElementById('landing-gm-tools');
+    if (gmTools && userIsGm) gmTools.style.display = '';
   }
 };
 
@@ -9122,7 +9130,7 @@ switchGmTab = function(tab) {
 
       <!-- CHARACTERS -->
       <div class="landing-col">
-        <h3>Characters</h3>
+        <h3>Your Characters</h3>
         <div class="landing-scroll" id="landing-char-list">
           <span class="landing-dim">Loading…</span>
         </div>
@@ -9143,48 +9151,56 @@ switchGmTab = function(tab) {
             style="flex:1; font-size:0.82rem;" onkeydown="if(event.key==='Enter')_landingCreateCampaign()">
           <button class="btn-sm btn-text" onclick="_landingCreateCampaign()">Create</button>
         </div>
-      </div>
-
-      <!-- GM CONFIGURATION -->
-      <div class="landing-col" id="landing-gm-col" style="display:none;">
-        <h3>Game Configuration</h3>
-        <div style="display:flex; flex-direction:column; gap:6px;">
-          <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species Manager</button>
-          <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skill Manager</button>
-          <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
-          <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
-          <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
-          <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
-          <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
-        </div>
-        <div id="landing-invite-section" style="margin-top:14px;display:none;">
-          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Campaign Invite</div>
-          <button class="landing-config-btn" onclick="generateInviteCode()" id="landing-invite-btn">🔑 Generate Invite Code</button>
-          <div id="landing-invite-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
-            <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Share this code — expires in 5 days</div>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span id="landing-invite-code" style="font-family:monospace;font-size:1.3rem;letter-spacing:0.15em;color:var(--gold);"></span>
-              <button class="btn-sm" onclick="copyInviteCode()" title="Copy">📋</button>
-            </div>
-            <a id="landing-invite-mailto" href="#" style="display:inline-block;margin-top:8px;font-size:0.78rem;color:var(--gold2);">📧 Email this code</a>
+        <!-- Always-visible join-by-code so new players can get in immediately -->
+        <div style="border-top:1px solid var(--border); margin-top:8px; padding-top:10px;">
+          <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Or join with an invite code</div>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="landing-invite-input" placeholder="e.g. A3X9K2"
+              style="flex:1;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.1em;"
+              maxlength="6" onkeydown="if(event.key==='Enter')redeemInviteCode()">
+            <button class="btn-sm btn-text" onclick="redeemInviteCode()">Join</button>
           </div>
-          <div id="landing-invite-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:4px;"></div>
+          <div id="landing-join-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
         </div>
       </div>
 
-      <!-- INVITE CODE ENTRY (players) -->
-      <div class="landing-col" id="landing-join-col" style="display:none;width:220px;">
-        <h3>Join a Campaign</h3>
-        <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:10px;">Enter an invite code from your GM to join their campaign.</p>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="landing-invite-input" placeholder="e.g. A3X9K2"
-            style="flex:1;font-size:1rem;text-transform:uppercase;letter-spacing:0.12em;"
-            maxlength="6" onkeydown="if(event.key==='Enter')redeemInviteCode()">
-          <button class="btn-sm btn-text" onclick="redeemInviteCode()">Join</button>
-        </div>
-        <div id="landing-join-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
-      </div>
+    </div>
 
+    <!-- GM TOOLS — collapsible, only shown to GMs; keeps config out of a new player's way -->
+    <div id="landing-gm-tools" style="display:none; margin-top:18px; border-top:1px solid var(--border); padding-top:12px;">
+      <div onclick="_toggleGmTools()" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between; user-select:none;">
+        <span style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">⚙ GM Tools</span>
+        <span id="landing-gm-caret" style="color:var(--text-dim);font-size:0.9rem;">▸</span>
+      </div>
+      <div id="landing-gm-body" style="display:none; margin-top:14px;">
+        <div style="display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;">
+          <div style="flex:1; min-width:200px;">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Game Configuration</div>
+            <div style="display:flex; flex-direction:column; gap:6px;">
+              <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species Manager</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skill Manager</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
+              <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
+              <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
+            </div>
+          </div>
+          <div id="landing-invite-section" style="flex:1; min-width:200px; display:none;">
+            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Invite Players</div>
+            <button class="landing-config-btn" onclick="generateInviteCode()" id="landing-invite-btn">🔑 Generate Invite Code</button>
+            <div id="landing-invite-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px 12px;">
+              <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">Share this code — expires in 5 days</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span id="landing-invite-code" style="font-family:monospace;font-size:1.3rem;letter-spacing:0.15em;color:var(--gold);"></span>
+                <button class="btn-sm" onclick="copyInviteCode()" title="Copy">📋</button>
+              </div>
+              <a id="landing-invite-mailto" href="#" style="display:inline-block;margin-top:8px;font-size:0.78rem;color:var(--gold2);">📧 Email this code</a>
+            </div>
+            <div id="landing-invite-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:4px;"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding-top:16px; border-top:1px solid var(--border);">
