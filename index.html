@@ -4039,7 +4039,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260717m';
+const VERSION = 'v0.1.20260717n';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4949,7 +4949,7 @@ const CONDITION_DEFS = [
     desc:'Cannot act or move.' },
   { key:'blinded',     label:'Blinded',     icon:'🚫', color:'#ff5555',
     desc:'Cannot see; attack penalties apply.' },
-  { key:'unconscious', label:'Unconscious', icon:'💤', iconImg:'unconscious5.png', color:'#888888',
+  { key:'unconscious', label:'Unconscious', icon:'💤', svg:'dizzy', color:'#888888',
     desc:'Unconscious or asleep; cannot act.' },
   { key:'dead',        label:'Dead',        icon:'☠', color:'#cc2222',
     desc:'Killed in combat.' },
@@ -5036,6 +5036,48 @@ function _getProcessedCondIcon(path, cb) {
   img.src = path;
 }
 
+// ── Vector condition overlays ─────────────────────────────────────────────────
+// Inline SVG icons for token overlays. SVG is transparent by definition (no
+// white-background/keying headaches), scales to any token size, and stays
+// crisp. Gold design with a dark under-stroke + drop-shadow for legibility on
+// any map. viewBox is 100×100; the caller sizes the <svg> to the token.
+function _sparklePath(cx, cy, s) {
+  const c = s * 0.16;
+  const f = n => n.toFixed(1);
+  return `M${f(cx)},${f(cy-s)} Q${f(cx+c)},${f(cy-c)} ${f(cx+s)},${f(cy)} `
+       + `Q${f(cx+c)},${f(cy+c)} ${f(cx)},${f(cy+s)} `
+       + `Q${f(cx-c)},${f(cy+c)} ${f(cx-s)},${f(cy)} `
+       + `Q${f(cx-c)},${f(cy-c)} ${f(cx)},${f(cy-s)} Z`;
+}
+function _dizzySpiralPath() {
+  const cx = 50, cy = 44, turns = 2.15, startR = 2.5, endR = 27, squashY = 0.62;
+  const steps = Math.round(turns * 26);
+  let d = '';
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const ang = t * turns * 2 * Math.PI - Math.PI / 2;
+    const r = startR + (endR - startR) * t;
+    const x = cx + r * Math.cos(ang);
+    const y = cy + r * Math.sin(ang) * squashY;
+    d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+  }
+  return d.trim();
+}
+function _condOverlaySvg(kind, sizePx) {
+  if (kind !== 'dizzy') return '';
+  const spiral = _dizzySpiralPath();
+  const stars = [ [80, 20, 8], [24, 24, 6.5], [70, 60, 5.5] ];
+  const starsDark = stars.map(([x,y,s]) => `<path d="${_sparklePath(x,y,s)}" fill="none" stroke="#140d00" stroke-width="4"/>`).join('');
+  const starsGold = stars.map(([x,y,s]) => `<path d="${_sparklePath(x,y,s)}" fill="#ffd66b"/>`).join('');
+  return `<svg width="${sizePx}" height="${sizePx}" viewBox="0 0 100 100"
+       style="overflow:visible;filter:drop-shadow(0 1px 1px rgba(0,0,0,0.85));">
+    <path d="${spiral}" fill="none" stroke="#140d00" stroke-width="9" stroke-linecap="round"/>
+    ${starsDark}
+    <path d="${spiral}" fill="none" stroke="#ffcf4a" stroke-width="4.5" stroke-linecap="round"/>
+    ${starsGold}
+  </svg>`;
+}
+
 function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
@@ -5050,7 +5092,9 @@ function _refreshTokenBadges(tokenId) {
     const def = CONDITION_DEFS.find(d => d.key === topCrit);
     const overlay = document.createElement('div');
     overlay.className = 'token-cond-overlay';
-    if (def.iconImg) {
+    if (def.svg) {
+      overlay.innerHTML = _condOverlaySvg(def.svg, getTokenSize(mapTokens[tokenId]));
+    } else if (def.iconImg) {
       const img = document.createElement('img');
       img.alt = def.label;
       img.className = 'token-cond-overlay-img';
