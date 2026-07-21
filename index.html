@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719d';
+const VERSION = 'v0.1.20260719e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5387,11 +5387,10 @@ const PART_TO_ARMOR_SLOT = {
 };
 
 // Write damage to cache + DB, refresh UI
-// Blood pool: starts at half of max Toughness. Damage past a depleted
-// Toughness spills into Blood; death is Blood <= 0 (Toughness 0 is only
-// unconsciousness).
+// Blood pool: equals max Toughness. Damage past a depleted Toughness spills
+// into Blood; death is Blood <= 0 (Toughness 0 is only unconsciousness).
 function _bloodMax(toughnessMax) {
-  return Math.max(1, Math.round((toughnessMax || 10) * 0.5));
+  return Math.max(1, Math.round(toughnessMax || 10));
 }
 
 async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
@@ -5493,8 +5492,8 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) 
     if (!editable) return `<span>${cur} / ${max}</span>`;
     return `<span onclick="_hpEditClick(this,'${entityType}','${entityId}','${stat}',${cur},${max})" title="Click to edit" style="cursor:pointer;"><span class="hp-cur">${cur}</span> / ${max} ✎</span>`;
   };
-  // Toughness blue · Stamina green · Blood red. The Blood track is half the
-  // Toughness track's width so one point spans the same distance on both.
+  // Toughness blue · Stamina green · Blood red. Blood now equals max Toughness,
+  // so all three tracks are full width.
   const bar = (label, valSpan, pct, color, trackWidthPct) => `
     <div style="margin-bottom:4px;">
       <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
@@ -5505,7 +5504,7 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) 
       </div>
     </div>`;
   return bar('Toughness', valHtml('toughness', tCur, tMax), tPct, '#4070c9', 100)
-       + bar('Blood',     valHtml('blood',     bCur, bMax), bPct, '#c04040', 50)
+       + bar('Blood',     valHtml('blood',     bCur, bMax), bPct, '#c04040', 100)
        + bar('Stamina',   valHtml('stamina',   sCur, sMax), sPct, '#3f9d4f', 100);
 }
 
@@ -5527,8 +5526,12 @@ const HIT_EFFECTS = [
     // (so smashing weapons can subdue without opening veins). Don't re-roll
     // if already bleeding (v1: no stacking).
     gate: ctx => ['slash', 'pierce'].includes(ctx.category) && ctx.finalDamage > 0 && !ctx.conds.has('bleeding'),
-    // Chance = half the fraction of max Toughness dealt in this one hit
-    chance: ctx => Math.max(0, Math.min(1, 0.5 * (ctx.finalDamage / ctx.toughnessMax))),
+    // Chance = (fraction of max Toughness dealt this hit) × a per-attack
+    // multiplier: stab (pierce) opens veins most at 1.0; slash 0.75.
+    chance: ctx => {
+      const mult = ctx.category === 'pierce' ? 1.0 : 0.75;
+      return Math.max(0, Math.min(1, mult * (ctx.finalDamage / ctx.toughnessMax)));
+    },
     onHit: async ctx => { await setCondition(ctx.targetTokenId, 'bleeding', true); },
     onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); },
   },
