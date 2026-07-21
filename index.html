@@ -4088,7 +4088,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719b';
+const VERSION = 'v0.1.20260719c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6197,8 +6197,15 @@ async function atPopulateAddSel() {
 }
 
 async function atAutoAddMapTokens() {
+  // Keep the tracker in sync with the active map: drop combatants whose token
+  // is no longer on this map (e.g. after switching maps), then add the new
+  // map's tokens below. _pathFindToken resolves a combatant to a token on the
+  // CURRENT map, so anything from another map filters out.
+  atCombatants = atCombatants.filter(c => _pathFindToken(c.id));
+  if (atActiveIdx >= atCombatants.length) atActiveIdx = 0;
+
   const tokens = Object.values(mapTokens || {});
-  if (!tokens.length) return;
+  if (!tokens.length) { renderAtList(); return; }
 
   // load character names in one query
   const charIds = tokens.filter(t => t.entity_type === 'character').map(t => t.entity_id);
