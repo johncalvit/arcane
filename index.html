@@ -3748,8 +3748,8 @@ function setCharSaveStatus(text, ok) {
 }
 
 async function saveCharacter() {
-  if (!currentCampaignId || !currentUser) {
-    setCharSaveStatus('Sign in and select a campaign first.', false);
+  if (!currentUser) {
+    setCharSaveStatus('Sign in first.', false);
     return;
   }
   const data = gatherCharacterData();
@@ -3758,6 +3758,14 @@ async function saveCharacter() {
     return;
   }
   setCharSaveStatus('Saving…', false);
+  // A character always needs a campaign to live in. If none is selected, drop
+  // it into the user's personal Home campaign (auto-created) so a brand-new
+  // account can save its very first character without losing work.
+  if (!currentCampaignId) {
+    const homeId = await _ensureHomeCampaign();
+    if (!homeId) { setCharSaveStatus('Could not set up your home campaign — try again.', false); return; }
+    currentCampaignId = homeId;
+  }
 
   const row = {
     campaign_id: currentCampaignId,
@@ -3815,6 +3823,35 @@ async function _ensureCampaignLink(characterId, campaignId) {
   await sb.from('campaign_characters')
     .upsert({ campaign_id: campaignId, character_id: characterId },
             { onConflict: 'campaign_id,character_id', ignoreDuplicates: true });
+}
+
+// Every user gets a personal "Home" campaign — a stable for their characters —
+// so character work always has somewhere to save, even before they join or run
+// a shared game. Created on demand (first save / sign-in) if they GM none yet.
+// Returns the home campaign id, or null on failure. In-flight-safe.
+let _homeCampaignPromise = null;
+async function _ensureHomeCampaign() {
+  if (!currentUser) return null;
+  if (_homeCampaignPromise) return _homeCampaignPromise;
+  _homeCampaignPromise = (async () => {
+    // Reuse an existing campaign they run rather than piling up homes
+    const { data: owned } = await sb.from('campaigns')
+      .select('id').eq('gm_id', currentUser.id)
+      .order('created_at', { ascending: true }).limit(1);
+    if (owned && owned.length) return owned[0].id;
+    const who = (currentUser.user_metadata?.display_name || '').trim();
+    const homeName = (who ? `${who}'s Home` : 'Home').slice(0, 60);
+    const { data, error } = await sb.from('campaigns')
+      .insert({ name: homeName, gm_id: currentUser.id })
+      .select('id, gm_id').single();
+    if (error || !data) { console.warn('home campaign create failed:', error?.message); return null; }
+    await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
+    try { await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() }); } catch (e) {}
+    return data.id;
+  })();
+  const id = await _homeCampaignPromise;
+  _homeCampaignPromise = null;
+  return id;
 }
 
 async function showCharacterListModal() {
@@ -4051,7 +4088,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260718d';
+const VERSION = 'v0.1.20260718e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4093,7 +4130,13 @@ async function submitSignup() {
   const password    = document.getElementById('auth-signup-password').value;
   const { error } = await sb.auth.signUp({
     email, password,
-    options: { data: { display_name: displayName } }
+    options: {
+      data: { display_name: displayName },
+      // Land confirmed users back on the app (must be in Supabase Redirect URLs
+      // allowlist). Overrides the project Site URL, which was sending them to
+      // the bare github.io root and 404ing.
+      emailRedirectTo: 'https://johncalvit.github.io/arcane/',
+    }
   });
   if (error) showAuthError(error.message);
   else showAuthError('Check your email to confirm your account, then sign in.');
@@ -4284,9 +4327,9 @@ async function _landingCreateCampaign() {
   const name = inp.value.trim();
   if (!name) return;
   setCampaignError('');
-  // Enforce 2-campaign limit per user
+  // Campaign limit per user — 3 (one auto "Home" stable + two shared games)
   const { count } = await sb.from('campaigns').select('id', { count: 'exact', head: true }).eq('gm_id', currentUser.id);
-  if (count >= 2) { setCampaignError('Campaign limit reached (max 2). Delete an existing campaign to create a new one.'); return; }
+  if (count >= 3) { setCampaignError('Campaign limit reached (max 3). Delete an existing campaign to create a new one.'); return; }
   const { data, error } = await sb
     .from('campaigns')
     .insert({ name, gm_id: currentUser.id })
@@ -4838,6 +4881,10 @@ sb.auth.onAuthStateChange(async (event, session) => {
     if ($('nav-user'))      $('nav-user').textContent =
       session.user.user_metadata?.display_name || session.user.email;
     updateOwnerButtonVisibility();
+    // Guarantee a Home campaign exists so this user's characters always have a
+    // stable to live in (created only if they GM none). Fire-and-forget; the
+    // landing modal reloads campaigns when it opens.
+    _ensureHomeCampaign().then(() => { if (document.getElementById('modal-landing')?.style.display === 'flex') _landingLoadCampaigns(); });
     if (!currentCampaignId) showLandingModal();
     // Show campaign join input for non-GM users who aren't in a campaign yet
     if ($('nav-join-campaign')) $('nav-join-campaign').style.display = '';
