@@ -922,7 +922,7 @@
       <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
       <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
       <label id="is-template-row" style="display:none;align-items:center;gap:6px;padding:2px 18px 6px;font-size:0.75rem;color:var(--text-dim);cursor:pointer;">
-        <input type="checkbox" id="is-template-chk"> Monster Template
+        <input type="checkbox" id="is-template-chk" onchange="buildCharSelects();recalc();"> Monster Template
       </label>
       <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
       <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
@@ -1604,11 +1604,14 @@ function buildCharSelects() {
     ['sel-social', SOCIAL_DATA],
     ['sel-mental', MENTAL_DATA],
   ];
+  // Monster-only species (zombie, giant, …) are hidden from normal character
+  // creation, but available when defining a Monster Template.
+  const templateMode = !!document.getElementById('is-template-chk')?.checked;
   for (const [id, table] of tables) {
     const sel = document.getElementById(id);
     const prev = sel.value;
     const keys = Object.keys(table).filter(k =>
-      id !== 'sel-race' || !table[k].monsterOnly
+      id !== 'sel-race' || !table[k].monsterOnly || templateMode
     );
     sel.innerHTML = keys.map(k => `<option>${k}</option>`).join('');
     sel.value = keys.includes(prev) ? prev : keys[0];
@@ -3907,7 +3910,7 @@ async function showCharacterListModal() {
     const { data: tmpls } = await sb
       .from('characters')
       .select('id, name, species, updated_at')
-      .eq('campaign_id', currentCampaignId)
+      .eq('user_id', currentUser.id)
       .eq('is_template', true)
       .order('name', { ascending: true });
     if (tmpls && tmpls.length) {
@@ -3944,6 +3947,12 @@ async function loadCharacter(id) {
   currentCharacterId = data.id;
   hideCharacterListModal();
 
+  // Set template mode + rebuild the species dropdown FIRST, so a template's
+  // monster-only species (zombie, giant, …) is a valid option before we select it.
+  const tmplChk = document.getElementById('is-template-chk');
+  if (tmplChk) tmplChk.checked = data.is_template || false;
+  buildCharSelects();
+
   // Map DB columns back to the character data shape applyCharacterData expects
   applyCharacterData({
     name:      data.name,
@@ -3969,8 +3978,6 @@ async function loadCharacter(id) {
   avatarStoragePath = (data.avatar_url && !data.avatar_url.startsWith('data:') && !data.avatar_url.startsWith('http'))
     ? data.avatar_url : '';
 
-  const tmplChk = document.getElementById('is-template-chk');
-  if (tmplChk) tmplChk.checked = data.is_template || false;
   setCharSaveStatus('Loaded: ' + data.name, true);
 }
 
@@ -4088,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719c';
+const VERSION = 'v0.1.20260719d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8773,9 +8780,10 @@ async function loadTemplatesForTokens() {
   if (!el || !currentCampaignId) return;
   el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);">Loading…</div>';
 
+  // Templates are a shared library — every GM sees every template across all
+  // campaigns (relies on chars_select RLS allowing is_template reads).
   const { data, error } = await sb.from('characters')
     .select('id, name, species, avatar_url')
-    .eq('campaign_id', currentCampaignId)
     .eq('is_template', true)
     .order('name');
 
