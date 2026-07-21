@@ -4088,7 +4088,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260718e';
+const VERSION = 'v0.1.20260719a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5030,6 +5030,8 @@ const CONDITION_DEFS = [
     desc:'Unconscious or asleep; cannot act.' },
   { key:'dead',        label:'Dead',        icon:'☠', color:'#cc2222',
     desc:'Killed in combat.' },
+  { key:'bleeding',    label:'Bleeding',    icon:'🩸', color:'#c02020',
+    desc:'Losing Blood each round. Clear the condition (or bind wounds) to stop.' },
   { key:'deafened',    label:'Deafened',    icon:'🔇', color:'#888888',
     desc:'Cannot hear.' },
 ];
@@ -5501,6 +5503,98 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) 
 }
 
 // Called from roller after a successful attack hit resolves location
+// ═══ HIT EFFECTS — damage-triggered consequences ══════════════════════════════
+// A data-driven registry: each effect declares when it fires (location + gate)
+// and how it resolves (deterministic / chance / saving-throw — saves are a
+// future field, wired here so no engine change is needed to add them). Runs
+// from _applyDamageAfterHit on a hit; ongoing effects also tick each round in
+// atNext. Effects are announced in the roller and are reversible (conditions
+// clear via the chooser) — manage, don't enforce.
+
+const _BLEED_RATE = 1; // Blood lost per round while bleeding (v1 flat; will vary/scale later)
+
+const HIT_EFFECTS = [
+  {
+    key: 'bleeding', label: 'Bleeding',
+    // Slashing/piercing wounds that break through bleed; crush never does
+    // (so smashing weapons can subdue without opening veins). Don't re-roll
+    // if already bleeding (v1: no stacking).
+    gate: ctx => ['slash', 'pierce'].includes(ctx.category) && ctx.finalDamage > 0 && !ctx.conds.has('bleeding'),
+    // Chance = half the fraction of max Toughness dealt in this one hit
+    chance: ctx => Math.max(0, Math.min(1, 0.5 * (ctx.finalDamage / ctx.toughnessMax))),
+    onHit: async ctx => { await setCondition(ctx.targetTokenId, 'bleeding', true); },
+    onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); },
+  },
+];
+
+// Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
+async function applyBloodLoss(ent, amount) {
+  if (!ent) return;
+  const bMax = _bloodMax(Math.round(ent.attrs.Toughness || 10));
+  const newBlood = Math.min(bMax, (ent.damage.blood || 0) + amount);
+  await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { blood: newBlood }) });
+}
+
+// Shared downed-state detection: Toughness 0 = unconscious, Blood 0 = dead.
+// Returns 'dead' | 'unconscious' | null. Used by both hit resolution and the
+// bleed tick so bleeding-to-death works identically.
+async function _checkDownedState(tokenId, ent) {
+  if (!ent || !tokenId) return null;
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+  const bMax = _bloodMax(tMax);
+  if ((ent.damage.blood || 0) >= bMax) {
+    await setCondition(tokenId, 'unconscious', true);
+    await setCondition(tokenId, 'dead', true);
+    return 'dead';
+  }
+  if ((ent.damage.toughness || 0) >= tMax) {
+    await setCondition(tokenId, 'unconscious', true);
+    return 'unconscious';
+  }
+  return null;
+}
+
+// Resolve every applicable effect for a hit; apply and announce. dmgEl optional.
+async function _runHitEffects(ctx, dmgEl) {
+  for (const eff of HIT_EFFECTS) {
+    if (eff.parts && !eff.parts.includes(ctx.hitPart)) continue;
+    if (eff.gate && !eff.gate(ctx)) continue;
+    let applied, line;
+    if (eff.chance) {
+      const pct  = Math.round(eff.chance(ctx) * 100);
+      const roll = Math.floor(Math.random() * 100) + 1; // 1..100
+      applied = roll <= pct;
+      line = `${eff.label} ${pct}% · rolled ${roll} → ${applied ? '🩸 ' + eff.label : 'no ' + eff.label.toLowerCase()}`;
+    } else if (eff.save) {
+      // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
+      applied = false; line = '';
+    } else {
+      applied = true; line = eff.label;
+    }
+    if (applied && eff.onHit) await eff.onHit(ctx);
+    if (dmgEl && line) {
+      dmgEl.innerHTML += `<div style="font-size:0.72rem;color:${applied ? '#e05555' : 'var(--text-dim)'};margin-top:3px;">${line}</div>`;
+    }
+  }
+}
+
+// Per-round tick for ongoing effects (called at the round boundary in atNext).
+async function _tickHitEffects(combatantId) {
+  const token = _pathFindToken(combatantId);
+  if (!token) return;
+  const conds = getConditions(token.id);
+  for (const eff of HIT_EFFECTS) {
+    if (!eff.onTick || !conds.has(eff.key)) continue;
+    const ent = getEntity(combatantId);
+    if (!ent) continue;
+    await eff.onTick(ent);
+    const after = getEntity(combatantId);
+    const downed = await _checkDownedState(token.id, after);
+    if (downed === 'dead') await setCondition(token.id, eff.key, false); // stop bleeding once dead
+  }
+}
+// ═══ END HIT EFFECTS ═══════════════════════════════════════════════════════════
+
 async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   const { targetEntityType, targetEntityId, targetTokenId,
           atkPower, weaponRow, actionLabel } = ctx;
@@ -5543,20 +5637,25 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   // Apply to Toughness only — stamina is spent on actions, not from being hit
   await applyDamage(targetEntityType, targetEntityId, finalDamage, 0);
 
-  if (finalDamage > 0 && targetTokenId) {
-    // Toughness 0 = unconscious; Blood 0 = dead (applyDamage spilled overflow)
-    const ent = getEntity(_entityRef(targetEntityType, targetEntityId));
+  if (targetTokenId) {
+    const ref = _entityRef(targetEntityType, targetEntityId);
+    const ent = getEntity(ref);
     if (ent) {
-      const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
-      const bMax = _bloodMax(tMax);
-      if ((ent.damage.blood || 0) >= bMax) {
-        await setCondition(targetTokenId, 'unconscious', true);
-        await setCondition(targetTokenId, 'dead', true);
-        if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
-      } else if ((ent.damage.toughness || 0) >= tMax) {
-        await setCondition(targetTokenId, 'unconscious', true);
-        if (dmgEl) dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
+      const toughnessMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+      // Damage-triggered effects (bleeding now; stun/disarm/knockback later)
+      if (finalDamage > 0) {
+        await _runHitEffects({
+          hitPart, category, finalDamage, toughnessMax,
+          targetTokenId, targetEntityType, targetEntityId,
+          conds: getConditions(targetTokenId),
+        }, dmgEl);
       }
+      // Downed state — re-read in case an effect shifted Blood
+      const downed = await _checkDownedState(targetTokenId, getEntity(ref));
+      if (downed === 'dead' && dmgEl)
+        dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
+      else if (downed === 'unconscious' && dmgEl)
+        dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
     }
   }
 }
@@ -5698,6 +5797,9 @@ function atNext() {
         }
       }
     });
+    // Ongoing hit-effects (bleeding drains Blood) tick once per round. GM-only
+    // path (atNext runs on the GM), so no double application; writes sync out.
+    atCombatants.forEach(c => { _tickHitEffects(c.id); });
     atRound++;
     // Expire finished slot actions at round boundary
     atCombatants.forEach(c => {
