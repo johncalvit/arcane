@@ -4088,7 +4088,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719a';
+const VERSION = 'v0.1.20260719b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7950,6 +7950,7 @@ async function showTokenInfo(tokenId) {
   if (!el) return;
 
   _tokenInfoViewId = tokenId; // refreshUI() re-renders this view on data changes
+  if (typeof _renderActiveBanner === 'function') _renderActiveBanner(); // keep the banner up
 
   const ref = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + tokenId;
   if (t.entity_type === 'character' && !playCharCache[t.entity_id]) {
@@ -9117,6 +9118,8 @@ switchGmTab = function(tab) {
       <div class="play-panel-header">
         <span class="panel-title">Character</span>
       </div>
+      <!-- Persistent active-turn banner (survives content re-renders) -->
+      <div id="play-active-banner" style="padding:0;"></div>
       <div id="play-char-content" style="padding:10px 12px;"></div>
     </div>
 
@@ -9371,6 +9374,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260717e"></script>
+<script src="panels.js?v=20260719b"></script>
 </body>
 </html>

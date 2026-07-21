@@ -66,55 +66,18 @@ function _paSecConditions(ent) {
   return _paSection('Conditions', `<div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div>${note}`);
 }
 
+// Combat section is now minimal: just an initiative-roll prompt, and only until
+// it's rolled. Everything else (actions, done, queued readout) lives in the
+// persistent active-turn banner. Players can't see the GM's right-panel
+// tracker, so this is their initiative entry point; it vanishes once rolled.
 function _paSecCombat(ent, canEdit, prefixHtml) {
   const c = atCombatants.find(x => x.id === ent.ref);
-  if (!c) return _paSection('Combat',
-    (prefixHtml || '') + `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">Not in action tracker.</div>`);
-  if (!c.slots) c.slots = _newSlots();
-  const round = _atSharedRound();
-  const initBadge = c.initiative != null
-    ? `<span style="color:var(--gold2);font-weight:bold;font-size:0.95rem;">${c.initiative}</span>`
-    : `<span style="color:var(--text-dim);font-style:italic;">Not rolled</span>`;
-  const rollBtn = !canEdit ? '' : (c.initiative == null
-    ? `<button class="at-btn primary" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🎲 Roll</button>`
-    : `<button class="at-btn" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;" title="Re-roll">↺</button>`);
-  const durTagOf = (sl) => {
-    if (!sl) return '';
-    if (sl.durationRounds >= 9999) return `<span class="at-slot-dur">∞</span>`;
-    return sl.durationRounds > 1 ? `<span class="at-slot-dur">${sl.startRound + sl.durationRounds - round}r</span>` : '';
-  };
-  const full = c.slots.full;
-  // Channel rows come from the entity's body plan, plus movement
-  const slotDefs = [
-    ..._paBodyPlan(ent.bodyType).map(ch => ({ key: ch.key, icon: ch.icon || '⚔' })),
-    { key: 'move', icon: '🏃' },
-  ];
-  let slotsHtml = '';
-  if (full) {
-    const clrBtn = canEdit ? `<button class="at-btn danger at-slot-clr-btn" data-pa="clear-slot" data-id="${_paEsc(ent.ref)}" data-slot="full">✕</button>` : '';
-    slotsHtml += `<div class="at-slot"><span class="at-slot-icon">⚡</span><span class="at-slot-action">${_paEsc(full.label)}</span>${durTagOf(full)}${clrBtn}</div>`;
-    slotsHtml += slotDefs.map(({ icon }) =>
-      `<div class="at-slot at-slot-locked"><span class="at-slot-icon">${icon}</span><span class="at-slot-action empty">— full body —</span></div>`).join('');
-  } else {
-    slotsHtml += slotDefs.map(({ key, icon }) => {
-      const sl = c.slots[key];
-      const actionSpan = sl ? `<span class="at-slot-action">${_paEsc(sl.label)}</span>${durTagOf(sl)}` : `<span class="at-slot-action empty">—</span>`;
-      const setBtn = canEdit ? `<button class="at-btn at-slot-set-btn" data-pa="open-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">${sl ? '⚙' : '+'}</button>` : '';
-      const clrBtn = (canEdit && sl) ? `<button class="at-btn danger at-slot-clr-btn" data-pa="clear-slot" data-id="${_paEsc(ent.ref)}" data-slot="${key}">✕</button>` : '';
-      return `<div class="at-slot"><span class="at-slot-icon">${icon}</span>${actionSpan}${setBtn}${clrBtn}</div>`;
-    }).join('');
-  }
-  const actionsBtn = canEdit
-    ? `<button class="at-btn primary" data-pa="open-slot" data-id="${_paEsc(ent.ref)}" data-slot="" style="width:100%;margin-top:6px;">⚡ Choose Actions</button>`
-    : '';
+  if (!c || !canEdit || c.initiative != null) return '';
   return _paSection('Combat', `
-    ${prefixHtml || ''}
-    <div class="at-action-row" style="margin-bottom:6px;">
-      <span style="font-size:0.72rem;color:var(--text-dim);">Initiative</span>
-      ${initBadge}${rollBtn}
-    </div>
-    <div class="at-slots">${slotsHtml}</div>
-    ${actionsBtn}`);
+    <div class="at-action-row">
+      <span style="font-size:0.72rem;color:var(--text-dim);">Initiative not rolled</span>
+      <button class="at-btn primary" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🎲 Roll</button>
+    </div>`);
 }
 
 function _paSecStats(attrs) {
@@ -318,8 +281,15 @@ function _paActiveBanner() {
     ? `<img src="${_paEsc(acAvatar)}" style="width:36px;height:36px;object-fit:cover;object-position:top center;border-radius:50%;border:2px solid var(--gold);flex-shrink:0;">`
     : `<div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--gold);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0;">⚔</div>`;
   const acSafeId = ac.id.replace(/'/g, "\\'");
-  const acHasAction = Object.values(ac.slots || {}).some(Boolean);
+  const slots = ac.slots || {};
+  const acHasAction = Object.values(slots).some(Boolean);
   const canControl = isGM() || (ac.type === 'char' && ac.id.split('::')[1] === currentCharacterId);
+  // Compact readout of assigned actions (the slot rows are gone from the panel)
+  const queued = Object.values(slots).filter(Boolean)
+    .map(s => _paEsc(s.label.split(' —')[0].trim())).join(' · ');
+  const queuedLine = queued
+    ? `<div style="font-size:0.68rem;color:var(--gold2);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚔ ${queued}</div>`
+    : '';
   const actionBtns = canControl ? `
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px;">
       <button class="at-btn primary" style="flex:2;" onclick="atOpenSlotModal('${acSafeId}','')">⚡ Actions</button>
@@ -334,8 +304,20 @@ function _paActiveBanner() {
           <div style="font-size:0.9rem;color:var(--gold2);font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_paEsc(ac.name)}</div>
         </div>
       </div>
+      ${queuedLine}
       ${actionBtns}
     </div>`;
+}
+
+// Render the active-turn banner into its OWN persistent element (above the
+// scrolling panel content), so token clicks / move mode / token-info re-renders
+// never wipe it. Called by every panel refresh path.
+function _renderActiveBanner() {
+  const el = document.getElementById('play-active-banner');
+  if (!el) return;
+  const html = _atIsCombatActive() ? _paActiveBanner() : '';
+  el.innerHTML = html;
+  el.style.padding = html ? '10px 12px 0' : '0';
 }
 
 // ── Top-level play panel (replaces legacy renderPlayCharacter body) ───────────
@@ -355,7 +337,7 @@ async function _paEnsureActiveLoaded(ac) {
 }
 
 function renderPlayPanel(el) {
-  const banner = _paActiveBanner();
+  _renderActiveBanner(); // persistent element above the content
 
   // During combat everyone sees the active combatant's sheet
   if (_atIsCombatActive()) {
@@ -363,12 +345,12 @@ function renderPlayPanel(el) {
     if (ac) {
       const ent = getEntity(ac.id);
       if (ent) {
-        renderEntityPanel(ac.id, { container: el, header: 'mini', prefixHtml: banner });
+        renderEntityPanel(ac.id, { container: el, header: 'mini' });
         return;
       }
       // Not cached yet — show a loading state for THIS combatant, not a
       // fallback to someone else's sheet, and fetch the missing data.
-      el.innerHTML = banner +
+      el.innerHTML =
         `<div style="color:var(--text-dim);font-size:0.8rem;font-style:italic;">Loading ${_paEsc(ac.name)}…</div>`;
       _paEnsureActiveLoaded(ac);
       return;
@@ -391,7 +373,7 @@ function renderPlayPanel(el) {
   }
 
   if (!myRef || !getEntity(myRef)) {
-    el.innerHTML = banner +
+    el.innerHTML =
       `<div style="color:var(--text-dim);font-size:0.8rem;font-style:italic;">
         ${myRef ? 'Character not loaded yet.' : 'No character selected. Save a character to see it here.'}
       </div>`;
@@ -422,7 +404,6 @@ function renderPlayPanel(el) {
   renderEntityPanel(myRef, {
     container: el,
     header: 'self',
-    prefixHtml: banner,
     attrs: attrs || undefined,
     carried,
     name: charName || undefined,
