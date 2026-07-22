@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719g';
+const VERSION = 'v0.1.20260720a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6394,9 +6394,13 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null, mirror = false, by = '' }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
-              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, damageContext, onComplete };
+              phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, damageContext, onComplete,
+              mirror, by, mirrorResult: null };
+
+  // Broadcast the roll to the rest of the campaign (unless this IS the mirror)
+  if (!mirror) _rollerBroadcast('roller-open', { by: _rollerWho(), label, min, max, target, targetLabel });
 
   const dmgElReset = document.getElementById('roller-damage-display');
   if (dmgElReset) { dmgElReset.style.display = 'none'; dmgElReset.innerHTML = ''; }
@@ -6435,6 +6439,23 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   _rollerUpdateTarget();
   document.getElementById('roller-overlay').style.display = 'flex';
   _rollerStartSpin();
+  if (mirror) document.getElementById('roller-status').textContent = (by || 'Someone') + ' is rolling…';
+}
+
+function _rollerWho() {
+  return (currentUser && (currentUser.user_metadata?.display_name || currentUser.email)) || 'Someone';
+}
+function _rollerBroadcast(event, payload) {
+  if (mapChannel) mapChannel.send({ type: 'broadcast', event, payload: payload || {} });
+}
+function _openRollerMirror(p) {
+  openRoller({ label: p.label, min: p.min, max: p.max, target: p.target, targetLabel: p.targetLabel, mirror: true, by: p.by });
+}
+function _rollerMirrorLand(p) {
+  if (!_roller || !_roller.mirror) return;
+  _roller.finalNum    = p.finalNum;
+  _roller.mirrorResult = { resultLabel: p.resultLabel, resultClass: p.resultClass, hitLocation: p.hitLocation };
+  _rollerBeginStop(); // uses the preset finalNum, decelerates, then shows the result
 }
 
 function _makeDefBtn(label, reduction, active, onSelect) {
@@ -6474,7 +6495,7 @@ function _rollerUpdateTarget() {
 }
 
 function rollerClick() {
-  if (!_roller) return;
+  if (!_roller || _roller.mirror) return; // spectators can't stop someone else's roll
   if (_roller.phase === 'spinning') { _rollerBeginStop(); return; }
 }
 
@@ -6515,8 +6536,9 @@ function _rollerTick(interval) {
 function _rollerBeginStop() {
   _roller.phase = 'stopping';
   clearTimeout(_roller.timeoutId);
-  // Choose the final number now — timing the click cannot influence it
-  _roller.finalNum = _rollerRand();
+  // Choose the final number now — timing the click cannot influence it.
+  // A mirror already has finalNum set from the broadcast; keep it.
+  if (_roller.finalNum == null) _roller.finalNum = _rollerRand();
   document.getElementById('roller-status').textContent = 'Stopping…';
   // Deceleration steps: delays in ms, last step reveals the final number
   const steps = [80, 120, 170, 230, 300, 380, 460];
@@ -6539,31 +6561,48 @@ function _rollerShowResult() {
   const n = _roller.finalNum;
   const numEl    = document.getElementById('roller-number');
   const resultEl = document.getElementById('roller-result-label');
+  const locEl    = document.getElementById('roller-hit-location');
 
+  // Mirror: display exactly what the roller broadcast — no rolls, no damage,
+  // no onComplete (side effects only ever run on the person actually rolling).
+  if (_roller.mirror) {
+    const mr = _roller.mirrorResult || {};
+    numEl.className      = mr.resultClass || '';
+    resultEl.textContent = mr.resultLabel || '';
+    resultEl.className   = mr.resultClass || '';
+    document.getElementById('roller-status').textContent = '';
+    locEl.textContent = mr.hitLocation || '';
+    locEl.style.color = '#f0c060';
+    document.getElementById('roller-close').style.display = 'inline-block';
+    return;
+  }
+
+  let bcLabel = '', bcClass = '', bcHitLoc = '';
   if (_roller.target != null) {
     const critSuccess = n <= 5;
     const critFail    = n >= 96;
     const success = critSuccess || (!critFail && n <= _roller.target);
-    const label   = critSuccess ? 'CRITICAL SUCCESS'
-                  : critFail    ? 'CRITICAL FAIL'
-                  : success     ? 'SUCCESS' : 'FAIL';
-    numEl.className      = success ? 'success' : 'fail';
-    resultEl.textContent = label;
-    resultEl.className   = success ? 'success' : 'fail';
+    bcLabel = critSuccess ? 'CRITICAL SUCCESS'
+            : critFail    ? 'CRITICAL FAIL'
+            : success     ? 'SUCCESS' : 'FAIL';
+    bcClass = success ? 'success' : 'fail';
+    numEl.className      = bcClass;
+    resultEl.textContent = bcLabel;
+    resultEl.className   = bcClass;
     document.getElementById('roller-status').textContent = '';
     if (success && _roller.locContext) {
       const { bodyType, partKey } = _roller.locContext;
       const hitPart = (critSuccess && partKey) ? partKey : rollHitLocation(bodyType, partKey);
       const locData = getHitLocData(bodyType);
       const partLabel = locData.parts[hitPart]?.label || hitPart;
-      const locEl = document.getElementById('roller-hit-location');
-      locEl.textContent = `HIT: ${partLabel}`;
+      bcHitLoc = `HIT: ${partLabel}`;
+      locEl.textContent = bcHitLoc;
       locEl.style.color = '#f0c060';
       if (_roller.damageContext) {
         _applyDamageAfterHit(_roller.damageContext, hitPart, partLabel);
       }
     } else if (!success && _roller.locContext) {
-      document.getElementById('roller-hit-location').textContent = '';
+      locEl.textContent = '';
     }
     // Stray shot on ranged miss (not crit fail — arrow still goes somewhere)
     if (!success && !critSuccess && _roller.strayContext) {
@@ -6573,14 +6612,18 @@ function _rollerShowResult() {
     document.getElementById('roller-status').textContent = '';
   }
   document.getElementById('roller-close').style.display = 'inline-block';
+  // Let spectators' mirror land on the same number and show the same result
+  _rollerBroadcast('roller-result', { finalNum: n, resultLabel: bcLabel, resultClass: bcClass, hitLocation: bcHitLoc });
   if (_roller.onComplete) _roller.onComplete(_roller.finalNum);
 }
 
 function closeRoller() {
+  const wasMirror = _roller && _roller.mirror;
   clearTimeout(_roller?.timeoutId);
   _roller = null;
   document.getElementById('roller-overlay').style.display = 'none';
   clearStrayRay(true);
+  if (!wasMirror) _rollerBroadcast('roller-close'); // dismiss everyone's mirror
 }
 
 // ── Stray shot (ranged miss) ──────────────────────────────────────────────────
@@ -6834,6 +6877,19 @@ function subscribeMapRealtime() {
         renderAtList();
         renderPlayCharacter();
       }
+    })
+    // Shared dice roller — everyone watches everyone's rolls. The roller who
+    // sent it sees their own real roller (broadcast doesn't echo to sender);
+    // everyone else gets a read-only mirror that lands on the same number.
+    .on('broadcast', { event: 'roller-open' }, ({ payload }) => {
+      if (_roller && !_roller.mirror) return; // don't clobber my own live roll
+      _openRollerMirror(payload);
+    })
+    .on('broadcast', { event: 'roller-result' }, ({ payload }) => {
+      if (_roller && _roller.mirror) _rollerMirrorLand(payload);
+    })
+    .on('broadcast', { event: 'roller-close' }, () => {
+      if (_roller && _roller.mirror) closeRoller();
     })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
