@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260719f';
+const VERSION = 'v0.1.20260719g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5077,7 +5077,8 @@ async function setCondition(tokenId, condition, active) {
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
   drawSentinelRanges();
-  await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
+  const { error } = await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
+  if (error) _writeErrorToast(error, 'map_tokens (condition)');
   // Realtime UPDATE will sync to other clients automatically
   refreshUI();
 }
@@ -5336,6 +5337,40 @@ async function ensureEntityLoaded(ref) {
   return true;
 }
 
+// Transient toast, bottom-center. kind 'error' styles it red.
+let _toastTimer = null;
+function showToast(msg, kind) {
+  let el = document.getElementById('app-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'app-toast';
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;'
+      + 'padding:10px 16px;border-radius:6px;font-family:Georgia,serif;font-size:0.85rem;'
+      + 'box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:80vw;text-align:center;pointer-events:none;'
+      + 'opacity:0;transition:opacity 0.2s;';
+    document.body.appendChild(el);
+  }
+  const danger = kind === 'error';
+  el.style.background = danger ? 'rgba(120,20,20,0.96)' : 'rgba(30,30,30,0.96)';
+  el.style.color      = danger ? '#ffdddd' : '#fff';
+  el.style.border     = '1px solid ' + (danger ? '#e05555' : 'var(--gold)');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 4500);
+}
+
+// Surface a failed DB write instead of swallowing it (RLS rejections in
+// particular used to look like success because the cache updated locally).
+function _writeErrorToast(error, context) {
+  if (!error) return;
+  console.warn('write failed' + (context ? ' (' + context + ')' : '') + ':', error.message || error);
+  const perm = /permission|policy|row-level|violat|denied/i.test(error.message || '');
+  showToast(perm
+    ? "Couldn't save — you may not have permission to change that."
+    : "Couldn't save changes: " + (error.message || 'unknown error'), 'error');
+}
+
 // The single write path: merge patch into the cache row, persist the patch
 // columns to the DB, invalidate memoized attrs, refresh the UI.
 async function updateEntity(ref, patch) {
@@ -5344,9 +5379,10 @@ async function updateEntity(ref, patch) {
   Object.assign(row, patch);
   delete row._attrs;
   const table = ref.startsWith('char::') ? 'characters' : 'session_creatures';
-  await sb.from(table).update(patch).eq('id', row.id);
+  const { error } = await sb.from(table).update(patch).eq('id', row.id);
+  if (error) _writeErrorToast(error, table);
   refreshUI();
-  return true;
+  return !error;
 }
 
 // Which token's info panel is currently displayed (null = own character view).
