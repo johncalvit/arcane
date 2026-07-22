@@ -569,8 +569,46 @@ function _dlgRender(body) {
 
   // ── Channel sections from the body plan ────────────────────────────────────
   const fullActive = !!c.slots.full;
+
+  // Item list for the hand selectors: a character's own carried loadout, or the
+  // full weapon catalogue for creatures / other-owned entities the GM equips.
+  const isOwn = ent?.type === 'char' && ent.id === currentCharacterId;
+  const handItems = isOwn && typeof getLoadoutItemNames === 'function'
+    ? getLoadoutItemNames()
+    : (ent?.loadout && ent.loadout.length
+        ? ent.loadout
+        : [...new Set([...MELEE_WEAPONS.map(r => r.weapon), ...RANGED_WEAPONS.map(r => r.weapon)])].sort());
+
+  // Renders the action chips for whatever a hand holds — empty hands fight with
+  // the "Bare Handed" weapon so the row lookup is identical to any real weapon.
+  const weaponChips = (itemName, chKey) => {
+    const norm = normalizeWeaponName(itemName);
+    const rows = [
+      ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
+      ...RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: true })),
+    ];
+    const cur = c.slots[chKey];
+    return rows.map(({ r, ranged }) => {
+      const lbl = `${r.action} — ${itemName}`;
+      if (cur?.label === lbl) return ''; // already shown as the lit chip
+      const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
+                : r.action.toLowerCase().includes('aim') ? 2 : 1;
+      const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
+      const defensive = r.action === 'Block' || r.action === 'Parry';
+      return _dlgChip({
+        label: r.action, sub,
+        data: defensive
+          ? { dact: 'set', slot: chKey, label: lbl, dur: dur * 3, locks: 0 }
+          : { dact: 'attack', slot: chKey, label: lbl, dur: dur * 3,
+              item: itemName, action: r.action, ranged: ranged ? 1 : 0,
+              range: ranged ? (r.rangeIncrement || 5) : (r.reach ?? 0) },
+      });
+    }).join('');
+  };
+
   const channelHtml = plan.map(ch => {
     const cur = c.slots[ch.key];
+    const isArm = ch.key === 'right' || ch.key === 'left';
     let chips = '';
     if (cur) {
       chips += _dlgChip({
@@ -579,44 +617,26 @@ function _dlgRender(body) {
         data: { dact: 'off', slot: ch.key },
       });
     }
-    const held = (ch.key === 'right' || ch.key === 'left') ? (ent?.held?.[ch.key] || '') : '';
-    if (held) {
-      const norm = normalizeWeaponName(held);
-      const rows = [
-        ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
-        ...RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: true })),
-      ];
-      chips += rows.map(({ r, ranged }) => {
-        const lbl = `${r.action} — ${held}`;
-        if (cur?.label === lbl) return ''; // already shown as the lit chip
-        const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
-                  : r.action.toLowerCase().includes('aim') ? 2 : 1;
-        const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
-        const defensive = r.action === 'Block' || r.action === 'Parry';
-        return _dlgChip({
-          label: r.action, sub,
-          data: defensive
-            ? { dact: 'set', slot: ch.key, label: lbl, dur: dur * 3, locks: 0 }
-            : { dact: 'attack', slot: ch.key, label: lbl, dur: dur * 3,
-                item: held, action: r.action, ranged: ranged ? 1 : 0,
-                range: ranged ? (r.rangeIncrement || 5) : (r.reach ?? 0) },
-        });
-      }).join('');
-    } else if (ch.key === 'right' || ch.key === 'left') {
-      chips += AT_UNARMED.map(a => cur?.label === a.label ? '' : _dlgChip({
-        label: a.label, sub: _dlgDurLabel(a.dur),
-        data: { dact: 'set', slot: ch.key, label: a.label, dur: a.dur, locks: 0 },
-      })).join('');
+    let held = '';
+    if (isArm) {
+      held = ent?.held?.[ch.key] || '';
+      // Hand selector — swapping what's held is this arm's action for the round
+      // (replaces the old Draw Weapon / Change Item Held full-body actions).
+      const selStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
+      const opts = ['', ...handItems].map(n =>
+        `<option value="${_paEsc(n)}"${n === held ? ' selected' : ''}>${_paEsc(n) || '— Bare Handed —'}</option>`).join('');
+      chips += `<select style="${selStyle}" data-dchange="held" data-side="${ch.key}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
+      chips += weaponChips(held || BARE_HANDED, ch.key);
     } else {
       // Natural attack channel — generic entries until natural weapons get
       // their own table alongside MELEE_WEAPONS
-      chips += [{ label: `${ch.label} Attack`, dur: 1 }, { label: `${ch.label} Grab`, dur: 2 }, { label: 'Hold', dur: 99 }]
+      chips += [{ label: `${ch.label} Attack`, dur: 1 }, { label: `${ch.label} Grab`, dur: 2 }]
         .map(a => cur?.label === a.label ? '' : _dlgChip({
           label: a.label, sub: _dlgDurLabel(a.dur),
           data: { dact: 'set', slot: ch.key, label: a.label, dur: a.dur, locks: 0 },
         })).join('');
     }
-    const heldNote = held ? ` — ${held}` : '';
+    const heldNote = isArm ? ` — ${held || 'Bare Handed'}` : '';
     return _dlgSection(`${ch.icon || '⚔'} ${_paEsc(ch.label)}${_paEsc(heldNote)}`, chips, fullActive);
   }).join('');
 
@@ -658,6 +678,39 @@ function _dlgRender(body) {
     </div>`;
 
   body.onclick = _dlgClick;
+  body.onchange = _dlgChange;
+}
+
+// Swapping a hand's item in the action dialog: writes the new item and spends
+// that arm's action for the round (the "change weapon" action).
+async function _dlgChange(e) {
+  const sel = e.target.closest('[data-dchange="held"]');
+  if (!sel) return;
+  const side = sel.dataset.side;
+  const value = sel.value; // '' → back to Bare Handed
+  const id = _dlgCombatantId;
+  const body = document.getElementById('at-dialog-body');
+  const ent = getEntity(id);
+  if (!ent) return;
+  const prev = ent.held?.[side] || '';
+  if ((value || '') === prev) return; // no-op re-select
+  try {
+    const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
+    if (isOwn && document.getElementById('ps-hand-' + side)) {
+      await _playSetHand(side, value);
+    } else {
+      await _acSetHand(ent.type, ent.id, side, value);
+    }
+    const label = value ? `Ready ${value}` : 'Free hand';
+    await atSetSlot(id, side, label, 3, false); // ~1 round, this arm only
+    _dlgRender(body);
+  } catch (err) {
+    console.error('hand change:', err);
+    const note = document.createElement('div');
+    note.style.cssText = 'background:rgba(224,85,85,0.15);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.72rem;color:#e05555;margin-top:8px;';
+    note.textContent = 'Could not change item: ' + (err?.message || err);
+    body?.appendChild(note);
+  }
 }
 
 async function _dlgClick(e) {

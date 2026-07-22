@@ -2958,9 +2958,9 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Axe, Hatchet",          action:"Parry",         minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:8,  damageMax:0,  maxPowerMod:0   },
   { weapon:"Axe, Hatchet",          action:"Hook",          minReach:0.5, reach:1,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:8,  damageMax:0,  maxPowerMod:0   },
 
-  { weapon:"Unarmed Strike",        action:"Smash",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:5,  maxPowerMod:0.3 },
-  { weapon:"Unarmed Strike",        action:"Grab",          minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:0,  maxPowerMod:0   },
-  { weapon:"Unarmed Strike",        action:"Crush",         minReach:0,   reach:0,    hitFormula:"Power",                                        material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:20, maxPowerMod:0.1 },
+  { weapon:"Bare Handed",           action:"Smash",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:5,  maxPowerMod:0.3 },
+  { weapon:"Bare Handed",           action:"Grab",          minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:0,  maxPowerMod:0   },
+  { weapon:"Bare Handed",           action:"Crush",         minReach:0,   reach:0,    hitFormula:"Power",                                        material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:20, maxPowerMod:0.1 },
 
   { weapon:"Battleaxe",             action:"Slash",         minReach:1,   reach:2,    hitFormula:"(Physical Coordination + Manual Dexterity)*.5",material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:14, maxPowerMod:0.8 },
   { weapon:"Battleaxe",             action:"Smash",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:9,  maxPowerMod:0.6 },
@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260720a';
+const VERSION = 'v0.1.20260722a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5726,14 +5726,14 @@ const AT_FULLBODY = [
   { label: 'Evade',          dur: 2 },
   { label: 'Retreat',        dur: 2 },
   { label: 'Sentinel',       dur: 99 },
-  { label: 'Change Item Held', dur: 1 },
   { label: 'Go Prone',       dur: 1 },
-  { label: 'Search',         dur: 1 },
-  { label: 'Hide',           dur: 1 },
   { label: 'Charge',         dur: 3 },
   { label: 'Use Item',       dur: 2 },
-  { label: 'Draw Weapon',    dur: 2 },
 ];
+// Bare-handed combat: empty hands fight with the "Bare Handed" weapon
+// (Smash / Grab / Crush) looked up from MELEE_WEAPONS, so its actions stay
+// data-driven with every other weapon. BARE_HANDED names that weapon.
+const BARE_HANDED = 'Bare Handed';
 
 const WEAPON_ACTIONS = {
   // melee
@@ -9498,6 +9498,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260719b"></script>
+<script src="panels.js?v=20260722a"></script>
 </body>
 </html>
