@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722a';
+const VERSION = 'v0.1.20260722b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5041,6 +5041,10 @@ const CONDITION_DEFS = [
     desc:'Losing Blood each round. Clear the condition (or bind wounds) to stop.' },
   { key:'deafened',    label:'Deafened',    icon:'🔇', color:'#888888',
     desc:'Cannot hear.' },
+  { key:'held',        label:'Held',        icon:'✊', color:'#d98c40',
+    desc:'Grabbed and held. Spend an action on Escape — an opposed Power + Coordination roll — to break free.' },
+  { key:'holding',     label:'Holding',     icon:'🤚', color:'#d98c40',
+    desc:'Holding an opponent in a grab. They must win an opposed Power + Coordination roll to escape.' },
 ];
 
 function getConditions(tokenId) {
@@ -5571,7 +5575,87 @@ const HIT_EFFECTS = [
     onHit: async ctx => { await setCondition(ctx.targetTokenId, 'bleeding', true); },
     onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); },
   },
+  {
+    key: 'held', label: 'Grabbed',
+    // A landed Grab holds deterministically — no chance/save. The target can
+    // spend an action to break free via an opposed Power + Coordination roll
+    // (atResolveEscape). We stash the grabber as a namespaced `heldby:` marker
+    // so the escape contest knows whose Hold to beat; badges ignore it since it
+    // isn't a CONDITION_DEFS key.
+    gate: ctx => /grab/i.test(ctx.actionLabel || '') && !ctx.conds.has('held'),
+    onHit: async ctx => {
+      await setCondition(ctx.targetTokenId, 'held', true);
+      if (ctx.attackerCombatantId) {
+        await setCondition(ctx.targetTokenId, 'heldby:' + ctx.attackerCombatantId, true);
+        const atkTok = _pathFindToken(ctx.attackerCombatantId);
+        if (atkTok) await setCondition(atkTok.id, 'holding', true);
+      }
+    },
+  },
 ];
+
+// Opposed Power + Coordination threshold for a grapple contest (d100 roll-under).
+function _grappleMax(ent) {
+  const a = ent?.attrs || {};
+  return Math.max(1, Math.round((a['Power'] || 0) + (a['Physical Coordination'] || 0)));
+}
+
+// Break a Hold: clears the target's held + heldby marker, and the grabber's
+// holding flag if they're no longer holding anyone else.
+async function atReleaseHold(targetTokenId) {
+  const conds = getConditions(targetTokenId);
+  const link  = [...conds].find(c => c.startsWith('heldby:'));
+  const grabberCid = link ? link.slice('heldby:'.length) : null;
+  await setCondition(targetTokenId, 'held', false);
+  if (link) await setCondition(targetTokenId, link, false);
+  if (grabberCid) {
+    const gTok = _pathFindToken(grabberCid);
+    if (gTok) {
+      const stillHolding = Object.values(mapTokens).some(t =>
+        t.id !== targetTokenId && (Array.isArray(t.conditions) ? t.conditions : []).includes('heldby:' + grabberCid));
+      if (!stillHolding) await setCondition(gTok.id, 'holding', false);
+    }
+  }
+}
+
+// Escape contest: the held combatant rolls d100 under their Power+Coordination;
+// the grabber's Hold is pre-rolled the same way. Higher degree of success wins;
+// ties favour the grabber (stay held). Runs through the shared roller so the
+// table watches the roll; the outcome syncs via the condition change.
+async function atResolveEscape(combatantId) {
+  const token = _pathFindToken(combatantId);
+  if (!token) return;
+  const conds = getConditions(token.id);
+  const link  = [...conds].find(c => c.startsWith('heldby:'));
+  const grabberCid = link ? link.slice('heldby:'.length) : null;
+  const targetEnt = getEntity(combatantId);
+  const targetMax = _grappleMax(targetEnt);
+
+  let grabberMax = targetMax, grabberName = 'the grab';
+  if (grabberCid) {
+    const gEnt = getEntity(grabberCid);
+    if (gEnt) { grabberMax = _grappleMax(gEnt); grabberName = gEnt.name || grabberName; }
+  }
+  const gRoll = Math.floor(Math.random() * 100) + 1;
+  const gDeg  = grabberMax - gRoll; // grabber's degree of success (Hold strength)
+
+  openRoller({
+    label: `Escape Grab — ${targetEnt?.name || 'Target'} vs ${grabberName}`,
+    onComplete: async (tRoll) => {
+      const tDeg  = targetMax - tRoll;
+      const freed = tDeg > gDeg; // ties favour the grabber
+      const resultEl = document.getElementById('roller-result-label');
+      if (resultEl) {
+        resultEl.textContent = freed ? 'BROKE FREE' : 'STILL HELD';
+        resultEl.className   = freed ? 'success' : 'fail';
+      }
+      if (freed) await atReleaseHold(token.id);
+      showToast(
+        `${freed ? '✊ Broke free!' : '✊ Still held.'} ${targetEnt?.name || 'Target'} ${tRoll}/${targetMax} vs Hold ${gRoll}/${grabberMax}`,
+        freed ? 'good' : 'warn');
+    },
+  });
+}
 
 // Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
 async function applyBloodLoss(ent, amount) {
@@ -5688,14 +5772,15 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
     const ent = getEntity(ref);
     if (ent) {
       const toughnessMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
-      // Damage-triggered effects (bleeding now; stun/disarm/knockback later)
-      if (finalDamage > 0) {
-        await _runHitEffects({
-          hitPart, category, finalDamage, toughnessMax,
-          targetTokenId, targetEntityType, targetEntityId,
-          conds: getConditions(targetTokenId),
-        }, dmgEl);
-      }
+      // Damage-triggered effects (bleeding, grab-hold now; stun/disarm later).
+      // Runs even at 0 damage so a Grab (no damage) can still take hold; each
+      // effect's own gate decides whether it applies.
+      await _runHitEffects({
+        hitPart, category, finalDamage, toughnessMax,
+        targetTokenId, targetEntityType, targetEntityId,
+        actionLabel, attackerCombatantId: ctx.attackerCombatantId,
+        conds: getConditions(targetTokenId),
+      }, dmgEl);
       // Downed state — re-read in case an effect shifted Blood
       const downed = await _checkDownedState(targetTokenId, getEntity(ref));
       if (downed === 'dead' && dmgEl)
@@ -7746,6 +7831,7 @@ function attackTokenClick(tokenId) {
     atkPower,
     weaponRow:   attackWeaponRow,
     actionLabel: attackActionLabel,
+    attackerCombatantId: attackCombatantId,
   };
 
   // ── Range penalty (ranged weapons only) ───────────────────────────────────
@@ -9498,6 +9584,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722a"></script>
+<script src="panels.js?v=20260722b"></script>
 </body>
 </html>

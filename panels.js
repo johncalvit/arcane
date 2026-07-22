@@ -653,6 +653,15 @@ function _dlgRender(body) {
     }
   }
 
+  // ── Held: break-free contest ───────────────────────────────────────────────
+  const escapeHtml = conds.has('held')
+    ? _dlgSection('✊ Held — grabbed', _dlgChip({
+        label: 'Escape', sub: 'contest',
+        title: 'Opposed Power + Coordination roll to break free (spends your action)',
+        data: { dact: 'escape' },
+      }), false)
+    : '';
+
   // ── Custom action + footer ─────────────────────────────────────────────────
   const channelOpts = [`<option value="full">Full body</option>`]
     .concat(plan.map(ch => `<option value="${_paEsc(ch.key)}">${_paEsc(ch.label)}</option>`)).join('');
@@ -662,6 +671,7 @@ function _dlgRender(body) {
     <h3 style="margin:0 0 2px;">${_paEsc(c.name)} — Round ${round}</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">${_paEsc(summary)}</div>
     ${banner}
+    ${escapeHtml}
     ${moveHtml}
     ${_dlgSection('⚡ Full Body — replaces arm and movement actions', fullChips, false)}
     ${channelHtml}
@@ -756,6 +766,11 @@ async function _dlgAct(d, id, body) {
       _dlgRender(body);
       break;
     }
+    case 'escape':
+      await atSetSlot(id, 'full', 'Escape', 3, true); // full-body effort
+      atCloseModal();
+      await atResolveEscape(id);
+      break;
     case 'end-turn':
       atAcceptAction(id);
       atCloseModal();
