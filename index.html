@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722c';
+const VERSION = 'v0.1.20260722d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5810,26 +5810,37 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   const category  = getAttackCategory(actionLabel);
   const dr        = getArmorDR(armorType, category);
 
-  // Roll damage: random 1–(Power × maxPowerMod), subtract armor DR, cap at damageMax
-  const maxRoll     = Math.max(1, (atkPower || 1) * (weaponRow.maxPowerMod || 0.5));
+  // Roll damage: random 1–(Power × maxPowerMod), subtract armor DR, cap at damageMax.
+  // Use ?? not || so a legitimate 0 (e.g. Grab: damageMax 0, maxPowerMod 0 — a
+  // non-damaging control action) isn't silently replaced by the default.
+  const dmgCap      = weaponRow.damageMax  ?? 10;
+  const powerMod    = weaponRow.maxPowerMod ?? 0.5;
+  const maxRoll     = Math.max(1, (atkPower || 1) * powerMod);
   const rawRoll     = Math.random() * (maxRoll - 1) + 1;
   const afterArmor  = Math.max(0, rawRoll - dr);
-  const finalDamage = Math.round(Math.min(afterArmor, weaponRow.damageMax || 10));
+  const finalDamage = dmgCap <= 0 ? 0 : Math.round(Math.min(afterArmor, dmgCap));
 
   // Show result in roller
   const dmgEl = document.getElementById('roller-damage-display');
   if (dmgEl) {
     dmgEl.style.display = 'block';
     const rawDisplay  = Math.round(rawRoll);
-    const capNote     = afterArmor > (weaponRow.damageMax || 10) ? ` (capped at ${weaponRow.damageMax})` : '';
-    const rollLine    = dr > 0
-      ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
-      : `Roll ${rawDisplay}${capNote}`;
-    dmgEl.innerHTML = `
-      <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}</div>
-      <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
-      <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
-      <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
+    const capNote     = dmgCap > 0 && afterArmor > dmgCap ? ` (capped at ${dmgCap})` : '';
+    if (dmgCap <= 0) {
+      // Non-damaging control action (e.g. Grab) — no damage line, just the hit.
+      dmgEl.innerHTML = `
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${actionLabel}</div>
+        <div style="font-size:1.1rem;font-weight:bold;color:var(--text);">Connects — no damage</div>`;
+    } else {
+      const rollLine  = dr > 0
+        ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
+        : `Roll ${rawDisplay}${capNote}`;
+      dmgEl.innerHTML = `
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}</div>
+        <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
+        <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
+    }
   }
 
   // Apply to Toughness only — stamina is spent on actions, not from being hit
@@ -9660,6 +9671,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722c"></script>
+<script src="panels.js?v=20260722d"></script>
 </body>
 </html>
