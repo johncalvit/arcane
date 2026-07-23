@@ -4095,7 +4095,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722b';
+const VERSION = 'v0.1.20260722c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5045,6 +5045,8 @@ const CONDITION_DEFS = [
     desc:'Grabbed and held. Spend an action on Escape — an opposed Power + Coordination roll — to break free.' },
   { key:'holding',     label:'Holding',     icon:'🤚', color:'#d98c40',
     desc:'Holding an opponent in a grab. They must win an opposed Power + Coordination roll to escape.' },
+  { key:'carrying',    label:'Carrying',    icon:'🐴', color:'#7fb069',
+    desc:'Willingly carrying or being ridden by one or more others. They move with this token; their weight slows it.' },
 ];
 
 function getConditions(tokenId) {
@@ -5655,6 +5657,72 @@ async function atResolveEscape(combatantId) {
         freed ? 'good' : 'warn');
     },
   });
+}
+
+// ── Carry / Mount / Grab — the "borne-by" relationship ───────────────────────
+// A dependent token carries a namespaced marker pointing at its bearer's
+// combatant id: `heldby:<cid>` (forced grab — escapable) or `borneby:<cid>`
+// (willing carry/mount — free dismount). The bearer shows holding / carrying.
+// Moving a bearer moves everything it bears; borne weight slows the bearer via
+// the existing calcMaxSpeed encumbrance term. (Phase 1: one level deep — a
+// dependent that is itself a bearer doesn't cascade; the GM manages stacks.)
+function _tokenCid(token) {
+  if (!token) return null;
+  return token.entity_type === 'character' ? 'char::' + token.entity_id : 'creature::' + token.id;
+}
+function _dependentTokensOf(bearerToken) {
+  const cid = _tokenCid(bearerToken);
+  if (!cid) return [];
+  const forced = 'heldby:' + cid, willing = 'borneby:' + cid;
+  return Object.values(mapTokens).filter(t => {
+    const c = Array.isArray(t.conditions) ? t.conditions : [];
+    return c.includes(forced) || c.includes(willing);
+  });
+}
+// Spread dependents around the bearer's anchor so each stays visible (map-% units).
+function _carryOffsetPct(i, count) {
+  if (count <= 1) return { x: 1.4, y: 1.4 };
+  const a = (i / count) * Math.PI * 2;
+  return { x: Math.cos(a) * 2.6, y: Math.sin(a) * 2.6 };
+}
+// Move a bearer's dependents to follow it. persist writes to the DB (on drop /
+// commit); the live drag path passes persist=false and only nudges + broadcasts.
+function _moveBorneWith(bearerTokenId, x_pct, y_pct, persist) {
+  const bearer = mapTokens[bearerTokenId];
+  if (!bearer) return;
+  const deps = _dependentTokensOf(bearer);
+  if (!deps.length) return;
+  deps.forEach((d, i) => {
+    const off = _carryOffsetPct(i, deps.length);
+    const nx = Math.min(100, Math.max(0, x_pct + off.x));
+    const ny = Math.min(100, Math.max(0, y_pct + off.y));
+    d.x_pct = nx; d.y_pct = ny;
+    const el = document.getElementById('token-' + d.id);
+    if (el) { el.style.left = nx + '%'; el.style.top = ny + '%'; }
+    tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: d.id, x_pct: nx, y_pct: ny } });
+    if (persist) sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', d.id);
+  });
+}
+function _entityBodyWeight(cid) {
+  const w = getEntity(cid)?.attrs?._weight;
+  return (typeof w === 'number' && w > 0) ? w : 150;
+}
+// Total body weight a bearer is carrying — feeds the movement encumbrance term.
+function _borneWeightOn(bearerToken) {
+  return _dependentTokensOf(bearerToken).reduce((s, d) => s + _entityBodyWeight(_tokenCid(d)), 0);
+}
+// Create or clear a willing carry (bearer carries dep) / mount (dep rides bearer).
+async function atSetCarry(bearerCid, depCid, on) {
+  const depTok = _pathFindToken(depCid), bearerTok = _pathFindToken(bearerCid);
+  if (!depTok || !bearerTok) return;
+  await setCondition(depTok.id, 'borneby:' + bearerCid, on);
+  if (on) {
+    await setCondition(bearerTok.id, 'carrying', true);
+  } else {
+    const stillCarrying = Object.values(mapTokens).some(t =>
+      t.id !== depTok.id && (Array.isArray(t.conditions) ? t.conditions : []).includes('borneby:' + bearerCid));
+    if (!stillCarrying) await setCondition(bearerTok.id, 'carrying', false);
+  }
 }
 
 // Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
@@ -7564,6 +7632,9 @@ function onTokenMouseMove(e) {
   // broadcast to others (fast path)
   tokenChannel?.send({ type: 'broadcast', event: 'token-move',
     payload: { id: dragTokenId, x_pct, y_pct } });
+
+  // anyone this token is carrying / holding rides along
+  _moveBorneWith(dragTokenId, x_pct, y_pct, false);
 }
 
 async function onTokenMouseUp(e) {
@@ -7622,6 +7693,9 @@ async function onTokenMouseUp(e) {
   }
 
   await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', dragTokenId);
+
+  // drop anyone carried / held at the new spot too
+  _moveBorneWith(dragTokenId, x_pct, y_pct, true);
 
   // keep path-tool seed position current if this token is a combatant
   const movedId = dragTokenId;
@@ -8710,7 +8784,8 @@ function pathGetSpeed() {
     const attrs = calcAttributes();
     if (!attrs || !attrs.Speed) return 5;
     const { total } = getCarriedWeight(attrs);
-    return Math.max(1, calcMaxSpeed(attrs, total));
+    const borne = pathCharId ? _borneWeightOn(_pathFindToken(pathCharId)) : 0;
+    return Math.max(1, calcMaxSpeed(attrs, total + borne));
   } catch(e) { return 5; }
 }
 
@@ -8852,6 +8927,7 @@ async function pathCommit() {
       token.x_pct = x_pct; token.y_pct = y_pct;
       tokenChannel?.send({ type:'broadcast', event:'token-move', payload:{ id:token.id, x_pct, y_pct } });
       await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', token.id);
+      _moveBorneWith(token.id, x_pct, y_pct, true); // carried / held move too
     }
   }
 
@@ -9584,6 +9660,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722b"></script>
+<script src="panels.js?v=20260722c"></script>
 </body>
 </html>

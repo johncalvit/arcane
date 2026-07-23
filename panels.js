@@ -531,7 +531,9 @@ function _dlgRender(body) {
 
   // ── Movement indicator (read-only; movement happens on the map) ────────────
   const mv = c.slots.move;
-  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, 0) || 5) * 3));
+  const _borne = (typeof _borneWeightOn === 'function' && typeof _pathFindToken === 'function')
+    ? _borneWeightOn(_pathFindToken(combatantId)) : 0;
+  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, _borne) || 5) * 3));
   const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft\)/) || [])[1] || '0', 10)) : 0;
   const movePct  = Math.min(100, Math.round((usedFeet / maxFeet) * 100));
   const halfUsed = usedFeet >= maxFeet / 2;
@@ -662,6 +664,28 @@ function _dlgRender(body) {
       }), false)
     : '';
 
+  // ── Carry / Mount (willing borne-by) ───────────────────────────────────────
+  let carryHtml = '';
+  const selfTok = typeof _pathFindToken === 'function' ? _pathFindToken(combatantId) : null;
+  if (selfTok) {
+    const csel = 'font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin:0 6px 6px 0;font-family:Georgia,serif;';
+    const myConds  = getConditions(selfTok.id);
+    const borneOn  = [...myConds].find(cc => cc.startsWith('borneby:')); // I'm being carried/ridden
+    const iCarry   = _dependentTokensOf(selfTok).some(d =>
+      (Array.isArray(d.conditions) ? d.conditions : []).includes('borneby:' + combatantId));
+    let cc = '';
+    if (borneOn) cc += _dlgChip({ label: 'Dismount', sub: 'free', data: { dact: 'dismount' } });
+    if (iCarry)  cc += _dlgChip({ label: 'Set down', sub: 'free', data: { dact: 'setdown' } });
+    const others = Object.values(mapTokens).filter(t => t.id !== selfTok.id);
+    if (others.length) {
+      const opts = others.map(t => `<option value="${_paEsc(t.id)}">${_paEsc(t.label || 'token')}</option>`).join('');
+      cc += `<select id="dlg-carry-target" style="${csel}">${opts}</select>`
+          + _dlgChip({ label: 'Carry them', sub: 'they ride', data: { dact: 'carry' } })
+          + _dlgChip({ label: 'Mount them', sub: 'you ride', data: { dact: 'mount' } });
+    }
+    carryHtml = _dlgSection('🐴 Carry / Mount', cc, fullActive);
+  }
+
   // ── Custom action + footer ─────────────────────────────────────────────────
   const channelOpts = [`<option value="full">Full body</option>`]
     .concat(plan.map(ch => `<option value="${_paEsc(ch.key)}">${_paEsc(ch.label)}</option>`)).join('');
@@ -675,6 +699,7 @@ function _dlgRender(body) {
     ${moveHtml}
     ${_dlgSection('⚡ Full Body — replaces arm and movement actions', fullChips, false)}
     ${channelHtml}
+    ${carryHtml}
     ${arcaneHtml}
     <div style="display:flex;gap:6px;margin-top:14px;">
       <input type="text" id="dlg-custom-label" placeholder="Custom action…" style="${selStyle}flex:1;">
@@ -771,6 +796,32 @@ async function _dlgAct(d, id, body) {
       atCloseModal();
       await atResolveEscape(id);
       break;
+    case 'carry': {
+      const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];
+      if (depTok) { await atSetCarry(id, _tokenCid(depTok), true); _dlgRender(body); }
+      break;
+    }
+    case 'mount': {
+      const bTok = mapTokens[document.getElementById('dlg-carry-target')?.value];
+      if (bTok) { await atSetCarry(_tokenCid(bTok), id, true); _dlgRender(body); }
+      break;
+    }
+    case 'dismount': {
+      const selfTok = _pathFindToken(id);
+      const link = selfTok && [...getConditions(selfTok.id)].find(cc => cc.startsWith('borneby:'));
+      if (link) { await atSetCarry(link.slice('borneby:'.length), id, false); _dlgRender(body); }
+      break;
+    }
+    case 'setdown': {
+      const selfTok = _pathFindToken(id);
+      if (selfTok) {
+        const deps = _dependentTokensOf(selfTok).filter(d =>
+          (Array.isArray(d.conditions) ? d.conditions : []).includes('borneby:' + id));
+        for (const d of deps) await atSetCarry(id, _tokenCid(d), false);
+        _dlgRender(body);
+      }
+      break;
+    }
     case 'end-turn':
       atAcceptAction(id);
       atCloseModal();
