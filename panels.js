@@ -632,12 +632,12 @@ function _dlgRender(body) {
   // A single weapon in both hands (and not two copies) is held two-handed — its
   // actions show once under "Both Hands" instead of duplicated per arm.
   const twoHanded = _twoHandedGrip(ent);
-  const selStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
+  const handSelStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
   const handSelect = (side) => {
     const cur = ent?.held?.[side] || '';
     const opts = ['', ...handItems].map(n =>
       `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Bare Handed —'}</option>`).join('');
-    return `<select style="${selStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
+    return `<select style="${handSelStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
   };
 
   const channelHtml = plan.map(ch => {
