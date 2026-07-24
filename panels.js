@@ -531,9 +531,9 @@ function _dlgRender(body) {
 
   // ── Movement indicator (read-only; movement happens on the map) ────────────
   const mv = c.slots.move;
-  const _borne = (typeof _borneWeightOn === 'function' && typeof _pathFindToken === 'function')
-    ? _borneWeightOn(_pathFindToken(combatantId)) : 0;
-  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, _borne) || 5) * 3));
+  const _drag = (typeof _groupDragLoad === 'function' && typeof _pathFindToken === 'function')
+    ? _groupDragLoad(_pathFindToken(combatantId)) : 0;
+  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, _drag) || 5) * 3));
   const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft\)/) || [])[1] || '0', 10)) : 0;
   const movePct  = Math.min(100, Math.round((usedFeet / maxFeet) * 100));
   const halfUsed = usedFeet >= maxFeet / 2;
@@ -655,14 +655,26 @@ function _dlgRender(body) {
     }
   }
 
-  // ── Held: break-free contest ───────────────────────────────────────────────
-  const escapeHtml = conds.has('held')
-    ? _dlgSection('✊ Held — grabbed', _dlgChip({
+  // ── Grappling: break free (held) / take down (holding) ─────────────────────
+  let escapeHtml = '';
+  if (conds.has('held') || conds.has('holding')) {
+    let gchips = '';
+    if (conds.has('held'))
+      gchips += _dlgChip({
         label: 'Escape', sub: 'contest',
-        title: 'Opposed Power + Coordination roll to break free (spends your action)',
+        title: 'Opposed Power + Coordination roll vs the combined hold to break free (spends your action)',
         data: { dact: 'escape' },
-      }), false)
-    : '';
+      });
+    if (conds.has('holding'))
+      gchips += _dlgChip({
+        label: 'Takedown', sub: 'contest',
+        title: 'Opposed Power + Coordination roll to wrestle the held target Prone (spends your action)',
+        data: { dact: 'takedown' },
+      });
+    const gtitle = conds.has('held') && conds.has('holding') ? '🤼 Grappling'
+                 : conds.has('held') ? '✊ Held — grabbed' : '🤚 Holding';
+    escapeHtml = _dlgSection(gtitle, gchips, false);
+  }
 
   // ── Carry / Mount (willing borne-by) ───────────────────────────────────────
   let carryHtml = '';
@@ -795,6 +807,11 @@ async function _dlgAct(d, id, body) {
       await atSetSlot(id, 'full', 'Escape', 3, true); // full-body effort
       atCloseModal();
       await atResolveEscape(id);
+      break;
+    case 'takedown':
+      await atSetSlot(id, 'full', 'Takedown', 3, true); // full-body effort
+      atCloseModal();
+      await atResolveTakedown(id);
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];
