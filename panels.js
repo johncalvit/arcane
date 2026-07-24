@@ -94,8 +94,25 @@ function _paSecStats(attrs) {
   return _paSection('Stats', content);
 }
 
+// Same weapon in both hands, held as one (a two-handed grip) — not two copies
+// dual-wielded, and never bare hands. Loadout count ≥ 2 means dual-wield (shown
+// as two of the weapon); < 2 (or unknown, for non-own entities) means one
+// weapon spanning both hands. Mirrors the builder's isTwoHandedGrip().
+function _twoHandedGrip(ent) {
+  const r = ent?.held?.right || '', l = ent?.held?.left || '';
+  if (!r || r !== l) return false;
+  const bare = typeof BARE_HANDED !== 'undefined' ? BARE_HANDED : 'Bare Handed';
+  if (normalizeWeaponName(r) === bare) return false;
+  let count = 1;
+  if (ent?.type === 'char' && ent.id === currentCharacterId && typeof getLoadoutItemCounts === 'function') {
+    count = getLoadoutItemCounts()[r] || 1;
+  }
+  return count < 2;
+}
+
 function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   const held = ent.held || {};
+  const twoHanded = _twoHandedGrip(ent);
   let html = '';
   if (canEdit) {
     let options = loadoutOverride || ent.loadout;
@@ -115,15 +132,19 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
         <select style="${selStyle}" data-pa="set-hand" data-side="${side}">${opts}</select>
       </div>`;
     }).join('');
+  } else if (twoHanded) {
+    html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Both hands: <span style="color:var(--text);">${_paEsc(held.right)} <span style="color:var(--text-dim);">(Two-Handed)</span></span></div>`;
   } else {
     html += `
       <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${_paEsc(held.right || 'Bare Hand')}</span></div>
       <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Left: <span style="color:var(--text);">${_paEsc(held.left || 'Bare Hand')}</span></div>`;
   }
-  // Hit/damage rows for held weapons — same math for every entity
+  // Hit/damage rows for held weapons — same math for every entity. A two-handed
+  // grip is one weapon, so only walk the right hand (skip the mirrored left).
   const sizeAdj = attrs._targetAdj ?? 1;
+  const sides = twoHanded ? ['right'] : ['right', 'left'];
   let rows = '';
-  for (const side of ['right', 'left']) {
+  for (const side of sides) {
     const itemName = held[side];
     if (!itemName) continue;
     const norm = normalizeWeaponName(itemName);
@@ -608,9 +629,21 @@ function _dlgRender(body) {
     }).join('');
   };
 
+  // A single weapon in both hands (and not two copies) is held two-handed — its
+  // actions show once under "Both Hands" instead of duplicated per arm.
+  const twoHanded = _twoHandedGrip(ent);
+  const selStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
+  const handSelect = (side) => {
+    const cur = ent?.held?.[side] || '';
+    const opts = ['', ...handItems].map(n =>
+      `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Bare Handed —'}</option>`).join('');
+    return `<select style="${selStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
+  };
+
   const channelHtml = plan.map(ch => {
-    const cur = c.slots[ch.key];
     const isArm = ch.key === 'right' || ch.key === 'left';
+    if (twoHanded && ch.key === 'left') return ''; // merged into the Both Hands section
+    const cur = c.slots[ch.key];
     let chips = '';
     if (cur) {
       chips += _dlgChip({
@@ -622,12 +655,13 @@ function _dlgRender(body) {
     let held = '';
     if (isArm) {
       held = ent?.held?.[ch.key] || '';
-      // Hand selector — swapping what's held is this arm's action for the round
-      // (replaces the old Draw Weapon / Change Item Held full-body actions).
-      const selStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
-      const opts = ['', ...handItems].map(n =>
-        `<option value="${_paEsc(n)}"${n === held ? ' selected' : ''}>${_paEsc(n) || '— Bare Handed —'}</option>`).join('');
-      chips += `<select style="${selStyle}" data-dchange="held" data-side="${ch.key}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
+      if (twoHanded) {
+        // Both hands on one weapon: two selectors, actions once (on the right slot)
+        chips += handSelect('right') + handSelect('left');
+        chips += weaponChips(held, 'right');
+        return _dlgSection(`🤲 Both Hands — ${_paEsc(held)}`, chips, fullActive);
+      }
+      chips += handSelect(ch.key);
       chips += weaponChips(held || BARE_HANDED, ch.key);
     } else {
       // Natural attack channel — generic entries until natural weapons get
