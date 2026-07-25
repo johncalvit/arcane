@@ -846,14 +846,12 @@ async function _dlgAct(d, id, body) {
       break;
     }
     case 'escape':
-      await atSetSlot(id, 'full', 'Escape', 3, true); // full-body effort
       atCloseModal();
-      await atResolveEscape(id);
+      await atResolveEscape(id); // spends the action only when the roll lands
       break;
     case 'takedown':
-      await atSetSlot(id, 'full', 'Takedown', 3, true); // full-body effort
       atCloseModal();
-      await atResolveTakedown(id);
+      await atResolveTakedown(id); // spends the action only when the roll lands
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];

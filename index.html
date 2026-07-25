@@ -281,7 +281,7 @@
   }
   #roller-result-label.success { color: #4de080; }
   #roller-result-label.fail    { color: #e05050; }
-  #roller-close {
+  #roller-close, #roller-cancel {
     margin-top: 18px; font-size: 0.75rem; color: var(--text-dim);
     background: none; border: 1px solid var(--border); border-radius: 3px;
     padding: 3px 14px; cursor: pointer; font-family: Georgia, serif;
@@ -4118,7 +4118,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722h';
+const VERSION = 'v0.1.20260722i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5661,12 +5661,15 @@ function _combinedGrappleMax(targetToken) {
 // pre-rolled, the acting side rolls live. Degree of success = threshold − roll;
 // higher wins. `win` decides the acting side's victory (used for both escape
 // and takedown, which share the math but flip who acts and the outcome).
-async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, onLose, actorName, oppName }) {
+async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, onLose, actorName, oppName, actorCid, actionLabel }) {
   const oRoll = Math.floor(Math.random() * 100) + 1;
   const oDeg  = oppMax - oRoll;
   openRoller({
     label,
     onComplete: async (aRoll) => {
+      // The action is spent only now that the roll landed — a cancelled roll
+      // (closed before it stops) never reaches here, so nothing is committed.
+      if (actorCid && actionLabel) await atSetSlot(actorCid, 'full', actionLabel, 3, true);
       const aDeg = actorMax - aRoll;
       const win  = tiesToActor ? aDeg >= oDeg : aDeg > oDeg;
       const resultEl = document.getElementById('roller-result-label');
@@ -5694,6 +5697,7 @@ async function atResolveEscape(combatantId) {
     label: `Escape Grab — ${targetEnt?.name || 'Target'} vs ${oppName}`,
     actorMax: targetMax, oppMax: hold.max, tiesToActor: false,
     actorName: targetEnt?.name || 'Target', oppName,
+    actorCid: combatantId, actionLabel: 'Escape',
     onWin:  { label: 'BROKE FREE', toast: '✊ Broke free!', act: () => atReleaseHold(token.id) },
     onLose: { label: 'STILL HELD',  toast: '✊ Still held.' },
   });
@@ -5716,6 +5720,7 @@ async function atResolveTakedown(grabberCid) {
     label: `Takedown — ${actorName} vs ${targetEnt?.name || 'Target'}`,
     actorMax: hold.max, oppMax: targetMax, tiesToActor: true,
     actorName, oppName: targetEnt?.name || 'Target',
+    actorCid: grabberCid, actionLabel: 'Takedown',
     onWin:  { label: 'TAKEN DOWN', toast: '🤼 Taken down!', act: () => setCondition(targetTok.id, 'prone', true) },
     onLose: { label: 'STAYS UP',   toast: 'Stays standing.' },
   });
@@ -6670,6 +6675,8 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   document.getElementById('roller-result-label').className = '';
   document.getElementById('roller-hit-location').textContent = '';
   document.getElementById('roller-close').style.display = 'none';
+  // Cancel is available while spinning (not for spectators watching a mirror)
+  document.getElementById('roller-cancel').style.display = mirror ? 'none' : 'inline-block';
 
   // Defense buttons
   const defSection = document.getElementById('roller-defense');
@@ -6793,6 +6800,7 @@ function _rollerTick(interval) {
 function _rollerBeginStop() {
   _roller.phase = 'stopping';
   clearTimeout(_roller.timeoutId);
+  document.getElementById('roller-cancel').style.display = 'none'; // roll is committed
   // Choose the final number now — timing the click cannot influence it.
   // A mirror already has finalNum set from the broadcast; keep it.
   if (_roller.finalNum == null) _roller.finalNum = _rollerRand();
@@ -6803,6 +6811,7 @@ function _rollerBeginStop() {
   const pitches = [0.95, 0.88, 0.80, 0.72, 0.65, 0.58, 0.55];
   let i = 0;
   function step() {
+    if (!_roller) return; // cancelled mid-deceleration
     const isLast = i === steps.length - 1;
     document.getElementById('roller-number').textContent =
       isLast ? _roller.finalNum : _rollerRand();
@@ -6879,8 +6888,16 @@ function closeRoller() {
   clearTimeout(_roller?.timeoutId);
   _roller = null;
   document.getElementById('roller-overlay').style.display = 'none';
+  document.getElementById('roller-cancel').style.display = 'none';
   clearStrayRay(true);
   if (!wasMirror) _rollerBroadcast('roller-close'); // dismiss everyone's mirror
+}
+
+// Abort a roll before it lands: closes without running onComplete, so no roll
+// happens and no action is spent (grapple actions commit on result, not open).
+function cancelRoller() {
+  if (!_roller || _roller.mirror) return;
+  closeRoller();
 }
 
 // ── Stray shot (ranged miss) ──────────────────────────────────────────────────
@@ -8887,13 +8904,17 @@ function exitPathMode() {
 }
 
 function pathGetSpeed() {
-  // Use the live calcMaxSpeed if the current character sheet is loaded
+  // Speed belongs to the entity being MOVED, not whatever sheet is loaded — a
+  // horse must use the horse's Speed, not the rider's. Own character prefers the
+  // live sheet (reflects unsaved edits); everyone else uses their cached attrs.
   try {
-    const attrs = calcAttributes();
+    const ent   = pathCharId ? getEntity(pathCharId) : null;
+    const isOwn = ent && ent.type === 'char' && ent.id === currentCharacterId;
+    const attrs = isOwn ? calcAttributes() : (ent?.attrs || calcAttributes());
     if (!attrs || !attrs.Speed) return 5;
-    const { total } = getCarriedWeight(attrs);
+    const carried = _entityCarried(ent, attrs);
     const tok = pathCharId ? _pathFindToken(pathCharId) : null;
-    return Math.max(1, _effectiveSpeed(attrs, total, tok) ?? 5);
+    return Math.max(1, _effectiveSpeed(attrs, carried, tok) ?? 5);
   } catch(e) { return 5; }
 }
 
@@ -9325,6 +9346,7 @@ switchGmTab = function(tab) {
     <div id="roller-result-label"></div>
     <div id="roller-hit-location" style="font-size:1.05rem;font-weight:bold;margin-top:4px;min-height:1.4em;"></div>
     <div id="roller-damage-display" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;text-align:center;"></div>
+    <button id="roller-cancel" onclick="event.stopPropagation(); cancelRoller()" style="display:none;">Cancel</button>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
 </div>
@@ -9769,6 +9791,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722h"></script>
+<script src="panels.js?v=20260722i"></script>
 </body>
 </html>
