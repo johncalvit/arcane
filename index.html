@@ -1799,6 +1799,29 @@ function calcMaxSpeed(attrs, totalCarried) {
   return Math.max(0, attrs.Speed - penalty);
 }
 
+const PRONE_SPEED_FACTOR = 0.25; // crawling — quarter speed while prone
+
+// Best-effort carried weight for encumbrance. The own character reads its live
+// loadout (body + weapons + equipment + armor); other entities fall back to
+// body weight (their gear isn't tracked here).
+function _entityCarried(ent, attrs) {
+  if (ent && ent.type === 'char' && ent.id === currentCharacterId && typeof getCarriedWeight === 'function') {
+    try { return getCarriedWeight(attrs).total || 0; } catch (e) {}
+  }
+  return (attrs && attrs._weight) || 0;
+}
+
+// Effective move speed (ft/s): base speed minus carried + grappled-drag
+// encumbrance, then quartered if the token is prone (crawling). token optional.
+function _effectiveSpeed(attrs, carried, token) {
+  if (!attrs) return null;
+  const drag = token ? _groupDragLoad(token) : 0;
+  let spd = calcMaxSpeed(attrs, (carried || 0) + drag);
+  if (spd == null) return null;
+  if (token && getConditions(token.id).has('prone')) spd *= PRONE_SPEED_FACTOR;
+  return spd;
+}
+
 function updateWeightSummary(attrs) {
   document.getElementById('ws-body').textContent = attrs ? Math.round(attrs._weight)+' lbs' : '—';
   const { wW, wE, wA, total } = getCarriedWeight(attrs);
@@ -4095,7 +4118,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722g';
+const VERSION = 'v0.1.20260722h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5956,7 +5979,7 @@ const AT_MOVE = [
   { label: 'Stand Up',      dur: 2  },
 ];
 const AT_FULLBODY = [
-  { label: 'Evade',          dur: 2 },
+  { label: 'Evade',          dur: 99 }, // lock-on stance — persists until cleared
   { label: 'Retreat',        dur: 2 },
   { label: 'Sentinel',       dur: 99 },
   { label: 'Go Prone',       dur: 1 },
@@ -6339,6 +6362,7 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   }
 
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
+  if (label === 'Go Prone'  && token) setCondition(token.id, 'prone', true); // prone locks on until Stand Up
 
   // Set or clear defensive conditions based on what was just assigned
   if (token) {
@@ -8868,8 +8892,8 @@ function pathGetSpeed() {
     const attrs = calcAttributes();
     if (!attrs || !attrs.Speed) return 5;
     const { total } = getCarriedWeight(attrs);
-    const drag = pathCharId ? _groupDragLoad(_pathFindToken(pathCharId)) : 0;
-    return Math.max(1, calcMaxSpeed(attrs, total + drag));
+    const tok = pathCharId ? _pathFindToken(pathCharId) : null;
+    return Math.max(1, _effectiveSpeed(attrs, total, tok) ?? 5);
   } catch(e) { return 5; }
 }
 
@@ -9745,6 +9769,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722g"></script>
+<script src="panels.js?v=20260722h"></script>
 </body>
 </html>

@@ -240,8 +240,14 @@ function renderEntityPanel(ref, opts = {}) {
   const name    = opts.name   || ent.name || '—';
   const isOwnSheet = ent.type === 'char' && ent.id === currentCharacterId;
 
-  const speed = calcMaxSpeed(attrs, opts.carried || 0);
-  const speedStr = speed != null ? Math.round(speed) + ' ft/s' : '—';
+  const _spdTok = typeof _pathFindToken === 'function'
+    ? _pathFindToken(ent.type === 'char' ? 'char::' + ent.id : 'creature::' + ent.id) : null;
+  const _carried = opts.carried != null ? opts.carried
+    : (typeof _entityCarried === 'function' ? _entityCarried(ent, attrs) : 0);
+  const speed = typeof _effectiveSpeed === 'function'
+    ? _effectiveSpeed(attrs, _carried, _spdTok) : calcMaxSpeed(attrs, _carried);
+  const _proneNow = _spdTok ? getConditions(_spdTok.id).has('prone') : false;
+  const speedStr = speed != null ? Math.round(speed) + ' ft/s' + (_proneNow ? ' (crawl)' : '') : '—';
   const sizeStr = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const sub = [ent.species, ent.bodyType].filter(Boolean).join(' · ');
 
@@ -552,9 +558,11 @@ function _dlgRender(body) {
 
   // ── Movement indicator (read-only; movement happens on the map) ────────────
   const mv = c.slots.move;
-  const _drag = (typeof _groupDragLoad === 'function' && typeof _pathFindToken === 'function')
-    ? _groupDragLoad(_pathFindToken(combatantId)) : 0;
-  const maxFeet  = Math.max(1, Math.round((calcMaxSpeed(attrs, _drag) || 5) * 3));
+  const _mvTok   = typeof _pathFindToken === 'function' ? _pathFindToken(combatantId) : null;
+  const _carried = typeof _entityCarried === 'function' ? _entityCarried(ent, attrs) : 0;
+  const _spd     = typeof _effectiveSpeed === 'function'
+    ? _effectiveSpeed(attrs, _carried, _mvTok) : calcMaxSpeed(attrs, 0);
+  const maxFeet  = Math.max(1, Math.round((_spd || 5) * 3));
   const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft\)/) || [])[1] || '0', 10)) : 0;
   const movePct  = Math.min(100, Math.round((usedFeet / maxFeet) * 100));
   const halfUsed = usedFeet >= maxFeet / 2;
@@ -621,7 +629,7 @@ function _dlgRender(body) {
       return _dlgChip({
         label: r.action, sub,
         data: defensive
-          ? { dact: 'set', slot: chKey, label: lbl, dur: dur * 3, locks: 0 }
+          ? { dact: 'set', slot: chKey, label: lbl, dur: 99, locks: 0 } // lock-on stance
           : { dact: 'attack', slot: chKey, label: lbl, dur: dur * 3,
               item: itemName, action: r.action, ranged: ranged ? 1 : 0,
               range: ranged ? (r.rangeIncrement || 5) : (r.reach ?? 0) },
