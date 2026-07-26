@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722l';
+const VERSION = 'v0.1.20260722m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6223,27 +6223,31 @@ function atStopCombat() {
   renderPlayCharacter();
 }
 
-function atNext() {
+async function atNext() {
   const sorted = atSortedCombatants();
   if (!sorted.length) return;
   atActiveIdx++;
   if (atActiveIdx >= sorted.length) {
     atActiveIdx = 0;
-    // Stamina recovery: +1 for combatants who took no actions this round
-    atCombatants.forEach(c => {
+    // Stamina recovery + bleed tick both write the same entity's `damage`, so
+    // they MUST run sequentially (awaited) — firing them concurrently let a
+    // stale-snapshot stamina write clobber the bleed's blood drain, leaving a
+    // combatant marked dead while still showing 1 blood.
+    // Stamina recovery: +1 for combatants who took no actions this round.
+    for (const c of atCombatants) {
       if (!c.slots || Object.values(c.slots).every(s => !s)) {
         const [type, rawId] = c.id.split('::');
         if (type === 'char') {
-          recoverStamina('character', rawId, 1);
+          await recoverStamina('character', rawId, 1);
         } else {
           const tok = mapTokens[rawId];
-          if (tok) recoverStamina('creature', tok.entity_id, 1);
+          if (tok) await recoverStamina('creature', tok.entity_id, 1);
         }
       }
-    });
-    // Ongoing hit-effects (bleeding drains Blood) tick once per round. GM-only
-    // path (atNext runs on the GM), so no double application; writes sync out.
-    atCombatants.forEach(c => { _tickHitEffects(c.id); });
+    }
+    // Ongoing hit-effects (bleeding drains Blood) tick once per round, after
+    // recovery has committed. GM-only path; writes sync out.
+    for (const c of atCombatants) { await _tickHitEffects(c.id); }
     atRound++;
     // Expire finished slot actions at round boundary
     atCombatants.forEach(c => {
@@ -9928,6 +9932,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722l"></script>
+<script src="panels.js?v=20260722m"></script>
 </body>
 </html>
