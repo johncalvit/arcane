@@ -240,8 +240,9 @@ function renderEntityPanel(ref, opts = {}) {
   const name    = opts.name   || ent.name || '—';
   const isOwnSheet = ent.type === 'char' && ent.id === currentCharacterId;
 
-  const _spdTok = typeof _pathFindToken === 'function'
-    ? _pathFindToken(ent.type === 'char' ? 'char::' + ent.id : 'creature::' + ent.id) : null;
+  // Use the entity's own resolved token — ent.id is a session_creature id for
+  // creatures (not a map-token id), so building 'creature::'+ent.id would miss.
+  const _spdTok = ent.tokenId ? mapTokens[ent.tokenId] : null;
   const _carried = opts.carried != null ? opts.carried
     : (typeof _entityCarried === 'function' ? _entityCarried(ent, attrs) : 0);
   const speed = typeof _effectiveSpeed === 'function'

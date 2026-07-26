@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722m';
+const VERSION = 'v0.1.20260722n';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6052,7 +6052,12 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
   const maxRoll     = Math.max(1, (atkPower || 1) * powerMod);
   const rawRoll     = Math.random() * (maxRoll - 1) + 1;
   const afterArmor  = Math.max(0, rawRoll - dr);
-  const finalDamage = dmgCap <= 0 ? 0 : Math.round(Math.min(afterArmor, dmgCap));
+  let   finalDamage = dmgCap <= 0 ? 0 : Math.round(Math.min(afterArmor, dmgCap));
+  // Head hits double — applied AFTER armor and the weapon cap, so a solid
+  // headshot punches past the normal max (a lethal called shot).
+  const _tgtBody  = getEntity(_entityRef(targetEntityType, targetEntityId))?.bodyType || 'Humanoid';
+  const isHeadHit = finalDamage > 0 && _partRole(_tgtBody, hitPart) === 'head';
+  if (isHeadHit) finalDamage *= 2;
 
   // Show result in roller
   const dmgEl = document.getElementById('roller-damage-display');
@@ -6070,8 +6075,8 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
         ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
         : `Roll ${rawDisplay}${capNote}`;
       dmgEl.innerHTML = `
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}</div>
-        <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}</div>
+        <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
     }
@@ -9932,6 +9937,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722m"></script>
+<script src="panels.js?v=20260722n"></script>
 </body>
 </html>
