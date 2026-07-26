@@ -718,6 +718,19 @@ function _dlgRender(body) {
     escapeHtml = _dlgSection(gtitle, gchips, false);
   }
 
+  // ── Recovery saves (manual roll to shed a condition) ───────────────────────
+  let recoverHtml = '';
+  const recoverable = [];
+  if (conds.has('stunned'))  recoverable.push({ key: 'stunned',  label: '💫 Shake Off Stun' });
+  if (conds.has('bleeding')) recoverable.push({ key: 'bleeding', label: '🩸 Stanch Bleeding' });
+  if (recoverable.length) {
+    recoverHtml = _dlgSection('🎲 Recover', recoverable.map(r => _dlgChip({
+      label: r.label, sub: 'save',
+      title: 'Roll a percentile save to shake off this condition',
+      data: { dact: 'recover', key: r.key },
+    })).join(''), false);
+  }
+
   // ── Carry / Mount (willing borne-by) ───────────────────────────────────────
   let carryHtml = '';
   const selfTok = typeof _pathFindToken === 'function' ? _pathFindToken(combatantId) : null;
@@ -750,6 +763,7 @@ function _dlgRender(body) {
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">${_paEsc(summary)}</div>
     ${banner}
     ${escapeHtml}
+    ${recoverHtml}
     ${moveHtml}
     ${_dlgSection('⚡ Full Body — replaces arm and movement actions', fullChips, false)}
     ${channelHtml}
@@ -852,6 +866,10 @@ async function _dlgAct(d, id, body) {
     case 'takedown':
       atCloseModal();
       await atResolveTakedown(id); // spends the action only when the roll lands
+      break;
+    case 'recover':
+      atCloseModal();
+      await atResolveRecovery(id, d.key); // manual save roll to shed the condition
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];

@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722j';
+const VERSION = 'v0.1.20260722k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5111,7 +5111,7 @@ async function setCondition(tokenId, condition, active) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunround:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -5667,8 +5667,11 @@ const HIT_EFFECTS = [
       const mult = ctx.category === 'pierce' ? 1.0 : 0.75;
       return Math.max(0, Math.min(1, mult * (ctx.finalDamage / ctx.toughnessMax)));
     },
-    onHit: async ctx => { await setCondition(ctx.targetTokenId, 'bleeding', true); },
-    onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); },
+    onHit: async ctx => {
+      await setCondition(ctx.targetTokenId, 'bleeding', true);
+      await setCondition(ctx.targetTokenId, 'bleedsince:' + _atSharedRound(), true);
+    },
+    onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); }, // drain stays automatic
   },
   {
     key: 'held', label: 'Grabbed',
@@ -5688,26 +5691,17 @@ const HIT_EFFECTS = [
     },
   },
   {
-    // Head hit → chance to stun. Recovers when a percentile save rolls under
-    // Toughness × rounds-stunned (grows each round, so it always ends).
+    // Head hit → chance to stun. Cleared by a manual recovery save (Shake Off
+    // Stun in the action dialog → atResolveRecovery): roll-under Toughness ×
+    // rounds-stunned, which grows each round so it always ends. stunsince: marks
+    // the onset round for that count.
     key: 'stunned', label: 'Stun', icon: '💫',
     gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'head' && ctx.finalDamage > 0
               && !ctx.conds.has('stunned') && _LOC_EFFECT_MODS.stunned[_damageType(ctx)] > 0,
     chance: ctx => _locEffectChance('stunned', ctx),
-    onHit: async ctx => { await setCondition(ctx.targetTokenId, 'stunned', true); },
-    onTick: async (ent, token) => {
-      const marker = [...getConditions(token.id)].find(c => c.startsWith('stunround:'));
-      const n = (marker ? (parseInt(marker.slice(10), 10) || 0) : 0) + 1;
-      if (marker) await setCondition(token.id, marker, false);
-      const target = Math.max(1, Math.round(ent.attrs.Toughness || 10)) * n;
-      const roll = Math.floor(Math.random() * 100) + 1;
-      if (roll <= target) {
-        await setCondition(token.id, 'stunned', false);
-        showToast(`💫 ${ent.name || 'Target'} shakes off the stun (save ${roll} ≤ ${target})`, 'good');
-      } else {
-        await setCondition(token.id, 'stunround:' + n, true);
-        showToast(`💫 ${ent.name || 'Target'} stays stunned (save ${roll} > ${target})`, 'warn');
-      }
+    onHit: async ctx => {
+      await setCondition(ctx.targetTokenId, 'stunned', true);
+      await setCondition(ctx.targetTokenId, 'stunsince:' + _atSharedRound(), true);
     },
   },
   {
@@ -5794,6 +5788,35 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
       if (win) await onWin.act(); else if (onLose.act) await onLose.act();
       showToast(`${win ? onWin.toast : onLose.toast} — ${actorName} ${aRoll}/${actorMax} vs ${oppName} ${oRoll}/${oppMax}`,
         win ? 'good' : 'warn');
+    },
+  });
+}
+
+// Manual recovery save through the shared roller — the acting player (or the GM,
+// for their tokens) kicks off the roll, stops it, and sees the outcome; success
+// (roll-under the target) clears the condition. Target escalates with how long
+// the condition has lasted (Toughness × rounds), so it always resolves. Used for
+// Stun and Bleeding; the blood drain keeps ticking until a save stanches it.
+async function atResolveRecovery(combatantId, effectKey) {
+  const token = _pathFindToken(combatantId);
+  if (!token) return;
+  const ent = getEntity(combatantId);
+  const tough = Math.max(1, Math.round(ent?.attrs?.Toughness || 10));
+  const cfg = {
+    stunned:  { since: 'stunsince:',  label: 'Shake Off Stun' },
+    bleeding: { since: 'bleedsince:', label: 'Stanch Bleeding' },
+  }[effectKey];
+  if (!cfg) return;
+  const marker = [...getConditions(token.id)].find(c => c.startsWith(cfg.since));
+  const start  = marker ? (parseInt(marker.slice(cfg.since.length), 10) || _atSharedRound()) : _atSharedRound();
+  const rounds = Math.max(1, _atSharedRound() - start + 1);
+  const target = tough * rounds;
+  openRoller({
+    label: `${cfg.label} — ${ent?.name || 'Target'} (round ${rounds})`,
+    target, targetLabel: 'roll under to recover',
+    onComplete: async (n) => {
+      const success = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
+      if (success) await setCondition(token.id, effectKey, false); // sweep clears the since marker
     },
   });
 }
@@ -9905,6 +9928,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722j"></script>
+<script src="panels.js?v=20260722k"></script>
 </body>
 </html>
