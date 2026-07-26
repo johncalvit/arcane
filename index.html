@@ -1818,7 +1818,11 @@ function _effectiveSpeed(attrs, carried, token) {
   const drag = token ? _groupDragLoad(token) : 0;
   let spd = calcMaxSpeed(attrs, (carried || 0) + drag);
   if (spd == null) return null;
-  if (token && getConditions(token.id).has('prone')) spd *= PRONE_SPEED_FACTOR;
+  if (token) {
+    const legProp = _damagedLegProportion(token); // injured legs slow you proportionally
+    if (legProp > 0) spd *= (1 - legProp);
+    if (getConditions(token.id).has('prone')) spd *= PRONE_SPEED_FACTOR;
+  }
   return spd;
 }
 
@@ -4118,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722i';
+const VERSION = 'v0.1.20260722j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5070,6 +5074,8 @@ const CONDITION_DEFS = [
     desc:'Holding an opponent in a grab. They must win an opposed Power + Coordination roll to escape.' },
   { key:'carrying',    label:'Carrying',    icon:'🐴', color:'#7fb069',
     desc:'Willingly carrying or being ridden by one or more others. They move with this token; their weight slows it.' },
+  { key:'slowed',      label:'Slowed',      icon:'🦵', color:'#c99a40',
+    desc:'Injured leg(s). Max speed is reduced by the proportion of legs hurt. Clear to heal.' },
 ];
 
 function getConditions(tokenId) {
@@ -5102,6 +5108,12 @@ async function setCondition(tokenId, condition, active) {
   const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
   if (active) current.add(condition);
   else        current.delete(condition);
+  // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
+  // clearing Slow restores full speed and clearing Stun resets its save counter.
+  if (!active) {
+    const sweep = { slowed: 'legdmg:', stunned: 'stunround:' }[condition];
+    if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
+  }
   const newConds = [...current];
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
@@ -5584,9 +5596,67 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId) 
 
 const _BLEED_RATE = 1; // Blood lost per round while bleeding (v1 flat; will vary/scale later)
 
+// Location-effect chance modifiers by damage type (0 = that type can't cause it).
+// Base chance is damage÷maxToughness (same as bleeding); this multiplies it.
+// Damage types match the armor system; attacks currently produce slash/stab/
+// smashbash, so the elemental columns are wired for future elemental damage.
+const _LOC_EFFECT_MODS = {
+  stunned: { slash:0.75, stab:0.75, smashbash:1,    burn:0,    shock:1,    freeze:0.5, corrode:0,    quint:1 },
+  fumble:  { slash:1,    stab:0.75, smashbash:0.75, burn:0.75, shock:1,    freeze:0,   corrode:0.75, quint:1 },
+  slowed:  { slash:1,    stab:0.75, smashbash:0.75, burn:0.75, shock:0.75, freeze:1,   corrode:0.75, quint:0 },
+};
+// Map the current 3-way attack category to the 8-type damage system. An explicit
+// ctx.damageType (future elemental attacks) wins if present.
+function _damageType(ctx) {
+  if (ctx.damageType) return ctx.damageType;
+  return ctx.category === 'slash' ? 'slash' : ctx.category === 'pierce' ? 'stab' : 'smashbash';
+}
+function _locEffectChance(effKey, ctx) {
+  const mod = (_LOC_EFFECT_MODS[effKey] || {})[_damageType(ctx)] || 0;
+  return Math.max(0, Math.min(1, mod * (ctx.finalDamage / ctx.toughnessMax)));
+}
+// Role of a hit location, from its label — head / arm / leg / other. Works across
+// body plans (forelegs/hindlegs read as legs) without per-plan role tagging.
+function _partRole(bodyType, hitPart) {
+  const l = ((getHitLocData(bodyType).parts[hitPart] || {}).label || hitPart || '').toLowerCase();
+  if (l.includes('head')) return 'head';
+  if (l.includes('arm'))  return 'arm';
+  if (l.includes('leg'))  return 'leg';
+  return 'other';
+}
+// Which hand a struck arm corresponds to (for dropping its held item).
+function _armSide(bodyType, hitPart) {
+  const l = ((getHitLocData(bodyType).parts[hitPart] || {}).label || hitPart || '').toLowerCase();
+  return l.includes('right') ? 'right' : l.includes('left') ? 'left' : null;
+}
+function _armHasItem(ctx) {
+  const side = _armSide(ctx.bodyType, ctx.hitPart);
+  if (!side) return false;
+  return !!(getEntity(_entityRef(ctx.targetEntityType, ctx.targetEntityId))?.held?.[side]);
+}
+async function _dropHeldFromArm(ctx) {
+  const side = _armSide(ctx.bodyType, ctx.hitPart);
+  if (!side) return;
+  const ref = _entityRef(ctx.targetEntityType, ctx.targetEntityId);
+  const ent = getEntity(ref);
+  if (!ent?.held?.[side]) return;
+  const held = Object.assign({}, ent.held); held[side] = null;
+  await updateEntity(ref, { held_items: held });
+}
+// Fraction of a token's legs that are injured — feeds the movement penalty.
+function _damagedLegProportion(token) {
+  const conds = Array.isArray(token.conditions) ? token.conditions : [];
+  const damaged = conds.filter(c => c.startsWith('legdmg:')).length;
+  if (!damaged) return 0;
+  const bodyType = getEntity(_tokenCid(token))?.bodyType || 'Humanoid';
+  const parts = getHitLocData(bodyType).parts || {};
+  const totalLegs = Object.values(parts).filter(p => (p.label || '').toLowerCase().includes('leg')).length || 2;
+  return Math.min(1, damaged / totalLegs);
+}
+
 const HIT_EFFECTS = [
   {
-    key: 'bleeding', label: 'Bleeding',
+    key: 'bleeding', label: 'Bleeding', icon: '🩸',
     // Slashing/piercing wounds that break through bleed; crush never does
     // (so smashing weapons can subdue without opening veins). Don't re-roll
     // if already bleeding (v1: no stacking).
@@ -5615,6 +5685,50 @@ const HIT_EFFECTS = [
         const atkTok = _pathFindToken(ctx.attackerCombatantId);
         if (atkTok) await setCondition(atkTok.id, 'holding', true);
       }
+    },
+  },
+  {
+    // Head hit → chance to stun. Recovers when a percentile save rolls under
+    // Toughness × rounds-stunned (grows each round, so it always ends).
+    key: 'stunned', label: 'Stun', icon: '💫',
+    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'head' && ctx.finalDamage > 0
+              && !ctx.conds.has('stunned') && _LOC_EFFECT_MODS.stunned[_damageType(ctx)] > 0,
+    chance: ctx => _locEffectChance('stunned', ctx),
+    onHit: async ctx => { await setCondition(ctx.targetTokenId, 'stunned', true); },
+    onTick: async (ent, token) => {
+      const marker = [...getConditions(token.id)].find(c => c.startsWith('stunround:'));
+      const n = (marker ? (parseInt(marker.slice(10), 10) || 0) : 0) + 1;
+      if (marker) await setCondition(token.id, marker, false);
+      const target = Math.max(1, Math.round(ent.attrs.Toughness || 10)) * n;
+      const roll = Math.floor(Math.random() * 100) + 1;
+      if (roll <= target) {
+        await setCondition(token.id, 'stunned', false);
+        showToast(`💫 ${ent.name || 'Target'} shakes off the stun (save ${roll} ≤ ${target})`, 'good');
+      } else {
+        await setCondition(token.id, 'stunround:' + n, true);
+        showToast(`💫 ${ent.name || 'Target'} stays stunned (save ${roll} > ${target})`, 'warn');
+      }
+    },
+  },
+  {
+    // Arm hit → chance to drop what that hand holds (instant, no lasting cond).
+    key: 'fumble', label: 'Fumble', icon: '🖐',
+    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'arm' && ctx.finalDamage > 0
+              && _LOC_EFFECT_MODS.fumble[_damageType(ctx)] > 0 && _armHasItem(ctx),
+    chance: ctx => _locEffectChance('fumble', ctx),
+    onHit: async ctx => { await _dropHeldFromArm(ctx); },
+  },
+  {
+    // Leg hit → chance to injure that leg; max speed drops by the proportion of
+    // legs injured (see _effectiveSpeed). Persists until the injury is healed.
+    key: 'slowed', label: 'Slow', icon: '🦵',
+    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'leg' && ctx.finalDamage > 0
+              && _LOC_EFFECT_MODS.slowed[_damageType(ctx)] > 0
+              && !ctx.conds.has('legdmg:' + ctx.hitPart),
+    chance: ctx => _locEffectChance('slowed', ctx),
+    onHit: async ctx => {
+      await setCondition(ctx.targetTokenId, 'legdmg:' + ctx.hitPart, true);
+      await setCondition(ctx.targetTokenId, 'slowed', true);
     },
   },
 ];
@@ -5859,7 +5973,7 @@ async function _runHitEffects(ctx, dmgEl) {
       const pct  = Math.round(eff.chance(ctx) * 100);
       const roll = Math.floor(Math.random() * 100) + 1; // 1..100
       applied = roll <= pct;
-      line = `${eff.label} ${pct}% · rolled ${roll} → ${applied ? '🩸 ' + eff.label : 'no ' + eff.label.toLowerCase()}`;
+      line = `${eff.label} ${pct}% · rolled ${roll} → ${applied ? (eff.icon || '•') + ' ' + eff.label : 'no ' + eff.label.toLowerCase()}`;
     } else if (eff.save) {
       // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
       applied = false; line = '';
@@ -5882,7 +5996,7 @@ async function _tickHitEffects(combatantId) {
     if (!eff.onTick || !conds.has(eff.key)) continue;
     const ent = getEntity(combatantId);
     if (!ent) continue;
-    await eff.onTick(ent);
+    await eff.onTick(ent, token);
     const after = getEntity(combatantId);
     const downed = await _checkDownedState(token.id, after);
     if (downed === 'dead') await setCondition(token.id, eff.key, false); // stop bleeding once dead
@@ -5952,7 +6066,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
       // Runs even at 0 damage so a Grab (no damage) can still take hold; each
       // effect's own gate decides whether it applies.
       await _runHitEffects({
-        hitPart, category, finalDamage, toughnessMax,
+        hitPart, category, finalDamage, toughnessMax, bodyType: ent.bodyType,
         targetTokenId, targetEntityType, targetEntityId,
         actionLabel, attackerCombatantId: ctx.attackerCombatantId,
         conds: getConditions(targetTokenId),
@@ -9791,6 +9905,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722i"></script>
+<script src="panels.js?v=20260722j"></script>
 </body>
 </html>
