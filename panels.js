@@ -49,7 +49,7 @@ function _paSecConditions(ent) {
     `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No token on map.</div>`);
   const canEdit = isGM();
   const active = ent.conditions;
-  const chips = CONDITION_DEFS.map(def => {
+  const chip = (def) => {
     const on = active.has(def.key);
     const style = on
       ? `background:${def.color}22;border-color:${def.color};color:${def.color};`
@@ -59,11 +59,29 @@ function _paSecConditions(ent) {
       : '';
     return `<div title="${_paEsc(def.desc)}" ${pa}
       style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${style}${canEdit ? 'cursor:pointer;' : 'cursor:default;'}user-select:none;">
-      <span>${def.icon}</span><span>${def.label}</span></div>`;
-  }).join('');
-  const note = !canEdit
-    ? '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:4px;font-style:italic;">GM controls conditions.</div>' : '';
-  return _paSection('Conditions', `<div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div>${note}`);
+      <span>${def.icon}</span><span>${_paEsc(def.label)}</span></div>`;
+  };
+  const activeDefs   = CONDITION_DEFS.filter(d => active.has(d.key));
+  const inactiveDefs = CONDITION_DEFS.filter(d => !active.has(d.key));
+
+  // Active conditions up top (click to clear, for the GM).
+  let html = activeDefs.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${activeDefs.map(chip).join('')}</div>`
+    : `<div style="font-size:0.72rem;color:var(--text-dim);font-style:italic;">None active.</div>`;
+
+  // Inactive conditions behind an expander (GM only — players can't set them).
+  if (canEdit && inactiveDefs.length) {
+    html += `
+      <div data-pa="collapse" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:0.63rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
+        <span>+ Add condition</span><span style="opacity:0.5;">▾</span>
+      </div>
+      <div style="display:none;margin-top:6px;">
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">${inactiveDefs.map(chip).join('')}</div>
+      </div>`;
+  } else if (!canEdit) {
+    html += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:4px;font-style:italic;">GM controls conditions.</div>';
+  }
+  return _paSection('Conditions', html);
 }
 
 // Combat section is now minimal: just an initiative-roll prompt, and only until
