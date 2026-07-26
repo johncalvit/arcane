@@ -745,12 +745,16 @@ function _dlgRender(body) {
     if (iCarry)  cc += _dlgChip({ label: 'Set down', sub: 'free', data: { dact: 'setdown' } });
     const others = Object.values(mapTokens).filter(t => t.id !== selfTok.id);
     if (others.length) {
-      const opts = others.map(t => `<option value="${_paEsc(t.id)}">${_paEsc(t.label || 'token')}</option>`).join('');
+      // Placeholder first so nothing is targeted until the user explicitly picks
+      // — otherwise the dropdown silently defaults to the first token.
+      const opts = ['<option value="">— choose a token —</option>']
+        .concat(others.map(t => `<option value="${_paEsc(t.id)}">${_paEsc(t.label || 'token')}</option>`)).join('');
       cc += `<select id="dlg-carry-target" style="${csel}">${opts}</select>`
-          + _dlgChip({ label: 'Carry them', sub: 'they ride', data: { dact: 'carry' } })
-          + _dlgChip({ label: 'Mount them', sub: 'you ride', data: { dact: 'mount' } });
+          + _dlgChip({ label: 'Carry them', sub: 'they ride you', data: { dact: 'carry' } })
+          + _dlgChip({ label: 'Mount them', sub: 'you ride them', data: { dact: 'mount' } });
     }
-    carryHtml = _dlgSection('🐴 Carry / Mount', cc, fullActive);
+    // Name the actor so it's unmistakable who does the carrying/mounting.
+    carryHtml = _dlgSection(`🐴 ${_paEsc(c.name)} — Carry / Mount`, cc, fullActive);
   }
 
   // ── Custom action + footer ─────────────────────────────────────────────────
@@ -873,12 +877,14 @@ async function _dlgAct(d, id, body) {
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];
-      if (depTok) { await atSetCarry(id, _tokenCid(depTok), true); _dlgRender(body); }
+      if (!depTok) { showToast('Pick a token to carry first.'); break; }
+      await atSetCarry(id, _tokenCid(depTok), true); _dlgRender(body);
       break;
     }
     case 'mount': {
       const bTok = mapTokens[document.getElementById('dlg-carry-target')?.value];
-      if (bTok) { await atSetCarry(_tokenCid(bTok), id, true); _dlgRender(body); }
+      if (!bTok) { showToast('Pick a token to mount first.'); break; }
+      await atSetCarry(_tokenCid(bTok), id, true); _dlgRender(body);
       break;
     }
     case 'dismount': {
