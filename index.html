@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722r';
+const VERSION = 'v0.1.20260722s';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5340,12 +5340,12 @@ function getEntity(ref) {
     });
   }
 
-  const loadout = isChar
-    ? [...new Set([
-        ...(row.weapons   || []).map(w => w.name),
-        ...(row.equipment || []).map(e => e.name),
-      ].filter(Boolean))]
-    : [];
+  // Loadout for characters AND creatures (creatures gain weapons/equipment once
+  // the session_creatures columns exist; missing arrays just yield an empty list).
+  const loadout = [...new Set([
+    ...(row.weapons   || []).map(w => w.name),
+    ...(row.equipment || []).map(e => e.name),
+  ].filter(Boolean))];
 
   return {
     ref, type,
@@ -5738,13 +5738,13 @@ async function dropHeldItem(ref, side) {
   if (!name) return;
   const patch = { held_items: Object.assign({}, ent.held, { [side]: null }) };
   let payload = { kind: _lookupItemKind(name), record: { name } };
-  if (ref.startsWith('char::')) {           // only characters track an inventory array
-    const row = _entityCacheRow(ref);
-    if (row) {
-      const ext = _extractItemFromInventory(row, name);
-      payload = { kind: ext.kind, record: ext.record };
-      patch.weapons = ext.weapons; patch.equipment = ext.equipment;
-    }
+  const row = _entityCacheRow(ref);
+  // Pull from the inventory array if this entity keeps one (characters always;
+  // creatures once their columns exist) — otherwise just drop it by name.
+  if (row && (ref.startsWith('char::') || Array.isArray(row.weapons) || Array.isArray(row.equipment))) {
+    const ext = _extractItemFromInventory(row, name);
+    payload = { kind: ext.kind, record: ext.record };
+    patch.weapons = ext.weapons; patch.equipment = ext.equipment;
   }
   await updateEntity(ref, patch);
   _syncOwnBuilder(ref);
@@ -5769,7 +5769,10 @@ async function pickUpItem(itemTokenId, grabberRef) {
   const held = Object.assign({}, ent.held || {});
   if (held.right && held.left) { showToast(`${ent.name || 'They'} have no free hand for ${name}`, 'warn'); return; }
   const patch = { held_items: held };
-  if (grabberRef.startsWith('char::')) {  // characters track an inventory array
+  // Stash it in the inventory array too, if this entity tracks one (characters
+  // always; creatures once the session_creatures columns exist).
+  const tracksInv = grabberRef.startsWith('char::') || Array.isArray(row.weapons) || Array.isArray(row.equipment);
+  if (tracksInv) {
     if (kind === 'equipment') {
       const equipment = [...(row.equipment || [])];
       const idx = equipment.findIndex(e => e.name === name);
@@ -9568,7 +9571,7 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
   while (usedNumbers.has(n)) n++;
   const label = `${baseName} ${n}`;
 
-  const { data: creature, error: scErr } = await sb.from('session_creatures').insert({
+  const baseInsert = {
     campaign_id: currentCampaignId,
     species:     tmpl.species    || '',
     body_type:   tmpl.body_type  || 'Humanoid',
@@ -9583,7 +9586,16 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
     skills:      tmpl.skills     || {},
     held_items:  tmpl.held_items || {},
     armor:       tmpl.armor      || {},
-  }).select('id').single();
+  };
+  // Carry the template's full inventory onto the creature. If the weapons/
+  // equipment columns aren't there yet (migration not run), retry without them
+  // so spawning still works.
+  let { data: creature, error: scErr } = await sb.from('session_creatures')
+    .insert({ ...baseInsert, weapons: tmpl.weapons || [], equipment: tmpl.equipment || [] })
+    .select('id').single();
+  if (scErr && /column .* does not exist/i.test(scErr.message || '')) {
+    ({ data: creature, error: scErr } = await sb.from('session_creatures').insert(baseInsert).select('id').single());
+  }
 
   if (scErr || !creature) { alert('Failed to spawn creature: ' + (scErr?.message || 'unknown')); return; }
 
@@ -9592,7 +9604,8 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
     species: tmpl.species||'', body_type: tmpl.body_type||'Humanoid', label,
     sex: tmpl.sex||'', age: tmpl.age||'Adult', height: tmpl.height||'Average',
     build: tmpl.build||'Average', social: tmpl.social||'Balanced', mental: tmpl.mental||'Balanced',
-    stats: tmpl.stats||{}, skills: tmpl.skills||{}, held_items: tmpl.held_items||{}, armor: tmpl.armor||{} };
+    stats: tmpl.stats||{}, skills: tmpl.skills||{}, held_items: tmpl.held_items||{}, armor: tmpl.armor||{},
+    weapons: tmpl.weapons||[], equipment: tmpl.equipment||[] };
 
   let avatar_url = '';
   if (avatarPath) {
@@ -10137,6 +10150,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722r"></script>
+<script src="panels.js?v=20260722s"></script>
 </body>
 </html>
