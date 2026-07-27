@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722q';
+const VERSION = 'v0.1.20260722r';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5752,8 +5752,9 @@ async function dropHeldItem(ref, side) {
   if (tok) await dropItemOnMap(tok.id, name, payload);
   showToast('Dropped ' + name);
 }
-// Character `charRef` grabs the ground item into inventory + a free hand.
-async function pickUpItem(itemTokenId, charRef) {
+// `grabberRef` (character OR creature) grabs the ground item into a free hand.
+// Characters also stash it in their inventory array; creatures just hold it.
+async function pickUpItem(itemTokenId, grabberRef) {
   const item = mapTokens[itemTokenId];
   if (!item || item.entity_type !== 'item') return;
   const marker = (Array.isArray(item.conditions) ? item.conditions : []).find(c => c.startsWith('item:'));
@@ -5761,26 +5762,29 @@ async function pickUpItem(itemTokenId, charRef) {
   const name   = item.label || payload?.record?.name || 'item';
   const kind   = payload?.kind || _lookupItemKind(name);
   const record = payload?.record || { name };
-  const ent = getEntity(charRef);
-  const row = _entityCacheRow(charRef);
-  if (!ent || !row || !charRef.startsWith('char::')) return;
-  const patch = {};
-  if (kind === 'equipment') {
-    const equipment = [...(row.equipment || [])];
-    const idx = equipment.findIndex(e => e.name === name);
-    if (idx >= 0) equipment[idx] = { ...equipment[idx], qty: (equipment[idx].qty || 1) + (record.qty || 1) };
-    else equipment.push(record);
-    patch.equipment = equipment;
-  } else {
-    patch.weapons = [...(row.weapons || []), record];
-  }
+  const ent = getEntity(grabberRef);
+  const row = _entityCacheRow(grabberRef);
+  if (!ent || !row) return;
+  // Need a free hand to hold it.
   const held = Object.assign({}, ent.held || {});
-  if (!held.right) held.right = name; else if (!held.left) held.left = name; // into a free hand
-  patch.held_items = held;
-  await updateEntity(charRef, patch);
-  _syncOwnBuilder(charRef);
+  if (held.right && held.left) { showToast(`${ent.name || 'They'} have no free hand for ${name}`, 'warn'); return; }
+  const patch = { held_items: held };
+  if (grabberRef.startsWith('char::')) {  // characters track an inventory array
+    if (kind === 'equipment') {
+      const equipment = [...(row.equipment || [])];
+      const idx = equipment.findIndex(e => e.name === name);
+      if (idx >= 0) equipment[idx] = { ...equipment[idx], qty: (equipment[idx].qty || 1) + (record.qty || 1) };
+      else equipment.push(record);
+      patch.equipment = equipment;
+    } else {
+      patch.weapons = [...(row.weapons || []), record];
+    }
+  }
+  if (!held.right) held.right = name; else held.left = name; // into the free hand
+  await updateEntity(grabberRef, patch);
+  _syncOwnBuilder(grabberRef);
   await removeToken(itemTokenId);
-  showToast((ent.name || 'Character') + ' picked up ' + name, 'good');
+  showToast((ent.name || 'They') + ' picked up ' + name, 'good');
   refreshUI();
 }
 // Controllable character tokens within `rangeFt` of an item (for the pickup UI).
@@ -8313,8 +8317,7 @@ function attackTokenClick(tokenId) {
   // character can scoop a targeted item into inventory + hand); anything else
   // just cancels rather than resolving a bogus attack.
   if (target.entity_type === 'item') {
-    const [gType, gId] = attackCombatantId.split('::');
-    if (/grab/i.test(attackActionLabel || '') && gType === 'char') pickUpItem(target.id, 'char::' + gId);
+    if (/grab/i.test(attackActionLabel || '')) pickUpItem(target.id, attackCombatantId); // char or creature
     else showToast('That is a ground item — use Grab to pick it up.');
     exitAttackMode(); return true;
   }
@@ -10134,6 +10137,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722q"></script>
+<script src="panels.js?v=20260722r"></script>
 </body>
 </html>
