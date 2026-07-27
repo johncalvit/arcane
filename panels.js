@@ -145,8 +145,13 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
       const cur = held[side] || '';
       const opts = ['', ...options].map(n =>
         `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Bare Hand —'}</option>`).join('');
+      // Drop lands the item on the map (1–4 ft away) so it can be picked back up.
+      const dropX = cur
+        ? `<span data-pa="drop-hand" data-side="${side}" title="Drop ${_paEsc(cur)} on the ground" style="cursor:pointer;color:#c96b6b;font-size:0.62rem;text-transform:none;letter-spacing:0;">✕ drop</span>`
+        : '';
       return `<div style="margin-bottom:6px;">
-        <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${side === 'right' ? 'Right Hand' : 'Left Hand'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">
+          <span>${side === 'right' ? 'Right Hand' : 'Left Hand'}</span>${dropX}</div>
         <select style="${selStyle}" data-pa="set-hand" data-side="${side}">${opts}</select>
       </div>`;
     }).join('');
@@ -224,6 +229,7 @@ function _paBind(el, ctx) {
       case 'roll-init': atRollInitiative(d.id); break;
       case 'open-slot': atOpenSlotModal(d.id, d.slot); break;
       case 'clear-slot': atClearSlot(d.id, d.slot); break;
+      case 'drop-hand': dropHeldItem(ctx.ent.ref, d.side); break;
     }
   };
   el.onchange = (e) => {

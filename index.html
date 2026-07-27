@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722o';
+const VERSION = 'v0.1.20260722p';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5638,10 +5638,152 @@ async function _dropHeldFromArm(ctx) {
   const side = _armSide(ctx.bodyType, ctx.hitPart);
   if (!side) return;
   const ref = _entityRef(ctx.targetEntityType, ctx.targetEntityId);
+  await dropHeldItem(ref, side); // fumble → same drop-to-ground path as a voluntary drop
+}
+
+// ── Ground items (dropped things you can pick back up) ───────────────────────
+// A dropped item is a map_tokens row with entity_type 'item' (📦 render already
+// exists). Its full payload rides in the token's `conditions` array as an
+// `item:<json>` marker (no schema change), so pickup restores it exactly.
+function _lookupItemKind(name) {
+  const n = normalizeWeaponName(name || '');
+  const isWeapon = MELEE_WEAPONS.some(r => normalizeWeaponName(r.weapon) === n)
+                || RANGED_WEAPONS.some(r => normalizeWeaponName(r.weapon) === n);
+  return isWeapon ? 'weapon' : 'equipment';
+}
+// Pull one instance of `name` out of a character row's inventory; returns the
+// removed record + the new arrays (equipment stacks decrement by qty).
+function _extractItemFromInventory(row, name) {
+  const weapons = [...(row.weapons || [])];
+  const wIdx = weapons.findIndex(w => w.name === name);
+  if (wIdx >= 0) {
+    const record = weapons[wIdx];
+    weapons.splice(wIdx, 1);
+    return { kind: 'weapon', record, weapons, equipment: row.equipment || [] };
+  }
+  const equipment = [...(row.equipment || [])];
+  const eIdx = equipment.findIndex(e => e.name === name);
+  if (eIdx >= 0) {
+    const rec = equipment[eIdx];
+    let record;
+    if ((rec.qty || 1) > 1) { equipment[eIdx] = { ...rec, qty: rec.qty - 1 }; record = { ...rec, qty: 1 }; }
+    else { equipment.splice(eIdx, 1); record = rec; }
+    return { kind: 'equipment', record, weapons: row.weapons || [], equipment };
+  }
+  // Not tracked in an inventory array (e.g. a creature's weapon) — just the name.
+  return { kind: _lookupItemKind(name), record: { name }, weapons: row.weapons, equipment: row.equipment };
+}
+// Place an item token 1–4 ft from the dropper in a random direction.
+async function dropItemOnMap(dropperTokenId, itemName, payload) {
+  const dropper = mapTokens[dropperTokenId];
+  if (!dropper) return;
+  const distFt = 1 + Math.random() * 3;          // 1–4 ft
+  const angle  = Math.random() * Math.PI * 2;
+  let nx = dropper.x_pct, ny = dropper.y_pct;
+  if (mapScalePPF > 0 && mapImgW && mapImgH) {
+    nx += (Math.cos(angle) * distFt * mapScalePPF / mapImgW) * 100;
+    ny += (Math.sin(angle) * distFt * mapScalePPF / mapImgH) * 100;
+  } else { nx += (Math.random() - 0.5) * 4; ny += (Math.random() - 0.5) * 4; }
+  nx = Math.min(100, Math.max(0, nx));
+  ny = Math.min(100, Math.max(0, ny));
+  const conditions = ['item:' + JSON.stringify(payload || { kind: _lookupItemKind(itemName), record: { name: itemName } })];
+  const { data, error } = await sb.from('map_tokens').insert({
+    map_id: activeMapId, campaign_id: currentCampaignId,
+    entity_type: 'item', entity_id: (crypto.randomUUID ? crypto.randomUUID() : 'item-' + Date.now()),
+    label: itemName, x_pct: nx, y_pct: ny, conditions, visible: true,
+  }).select().single();
+  if (error) { _writeErrorToast(error, 'map_tokens (drop)'); return; }
+  if (data) { mapTokens[data.id] = data; upsertTokenElement(data); if (isGM()) refreshTokenPanel(); }
+}
+// Drop whatever `side` holds onto the ground (removes it from inventory too).
+async function dropHeldItem(ref, side) {
   const ent = getEntity(ref);
-  if (!ent?.held?.[side]) return;
-  const held = Object.assign({}, ent.held); held[side] = null;
-  await updateEntity(ref, { held_items: held });
+  const name = ent?.held?.[side];
+  if (!name) return;
+  const patch = { held_items: Object.assign({}, ent.held, { [side]: null }) };
+  let payload = { kind: _lookupItemKind(name), record: { name } };
+  if (ref.startsWith('char::')) {           // only characters track an inventory array
+    const row = _entityCacheRow(ref);
+    if (row) {
+      const ext = _extractItemFromInventory(row, name);
+      payload = { kind: ext.kind, record: ext.record };
+      patch.weapons = ext.weapons; patch.equipment = ext.equipment;
+    }
+  }
+  await updateEntity(ref, patch);
+  const tok = _entityToken(ref);
+  if (tok) await dropItemOnMap(tok.id, name, payload);
+  showToast('Dropped ' + name);
+}
+// Character `charRef` grabs the ground item into inventory + a free hand.
+async function pickUpItem(itemTokenId, charRef) {
+  const item = mapTokens[itemTokenId];
+  if (!item || item.entity_type !== 'item') return;
+  const marker = (Array.isArray(item.conditions) ? item.conditions : []).find(c => c.startsWith('item:'));
+  let payload = null; try { payload = marker ? JSON.parse(marker.slice(5)) : null; } catch (e) {}
+  const name   = item.label || payload?.record?.name || 'item';
+  const kind   = payload?.kind || _lookupItemKind(name);
+  const record = payload?.record || { name };
+  const ent = getEntity(charRef);
+  const row = _entityCacheRow(charRef);
+  if (!ent || !row || !charRef.startsWith('char::')) return;
+  const patch = {};
+  if (kind === 'equipment') {
+    const equipment = [...(row.equipment || [])];
+    const idx = equipment.findIndex(e => e.name === name);
+    if (idx >= 0) equipment[idx] = { ...equipment[idx], qty: (equipment[idx].qty || 1) + (record.qty || 1) };
+    else equipment.push(record);
+    patch.equipment = equipment;
+  } else {
+    patch.weapons = [...(row.weapons || []), record];
+  }
+  const held = Object.assign({}, ent.held || {});
+  if (!held.right) held.right = name; else if (!held.left) held.left = name; // into a free hand
+  patch.held_items = held;
+  await updateEntity(charRef, patch);
+  await removeToken(itemTokenId);
+  showToast((ent.name || 'Character') + ' picked up ' + name, 'good');
+  refreshUI();
+}
+// Controllable character tokens within `rangeFt` of an item (for the pickup UI).
+function _adjacentControllableChars(item, rangeFt) {
+  return Object.values(mapTokens).filter(t => {
+    if (t.entity_type !== 'character') return false;
+    if (!(isGM() || t.entity_id === currentCharacterId)) return false;
+    let distFt;
+    if (mapScalePPF > 0 && mapImgW && mapImgH) {
+      const dx = (t.x_pct - item.x_pct) / 100 * mapImgW;
+      const dy = (t.y_pct - item.y_pct) / 100 * mapImgH;
+      distFt = Math.hypot(dx, dy) / mapScalePPF;
+    } else {
+      distFt = Math.hypot(t.x_pct - item.x_pct, t.y_pct - item.y_pct); // pct fallback
+    }
+    return distFt <= rangeFt;
+  });
+}
+// Left-panel view for a clicked ground item — name + a Pick-up button per
+// adjacent controllable character.
+function renderItemPanel(item) {
+  const el = document.getElementById('play-char-content');
+  if (!el) return;
+  const range = mapScalePPF > 0 ? 5 : 8; // 5 ft, or 8% on an uncalibrated map
+  const cands = _adjacentControllableChars(item, range);
+  const btnStyle = 'display:block;width:100%;margin-top:6px;padding:7px 10px;border-radius:4px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--gold2);cursor:pointer;font-family:Georgia,serif;font-size:0.8rem;';
+  const btns = cands.length
+    ? cands.map(c => {
+        const ref = 'char::' + c.entity_id;
+        const nm = (playCharCache[c.entity_id]?.name) || c.label || 'Character';
+        return `<button style="${btnStyle}" onclick="pickUpItem('${item.id}','${ref}')">✋ Pick up — ${_paEsc ? _paEsc(nm) : nm}</button>`;
+      }).join('')
+    : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;margin-top:8px;">No controllable character is close enough to pick this up.</div>`;
+  el.innerHTML = `
+    <button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← Back</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <div style="font-size:1.6rem;">📦</div>
+      <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${_paEsc ? _paEsc(item.label) : item.label}</div>
+    </div>
+    <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">On the ground.</div>
+    ${btns}`;
 }
 // Fraction of a token's legs that are injured — feeds the movement penalty.
 function _damagedLegProportion(token) {
@@ -8503,6 +8645,8 @@ async function showTokenInfo(tokenId) {
   _tokenInfoViewId = tokenId; // refreshUI() re-renders this view on data changes
   if (typeof _renderActiveBanner === 'function') _renderActiveBanner(); // keep the banner up
 
+  if (t.entity_type === 'item') { renderItemPanel(t); return; }
+
   const ref = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + tokenId;
   if (t.entity_type === 'character' && !playCharCache[t.entity_id]) {
     el.innerHTML = `<div style="color:var(--text-dim);font-size:0.8rem;">Loading…</div>`;
@@ -9937,6 +10081,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722o"></script>
+<script src="panels.js?v=20260722p"></script>
 </body>
 </html>
