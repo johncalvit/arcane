@@ -4122,7 +4122,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722p';
+const VERSION = 'v0.1.20260722q';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5695,6 +5695,42 @@ async function dropItemOnMap(dropperTokenId, itemName, payload) {
   if (error) { _writeErrorToast(error, 'map_tokens (drop)'); return; }
   if (data) { mapTokens[data.id] = data; upsertTokenElement(data); if (isGM()) refreshTokenPanel(); }
 }
+// Repopulate the builder's weapon/equipment tables from a character row, so the
+// DOM (which getLoadoutItemNames + saveCharacter read) matches the cache after a
+// drop/pickup — otherwise a saved item would resurrect and the hand dropdown
+// would still list a dropped item. Only meaningful for the loaded own character.
+function _rebuildBuilderLoadout(row) {
+  if (!row) return;
+  const wl = document.getElementById('weapon-list');
+  if (wl) {
+    wl.innerHTML = '';
+    (row.weapons || []).forEach(w => {
+      const tr = document.createElement('tr');
+      tr.dataset.wt = w.wt;
+      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      wl.appendChild(tr);
+    });
+  }
+  const eqEl = document.getElementById('equip-list');
+  if (eqEl) {
+    eqEl.innerHTML = '';
+    (row.equipment || []).forEach(eq => {
+      const total = (eq.unitWt || 0) * (eq.qty || 1);
+      const tr = document.createElement('tr');
+      tr.dataset.wt = total;
+      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      eqEl.appendChild(tr);
+    });
+  }
+}
+// If this ref is the loaded own character, resync its builder tables + selectors.
+function _syncOwnBuilder(ref) {
+  if (ref !== 'char::' + currentCharacterId) return;
+  _rebuildBuilderLoadout(_entityCacheRow(ref));
+  if (typeof buildHandSelectors === 'function') buildHandSelectors();
+  if (typeof recalc === 'function') recalc();
+}
+
 // Drop whatever `side` holds onto the ground (removes it from inventory too).
 async function dropHeldItem(ref, side) {
   const ent = getEntity(ref);
@@ -5711,6 +5747,7 @@ async function dropHeldItem(ref, side) {
     }
   }
   await updateEntity(ref, patch);
+  _syncOwnBuilder(ref);
   const tok = _entityToken(ref);
   if (tok) await dropItemOnMap(tok.id, name, payload);
   showToast('Dropped ' + name);
@@ -5741,6 +5778,7 @@ async function pickUpItem(itemTokenId, charRef) {
   if (!held.right) held.right = name; else if (!held.left) held.left = name; // into a free hand
   patch.held_items = held;
   await updateEntity(charRef, patch);
+  _syncOwnBuilder(charRef);
   await removeToken(itemTokenId);
   showToast((ent.name || 'Character') + ' picked up ' + name, 'good');
   refreshUI();
@@ -5776,13 +5814,19 @@ function renderItemPanel(item) {
         return `<button style="${btnStyle}" onclick="pickUpItem('${item.id}','${ref}')">✋ Pick up — ${_paEsc ? _paEsc(nm) : nm}</button>`;
       }).join('')
     : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;margin-top:8px;">No controllable character is close enough to pick this up.</div>`;
+  // Weight from the stored payload (weapon wt, or equipment unitWt × qty).
+  const marker = (Array.isArray(item.conditions) ? item.conditions : []).find(c => c.startsWith('item:'));
+  let rec = null; try { rec = marker ? JSON.parse(marker.slice(5)).record : null; } catch (e) {}
+  const wt = rec ? (rec.wt != null ? rec.wt : (rec.unitWt != null ? rec.unitWt * (rec.qty || 1) : null)) : null;
+  const wtStr = wt != null ? `Weight: ${Math.round(wt * 10) / 10} lbs` : '';
   el.innerHTML = `
     <button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← Back</button>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
       <div style="font-size:1.6rem;">📦</div>
       <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${_paEsc ? _paEsc(item.label) : item.label}</div>
     </div>
-    <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:6px;">On the ground.</div>
+    <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">On the ground.</div>
+    ${wtStr ? `<div style="font-size:0.72rem;color:var(--text);margin-bottom:6px;">${wtStr}</div>` : ''}
     ${btns}`;
 }
 // Fraction of a token's legs that are injured — feeds the movement penalty.
@@ -6797,10 +6841,10 @@ async function atAutoAddMapTokens() {
   // is no longer on this map (e.g. after switching maps), then add the new
   // map's tokens below. _pathFindToken resolves a combatant to a token on the
   // CURRENT map, so anything from another map filters out.
-  atCombatants = atCombatants.filter(c => _pathFindToken(c.id));
+  atCombatants = atCombatants.filter(c => { const tk = _pathFindToken(c.id); return tk && tk.entity_type !== 'item'; });
   if (atActiveIdx >= atCombatants.length) atActiveIdx = 0;
 
-  const tokens = Object.values(mapTokens || {});
+  const tokens = Object.values(mapTokens || {}).filter(t => t.entity_type !== 'item'); // ground items aren't combatants
   if (!tokens.length) { renderAtList(); return; }
 
   // load character names in one query
@@ -8265,6 +8309,15 @@ function attackTokenClick(tokenId) {
   if (!attackMode) return false;
   const target = mapTokens[tokenId];
   if (!target) return false;
+  // Ground items aren't attack targets. A Grab doubles as "pick it up" (a
+  // character can scoop a targeted item into inventory + hand); anything else
+  // just cancels rather than resolving a bogus attack.
+  if (target.entity_type === 'item') {
+    const [gType, gId] = attackCombatantId.split('::');
+    if (/grab/i.test(attackActionLabel || '') && gType === 'char') pickUpItem(target.id, 'char::' + gId);
+    else showToast('That is a ground item — use Grab to pick it up.');
+    exitAttackMode(); return true;
+  }
   if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
     exitAttackMode(); return true;
   }
@@ -10081,6 +10134,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722p"></script>
+<script src="panels.js?v=20260722q"></script>
 </body>
 </html>
