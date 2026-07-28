@@ -3850,9 +3850,10 @@ async function saveCharacter() {
 // Link a character into a campaign (idempotent). Owner or GM per RLS.
 async function _ensureCampaignLink(characterId, campaignId) {
   if (!characterId || !campaignId) return;
-  await sb.from('campaign_characters')
+  const { error } = await sb.from('campaign_characters')
     .upsert({ campaign_id: campaignId, character_id: characterId },
             { onConflict: 'campaign_id,character_id', ignoreDuplicates: true });
+  if (error) _writeErrorToast(error, 'campaign_characters (link)'); // was silent — surfaced now
 }
 
 // Every user gets a personal "Home" campaign — a stable for their characters —
@@ -4122,7 +4123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722s';
+const VERSION = 'v0.1.20260722t';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5024,6 +5025,7 @@ function enterPlayMode() {
   }
 
   renderPlayCharacter();
+  renderCombatLog();
   loadPlayCharCache();
   subscribeMapRealtime();
   loadActiveMap(activeMapId);
@@ -5399,6 +5401,49 @@ function showToast(msg, kind) {
   el.style.opacity = '1';
   clearTimeout(_toastTimer);
   _toastTimer = setTimeout(() => { el.style.opacity = '0'; }, 4500);
+}
+
+// ── Combat journal ────────────────────────────────────────────────────────────
+// A running log of hits, misses, rolls and outcomes, shown at the bottom of the
+// left panel. Session-only (in memory); broadcast so the whole table shares one
+// feed. The client that RESOLVES an event logs it and broadcasts to the rest.
+let _combatLog = []; // { t, text, kind }
+const _LOG_COLORS = { hit:'#e05555', kill:'#cc2222', miss:'var(--text-dim)', good:'#7fb069', roll:'var(--text)' };
+function _logEsc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
+function logCombat(text, kind, opts) {
+  if (!text) return;
+  const entry = { t: Date.now(), text: String(text), kind: kind || '' };
+  _combatLog.push(entry);
+  if (_combatLog.length > 300) _combatLog.shift();
+  renderCombatLog();
+  if (!(opts && opts.noBroadcast) && mapChannel) mapChannel.send({ type: 'broadcast', event: 'combat-log', payload: entry });
+}
+function _logReceive(entry) {
+  if (!entry || !entry.text) return;
+  if (_combatLog.some(e => e.t === entry.t && e.text === entry.text)) return; // dedupe
+  _combatLog.push(entry);
+  _combatLog.sort((a, b) => a.t - b.t);
+  if (_combatLog.length > 300) _combatLog = _combatLog.slice(-300);
+  renderCombatLog();
+}
+function renderCombatLog() {
+  const el = document.getElementById('combat-log');
+  if (!el) return;
+  if (!_combatLog.length) {
+    el.innerHTML = '<div style="color:var(--text-dim);font-style:italic;">No entries yet.</div>';
+    return;
+  }
+  el.innerHTML = _combatLog.slice(-80).map(e => {
+    const tm = new Date(e.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const col = _LOG_COLORS[e.kind] || 'var(--text)';
+    return `<div style="margin-bottom:3px;color:${col};"><span style="color:var(--text-dim);font-size:0.62rem;">${tm}</span> ${_logEsc(e.text)}</div>`;
+  }).join('');
+  el.scrollTop = el.scrollHeight; // keep the latest in view
+}
+function clearCombatLog() { _combatLog = []; renderCombatLog(); }
+// Resolve a combatant/entity ref to a display name for the log.
+function _logName(refOrCid) {
+  return (refOrCid && getEntity(refOrCid)?.name) || 'Someone';
 }
 
 // Surface a failed DB write instead of swallowing it (RLS rejections in
@@ -5981,6 +6026,8 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
       if (win) await onWin.act(); else if (onLose.act) await onLose.act();
       showToast(`${win ? onWin.toast : onLose.toast} — ${actorName} ${aRoll}/${actorMax} vs ${oppName} ${oRoll}/${oppMax}`,
         win ? 'good' : 'warn');
+      logCombat(`${label}: ${win ? onWin.label : onLose.label} (${actorName} ${aRoll}/${actorMax} vs ${oppName} ${oRoll}/${oppMax})`,
+        win ? 'good' : 'roll');
     },
   });
 }
@@ -6215,7 +6262,10 @@ async function _tickHitEffects(combatantId) {
     await eff.onTick(ent, token);
     const after = getEntity(combatantId);
     const downed = await _checkDownedState(token.id, after);
-    if (downed === 'dead') await setCondition(token.id, eff.key, false); // stop bleeding once dead
+    if (downed === 'dead') {
+      await setCondition(token.id, eff.key, false); // stop bleeding once dead
+      logCombat(`${after?.name || token.label || 'Someone'} bled out — ☠ dead`, 'kill');
+    }
   }
 }
 // ═══ END HIT EFFECTS ═══════════════════════════════════════════════════════════
@@ -6298,6 +6348,13 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
         dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
       else if (downed === 'unconscious' && dmgEl)
         dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
+
+      // Journal entry for the hit
+      const atkName = _logName(ctx.attackerCombatantId);
+      const dmgTxt  = finalDamage > 0 ? `−${finalDamage} Toughness` : 'no damage';
+      const suffix  = downed === 'dead' ? ' — ☠ killed' : downed === 'unconscious' ? ' — 💤 downed' : '';
+      logCombat(`${atkName} ${actionLabel} ${ent.name} — ${partLabel}, ${dmgTxt}${suffix}`,
+                downed === 'dead' ? 'kill' : 'hit');
     }
   }
 }
@@ -7213,6 +7270,17 @@ function _rollerShowResult() {
     if (!success && !critSuccess && _roller.strayContext) {
       setTimeout(() => _triggerStrayShot(n, _roller.target, _roller.strayContext), 600);
     }
+    // Journal: attack misses (hits are logged with their damage), plus
+    // standalone rolls like skills and recovery saves.
+    if (_roller.locContext && _roller.damageContext) {
+      if (!success) {
+        const dc = _roller.damageContext;
+        const tgt = getEntity(_entityRef(dc.targetEntityType, dc.targetEntityId))?.name || 'target';
+        logCombat(`${_logName(dc.attackerCombatantId)} ${dc.actionLabel} ${tgt} — MISS (rolled ${n})`, 'miss');
+      }
+    } else if (!_roller.locContext) {
+      logCombat(`${_roller.label}: rolled ${n} — ${bcLabel}`, success ? 'good' : 'roll');
+    }
   } else {
     document.getElementById('roller-status').textContent = '';
   }
@@ -7504,6 +7572,7 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'roller-close' }, () => {
       if (_roller && _roller.mirror) closeRoller();
     })
+    .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
         mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
@@ -9890,13 +9959,21 @@ switchGmTab = function(tab) {
   <div class="play-layout player-layout" id="play-layout">
 
     <!-- LEFT: compact character sheet -->
-    <div class="play-panel" id="play-char-panel">
+    <div class="play-panel" id="play-char-panel" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="play-panel-header">
         <span class="panel-title">Character</span>
       </div>
       <!-- Persistent active-turn banner (survives content re-renders) -->
-      <div id="play-active-banner" style="padding:0;"></div>
-      <div id="play-char-content" style="padding:10px 12px;"></div>
+      <div id="play-active-banner" style="padding:0;flex-shrink:0;"></div>
+      <div id="play-char-content" style="padding:10px 12px;flex:1;overflow-y:auto;min-height:0;"></div>
+      <!-- Combat journal pinned to the bottom -->
+      <div id="combat-log-wrap" style="flex-shrink:0;border-top:1px solid var(--border);background:var(--bg);">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-dim);">
+          <span>📜 Journal</span>
+          <span onclick="clearCombatLog()" title="Clear the journal" style="cursor:pointer;">✕</span>
+        </div>
+        <div id="combat-log" style="max-height:170px;overflow-y:auto;padding:0 10px 8px;font-size:0.72rem;line-height:1.45;"></div>
+      </div>
     </div>
 
     <div class="play-resize-handle" id="resize-left" onmousedown="startPanelResize(event,'left')"></div>
@@ -10150,6 +10227,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722s"></script>
+<script src="panels.js?v=20260722t"></script>
 </body>
 </html>
