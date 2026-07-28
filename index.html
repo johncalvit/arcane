@@ -4123,7 +4123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260722t';
+const VERSION = 'v0.1.20260728a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6357,6 +6357,8 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
                 downed === 'dead' ? 'kill' : 'hit');
     }
   }
+  // Share the damage breakdown with spectators watching the mirror roller.
+  if (dmgEl) _rollerBroadcast('roller-damage', { html: dmgEl.innerHTML });
 }
 
 // ── Action slot definitions ───────────────────────────────────────────────────
@@ -6955,6 +6957,9 @@ async function _acSetHand(entityType, entityId, side, value) {
 // ── Called-shot picker ────────────────────────────────────────────────────────
 function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext }) {
   const locData = getHitLocData(bodyType);
+  // Roll-under d100 → chance to hit, clamped to the crit floor/ceiling (n≤5
+  // always hits, n≥96 always misses). This is the no-defense hit chance.
+  const _hitPct = (thr) => thr == null ? null : Math.min(95, Math.max(5, Math.round(thr)));
   const existing = document.getElementById('called-shot-modal');
   if (existing) existing.remove();
 
@@ -6975,7 +6980,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 
   const sub = document.createElement('div');
   sub.style.cssText = 'font-size:0.72rem;color:var(--text-dim);text-align:center;';
-  sub.textContent = `Body type: ${bodyType}`;
+  sub.textContent = `${bodyType} · % is chance to hit (no defense)`;
   card.appendChild(sub);
 
   const grid = document.createElement('div');
@@ -7004,7 +7009,8 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 
   // Regular attack button (torso/default, no size penalty)
   const regBtn = document.createElement('button');
-  regBtn.textContent = '⚔ Regular Attack (Torso)';
+  const regPct = _hitPct(baseThreshold);
+  regBtn.textContent = regPct != null ? `⚔ Regular Attack (Torso) — ${regPct}%` : '⚔ Regular Attack (Torso)';
   regBtn.style.cssText = `width:100%;padding:8px 12px;border-radius:5px;cursor:pointer;
     font-family:Georgia,serif;font-size:0.82rem;
     border:2px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--text);`;
@@ -7021,9 +7027,9 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   for (const [key, part] of Object.entries(locData.parts)) {
     if (key === locData.defaultPart) continue; // torso = regular attack
     const btn = document.createElement('button');
-    const pct = Math.round(part.sizeFactor * 100);
-    btn.textContent = `${part.label} (${pct}%)`;
-    btn.title = `Hit chance ×${part.sizeFactor}`;
+    const hitPct = _hitPct(baseThreshold != null ? baseThreshold * part.sizeFactor : null);
+    btn.textContent = hitPct != null ? `${part.label} — ${hitPct}%` : part.label;
+    btn.title = `${Math.round(part.sizeFactor * 100)}% of body size${hitPct != null ? ` · ~${hitPct}% to hit, no defense` : ''}`;
     btn.style.cssText = `padding:6px 14px;border-radius:5px;cursor:pointer;
       font-family:Georgia,serif;font-size:0.78rem;
       border:1px solid var(--border);background:var(--bg3);color:var(--text);`;
@@ -7571,6 +7577,12 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'roller-close' }, () => {
       if (_roller && _roller.mirror) closeRoller();
+    })
+    .on('broadcast', { event: 'roller-damage' }, ({ payload }) => {
+      if (_roller && _roller.mirror && payload && payload.html != null) {
+        const de = document.getElementById('roller-damage-display');
+        if (de) { de.style.display = 'block'; de.innerHTML = payload.html; }
+      }
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
     .subscribe(status => {
@@ -10227,6 +10239,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260722t"></script>
+<script src="panels.js?v=20260728a"></script>
 </body>
 </html>
