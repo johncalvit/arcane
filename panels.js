@@ -599,7 +599,7 @@ function _dlgRender(body) {
       <div style="background:var(--bg3);border-radius:3px;height:6px;overflow:hidden;">
         <div style="width:${movePct}%;height:100%;background:${halfUsed ? '#c97040' : 'var(--gold)'};"></div>
       </div>
-      ${halfUsed ? `<div style="font-size:0.62rem;color:#c97040;margin-top:2px;">Over half movement used — Evade and Retreat unavailable this round.</div>` : ''}
+      ${halfUsed ? `<div style="font-size:0.62rem;color:#c97040;margin-top:2px;">Over half movement used — Evade unavailable this round.</div>` : ''}
     </div>`;
 
   // ── Full body section ──────────────────────────────────────────────────────
@@ -614,7 +614,7 @@ function _dlgRender(body) {
   }
   fullChips += AT_FULLBODY.map(a => {
     const lit = c.slots.full?.label === a.label;
-    const disabled = halfUsed && (a.label === 'Evade' || a.label === 'Retreat');
+    const disabled = halfUsed && a.label === 'Evade';
     return _dlgChip({
       label: a.label, sub: _dlgDurLabel(a.dur), lit, disabled,
       title: disabled ? 'Over half movement used this round' : '',

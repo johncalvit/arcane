@@ -4123,7 +4123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260728a';
+const VERSION = 'v0.1.20260728b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6374,12 +6374,10 @@ const AT_MOVE = [
   { label: 'Step',          dur: 1  },
   { label: 'Move',          dur: 2  },
   { label: 'Sprint',        dur: 3  },
-  { label: 'Retreat',       dur: 2  },
   { label: 'Stand Up',      dur: 2  },
 ];
 const AT_FULLBODY = [
   { label: 'Evade',          dur: 99 }, // lock-on stance — persists until cleared
-  { label: 'Retreat',        dur: 2 },
   { label: 'Sentinel',       dur: 99 },
   { label: 'Go Prone',       dur: 1 },
   { label: 'Charge',         dur: 3 },
@@ -6995,16 +6993,31 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     const locSubtitle = part
       ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor}) = ${locThreshold}`
       : baseSubtitle;
-    openRoller({
-      label: actionLabel,
-      min: 1, max: 100,
-      target: locThreshold,
-      targetLabel: locSubtitle,
-      defenseOptions,
-      strayContext,
-      locContext: { bodyType, partKey: partKey || null },
-      damageContext,
-    });
+    const targetTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
+    const locCtx = { bodyType, partKey: partKey || null };
+
+    // Opens the hit roller once the defense is decided. `chosen` = 'LOCAL' (I
+    // control the defender → pick in the roller as before) or a {label,reduction}
+    // (or null for No Defense) already chosen by the remote defender.
+    const openWith = (chosen) => {
+      if (chosen === 'LOCAL') {
+        openRoller({ label: actionLabel, min: 1, max: 100, target: locThreshold,
+          targetLabel: locSubtitle, defenseOptions, strayContext, locContext: locCtx, damageContext });
+        return;
+      }
+      const red = chosen && chosen.reduction ? chosen.reduction : 0;
+      const finalTarget = locThreshold != null ? Math.max(0, Math.round(locThreshold - red)) : null;
+      const sub = chosen && chosen.reduction ? `${locSubtitle} · def: ${chosen.label}` : `${locSubtitle} · no defense`;
+      openRoller({ label: actionLabel, min: 1, max: 100, target: finalTarget,
+        targetLabel: sub, strayContext, locContext: locCtx, damageContext }); // defense already chosen → no buttons
+    };
+
+    // Reactive defense: if someone ELSE controls the target, ask them to choose.
+    if (targetTok && !_iControlDefense(targetTok) && defenseOptions.length && locThreshold != null) {
+      _requestRemoteDefense(targetTok, defenseOptions, locThreshold, openWith);
+    } else {
+      openWith('LOCAL');
+    }
   }
 
   // Regular attack button (torso/default, no size penalty)
@@ -7052,6 +7065,74 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 
   overlay.appendChild(card);
   document.body.appendChild(overlay);
+}
+
+// ── Reactive defense (the defender picks their own response) ──────────────────
+// Whoever CONTROLS the target chooses the defense: the owning player for their
+// character, the GM for a creature. When that isn't the attacker's own client,
+// the attack waits (with a timeout fallback) while the defender's screen prompts.
+let _pendingDefense = null;
+function _iControlDefense(t) {
+  if (!t) return false;
+  if (t.entity_type === 'character') return t.entity_id === currentCharacterId;
+  return isGM(); // creatures (and anything else) are the GM's to defend
+}
+function _requestRemoteDefense(target, options, threshold, cb) {
+  const reqId = 'def-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
+  const dflt  = options.find(o => o.preSelected) || null; // fall back to their standing stance
+  _pendingDefense = { reqId, cb, done: false };
+  _showDefenseWaiting(target.label || 'the defender');
+  _rollerBroadcast('defense-request', {
+    reqId, targetTokenId: target.id, targetName: target.label || '', attackerName: _rollerWho(), threshold,
+    options: options.map(o => ({ label: o.label, reduction: o.reduction, prone: /Go Prone/i.test(o.label) })),
+  });
+  _pendingDefense.timer = setTimeout(() =>
+    _resolveDefenseLocal(reqId, dflt ? { label: dflt.label, reduction: dflt.reduction } : null), 25000);
+}
+function _resolveDefenseLocal(reqId, chosen) {
+  if (!_pendingDefense || _pendingDefense.reqId !== reqId || _pendingDefense.done) return;
+  _pendingDefense.done = true;
+  clearTimeout(_pendingDefense.timer);
+  _hideDefenseWaiting();
+  const cb = _pendingDefense.cb;
+  _pendingDefense = null;
+  cb(chosen); // null → no defense
+}
+function _skipDefenseWait() { if (_pendingDefense) _resolveDefenseLocal(_pendingDefense.reqId, null); }
+function _showDefenseWaiting(name) {
+  let el = document.getElementById('defense-waiting');
+  if (!el) { el = document.createElement('div'); el.id = 'defense-waiting'; document.body.appendChild(el); }
+  el.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
+  el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:24px 28px;text-align:center;max-width:90vw;">
+    <div style="font-size:0.95rem;color:var(--gold2);margin-bottom:6px;">⏳ Waiting for ${_logEsc(name)}</div>
+    <div style="font-size:0.74rem;color:var(--text-dim);margin-bottom:14px;">choosing their defense…</div>
+    <button onclick="_skipDefenseWait()" style="font-size:0.78rem;padding:6px 16px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Skip — resolve now</button>
+  </div>`;
+  el.style.display = 'flex';
+}
+function _hideDefenseWaiting() { const el = document.getElementById('defense-waiting'); if (el) el.style.display = 'none'; }
+// Defender's screen: choose a defense, then send the reduction back to the attacker.
+function _showDefensePicker(payload) {
+  const target = mapTokens[payload.targetTokenId];
+  if (!target) return;
+  let el = document.getElementById('defense-picker');
+  if (!el) { el = document.createElement('div'); el.id = 'defense-picker'; document.body.appendChild(el); }
+  const opts = [{ label: 'No Defense', reduction: 0, prone: false }, ...(payload.options || [])];
+  const btns = opts.map((o, i) => `<button data-i="${i}" style="display:block;width:100%;margin-top:6px;padding:8px 12px;border-radius:5px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--text);cursor:pointer;font-family:Georgia,serif;font-size:0.82rem;">${_logEsc(o.label)}</button>`).join('');
+  el.style.cssText = 'position:fixed;inset:0;z-index:1650;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
+  el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:280px;max-width:92vw;">
+    <div style="font-size:0.95rem;color:var(--gold2);text-align:center;margin-bottom:4px;">⚔ ${_logEsc(payload.attackerName)} attacks ${_logEsc(payload.targetName)}!</div>
+    <div style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-bottom:8px;">Choose your defense</div>
+    ${btns}</div>`;
+  el.style.display = 'flex';
+  const respond = async (o) => {
+    el.style.display = 'none'; el.onclick = null; clearTimeout(el._to);
+    if (o.prone) await setCondition(target.id, 'prone', true); // Go Prone applies to me
+    _rollerBroadcast('defense-response', { reqId: payload.reqId, label: o.label, reduction: o.reduction });
+  };
+  el.onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) respond(opts[+b.dataset.i]); };
+  clearTimeout(el._to);
+  el._to = setTimeout(() => { if (el.style.display !== 'none') respond(opts[0]); }, 24000); // auto no-defense
 }
 
 // openRoller({ label, min=1, max=100, target=null, targetLabel='' })
@@ -7582,6 +7663,15 @@ function subscribeMapRealtime() {
       if (_roller && _roller.mirror && payload && payload.html != null) {
         const de = document.getElementById('roller-damage-display');
         if (de) { de.style.display = 'block'; de.innerHTML = payload.html; }
+      }
+    })
+    .on('broadcast', { event: 'defense-request' }, ({ payload }) => {
+      const t = payload && mapTokens[payload.targetTokenId];
+      if (t && _iControlDefense(t)) _showDefensePicker(payload); // only the target's controller responds
+    })
+    .on('broadcast', { event: 'defense-response' }, ({ payload }) => {
+      if (payload && _pendingDefense && _pendingDefense.reqId === payload.reqId) {
+        _resolveDefenseLocal(payload.reqId, payload.reduction ? { label: payload.label, reduction: payload.reduction } : null);
       }
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
@@ -8574,16 +8664,12 @@ function attackTokenClick(tokenId) {
     const targetIsEvading  = targetConds.has('evading');
     const physCoord = defAttrs.PhysCoord || 0;
 
-    // Retreat and Evade — unavailable while prone
+    // Evade — unavailable while prone. Buffed to the old Retreat value now that
+    // Retreat is gone, so a dodge stays worthwhile.
     if (!targetIsProne) {
-      const retreatReduction = Math.round(physCoord * defSize);
-      const evadeReduction   = Math.round(physCoord * defSize / 2);
+      const evadeReduction = Math.round(physCoord * defSize);
       defenseOptions.push({
-        label: `Retreat — move out of area (−${retreatReduction}) [3 sec]`,
-        reduction: retreatReduction,
-      });
-      defenseOptions.push({
-        label: `Evade — dodge in place (−${evadeReduction}) [3 sec]`,
+        label: `Evade — dodge (−${evadeReduction}) [3 sec]`,
         reduction: evadeReduction,
       });
     }
@@ -8650,8 +8736,7 @@ function attackTokenClick(tokenId) {
     const physCoord = defAttrs.PhysCoord || 0;
     const conds = getConditions(target.id);
     if (!conds.has('prone')) {
-      defenseOptions.push({ label: `Retreat (−${Math.round(physCoord * defSize)}) [3 sec]`,   reduction: Math.round(physCoord * defSize) });
-      defenseOptions.push({ label: `Evade (−${Math.round(physCoord * defSize / 2)}) [3 sec]`, reduction: Math.round(physCoord * defSize / 2) });
+      defenseOptions.push({ label: `Evade (−${Math.round(physCoord * defSize)}) [3 sec]`, reduction: Math.round(physCoord * defSize) });
     }
     if (wasRanged && !conds.has('prone') && rawThreshold != null) {
       const proneReduction = Math.round(rawThreshold / 2);
@@ -10239,6 +10324,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260728a"></script>
+<script src="panels.js?v=20260728b"></script>
 </body>
 </html>
