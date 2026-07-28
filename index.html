@@ -4123,7 +4123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260728b';
+const VERSION = 'v0.1.20260728c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7072,27 +7072,27 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 // character, the GM for a creature. When that isn't the attacker's own client,
 // the attack waits (with a timeout fallback) while the defender's screen prompts.
 let _pendingDefense = null;
+// Who may set a target's defense: the GM (for anyone) or the player who owns
+// that character. The GM is always present, so a slow/absent player never
+// stalls the game — the GM just picks; no auto-timeout needed.
 function _iControlDefense(t) {
   if (!t) return false;
-  if (t.entity_type === 'character') return t.entity_id === currentCharacterId;
-  return isGM(); // creatures (and anything else) are the GM's to defend
+  if (isGM()) return true;
+  return t.entity_type === 'character' && t.entity_id === currentCharacterId;
 }
 function _requestRemoteDefense(target, options, threshold, cb) {
   const reqId = 'def-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
-  const dflt  = options.find(o => o.preSelected) || null; // fall back to their standing stance
   _pendingDefense = { reqId, cb, done: false };
   _showDefenseWaiting(target.label || 'the defender');
   _rollerBroadcast('defense-request', {
     reqId, targetTokenId: target.id, targetName: target.label || '', attackerName: _rollerWho(), threshold,
-    options: options.map(o => ({ label: o.label, reduction: o.reduction, prone: /Go Prone/i.test(o.label) })),
+    options: options.map(o => ({ label: o.label, reduction: o.reduction,
+      prone: /Go Prone/i.test(o.label), stamina: o.stamina || 0 })),
   });
-  _pendingDefense.timer = setTimeout(() =>
-    _resolveDefenseLocal(reqId, dflt ? { label: dflt.label, reduction: dflt.reduction } : null), 25000);
 }
 function _resolveDefenseLocal(reqId, chosen) {
   if (!_pendingDefense || _pendingDefense.reqId !== reqId || _pendingDefense.done) return;
   _pendingDefense.done = true;
-  clearTimeout(_pendingDefense.timer);
   _hideDefenseWaiting();
   const cb = _pendingDefense.cb;
   _pendingDefense = null;
@@ -7125,14 +7125,19 @@ function _showDefensePicker(payload) {
     <div style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-bottom:8px;">Choose your defense</div>
     ${btns}</div>`;
   el.style.display = 'flex';
+  el.dataset.reqid = payload.reqId;
   const respond = async (o) => {
-    el.style.display = 'none'; el.onclick = null; clearTimeout(el._to);
-    if (o.prone) await setCondition(target.id, 'prone', true); // Go Prone applies to me
+    el.style.display = 'none'; el.onclick = null; delete el.dataset.reqid;
+    if (o.prone)   await setCondition(target.id, 'prone', true);     // Go Prone applies to me
+    if (o.stamina) await _deductStamina(_tokenCid(target), o.stamina); // Evade costs stamina
     _rollerBroadcast('defense-response', { reqId: payload.reqId, label: o.label, reduction: o.reduction });
   };
   el.onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) respond(opts[+b.dataset.i]); };
-  clearTimeout(el._to);
-  el._to = setTimeout(() => { if (el.style.display !== 'none') respond(opts[0]); }, 24000); // auto no-defense
+}
+// Another controller (the GM or the owner) resolved it — close a stale picker.
+function _closeDefensePicker(reqId) {
+  const el = document.getElementById('defense-picker');
+  if (el && el.dataset.reqid === reqId) { el.style.display = 'none'; el.onclick = null; delete el.dataset.reqid; }
 }
 
 // openRoller({ label, min=1, max=100, target=null, targetLabel='' })
@@ -7670,7 +7675,9 @@ function subscribeMapRealtime() {
       if (t && _iControlDefense(t)) _showDefensePicker(payload); // only the target's controller responds
     })
     .on('broadcast', { event: 'defense-response' }, ({ payload }) => {
-      if (payload && _pendingDefense && _pendingDefense.reqId === payload.reqId) {
+      if (!payload) return;
+      _closeDefensePicker(payload.reqId); // if the OTHER controller had it open, dismiss it
+      if (_pendingDefense && _pendingDefense.reqId === payload.reqId) {
         _resolveDefenseLocal(payload.reqId, payload.reduction ? { label: payload.label, reduction: payload.reduction } : null);
       }
     })
@@ -8665,12 +8672,14 @@ function attackTokenClick(tokenId) {
     const physCoord = defAttrs.PhysCoord || 0;
 
     // Evade — unavailable while prone. Buffed to the old Retreat value now that
-    // Retreat is gone, so a dodge stays worthwhile.
+    // Retreat is gone; costs 1 stamina so a dodge isn't free.
     if (!targetIsProne) {
       const evadeReduction = Math.round(physCoord * defSize);
       defenseOptions.push({
-        label: `Evade — dodge (−${evadeReduction}) [3 sec]`,
+        label: `Evade — dodge (−${evadeReduction}, 1 stam)`,
         reduction: evadeReduction,
+        stamina: 1,
+        onSelect: () => _deductStamina(_tokenCid(target), 1),
       });
     }
 
@@ -8735,8 +8744,26 @@ function attackTokenClick(tokenId) {
     const defSize = Math.round((defAttrs._heightInches || 66) / 12 * ((BUILD_DATA[sc.build || 'Average'] || {}).TargetAdj || 1));
     const physCoord = defAttrs.PhysCoord || 0;
     const conds = getConditions(target.id);
+    // Block / Parry from a creature's ready shield/weapon (same as characters)
+    const held = sc.held_items || {};
+    const seen = new Set();
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      for (const r of getWeaponRows(itemName)) {
+        if (r.action !== 'Block' && r.action !== 'Parry') continue;
+        const key = `${r.action}::${itemName}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const defVal = calcHitValue(r.hitFormula, defAttrs);
+        if (defVal == null) continue;
+        defenseOptions.push({ label: `${r.action} — ${itemName} (−${Math.round(defVal * defSize)})`, reduction: Math.round(defVal * defSize) });
+      }
+    }
     if (!conds.has('prone')) {
-      defenseOptions.push({ label: `Evade (−${Math.round(physCoord * defSize)}) [3 sec]`, reduction: Math.round(physCoord * defSize) });
+      const evadeReduction = Math.round(physCoord * defSize);
+      defenseOptions.push({ label: `Evade (−${evadeReduction}, 1 stam)`, reduction: evadeReduction,
+        stamina: 1, onSelect: () => _deductStamina(_tokenCid(target), 1) });
     }
     if (wasRanged && !conds.has('prone') && rawThreshold != null) {
       const proneReduction = Math.round(rawThreshold / 2);
@@ -10324,6 +10351,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260728b"></script>
+<script src="panels.js?v=20260728c"></script>
 </body>
 </html>
