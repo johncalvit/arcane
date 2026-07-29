@@ -4123,7 +4123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260728c';
+const VERSION = 'v0.1.20260728d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8043,6 +8043,7 @@ let dragOffsetX      = 0;
 let dragOffsetY      = 0;
 
 const TOKEN_SIZE = 44; // canvas-pixel diameter
+const ITEM_TOKEN_ICON = 'map_items_token2.png'; // shared art for dropped ground items (falls back to 📦 if missing)
 
 // ── GM tab switch ─────────────────────────────────────────────────────────────
 function switchGmTab(tab) {
@@ -8111,7 +8112,9 @@ function tokenHtml(t) {
   // For character tokens, prefer the live avatar from playCharCache over the stale map_tokens copy
   const liveAvatar = (t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id])
     ? resolveAvatarUrl(playCharCache[t.entity_id].avatar_url) : null;
-  const displayUrl = liveAvatar || t.avatar_url || speciesAvatar;
+  // Ground items share one piece of art (unless a token carries its own avatar).
+  const itemArt = (t.entity_type === 'item' && !t.avatar_url) ? ITEM_TOKEN_ICON : '';
+  const displayUrl = liveAvatar || t.avatar_url || speciesAvatar || itemArt;
   const inner = displayUrl
     ? `<img src="${displayUrl}" alt=""
          onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
@@ -10351,6 +10354,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260728c"></script>
+<script src="panels.js?v=20260728d"></script>
 </body>
 </html>
