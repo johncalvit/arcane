@@ -956,7 +956,7 @@
         <input type="text" id="nav-invite-input" placeholder="Invite code" maxlength="6"
           style="flex:1;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.1em;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;"
           onkeydown="if(event.key==='Enter')navRedeemInviteCode()">
-        <button class="nav-btn" style="padding:2px 8px;margin:0;" onclick="navRedeemInviteCode()">Join</button>
+        <button class="nav-btn" style="padding:2px 8px;margin:0;flex:0 0 auto;width:auto;" onclick="navRedeemInviteCode()">Join</button>
       </div>
       <div id="nav-join-status" style="font-size:0.66rem;color:var(--gold2);min-height:1em;margin-top:3px;"></div>
     </div>
@@ -4131,7 +4131,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260728e';
+const VERSION = 'v0.1.20260728f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4774,6 +4774,14 @@ function applyConfigData(data) {
   replaceArrayContents(EQUIPMENT,       data.equipment     && data.equipment.length     ? data.equipment     : DEFAULT_EQUIPMENT);
   replaceArrayContents(MELEE_WEAPONS,   data.meleeWeapons  && data.meleeWeapons.length  ? data.meleeWeapons  : DEFAULT_MELEE_WEAPONS);
   replaceArrayContents(RANGED_WEAPONS,  data.rangedWeapons && data.rangedWeapons.length ? data.rangedWeapons : DEFAULT_RANGED_WEAPONS);
+  // Backfill reload for configs saved before the field existed: use the default
+  // by weapon name (thrown default to 'N/A'), so bows/crossbows get their rounds.
+  RANGED_WEAPONS.forEach(r => {
+    if (r.reload === undefined) {
+      const d = DEFAULT_RANGED_WEAPONS.find(x => x.weapon === r.weapon);
+      r.reload = d ? d.reload : 'N/A';
+    }
+  });
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   migrateSkills();
@@ -10362,6 +10370,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260728e"></script>
+<script src="panels.js?v=20260728f"></script>
 </body>
 </html>

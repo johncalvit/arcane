@@ -639,12 +639,27 @@ function _dlgRender(body) {
   // the "Bare Handed" weapon so the row lookup is identical to any real weapon.
   const weaponChips = (itemName, chKey) => {
     const norm = normalizeWeaponName(itemName);
+    const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
     const rows = [
       ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
-      ...RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: true })),
+      ...rangedRows.map(r => ({ r, ranged: true })),
     ];
     const cur = c.slots[chKey];
-    return rows.map(({ r, ranged }) => {
+    // A ranged weapon with a reload count gets a Load action FIRST — a nudge to
+    // ready it before firing. Firing without loading is still allowed (soft).
+    let loadChip = '';
+    const reload = rangedRows.map(r => r.reload).find(v => typeof v === 'number' && v > 0);
+    if (reload) {
+      const loadLbl = `Load — ${itemName}`;
+      if (cur?.label !== loadLbl) {
+        loadChip = _dlgChip({
+          label: '🏹 Load', sub: `${reload}r`,
+          title: `Ready ${itemName} — takes ${reload} round${reload > 1 ? 's' : ''}`,
+          data: { dact: 'set', slot: chKey, label: loadLbl, dur: reload * 3, locks: 0 },
+        });
+      }
+    }
+    return loadChip + rows.map(({ r, ranged }) => {
       const lbl = `${r.action} — ${itemName}`;
       if (cur?.label === lbl) return ''; // already shown as the lit chip
       const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
