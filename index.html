@@ -1361,6 +1361,10 @@
             <input type="text" id="rf-maxrange" placeholder="(blank = none)">
           </div>
           <div class="field">
+            <label>Reload (rounds)</label>
+            <input type="text" id="rf-reload" placeholder="N/A for thrown">
+          </div>
+          <div class="field">
             <label>Hit Formula</label>
             <input type="text" id="rf-hitformula" placeholder="e.g. Physical Coordination + Day Vision">
           </div>
@@ -1384,7 +1388,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
         <tbody id="rangedmgr-list"></tbody>
       </table>
     </div>
@@ -3208,21 +3212,21 @@ function buildMeleeWeaponsManagerTable() {
 // increment / max range instead of reach. Config-driven, with a built-in
 // fallback transcribed from "Arcane Ranged Weapons.csv" so it's never empty.
 const DEFAULT_RANGED_WEAPONS = [
-  { weapon:"Blowgun",               action:"Stab",  rangeIncrement:2,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:4,  damageMax:2,  maxPowerMod:0.2 },
-  { weapon:"Bow, Horse",            action:"Stab",  rangeIncrement:7,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:6,  maxPowerMod:0.7 },
-  { weapon:"Bow, Hunting",          action:"Stab",  rangeIncrement:10, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:12, damageMax:7,  maxPowerMod:0.8 },
-  { weapon:"Bow, Light",            action:"Stab",  rangeIncrement:8,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.6 },
-  { weapon:"Bow, War",              action:"Stab",  rangeIncrement:12, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:16, damageMax:9,  maxPowerMod:0.9 },
-  { weapon:"Club (Thrown)",         action:"Smash", rangeIncrement:3,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:7,  damageMax:4,  maxPowerMod:0.5 },
-  { weapon:"Axe, Hatchet (Thrown)", action:"Stab",  rangeIncrement:2,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:9,  damageMax:6,  maxPowerMod:0.7 },
-  { weapon:"Crossbow, Hand",        action:"Stab",  rangeIncrement:4,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:8,  damageMax:4,  maxPowerMod:0.5 },
-  { weapon:"Crossbow, Heavy",       action:"Stab",  rangeIncrement:15, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:10, maxPowerMod:0.6 },
-  { weapon:"Crossbow, Light",       action:"Stab",  rangeIncrement:12, maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:8,  maxPowerMod:0.5 },
-  { weapon:"Dart",                  action:"Stab",  rangeIncrement:3,  maxRange:null, hitFormula:"Manual Dexterity * 2",                      material:"", minStr:6,  damageMax:2,  maxPowerMod:0.2 },
-  { weapon:"Sling Pellet",          action:"Smash", rangeIncrement:4,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:6,  maxPowerMod:0.6 },
-  { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
-  { weapon:"Javelin",               action:"Stab",  rangeIncrement:6,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
-  { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
+  { weapon:"Blowgun",               action:"Stab",  rangeIncrement:2,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:4,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Bow, Horse",            action:"Stab",  rangeIncrement:7,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Bow, Hunting",          action:"Stab",  rangeIncrement:10, maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:12, damageMax:7,  maxPowerMod:0.8 },
+  { weapon:"Bow, Light",            action:"Stab",  rangeIncrement:8,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.6 },
+  { weapon:"Bow, War",              action:"Stab",  rangeIncrement:12, maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:16, damageMax:9,  maxPowerMod:0.9 },
+  { weapon:"Club (Thrown)",         action:"Smash", rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:7,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Axe, Hatchet (Thrown)", action:"Stab",  rangeIncrement:2,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:9,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Crossbow, Hand",        action:"Stab",  rangeIncrement:4,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:8,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Crossbow, Heavy",       action:"Stab",  rangeIncrement:15, maxRange:null, reload:3,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:10, maxPowerMod:0.6 },
+  { weapon:"Crossbow, Light",       action:"Stab",  rangeIncrement:12, maxRange:null, reload:2,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:8,  maxPowerMod:0.5 },
+  { weapon:"Dart",                  action:"Stab",  rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Manual Dexterity * 2",                      material:"", minStr:6,  damageMax:2,  maxPowerMod:0.2 },
+  { weapon:"Sling Pellet",          action:"Smash", rangeIncrement:4,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
+  { weapon:"Javelin",               action:"Stab",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
 ];
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
@@ -3500,6 +3504,7 @@ function openRangedWeaponForm(index) {
   document.getElementById('rf-material').value       = row ? row.material : '';
   document.getElementById('rf-rangeincrement').value = row ? row.rangeIncrement : 0;
   document.getElementById('rf-maxrange').value        = row && row.maxRange !== null && row.maxRange !== undefined ? row.maxRange : '';
+  document.getElementById('rf-reload').value          = row && row.reload !== null && row.reload !== undefined ? row.reload : '';
   document.getElementById('rf-hitformula').value     = row ? row.hitFormula : '';
   document.getElementById('rf-minstr').value         = row ? row.minStr : 0;
   document.getElementById('rf-damagemax').value      = row ? row.damageMax : 0;
@@ -3518,10 +3523,13 @@ function saveRangedWeapon() {
   const action = document.getElementById('rf-action').value.trim();
   if (!weapon || !action) { alert('Weapon name and action are required.'); return; }
   const maxRangeRaw = document.getElementById('rf-maxrange').value.trim();
+  const reloadRaw   = document.getElementById('rf-reload').value.trim();
   const row = {
     weapon, action,
     rangeIncrement: parseFloat(document.getElementById('rf-rangeincrement').value) || 0,
     maxRange: maxRangeRaw === '' ? null : parseFloat(maxRangeRaw) || 0,
+    // Reload rounds; thrown weapons (or a blank/"N/A" entry) store the string 'N/A'.
+    reload: (reloadRaw === '' || /^n\s*\/?\s*a$/i.test(reloadRaw)) ? 'N/A' : (parseFloat(reloadRaw) || 0),
     hitFormula: document.getElementById('rf-hitformula').value.trim(),
     material: document.getElementById('rf-material').value.trim(),
     minStr: parseFloat(document.getElementById('rf-minstr').value) || 0,
@@ -3556,7 +3564,7 @@ function buildRangedWeaponsManagerTable() {
   tbody.innerHTML = '';
   RANGED_WEAPONS.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -4123,7 +4131,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260728d';
+const VERSION = 'v0.1.20260728e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10354,6 +10362,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260728d"></script>
+<script src="panels.js?v=20260728e"></script>
 </body>
 </html>
