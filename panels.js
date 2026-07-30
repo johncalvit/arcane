@@ -338,7 +338,12 @@ function _paActiveBanner() {
   const canControl = isGM() || (ac.type === 'char' && ac.id.split('::')[1] === currentCharacterId);
   // Compact readout of assigned actions (the slot rows are gone from the panel)
   const queued = Object.values(slots).filter(Boolean)
-    .map(s => _paEsc(s.label.split(' —')[0].trim())).join(' · ');
+    .map(s => {
+      const base = _paEsc(s.label.split(' —')[0].trim());
+      const rem = _slotRemaining(s);
+      // Show a countdown clock for genuine multi-round actions (Load, Charge…).
+      return (rem !== Infinity && s.durationRounds > 1 && rem > 0) ? `${base} ⏳${rem}r` : base;
+    }).join(' · ');
   const queuedLine = queued
     ? `<div style="font-size:0.68rem;color:var(--gold2);margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">⚔ ${queued}</div>`
     : '';
@@ -534,6 +539,19 @@ function _dlgDurLabel(dur) {
   return dur >= 99 ? '∞' : `${Math.max(1, Math.ceil(dur / 3))}r`;
 }
 
+// Rounds left on a queued slot: total duration minus rounds elapsed since it was
+// set. Ticks down as the round advances (re-rendered each round). ∞ for lock-on.
+function _slotRemaining(slot) {
+  if (!slot) return 0;
+  if (slot.durationRounds >= 9999) return Infinity;
+  const round = typeof _atSharedRound === 'function' ? _atSharedRound() : (slot.startRound || 0);
+  return Math.max(0, (slot.startRound != null ? slot.startRound : round) + slot.durationRounds - round);
+}
+function _slotCountdownLabel(slot) {
+  const rem = _slotRemaining(slot);
+  return rem === Infinity ? '∞' : `${rem}r`;
+}
+
 // One selectable chip. data-dact carries the click behavior.
 function _dlgChip({ label, sub, lit, disabled, title, data }) {
   const base = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;font-size:0.78rem;font-family:Georgia,serif;user-select:none;border:1px solid ';
@@ -616,7 +634,8 @@ function _dlgRender(body) {
     const lit = c.slots.full?.label === a.label;
     const disabled = halfUsed && a.label === 'Evade';
     return _dlgChip({
-      label: a.label, sub: _dlgDurLabel(a.dur), lit, disabled,
+      // When active, show the countdown; otherwise the action's total duration.
+      label: a.label, sub: lit ? _slotCountdownLabel(c.slots.full) : _dlgDurLabel(a.dur), lit, disabled,
       title: disabled ? 'Over half movement used this round' : '',
       data: lit ? { dact: 'off', slot: 'full' }
                 : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 },
@@ -695,7 +714,7 @@ function _dlgRender(body) {
     let chips = '';
     if (cur) {
       chips += _dlgChip({
-        label: cur.label, sub: _dlgDurLabel(cur.durationRounds * 3), lit: true,
+        label: cur.label, sub: _slotCountdownLabel(cur), lit: true, // rounds remaining
         title: 'Click to clear',
         data: { dact: 'off', slot: ch.key },
       });
