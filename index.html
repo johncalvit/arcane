@@ -938,6 +938,7 @@
       <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
       <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
+      <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables Manager</button>
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
       <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
@@ -1390,6 +1391,40 @@
       <table class="loadout-table">
         <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
         <tbody id="rangedmgr-list"></tbody>
+      </table>
+    </div>
+
+    <!-- CONSUMABLES MANAGER -->
+    <div id="panel-consumablesmgr" class="panel">
+      <h2>Consumables Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define potions and other expendable items. Restore values heal Toughness/Stamina/Blood; Clears lists conditions
+        removed (comma-separated, e.g. bleeding); the Buff applies an attribute bonus for a GM-managed duration.
+      </p>
+      <button class="btn" onclick="openConsumableForm(null)" style="margin-bottom:16px;">+ Add Consumable</button>
+
+      <div id="consumable-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="consumable-form-title" style="margin-top:0;">New Consumable</h3>
+        <div class="grid-3">
+          <div class="field"><label>Name</label><input type="text" id="cf-name" placeholder="e.g. Healing Potion"></div>
+          <div class="field"><label>Weight (lbs)</label><input type="text" id="cf-wt" placeholder="0.5"></div>
+          <div class="field"><label>Clears (conditions)</label><input type="text" id="cf-clears" placeholder="e.g. bleeding, stunned"></div>
+          <div class="field"><label>Restore Toughness</label><input type="text" id="cf-toughness" placeholder="0"></div>
+          <div class="field"><label>Restore Stamina</label><input type="text" id="cf-stamina" placeholder="0"></div>
+          <div class="field"><label>Restore Blood</label><input type="text" id="cf-blood" placeholder="0"></div>
+          <div class="field"><label>Buff Attribute</label><input type="text" id="cf-buffattr" placeholder="e.g. Night Vision"></div>
+          <div class="field"><label>Buff Amount</label><input type="text" id="cf-buffamount" placeholder="0"></div>
+          <div class="field"><label>Buff Duration (min)</label><input type="text" id="cf-buffminutes" placeholder="e.g. 10-100"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveConsumable()">Save Consumable</button>
+          <button class="btn danger" onclick="closeConsumableForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Name</th><th>Wt</th><th>Tough</th><th>Stam</th><th>Blood</th><th>Clears</th><th>Buff</th><th></th></tr></thead>
+        <tbody id="consumablesmgr-list"></tbody>
       </table>
     </div>
 
@@ -2735,6 +2770,21 @@ function buildLoadoutSelects() {
     o.value = e.name; o.textContent = `${e.name} (${e.wt} lbs)`;
     es.appendChild(o);
   });
+  if (CONSUMABLES.length) {
+    const og = document.createElement('optgroup');
+    og.label = '🧪 Consumables';
+    CONSUMABLES.forEach(c => {
+      const o = document.createElement('option');
+      o.value = c.name; o.textContent = `${c.name} (${c.wt} lbs)`;
+      og.appendChild(o);
+    });
+    es.appendChild(og);
+  }
+}
+
+// Resolve an equipment/consumable line item to its record (weight etc.).
+function _lookupEquipItem(name) {
+  return EQUIPMENT.find(x => x.name === name) || CONSUMABLES.find(x => x.name === name) || null;
 }
 
 function addWeapon() {
@@ -2761,7 +2811,7 @@ function addEquip() {
   const qty = parseInt(document.getElementById('equip-qty').value)||1;
   const tbody = document.getElementById('equip-list');
   for (const name of selected) {
-    const e = EQUIPMENT.find(x=>x.name===name);
+    const e = _lookupEquipItem(name);
     if (!e) continue;
     const tr = document.createElement('tr');
     const total = e.wt * qty;
@@ -3231,6 +3281,19 @@ const DEFAULT_RANGED_WEAPONS = [
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
 
+// ── Consumables (potions & the like) ──────────────────────────────────────────
+// An expendable item carried in the loadout and drunk/used on a target (self or
+// another). Effect fields are fixed for now: restore Toughness/Stamina/Blood,
+// clear conditions (comma-separated keys, e.g. "bleeding"), and one timed buff
+// (attribute + amount + duration text — GM-managed, no auto-expiry yet).
+const DEFAULT_CONSUMABLES = [
+  { name:"Water",              wt:1,   restoreToughness:0, restoreStamina:2, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"" },
+  { name:"Healing Potion",     wt:0.5, restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"bleeding", buffAttr:"",             buffAmount:0,  buffMinutes:"" },
+  { name:"Night Vision Potion",wt:0.5, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100" },
+];
+let CONSUMABLES = [...DEFAULT_CONSUMABLES];
+let editingConsumableIndex = null;
+
 // ─── Hit Location Data ────────────────────────────────────────────────────────
 // matrix: 8 rows × 5 cols, values are part keys or null (re-roll).
 // parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift called-shot rolls.
@@ -3557,6 +3620,79 @@ function deleteRangedWeapon(index) {
   recalc();
 }
 
+// ─── CONSUMABLES MANAGER ─────────────────────────────────────────────────────
+function openConsumableForm(index) {
+  editingConsumableIndex = index;
+  const row = index !== null ? CONSUMABLES[index] : null;
+  document.getElementById('consumable-form-title').textContent = row ? 'Edit Consumable' : 'New Consumable';
+  document.getElementById('cf-name').value        = row ? row.name : '';
+  document.getElementById('cf-wt').value          = row ? row.wt : '';
+  document.getElementById('cf-clears').value      = row ? (row.clears || '') : '';
+  document.getElementById('cf-toughness').value   = row ? row.restoreToughness : '';
+  document.getElementById('cf-stamina').value     = row ? row.restoreStamina : '';
+  document.getElementById('cf-blood').value       = row ? row.restoreBlood : '';
+  document.getElementById('cf-buffattr').value    = row ? (row.buffAttr || '') : '';
+  document.getElementById('cf-buffamount').value  = row ? row.buffAmount : '';
+  document.getElementById('cf-buffminutes').value = row ? (row.buffMinutes || '') : '';
+  document.getElementById('consumable-form').style.display = 'block';
+}
+
+function closeConsumableForm() {
+  editingConsumableIndex = null;
+  document.getElementById('consumable-form').style.display = 'none';
+}
+
+function saveConsumable() {
+  const name = document.getElementById('cf-name').value.trim();
+  if (!name) { alert('Consumable name is required.'); return; }
+  const row = {
+    name,
+    wt: parseFloat(document.getElementById('cf-wt').value) || 0,
+    restoreToughness: parseFloat(document.getElementById('cf-toughness').value) || 0,
+    restoreStamina: parseFloat(document.getElementById('cf-stamina').value) || 0,
+    restoreBlood: parseFloat(document.getElementById('cf-blood').value) || 0,
+    clears: document.getElementById('cf-clears').value.trim(),
+    buffAttr: document.getElementById('cf-buffattr').value.trim(),
+    buffAmount: parseFloat(document.getElementById('cf-buffamount').value) || 0,
+    buffMinutes: document.getElementById('cf-buffminutes').value.trim(),
+  };
+  if (editingConsumableIndex !== null) {
+    CONSUMABLES[editingConsumableIndex] = row;
+  } else {
+    CONSUMABLES.push(row);
+  }
+  writeConfigToDisk();
+  closeConsumableForm();
+  buildConsumablesManagerTable();
+  if (document.getElementById('equip-select')) buildLoadoutSelects();
+}
+
+function deleteConsumable(index) {
+  const row = CONSUMABLES[index];
+  if (!confirm(`Delete "${row.name}"?`)) return;
+  closeConsumableForm();
+  CONSUMABLES.splice(index, 1);
+  writeConfigToDisk();
+  buildConsumablesManagerTable();
+  if (document.getElementById('equip-select')) buildLoadoutSelects();
+}
+
+function buildConsumablesManagerTable() {
+  const tbody = document.getElementById('consumablesmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  CONSUMABLES.forEach((row, i) => {
+    const restores = [];
+    if (row.restoreToughness) restores.push(row.restoreToughness);
+    const buff = row.buffAttr ? `${row.buffAttr} +${row.buffAmount}${row.buffMinutes ? ' ('+row.buffMinutes+'m)' : ''}` : '—';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${row.restoreToughness || '—'}</td><td>${row.restoreStamina || '—'}</td><td>${row.restoreBlood || '—'}</td><td>${row.clears || '—'}</td><td>${buff}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openConsumableForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteConsumable(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 function buildRangedWeaponsManagerTable() {
   const tbody = document.getElementById('rangedmgr-list');
   if (!tbody) return;
@@ -3590,7 +3726,7 @@ function showPanel(id) {
   if (id === 'speciesmgr') buildSpeciesManagerTable();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr'];
 
 function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
@@ -4107,6 +4243,7 @@ function gatherConfigData() {
     armorTypes: ARMOR_TYPE_DATA,
     meleeWeapons: MELEE_WEAPONS,
     rangedWeapons: RANGED_WEAPONS,
+    consumables: CONSUMABLES,
   };
 }
 
@@ -4131,7 +4268,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260803a';
+const VERSION = 'v0.1.20260803b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4678,6 +4815,7 @@ function _seedDefaults() {
   replaceArrayContents(EQUIPMENT, DEFAULT_EQUIPMENT);
   replaceArrayContents(MELEE_WEAPONS,  DEFAULT_MELEE_WEAPONS);
   replaceArrayContents(RANGED_WEAPONS, DEFAULT_RANGED_WEAPONS);
+  replaceArrayContents(CONSUMABLES, DEFAULT_CONSUMABLES);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    DEFAULT_ARMOR_TYPE_DATA);
 }
@@ -4782,6 +4920,7 @@ function applyConfigData(data) {
       r.reload = d ? d.reload : 'N/A';
     }
   });
+  replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   migrateSkills();
@@ -4799,6 +4938,7 @@ function rebuildAllConfigUI() {
   buildArmorManagerTable();
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
+  buildConsumablesManagerTable();
   recalc();
 }
 
