@@ -4268,7 +4268,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260803b';
+const VERSION = 'v0.1.20260803c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5234,6 +5234,8 @@ const CONDITION_DEFS = [
     desc:'Willingly carrying or being ridden by one or more others. They move with this token; their weight slows it.' },
   { key:'slowed',      label:'Slowed',      icon:'🦵', color:'#c99a40',
     desc:'Injured leg(s). Max speed is reduced by the proportion of legs hurt. Clear to heal.' },
+  { key:'buffed',      label:'Buffed',      icon:'✨', color:'#c77dff',
+    desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
 ];
 
 function getConditions(tokenId) {
@@ -5269,7 +5271,7 @@ async function setCondition(tokenId, condition, active) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -5505,6 +5507,22 @@ function getEntity(ref) {
     ...(row.equipment || []).map(e => e.name),
   ].filter(Boolean))];
 
+  // Timed buffs from consumables ride as hidden `buff:<attrKey>:<amount>`
+  // markers on the token's conditions — layered onto attrs here (not memoized
+  // on the row) so they track condition changes without invalidating _attrs.
+  let attrs = row._attrs;
+  if (token && Array.isArray(token.conditions)) {
+    const buffMarkers = token.conditions.filter(c => c.startsWith('buff:'));
+    if (buffMarkers.length) {
+      attrs = Object.assign({}, row._attrs);
+      for (const m of buffMarkers) {
+        const [, attrKey, amountStr] = m.split(':');
+        const amount = parseFloat(amountStr) || 0;
+        if (attrKey in attrs) attrs[attrKey] = (attrs[attrKey] || 0) + amount;
+      }
+    }
+  }
+
   return {
     ref, type,
     id:        row.id,
@@ -5513,7 +5531,7 @@ function getEntity(ref) {
     species:   row.species || '',
     bodyType:  row.body_type || (isChar ? '' : 'Humanoid'),
     avatarUrl: row.avatar_url || token?.avatar_url || '',
-    attrs:     row._attrs,
+    attrs,
     held:      row.held_items || {},
     armor:     row.armor || {},
     damage:    row.damage || { toughness: 0, stamina: 0 },
@@ -5991,6 +6009,83 @@ async function pickUpItem(itemTokenId, grabberRef) {
   showToast((ent.name || 'They') + ' picked up ' + name, 'good');
   refreshUI();
 }
+// Remove `name` from a holder's hand + inventory without dropping it anywhere
+// (unlike dropHeldItem, which places it on the map) — used when it's consumed.
+async function _expendHeldItem(ref, name) {
+  const ent = getEntity(ref);
+  if (!ent) return;
+  const side = ent.held?.right === name ? 'right' : ent.held?.left === name ? 'left' : null;
+  const patch = { held_items: Object.assign({}, ent.held, side ? { [side]: null } : {}) };
+  const row = _entityCacheRow(ref);
+  if (row && (ref.startsWith('char::') || Array.isArray(row.weapons) || Array.isArray(row.equipment))) {
+    const ext = _extractItemFromInventory(row, name);
+    patch.weapons = ext.weapons; patch.equipment = ext.equipment;
+  }
+  await updateEntity(ref, patch);
+  _syncOwnBuilder(ref);
+}
+
+// Administer a consumable (potion etc.) from `holderRef`'s hand to `targetToken`
+// — restores stats, clears listed conditions, applies a GM-managed timed buff,
+// then expends the item. Grab-style targeting picks the target; no roll/miss.
+async function applyConsumable(consumable, targetToken, itemName, holderRef) {
+  const targetRef = targetToken.entity_type === 'character'
+    ? 'char::' + targetToken.entity_id
+    : 'creature::' + targetToken.id;
+  if (targetRef.startsWith('char::')) await ensureEntityLoaded(targetRef);
+  const ent = getEntity(targetRef);
+  if (!ent) { showToast('Could not load target.', 'error'); return; }
+
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+  const sMax = Math.max(1, Math.round(ent.attrs.Stamina || 10));
+  const bMax = _bloodMax(tMax);
+  const wasUnconscious = ent.conditions.has('unconscious');
+  const wasDead = ent.conditions.has('dead');
+  const newDamage = {
+    toughness: Math.max(0, Math.min(tMax, (ent.damage.toughness || 0) - (consumable.restoreToughness || 0))),
+    stamina:   Math.max(0, Math.min(sMax, (ent.damage.stamina   || 0) - (consumable.restoreStamina   || 0))),
+    blood:     Math.max(0, Math.min(bMax, (ent.damage.blood     || 0) - (consumable.restoreBlood     || 0))),
+  };
+  await updateEntity(targetRef, { damage: newDamage });
+
+  if (ent.tokenId) {
+    // Clear any listed conditions (comma-separated names, e.g. "bleeding, stunned")
+    const clears = (consumable.clears || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+    for (const key of clears) {
+      const def = CONDITION_DEFS.find(d => d.key.toLowerCase() === key || d.label.toLowerCase() === key);
+      if (def && ent.conditions.has(def.key)) await setCondition(ent.tokenId, def.key, false);
+    }
+    // Waking up / un-dying mirrors the manual HP editor's auto-clear rule.
+    if (wasUnconscious && newDamage.toughness < tMax) await setCondition(ent.tokenId, 'unconscious', false);
+    if (wasDead && newDamage.blood < bMax) await setCondition(ent.tokenId, 'dead', false);
+    // Timed buff: stash as a hidden buff:<attrKey>:<amount> marker + a visible
+    // Buffed badge; GM clears the badge when the duration (buffMinutes) elapses.
+    if (consumable.buffAttr && consumable.buffAmount) {
+      const attrDef = ATTRIBUTES.find(a => a.label === consumable.buffAttr || a.key === consumable.buffAttr);
+      if (attrDef) {
+        const t = mapTokens[ent.tokenId];
+        const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+        current.add(`buff:${attrDef.key}:${consumable.buffAmount}`);
+        current.add('buffed');
+        t.conditions = [...current];
+        _refreshTokenBadges(ent.tokenId);
+        const { error } = await sb.from('map_tokens').update({ conditions: t.conditions }).eq('id', ent.tokenId);
+        if (error) _writeErrorToast(error, 'map_tokens (buff)');
+      }
+    }
+  }
+
+  await _expendHeldItem(holderRef, itemName);
+
+  const holderName = _logName(holderRef);
+  const selfAdminister = holderRef === targetRef;
+  logCombat(selfAdminister
+    ? `${holderName} consumes ${itemName}.`
+    : `${holderName} gives ${ent.name} ${itemName}.`, 'good');
+  showToast(`${itemName} administered${selfAdminister ? '' : ' to ' + ent.name}.`, 'good');
+  refreshUI();
+}
+
 // Controllable character tokens within `rangeFt` of an item (for the pickup UI).
 function _adjacentControllableChars(item, rangeFt) {
   return Object.values(mapTokens).filter(t => {
@@ -8666,6 +8761,16 @@ function attackTokenClick(tokenId) {
     else showToast('That is a ground item — use Grab to pick it up.');
     exitAttackMode(); return true;
   }
+  // Consume: administer the held potion/etc. to whoever is clicked — no roll,
+  // no miss chance, and (unlike a weapon attack) self-targeting is allowed.
+  if (attackActionLabel === 'Consume') {
+    const consumable = CONSUMABLES.find(c => normalizeWeaponName(c.name) === normalizeWeaponName(attackWeaponName));
+    const holderRef = attackCombatantId, itemName = attackWeaponName;
+    exitAttackMode();
+    if (!consumable) { showToast('Unknown consumable.', 'error'); return true; }
+    applyConsumable(consumable, target, itemName, holderRef);
+    return true;
+  }
   if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
     exitAttackMode(); return true;
   }
@@ -10515,6 +10620,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260803a"></script>
+<script src="panels.js?v=20260803b"></script>
 </body>
 </html>

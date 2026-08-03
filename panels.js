@@ -658,6 +658,20 @@ function _dlgRender(body) {
   // the "Bare Handed" weapon so the row lookup is identical to any real weapon.
   const weaponChips = (itemName, chKey) => {
     const norm = normalizeWeaponName(itemName);
+    // Consumables (potions etc.) aren't weapons — one Consume chip, grab-style
+    // targeting picks who receives it (including the holder).
+    const consumable = (typeof CONSUMABLES !== 'undefined') ? CONSUMABLES.find(c => normalizeWeaponName(c.name) === norm) : null;
+    if (consumable) {
+      const cur = c.slots[chKey];
+      const lbl = `Consume — ${itemName}`;
+      if (cur?.label === lbl) return '';
+      return _dlgChip({
+        label: '🧪 Consume', sub: '1r',
+        title: `Administer ${itemName} to a target (yourself or another nearby character)`,
+        data: { dact: 'attack', slot: chKey, label: lbl, dur: 3,
+                item: itemName, action: 'Consume', ranged: 0, range: 5 },
+      });
+    }
     const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
     const rows = [
       ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
