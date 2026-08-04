@@ -4268,7 +4268,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260803c';
+const VERSION = 'v0.1.20260803d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6089,8 +6089,13 @@ async function applyConsumable(consumable, targetToken, itemName, holderRef) {
 // Controllable character tokens within `rangeFt` of an item (for the pickup UI).
 function _adjacentControllableChars(item, rangeFt) {
   return Object.values(mapTokens).filter(t => {
-    if (t.entity_type !== 'character') return false;
-    if (!(isGM() || t.entity_id === currentCharacterId)) return false;
+    if (t.entity_type === 'character') {
+      if (!(isGM() || t.entity_id === currentCharacterId)) return false;
+    } else if (t.entity_type === 'creature') {
+      if (!isGM()) return false; // creatures are GM-only controlled
+    } else {
+      return false;
+    }
     let distFt;
     if (mapScalePPF > 0 && mapImgW && mapImgH) {
       const dx = (t.x_pct - item.x_pct) / 100 * mapImgW;
@@ -6112,8 +6117,11 @@ function renderItemPanel(item) {
   const btnStyle = 'display:block;width:100%;margin-top:6px;padding:7px 10px;border-radius:4px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--gold2);cursor:pointer;font-family:Georgia,serif;font-size:0.8rem;';
   const btns = cands.length
     ? cands.map(c => {
-        const ref = 'char::' + c.entity_id;
-        const nm = (playCharCache[c.entity_id]?.name) || c.label || 'Character';
+        const isChar = c.entity_type === 'character';
+        const ref = isChar ? 'char::' + c.entity_id : 'creature::' + c.id;
+        const nm = isChar
+          ? (playCharCache[c.entity_id]?.name) || c.label || 'Character'
+          : (sessionCreatureCache[c.entity_id]?.name) || c.label || 'Creature';
         return `<button style="${btnStyle}" onclick="pickUpItem('${item.id}','${ref}')">✋ Pick up — ${_paEsc ? _paEsc(nm) : nm}</button>`;
       }).join('')
     : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;margin-top:8px;">No controllable character is close enough to pick this up.</div>`;
