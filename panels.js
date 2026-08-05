@@ -12,7 +12,7 @@
 // _atStateFromGM, atRollInitiative, atOpenSlotModal, atClearSlot,
 // atAcceptAction, openRoller, isGM, currentCharacterId, playCharCache,
 // sessionCreatureCache, mapTokens, resolveAvatarUrl, backToMyCharacter,
-// _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames.
+// _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget.
 
 function _paEsc(s) {
   return String(s == null ? '' : s)
@@ -98,16 +98,29 @@ function _paSecCombat(ent, canEdit, prefixHtml) {
     </div>`);
 }
 
-function _paSecStats(attrs) {
+// baseAttrs (pre-buff, pre-blood-loss) is optional — when given, any stat
+// that's currently modified (buffed or reduced, e.g. by blood loss) shows
+// its live value plus a colored (±delta) so the change is visible at a
+// glance instead of just a number that quietly moved.
+function _paSecStats(attrs, baseAttrs) {
   const groups = [
     { label: 'Physical',  keys: ATTRIBUTES.filter(a => a.group === 'physical') },
     { label: 'Cognitive', keys: ATTRIBUTES.filter(a => a.group === 'cognitive') },
     { label: 'Senses',    keys: ATTRIBUTES.filter(a => a.group === 'senses') },
   ];
+  const row = a => {
+    const cur  = attrs[a.key] != null ? Math.round(attrs[a.key]) : null;
+    const base = baseAttrs && baseAttrs[a.key] != null ? Math.round(baseAttrs[a.key]) : null;
+    const delta = (cur != null && base != null) ? cur - base : 0;
+    const deltaHtml = delta
+      ? ` <span style="font-size:0.68rem;font-weight:bold;color:${delta < 0 ? '#e05555' : '#7fb069'};">(${delta > 0 ? '+' : ''}${delta})</span>`
+      : '';
+    return `<div class="ps-stat-row"><span class="ps-stat-label">${a.label}</span><span class="ps-stat-val">${cur != null ? cur : '—'}${deltaHtml}</span></div>`;
+  };
   const content = groups.map(g => `
     <div style="margin-bottom:8px;">
       <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${g.label}</div>
-      ${g.keys.map(a => `<div class="ps-stat-row"><span class="ps-stat-label">${a.label}</span><span class="ps-stat-val">${attrs[a.key] != null ? Math.round(attrs[a.key]) : '—'}</span></div>`).join('')}
+      ${g.keys.map(row).join('')}
     </div>`).join('');
   return _paSection('Stats', content);
 }
@@ -313,7 +326,7 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecHealth(ent, canEdit)}
     ${_paSecConditions(ent)}
     ${_paSecCombat(ent, canEdit, opts.combatPrefix)}
-    ${_paSecStats(attrs)}
+    ${_paSecStats(attrs, ent.baseAttrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
     ${_paSecSkills(skills, attrs)}`;
@@ -792,16 +805,25 @@ function _dlgRender(body) {
   }
 
   // ── Recovery saves (manual roll to shed a condition) ───────────────────────
+  // Resuscitate is here too, despite being unconscious — they still roll it
+  // themselves (via the GM if it's a creature) to stay engaged rather than
+  // it happening silently; the % shown updates live off current Toughness
+  // (blood loss makes it harder) via the same calc the roller itself uses.
   let recoverHtml = '';
   const recoverable = [];
-  if (conds.has('stunned'))  recoverable.push({ key: 'stunned',  label: '💫 Shake Off Stun' });
-  if (conds.has('bleeding')) recoverable.push({ key: 'bleeding', label: '🩸 Stanch Bleeding' });
+  if (conds.has('stunned'))     recoverable.push({ key: 'stunned',     label: '💫 Shake Off Stun' });
+  if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: '🩸 Stanch Bleeding' });
+  if (conds.has('unconscious')) recoverable.push({ key: 'unconscious', label: '💤 Resuscitate' });
   if (recoverable.length) {
-    recoverHtml = _dlgSection('🎲 Recover', recoverable.map(r => _dlgChip({
-      label: r.label, sub: 'save',
-      title: 'Roll a percentile save to shake off this condition',
-      data: { dact: 'recover', key: r.key },
-    })).join(''), false);
+    recoverHtml = _dlgSection('🎲 Recover', recoverable.map(r => {
+      const t = (typeof _recoverTarget === 'function' && ent && ent.tokenId) ? _recoverTarget(ent, ent.tokenId, r.key) : null;
+      const sub = t ? `${t.pct}%${r.key !== 'unconscious' ? ` (rd ${t.rounds})` : ''}` : 'save';
+      return _dlgChip({
+        label: r.label, sub,
+        title: 'Roll a percentile save to shake off this condition',
+        data: { dact: 'recover', key: r.key },
+      });
+    }).join(''), false);
   }
 
   // ── Carry / Mount (willing borne-by) ───────────────────────────────────────

@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804g';
+const VERSION = 'v0.1.20260804h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6221,40 +6221,6 @@ const HIT_EFFECTS = [
     onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); }, // drain stays automatic
   },
   {
-    // Resuscitate: an unconscious (0 Toughness) combatant can't act on their
-    // own, so this can't be a manual save like Stun/Bleeding — it's an
-    // automatic chance each round, at the same round-boundary tick as
-    // bleeding, to claw back to consciousness. Roll under Toughness% (same
-    // crit floor/ceiling as any other roll) — success wakes them at 1
-    // Toughness point (still hurt, but conscious). Applies even while
-    // bleeding (that just makes it harder, via the stat reduction above —
-    // Toughness itself is a physical stat). No gate/onHit: this condition is
-    // set by _checkDownedState on damage, not by a landed hit — gate:false
-    // keeps it out of _runHitEffects' per-hit announce loop entirely (with
-    // no gate at all it fell through to that loop's "always applies" default
-    // and printed "Resuscitate" as a line on every single hit resolved).
-    key: 'unconscious', label: 'Resuscitate',
-    gate: () => false,
-    onTick: async (ent, token) => {
-      if (ent.conditions.has('dead')) return; // no reviving the dead
-      // Only actually downed-by-damage (0 current Toughness) gets a shot —
-      // "Unconscious" can also be set narratively (e.g. a sleep effect) on a
-      // combatant who's otherwise fine, and that shouldn't auto-wake them.
-      const tMaxGate = Math.max(1, Math.round(ent.attrs.Toughness || 10));
-      if ((ent.damage.toughness || 0) < tMaxGate) return;
-      const pct = Math.max(1, Math.min(99, Math.round(ent.attrs.Toughness || 0)));
-      const roll = Math.floor(Math.random() * 100) + 1;
-      const success = roll <= 5 || (roll < 96 && roll <= pct);
-      logCombat(`${ent.name || 'Someone'} fights to stay conscious — rolled ${roll} vs ${pct}% → ${success ? 'STABILIZES' : 'still down'}`,
-        success ? 'good' : 'roll');
-      if (!success) return;
-      const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
-      await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: Math.max(0, tMax - 1) }) });
-      await setCondition(token.id, 'unconscious', false);
-      showToast(`${ent.name || 'Someone'} regains consciousness!`, 'good');
-    },
-  },
-  {
     key: 'held', label: 'Grabbed',
     // A landed Grab holds deterministically — no chance/save. The target can
     // spend an action to break free via an opposed Power + Coordination roll
@@ -6399,29 +6365,59 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
   });
 }
 
-// Manual recovery save through the shared roller — the acting player (or the GM,
-// for their tokens) kicks off the roll, stops it, and sees the outcome; success
-// (roll-under the target) clears the condition. Target escalates with how long
-// the condition has lasted (Toughness × rounds), so it always resolves. Used for
-// Stun and Bleeding; the blood drain keeps ticking until a save stanches it.
+// Shared target-% calc for a recovery save — used both to actually open the
+// roller (atResolveRecovery) and to preview the % on the action-dialog chip
+// before the player commits (panels.js), so the two can't drift apart.
+// Stun/Bleeding escalate with how long the condition has lasted (base — i.e.
+// pre-blood-loss — Toughness × rounds elapsed), so they always eventually
+// resolve. Resuscitate has no rounds escalation and deliberately uses the
+// LIVE (blood-loss-reduced) Toughness instead — bleeding is meant to make
+// waking up harder, not easier over time.
+function _recoverTarget(ent, tokenId, effectKey) {
+  if (effectKey === 'unconscious') {
+    return { pct: Math.max(1, Math.min(99, Math.round(ent?.attrs?.Toughness || 0))), rounds: 1 };
+  }
+  const since = { stunned: 'stunsince:', bleeding: 'bleedsince:' }[effectKey];
+  if (!since) return { pct: 0, rounds: 1 };
+  const tough  = Math.max(1, Math.round(ent?.baseAttrs?.Toughness || ent?.attrs?.Toughness || 10));
+  const marker = [...getConditions(tokenId)].find(c => c.startsWith(since));
+  const start  = marker ? (parseInt(marker.slice(since.length), 10) || _atSharedRound()) : _atSharedRound();
+  const rounds = Math.max(1, _atSharedRound() - start + 1);
+  return { pct: tough * rounds, rounds };
+}
+
+// Manual recovery save through the shared roller — the acting player (or the
+// GM, for their tokens) kicks off the roll, stops it, and sees the outcome;
+// success clears the condition. Used for Stun, Bleeding, and Resuscitate
+// (waking from 0 Toughness) — despite being unconscious, the player still
+// rolls this themselves rather than it happening silently to keep them
+// engaged; the GM can trigger it on a token's behalf same as the others.
 async function atResolveRecovery(combatantId, effectKey) {
   const token = _pathFindToken(combatantId);
   if (!token) return;
   const ent = getEntity(combatantId);
-  // Base (pre-blood-loss) Toughness — the escalating "rounds elapsed"
-  // multiplier below is meant to make this get easier over time, which the
-  // live, bleed-reduced value would fight (blood drains at the same pace
-  // rounds accumulate, so the two nearly cancel out).
-  const tough = Math.max(1, Math.round(ent?.baseAttrs?.Toughness || ent?.attrs?.Toughness || 10));
+  const { pct: target, rounds } = _recoverTarget(ent, token.id, effectKey);
+
+  if (effectKey === 'unconscious') {
+    openRoller({
+      label: `Resuscitate — ${ent?.name || 'Target'}`,
+      target, targetLabel: 'roll under to stabilize',
+      onComplete: async (n) => {
+        const success = n <= 5 || (n < 96 && n <= target);
+        if (!success) return;
+        const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+        await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: Math.max(0, tMax - 1) }) });
+        await setCondition(token.id, 'unconscious', false);
+      },
+    });
+    return;
+  }
+
   const cfg = {
-    stunned:  { since: 'stunsince:',  label: 'Shake Off Stun' },
-    bleeding: { since: 'bleedsince:', label: 'Stanch Bleeding' },
+    stunned:  { label: 'Shake Off Stun' },
+    bleeding: { label: 'Stanch Bleeding' },
   }[effectKey];
   if (!cfg) return;
-  const marker = [...getConditions(token.id)].find(c => c.startsWith(cfg.since));
-  const start  = marker ? (parseInt(marker.slice(cfg.since.length), 10) || _atSharedRound()) : _atSharedRound();
-  const rounds = Math.max(1, _atSharedRound() - start + 1);
-  const target = tough * rounds;
   openRoller({
     label: `${cfg.label} — ${ent?.name || 'Target'} (round ${rounds})`,
     target, targetLabel: 'roll under to recover',
@@ -10859,6 +10855,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260803b"></script>
+<script src="panels.js?v=20260804a"></script>
 </body>
 </html>
