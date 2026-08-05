@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804b';
+const VERSION = 'v0.1.20260804c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5272,7 +5272,20 @@ function _clearDefConds(token) {
   }
 }
 
-async function setCondition(tokenId, condition, active) {
+async function setCondition(tokenId, condition, active, opts) {
+  // Held/Holding are RELATIONAL — each side names the other (heldby:<cid> on
+  // the target, holding on the grabber). Clearing either badge directly (e.g.
+  // from the Conditions panel) used to just flip that one flag and leave the
+  // other side dangling: clear "Held" and the grabber stayed flagged
+  // "Holding" forever with a stale heldby: marker still on the target, so the
+  // hold never actually released. Route a manual clear through the same
+  // two-sided cleanup Escape uses. `opts.raw` lets that cleanup itself write
+  // the plain flag without recursing back in here.
+  if (!(opts && opts.raw) && active === false) {
+    if (condition === 'held')     { await atReleaseHold(tokenId); return; }
+    if (condition === 'holding')  { await atReleaseHoldBy(tokenId); return; }
+    if (condition === 'carrying') { await atReleaseCarrying(tokenId); return; } // same relational bug as held/holding
+  }
   const t = mapTokens[tokenId];
   if (!t) return;
   const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
@@ -5281,7 +5294,7 @@ async function setCondition(tokenId, condition, active) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -6199,7 +6212,12 @@ const HIT_EFFECTS = [
       if (ctx.attackerCombatantId) {
         await setCondition(ctx.targetTokenId, 'heldby:' + ctx.attackerCombatantId, true);
         const atkTok = _pathFindToken(ctx.attackerCombatantId);
-        if (atkTok) await setCondition(atkTok.id, 'holding', true);
+        if (atkTok) {
+          await setCondition(atkTok.id, 'holding', true);
+          // Melee range isn't hard-enforced when targeting, so a grab can land
+          // on a target that's still visually far away — snap them together.
+          await _snapAdjacent(mapTokens[ctx.targetTokenId], atkTok);
+        }
       }
     },
   },
@@ -6252,17 +6270,28 @@ function _grappleMax(ent) {
 // each grabber's holding flag once it holds no one else.
 async function atReleaseHold(targetTokenId) {
   const links = [...getConditions(targetTokenId)].filter(c => c.startsWith('heldby:'));
-  await setCondition(targetTokenId, 'held', false);
+  await setCondition(targetTokenId, 'held', false, { raw: true });
   for (const link of links) {
-    await setCondition(targetTokenId, link, false);
+    await setCondition(targetTokenId, link, false, { raw: true });
     const grabberCid = link.slice('heldby:'.length);
     const gTok = _pathFindToken(grabberCid);
     if (gTok) {
       const stillHolding = Object.values(mapTokens).some(t =>
         t.id !== targetTokenId && (Array.isArray(t.conditions) ? t.conditions : []).includes('heldby:' + grabberCid));
-      if (!stillHolding) await setCondition(gTok.id, 'holding', false);
+      if (!stillHolding) await setCondition(gTok.id, 'holding', false, { raw: true });
     }
   }
+}
+// Mirror of atReleaseHold, from the grabber's side: release everyone this
+// token is holding (used when its own "Holding" badge is cleared directly).
+async function atReleaseHoldBy(grabberTokenId) {
+  const gTok = mapTokens[grabberTokenId];
+  if (!gTok) return;
+  const cid = _tokenCid(gTok);
+  const held = Object.values(mapTokens).filter(t =>
+    (Array.isArray(t.conditions) ? t.conditions : []).includes('heldby:' + cid));
+  for (const t of held) await atReleaseHold(t.id);
+  await setCondition(grabberTokenId, 'holding', false, { raw: true }); // safety net if nothing matched above
 }
 
 // Combined grapple strength of everyone holding a target, with diminishing
@@ -6460,18 +6489,59 @@ function _moveGroupWith(moverTokenId, dx, dy, persist) {
     if (persist) sb.from('map_tokens').update({ x_pct: t.x_pct, y_pct: t.y_pct }).eq('id', id);
   });
 }
+// Snap `tok` to a spot 1–3 ft from `anchor` — used whenever a held/borne
+// relationship is newly established. The token picker (Carry/Mount) and
+// melee targeting (Grab) both let you pick ANY token regardless of distance,
+// and once linked, the pair only ever moves together by DELTA (formation
+// preserved, not distance) — so without this they'd stay stuck at whatever
+// distance apart they happened to be when the relationship formed, only
+// "locking in" that same gap on the bearer's next move instead of standing
+// together right away.
+async function _snapAdjacent(tok, anchor) {
+  if (!tok || !anchor) return;
+  const distFt = 1 + Math.random() * 2; // 1-3 ft
+  const angle  = Math.random() * Math.PI * 2;
+  let nx = anchor.x_pct, ny = anchor.y_pct;
+  if (mapScalePPF > 0 && mapImgW && mapImgH) {
+    nx += (Math.cos(angle) * distFt * mapScalePPF / mapImgW) * 100;
+    ny += (Math.sin(angle) * distFt * mapScalePPF / mapImgH) * 100;
+  } else {
+    nx += (Math.random() - 0.5) * 3; ny += (Math.random() - 0.5) * 3;
+  }
+  nx = Math.min(100, Math.max(0, nx));
+  ny = Math.min(100, Math.max(0, ny));
+  tok.x_pct = nx; tok.y_pct = ny;
+  const el = document.getElementById('token-' + tok.id);
+  if (el) { el.style.left = nx + '%'; el.style.top = ny + '%'; }
+  tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny } });
+  await sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', tok.id);
+}
 // Create or clear a willing carry (bearer carries dep) / mount (dep rides bearer).
 async function atSetCarry(bearerCid, depCid, on) {
   const depTok = _pathFindToken(depCid), bearerTok = _pathFindToken(bearerCid);
   if (!depTok || !bearerTok) return;
-  await setCondition(depTok.id, 'borneby:' + bearerCid, on);
+  await setCondition(depTok.id, 'borneby:' + bearerCid, on, { raw: true });
   if (on) {
     await setCondition(bearerTok.id, 'carrying', true);
+    await _snapAdjacent(depTok, bearerTok);
   } else {
     const stillCarrying = Object.values(mapTokens).some(t =>
       t.id !== depTok.id && (Array.isArray(t.conditions) ? t.conditions : []).includes('borneby:' + bearerCid));
-    if (!stillCarrying) await setCondition(bearerTok.id, 'carrying', false);
+    if (!stillCarrying) await setCondition(bearerTok.id, 'carrying', false, { raw: true });
   }
+}
+// Mirror of atReleaseHold for the willing-carry relationship: clearing a
+// bearer's "Carrying" badge directly (Conditions panel) used to leave every
+// dependent's borneby: marker (and their Dismount option) dangling. Free
+// everyone this token carries/mounts, the same way Dismount/Set down does.
+async function atReleaseCarrying(bearerTokenId) {
+  const bTok = mapTokens[bearerTokenId];
+  if (!bTok) return;
+  const cid = _tokenCid(bTok);
+  const dependents = _dependentTokensOf(bTok).filter(t =>
+    (Array.isArray(t.conditions) ? t.conditions : []).includes('borneby:' + cid));
+  for (const d of dependents) await setCondition(d.id, 'borneby:' + cid, false, { raw: true });
+  await setCondition(bearerTokenId, 'carrying', false, { raw: true });
 }
 
 // Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
