@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804f';
+const VERSION = 'v0.1.20260804g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5575,6 +5575,13 @@ function getEntity(ref) {
     bodyType:  row.body_type || (isChar ? '' : 'Humanoid'),
     avatarUrl: row.avatar_url || token?.avatar_url || '',
     attrs,
+    // Pre-buff, pre-blood-loss attrs — for the rare calc that needs a STABLE
+    // reference point rather than current (possibly weakened) capability,
+    // e.g. a recovery-save target that's meant to get easier the longer a
+    // condition has lasted; using the live, bleed-reduced Toughness there
+    // would fight its own escalation as blood loss and rounds-elapsed climb
+    // together. Don't mutate this — it's the memoized row cache, shared.
+    baseAttrs: row._attrs,
     held:      row.held_items || {},
     armor:     row.armor || {},
     damage:    row.damage || { toughness: 0, stamina: 0 },
@@ -6222,8 +6229,12 @@ const HIT_EFFECTS = [
     // Toughness point (still hurt, but conscious). Applies even while
     // bleeding (that just makes it harder, via the stat reduction above —
     // Toughness itself is a physical stat). No gate/onHit: this condition is
-    // set by _checkDownedState on damage, not by a landed hit.
+    // set by _checkDownedState on damage, not by a landed hit — gate:false
+    // keeps it out of _runHitEffects' per-hit announce loop entirely (with
+    // no gate at all it fell through to that loop's "always applies" default
+    // and printed "Resuscitate" as a line on every single hit resolved).
     key: 'unconscious', label: 'Resuscitate',
+    gate: () => false,
     onTick: async (ent, token) => {
       if (ent.conditions.has('dead')) return; // no reviving the dead
       // Only actually downed-by-damage (0 current Toughness) gets a shot —
@@ -6397,7 +6408,11 @@ async function atResolveRecovery(combatantId, effectKey) {
   const token = _pathFindToken(combatantId);
   if (!token) return;
   const ent = getEntity(combatantId);
-  const tough = Math.max(1, Math.round(ent?.attrs?.Toughness || 10));
+  // Base (pre-blood-loss) Toughness — the escalating "rounds elapsed"
+  // multiplier below is meant to make this get easier over time, which the
+  // live, bleed-reduced value would fight (blood drains at the same pace
+  // rounds accumulate, so the two nearly cancel out).
+  const tough = Math.max(1, Math.round(ent?.baseAttrs?.Toughness || ent?.attrs?.Toughness || 10));
   const cfg = {
     stunned:  { since: 'stunsince:',  label: 'Shake Off Stun' },
     bleeding: { since: 'bleedsince:', label: 'Stanch Bleeding' },
