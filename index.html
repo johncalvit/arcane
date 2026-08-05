@@ -1236,6 +1236,16 @@
         Define new armor materials or edit/delete existing ones. Weight per piece = area weight ratio × target size × Weight/Mod.
         Damage modifiers are typically negative (damage reduction); Quintessence can also be negative (interferes with magic).
       </p>
+      <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:16px;line-height:1.5;">
+        <strong>How this reduction is applied in combat:</strong> a hit rolls raw damage from 1 up to the weapon
+        action's Max Damage (scaled by the attacker's Power), then subtracts the armor's modifier for that damage
+        type on the location struck, then the result is capped at the weapon's Max Damage again. That means a
+        strong attacker whose raw roll already lands near or above Max Damage can punch through most or all of an
+        armor's reduction — the cap re-asserts itself before armor gets to matter. Armor is most protective against
+        weaker or unlucky rolls, and against attacks with a low Max Damage relative to the armor's modifier; it
+        does less to blunt a heavy hitter's best swings. If a hit "shows no reduction," check the roller's damage
+        line — it prints the raw roll, the armor subtraction, and whether the Max Damage cap kicked in.
+      </p>
       <button class="btn" onclick="openArmorForm(null)" style="margin-bottom:16px;">+ Add New Armor Material</button>
       <div id="armor-form-anchor"></div>
 
@@ -4268,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260803d';
+const VERSION = 'v0.1.20260804a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5419,17 +5429,6 @@ function _refreshTokenBadges(tokenId) {
 
 // ── Damage system ─────────────────────────────────────────────────────────────
 
-// Armor damage reduction per attack category
-const ARMOR_DR = {
-  'None':               { slash:0, pierce:0, crush:0 },
-  'Cloth':              { slash:1, pierce:1, crush:0 },
-  'Leather/Hide':       { slash:2, pierce:2, crush:1 },
-  'Reinforced Leather': { slash:3, pierce:2, crush:2 },
-  'Chain':              { slash:4, pierce:2, crush:3 },
-  'Scale':              { slash:4, pierce:3, crush:3 },
-  'Plate':              { slash:6, pierce:4, crush:5 },
-};
-
 function getAttackCategory(actionLabel) {
   const l = (actionLabel || '').toLowerCase();
   if (/slash|swing|chop|hook|sweep/.test(l)) return 'slash';
@@ -5437,8 +5436,25 @@ function getAttackCategory(actionLabel) {
   return 'crush'; // smash, bash, crush, grab, push, etc.
 }
 
+// 3-way attack category → the armor system's protection key (8 damage types;
+// see ARMOR_PROTECTION_KEYS). Elemental columns are wired for future attacks.
+function _armorProtectionKey(category) {
+  return category === 'slash' ? 'Slash' : category === 'pierce' ? 'Stab' : 'SmashBash';
+}
+
+// Armor damage reduction, read from the SAME material table the character
+// sheet's armor dropdown and the Armor Manager edit — ARMOR_TYPE_DATA[type].
+// protection values are stored negative (as shown in the manager); DR is
+// their positive magnitude. Was previously a separate hardcoded ARMOR_DR
+// table whose material names (Cloth/Chain/Scale/Plate) didn't match the
+// Armor Manager's actual types (Bronze Scale, Steel Plate, etc.) — any armor
+// outside the 3 names that happened to coincide silently reduced 0 damage,
+// and editing a material's protection in the manager did nothing in combat.
 function getArmorDR(armorType, category) {
-  return (ARMOR_DR[armorType] || ARMOR_DR['None'])[category] || 0;
+  const mat = ARMOR_TYPE_DATA[armorType] || DEFAULT_ARMOR_TYPE_DATA[armorType];
+  if (!mat) return 0;
+  const val = mat.protection[_armorProtectionKey(category)] || 0;
+  return Math.max(0, -val);
 }
 
 // ═══ ENTITY DATA LAYER (Phase 1 refactor — see REFACTOR_SPEC.md) ═══════════════
