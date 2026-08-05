@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804a';
+const VERSION = 'v0.1.20260804b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7288,7 +7288,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     };
 
     // Reactive defense: if someone ELSE controls the target, ask them to choose.
-    if (targetTok && !_iControlDefense(targetTok) && defenseOptions.length && locThreshold != null) {
+    if (targetTok && _defenseNeedsPrompt(targetTok) && defenseOptions.length && locThreshold != null) {
       _requestRemoteDefense(targetTok, defenseOptions, locThreshold, openWith);
     } else {
       openWith('LOCAL');
@@ -7355,10 +7355,24 @@ function _iControlDefense(t) {
   if (isGM()) return true;
   return t.entity_type === 'character' && t.entity_id === currentCharacterId;
 }
+// Whether the ATTACKER should broadcast and wait for someone else to pick the
+// defense, rather than resolving it themselves right now. This is NOT just
+// "the inverse of _iControlDefense" — the GM controls everything, so that
+// check alone made every GM-initiated attack (i.e. almost every monster
+// attack) skip the broadcast entirely and resolve on the GM's own screen,
+// silently deciding the defense before the player ever saw a picker. A
+// player's own character should always get asked, even when the GM is the
+// one attacking; the GM remains a fallback via their own picker (as a
+// co-controller) or the roller's inline defense buttons if no one responds.
+function _defenseNeedsPrompt(t) {
+  if (!t) return false;
+  if (t.entity_type === 'character') return true;
+  return !isGM(); // a creature only needs asking if I don't already control it
+}
 function _requestRemoteDefense(target, options, threshold, cb) {
   const reqId = 'def-' + Date.now() + '-' + Math.floor(Math.random() * 10000);
   _pendingDefense = { reqId, cb, done: false };
-  _showDefenseWaiting(target.label || 'the defender');
+  _showDefenseWaiting(target, options, reqId);
   _rollerBroadcast('defense-request', {
     reqId, targetTokenId: target.id, targetName: target.label || '', attackerName: _rollerWho(), threshold,
     options: options.map(o => ({ label: o.label, reduction: o.reduction,
@@ -7374,15 +7388,48 @@ function _resolveDefenseLocal(reqId, chosen) {
   cb(chosen); // null → no defense
 }
 function _skipDefenseWait() { if (_pendingDefense) _resolveDefenseLocal(_pendingDefense.reqId, null); }
-function _showDefenseWaiting(name) {
+// Applies a chosen defense's side effects (Go Prone / Evade's stamina cost) to
+// the target, broadcasts it so any other open picker for this request closes,
+// and — since a broadcast never echoes back to its own sender — also resolves
+// this client's OWN pending wait immediately if it's the one that just
+// answered (the GM picking on a slow/absent player's behalf, from the
+// waiting screen below, rather than from a separate _showDefensePicker).
+async function _answerDefense(target, reqId, o) {
+  if (o.prone)   await setCondition(target.id, 'prone', true);
+  if (o.stamina) await _deductStamina(_tokenCid(target), o.stamina);
+  _rollerBroadcast('defense-response', { reqId, label: o.label, reduction: o.reduction });
+  if (_pendingDefense && _pendingDefense.reqId === reqId) {
+    _resolveDefenseLocal(reqId, o.reduction ? { label: o.label, reduction: o.reduction } : null);
+  }
+}
+// Attacker's screen while waiting on the defender. If I'm the GM, I'm also a
+// co-controller of the target's defense — show the same option buttons here
+// as a fallback (e.g. an away player), instead of only a blunt Skip that
+// throws away the defense entirely.
+function _showDefenseWaiting(target, options, reqId) {
+  const name = target?.label || 'the defender';
   let el = document.getElementById('defense-waiting');
   if (!el) { el = document.createElement('div'); el.id = 'defense-waiting'; document.body.appendChild(el); }
   el.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
+  const showGmPicker = isGM() && options && options.length;
+  const opts = [{ label: 'No Defense', reduction: 0, prone: false }, ...(options || [])];
+  const gmBtns = showGmPicker
+    ? `<div style="font-size:0.68rem;color:var(--text-dim);margin:10px 0 4px;">or set it yourself:</div>
+       <div id="defense-waiting-opts">${opts.map((o, i) =>
+         `<button data-i="${i}" style="display:block;width:100%;margin-top:4px;padding:6px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;font-size:0.75rem;">${_logEsc(o.label)}</button>`).join('')}</div>`
+    : '';
   el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:24px 28px;text-align:center;max-width:90vw;">
     <div style="font-size:0.95rem;color:var(--gold2);margin-bottom:6px;">⏳ Waiting for ${_logEsc(name)}</div>
     <div style="font-size:0.74rem;color:var(--text-dim);margin-bottom:14px;">choosing their defense…</div>
-    <button onclick="_skipDefenseWait()" style="font-size:0.78rem;padding:6px 16px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Skip — resolve now</button>
+    ${gmBtns}
+    <button onclick="_skipDefenseWait()" style="margin-top:10px;font-size:0.78rem;padding:6px 16px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Skip — resolve now</button>
   </div>`;
+  if (showGmPicker) {
+    document.getElementById('defense-waiting-opts').onclick = (e) => {
+      const b = e.target.closest('[data-i]');
+      if (b) _answerDefense(target, reqId, opts[+b.dataset.i]);
+    };
+  }
   el.style.display = 'flex';
 }
 function _hideDefenseWaiting() { const el = document.getElementById('defense-waiting'); if (el) el.style.display = 'none'; }
@@ -7403,9 +7450,7 @@ function _showDefensePicker(payload) {
   el.dataset.reqid = payload.reqId;
   const respond = async (o) => {
     el.style.display = 'none'; el.onclick = null; delete el.dataset.reqid;
-    if (o.prone)   await setCondition(target.id, 'prone', true);     // Go Prone applies to me
-    if (o.stamina) await _deductStamina(_tokenCid(target), o.stamina); // Evade costs stamina
-    _rollerBroadcast('defense-response', { reqId: payload.reqId, label: o.label, reduction: o.reduction });
+    await _answerDefense(target, payload.reqId, o);
   };
   el.onclick = (e) => { const b = e.target.closest('[data-i]'); if (b) respond(opts[+b.dataset.i]); };
 }
