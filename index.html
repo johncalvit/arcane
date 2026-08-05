@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804d';
+const VERSION = 'v0.1.20260804e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6322,11 +6322,19 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
       if (actorCid && actionLabel) await atSetSlot(actorCid, 'full', actionLabel, 3, true);
       const aDeg = actorMax - aRoll;
       const win  = tiesToActor ? aDeg >= oDeg : aDeg > oDeg;
+      const resultLabel = win ? onWin.label : onLose.label;
+      const resultClass = win ? 'success' : 'fail';
       const resultEl = document.getElementById('roller-result-label');
-      if (resultEl) {
-        resultEl.textContent = win ? (onWin.label) : (onLose.label);
-        resultEl.className   = win ? 'success' : 'fail';
-      }
+      const numEl    = document.getElementById('roller-number');
+      if (resultEl) { resultEl.textContent = resultLabel; resultEl.className = resultClass; }
+      if (numEl) numEl.className = resultClass;
+      // The roller already broadcast a 'roller-result' the moment it landed —
+      // but with an empty label (this contest has no numeric target, so the
+      // generic SUCCESS/FAIL path that fills it never ran). Anyone spectating
+      // via mirror saw the number land and then nothing. A separate, lighter
+      // event just fills in the label/color without replaying the whole
+      // deceleration animation a second time.
+      _rollerBroadcast('roller-result-update', { resultLabel, resultClass });
       if (win) await onWin.act(); else if (onLose.act) await onLose.act();
       showToast(`${win ? onWin.toast : onLose.toast} — ${actorName} ${aRoll}/${actorMax} vs ${oppName} ${oRoll}/${oppMax}`,
         win ? 'good' : 'warn');
@@ -8078,6 +8086,15 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'roller-result' }, ({ payload }) => {
       if (_roller && _roller.mirror) _rollerMirrorLand(payload);
+    })
+    // Late-arriving label for a contest roller (Escape/Takedown) that landed
+    // with no result text yet — fills it in without replaying the animation.
+    .on('broadcast', { event: 'roller-result-update' }, ({ payload }) => {
+      if (!(_roller && _roller.mirror && payload)) return;
+      const resultEl = document.getElementById('roller-result-label');
+      const numEl    = document.getElementById('roller-number');
+      if (resultEl) { resultEl.textContent = payload.resultLabel; resultEl.className = payload.resultClass; }
+      if (numEl) numEl.className = payload.resultClass;
     })
     .on('broadcast', { event: 'roller-close' }, () => {
       if (_roller && _roller.mirror) closeRoller();
