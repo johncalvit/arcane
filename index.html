@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804c';
+const VERSION = 'v0.1.20260804d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6883,6 +6883,29 @@ function atResetFull() {
   atCombatants.forEach(c => { c.slots = _newSlots(); c.initiative = null; c.tieBreak = null; });
   _atUpdateBlink();
   renderAtList();
+}
+
+// One-time cleanup for grab/carry links stuck from before Held/Holding/
+// Carrying could be released properly — a manual badge-clear used to just
+// flip that one flag, leaving the other side's heldby:/borneby: marker (and
+// possibly the OTHER token's badge) dangling forever. A dangling marker with
+// no visible badge can't be reached any other way, and silently drags on
+// movement speed via the borne-group system — this is a blunt "release
+// everything" tool, safe to run any time nothing should currently be held.
+async function atClearStuckGrapples() {
+  if (!confirm('Release every grab/carry relationship currently on the map? Use this if characters seem linked, dragged, or slowed for no reason.')) return;
+  let cleared = 0;
+  for (const t of Object.values(mapTokens)) {
+    const conds = Array.isArray(t.conditions) ? t.conditions : [];
+    if (conds.includes('held'))     { await atReleaseHold(t.id);      cleared++; }
+    if (conds.includes('holding'))  { await atReleaseHoldBy(t.id);    cleared++; }
+    if (conds.includes('carrying')) { await atReleaseCarrying(t.id);  cleared++; }
+    const stray = conds.filter(c => c.startsWith('heldby:') || c.startsWith('borneby:'));
+    for (const marker of stray) await setCondition(t.id, marker, false, { raw: true });
+    if (stray.length) cleared++;
+  }
+  showToast(cleared ? `Cleared ${cleared} stuck grab/carry link(s).` : 'No stuck grab/carry links found.', 'good');
+  refreshUI();
 }
 
 // ── Initiative rolling ────────────────────────────────────────────────────────
@@ -10618,6 +10641,7 @@ switchGmTab = function(tab) {
             <button class="at-next-btn" id="at-next-btn" onclick="atNext()" title="Advance to next combatant">⏭ Next</button>
             <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative">↺ Round</button>
             <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative">↺ All</button>
+            <button class="at-btn" onclick="atClearStuckGrapples()" title="Release any grab/carry relationships left dangling from before Held/Carrying could be cleared properly — safe to run any time">🧹 Fix Holds</button>
             <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="display:none;">🎲 Monsters</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
           </div>
