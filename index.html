@@ -4278,7 +4278,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260804i';
+const VERSION = 'v0.1.20260805a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9598,24 +9598,74 @@ function renderOnMapTokens() {
   }).join('');
 }
 
+// Players/NPCs/Monster Templates/All filter for the Tokens tab's Characters
+// area. There's no explicit "is NPC" flag on a character — a GM-owned
+// character (user_id === the campaign's GM) is treated as an NPC, since
+// players only ever own their own PCs; everything else is a Player character.
+let tokensCharFilter = 'all';
+let _tokensCharsCache = []; // raw campaign characters, re-filtered without refetching
+
+function buildTokensCharFilters() {
+  const el = document.getElementById('tokens-char-filters');
+  if (!el) return;
+  const opts = [
+    { key: 'all',       label: 'All' },
+    { key: 'players',   label: 'Players' },
+    { key: 'npcs',      label: 'NPCs' },
+    { key: 'templates', label: 'Monster Templates' },
+  ];
+  el.innerHTML = opts.map(o =>
+    `<button class="filter-btn${o.key === tokensCharFilter ? ' active' : ''}" onclick="setTokensCharFilter('${o.key}')">${o.label}</button>`
+  ).join('');
+}
+
+function setTokensCharFilter(filter) {
+  tokensCharFilter = filter;
+  buildTokensCharFilters();
+  renderTokensCharList();
+  renderTokensTemplateList();
+}
+
 async function loadCampaignCharactersForTokens() {
   const el = document.getElementById('tokens-char-list');
   if (!el || !currentCampaignId) return;
   el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);">Loading…</div>';
 
   const { data: chars } = await sb.from('characters')
-    .select('id, name, species, avatar_url')
+    .select('id, name, species, avatar_url, user_id')
     .eq('campaign_id', currentCampaignId)
     .order('name');
 
-  if (!chars?.length) {
-    el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No characters in this campaign yet.</div>';
+  _tokensCharsCache = chars || [];
+  buildTokensCharFilters();
+  renderTokensCharList();
+}
+
+function renderTokensCharList() {
+  const el = document.getElementById('tokens-char-list');
+  const header = document.getElementById('tokens-char-header');
+  if (!el) return;
+  const showSection = tokensCharFilter !== 'templates';
+  if (header) header.style.display = showSection ? '' : 'none';
+  el.style.display = showSection ? '' : 'none';
+  if (!showSection) return;
+
+  const filtered = _tokensCharsCache.filter(c => {
+    if (tokensCharFilter === 'players') return c.user_id !== currentCampaignGmId;
+    if (tokensCharFilter === 'npcs')    return c.user_id === currentCampaignGmId;
+    return true; // all
+  });
+
+  if (!filtered.length) {
+    el.innerHTML = `<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);font-style:italic;">${
+      _tokensCharsCache.length ? 'No characters match this filter.' : 'No characters in this campaign yet.'
+    }</div>`;
     return;
   }
 
   const onMap = new Set(Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => t.entity_id));
 
-  el.innerHTML = chars.map(c => {
+  el.innerHTML = filtered.map(c => {
     const already = onMap.has(c.id);
     return `<div class="token-add-row">
       <div style="flex:1;min-width:0;">
@@ -10221,6 +10271,8 @@ function populateCreatureSpecies() {
   if (species.includes(prev)) sel.value = prev;
 }
 
+let _tokensTemplatesCache = [];
+
 async function loadTemplatesForTokens() {
   const el = document.getElementById('tokens-template-list');
   if (!el || !currentCampaignId) return;
@@ -10234,12 +10286,25 @@ async function loadTemplatesForTokens() {
     .order('name');
 
   if (error) { el.innerHTML = `<div style="padding:8px 10px;font-size:0.72rem;color:#e06060;">${error.message}</div>`; return; }
-  if (!data?.length) {
+  _tokensTemplatesCache = data || [];
+  renderTokensTemplateList();
+}
+
+function renderTokensTemplateList() {
+  const el = document.getElementById('tokens-template-list');
+  const header = document.getElementById('tokens-template-header');
+  if (!el) return;
+  const showSection = tokensCharFilter === 'all' || tokensCharFilter === 'templates';
+  if (header) header.style.display = showSection ? '' : 'none';
+  el.style.display = showSection ? '' : 'none';
+  if (!showSection) return;
+
+  if (!_tokensTemplatesCache.length) {
     el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No templates yet — create a character and check "Monster Template" before saving.</div>';
     return;
   }
 
-  el.innerHTML = data.map(t => `
+  el.innerHTML = _tokensTemplatesCache.map(t => `
     <div class="token-add-row">
       <div style="flex:1;min-width:0;">
         <div class="t-name">${t.name}</div>
@@ -10688,14 +10753,15 @@ switchGmTab = function(tab) {
           <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">On Map</div>
           <div id="tokens-on-map" style="max-height:140px;overflow-y:auto;"></div>
         </div>
+        <div class="skill-filter" id="tokens-char-filters" style="padding:8px 10px 0;flex-shrink:0;"></div>
         <!-- scrollable area: characters + creatures -->
         <div style="flex:1;overflow-y:auto;">
-          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
+          <div id="tokens-char-header" style="padding:6px 10px 4px;border-bottom:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
             <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Characters</div>
           </div>
           <div id="tokens-char-list"></div>
 
-          <div style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
+          <div id="tokens-template-header" style="padding:6px 10px 4px;border-bottom:1px solid var(--border);border-top:1px solid var(--border);background:var(--bg3);position:sticky;top:0;z-index:2;">
             <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Templates</div>
           </div>
           <div id="tokens-template-list"></div>
