@@ -12,7 +12,9 @@
 // _atStateFromGM, atRollInitiative, atOpenSlotModal, atClearSlot,
 // atAcceptAction, openRoller, isGM, currentCharacterId, playCharCache,
 // sessionCreatureCache, mapTokens, resolveAvatarUrl, backToMyCharacter,
-// _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget.
+// _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
+// SPELLS, hasMagicClass, _spellSuccessPct, atCastSpell, atCompleteCast,
+// _slotRemaining, _slotCountdownLabel.
 
 function _paEsc(s) {
   return String(s == null ? '' : s)
@@ -773,16 +775,42 @@ function _dlgRender(body) {
     return _dlgSection(`${ch.icon || '⚔'} ${_paEsc(ch.label)}${_paEsc(heldNote)}`, chips, fullActive);
   }).join('');
 
-  // ── Arcane section (characters with arcane skills) ─────────────────────────
+  // ── Spells (characters OR creatures with a magic-class skill) ───────────────
   let arcaneHtml = '';
-  if (ent?.type === 'char' && typeof SPELL_ACTIONS !== 'undefined') {
-    const hasArcane = Object.keys(ent.skills || {}).some(k => (SKILLS.find(s => s.name === k) || {}).type === 'Arcane');
-    if (hasArcane) {
-      const target = plan.find(ch => !c.slots[ch.key])?.key || plan[0].key;
-      arcaneHtml = _dlgSection('✨ Arcane', SPELL_ACTIONS.map(a => _dlgChip({
-        label: a.label, sub: _dlgDurLabel(a.dur),
-        data: { dact: 'set', slot: target, label: a.label, dur: a.dur, locks: 0 },
-      })).join(''), fullActive);
+  if (ent && typeof SPELLS !== 'undefined' && typeof hasMagicClass === 'function') {
+    const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
+    if (knownClasses.length) {
+      const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
+      const spellChips = known.map(spell => {
+        const castLabel = `Casting: ${spell.name}`;
+        const cur = c.slots.full;
+        if (cur && cur.label === castLabel) {
+          const remaining = typeof _slotRemaining === 'function' ? _slotRemaining(cur) : 0;
+          if (remaining > 0) {
+            return _dlgChip({
+              label: `🔮 ${spell.name}`, sub: _slotCountdownLabel(cur), lit: true,
+              title: 'Forming the pattern — click to cancel',
+              data: { dact: 'off', slot: 'full' },
+            });
+          }
+          return _dlgChip({
+            label: `✨ Complete: ${spell.name}`, sub: 'ready',
+            title: 'The pattern is ready — cast it now',
+            data: { dact: 'completecast', spellName: spell.name },
+          });
+        }
+        const successPct = _spellSuccessPct(attrs[spell.difficultyStat] || 0, spell.difficultyValue);
+        const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
+        const notBuilt = spell.targetType === 'Area' || spell.targetType === 'Item';
+        return _dlgChip({
+          label: `🔮 ${spell.name}`, sub: `${successPct}% · ${costLabel}`,
+          disabled: notBuilt,
+          title: notBuilt ? `${spell.targetType}-target spells aren't built yet`
+                           : `${spell.range} · ${spell.castingTime === 0 ? 'Instant' : spell.castingTime + ' rd cast'} · ${spell.difficultyStat} ${spell.difficultyValue}`,
+          data: { dact: 'castspell', spellName: spell.name },
+        });
+      }).join('');
+      arcaneHtml = _dlgSection('✨ Spells', spellChips, fullActive);
     }
   }
 
@@ -961,6 +989,13 @@ async function _dlgAct(d, id, body) {
       _dlgRender(body);
       break;
     }
+    case 'castspell':
+      await atCastSpell(id, d.spellname);
+      _dlgRender(body);
+      break;
+    case 'completecast':
+      await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
+      break;
     case 'escape':
       atCloseModal();
       await atResolveEscape(id); // spends the action only when the roll lands

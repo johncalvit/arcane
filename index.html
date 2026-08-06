@@ -939,6 +939,7 @@
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
       <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
       <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables Manager</button>
+      <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spell Manager</button>
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
       <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
@@ -1435,6 +1436,78 @@
       <table class="loadout-table">
         <thead><tr><th>Name</th><th>Wt</th><th>Tough</th><th>Stam</th><th>Blood</th><th>Clears</th><th>Buff</th><th></th></tr></thead>
         <tbody id="consumablesmgr-list"></tbody>
+      </table>
+    </div>
+
+    <!-- SPELL MANAGER -->
+    <div id="panel-spellmgr" class="panel">
+      <h2>Spell Manager</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Define spells for casters to learn. Casting Time is whole rounds (0 = Instant). Cost is per cast, or per round
+        while Maintained is checked. Difficulty is the Logic/Intuition/Knowledge value needed for a ~90% success
+        chance — falling short escalates failure risk. Area/AOE targeting, Attack damage, and Creation-type spells
+        (a persistent object) are captured here but not all mechanically active yet — see the spell's own notes.
+      </p>
+      <button class="btn" onclick="openSpellForm(null)" style="margin-bottom:16px;">+ Add Spell</button>
+
+      <div id="spell-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="spell-form-title" style="margin-top:0;">New Spell</h3>
+        <div class="grid-3">
+          <div class="field"><label>Name</label><input type="text" id="sf-name" placeholder="e.g. Fire Rose"></div>
+          <div class="field"><label>Range</label><input type="text" id="sf-range" placeholder="e.g. 15 feet, Touch"></div>
+          <div class="field"><label>Casting Time (rounds)</label><input type="text" id="sf-castingtime" placeholder="0 = Instant"></div>
+          <div class="field"><label>Cost</label><input type="text" id="sf-cost" placeholder="0"></div>
+          <div class="field"><label>Maintained (cost is per round)</label>
+            <select id="sf-maintained"><option value="0">No — one-time cost</option><option value="1">Yes — per round while sustained</option></select>
+          </div>
+          <div class="field"><label>Difficulty Stat</label>
+            <select id="sf-difficultystat"><option>Logic</option><option>Intuition</option><option>Knowledge</option></select>
+          </div>
+          <div class="field"><label>Difficulty Value</label><input type="text" id="sf-difficultyvalue" placeholder="14"></div>
+          <div class="field"><label>Magic Class</label>
+            <select id="sf-magicclass"><option>Arcane</option><option>Deific</option><option>Demonic</option><option>Nature</option></select>
+          </div>
+          <div class="field"><label>Target Type</label>
+            <select id="sf-targettype"><option>Self</option><option>Individual</option><option>Item</option><option>Area</option></select>
+          </div>
+          <div class="field"><label>Area Shape</label>
+            <select id="sf-aoeshape"><option value="">—</option><option>Circle</option><option>Sector</option><option>Rectangle</option></select>
+          </div>
+          <div class="field"><label>Area Size</label><input type="text" id="sf-aoesize" placeholder="e.g. 45°, 15 ft radius"></div>
+          <div class="field"><label>Spell Type</label>
+            <select id="sf-spelltype"><option value="Attack">Attack</option><option value="Buff/Debuff">Buff/Debuff</option><option value="Control">Control</option><option value="Creation">Creation</option><option value="Summon/Transport">Summon/Transport</option></select>
+          </div>
+          <div class="field"><label>Damage Stat (Attack)</label>
+            <select id="sf-damagestat"><option value="">—</option>
+              <option>Power</option><option>Speed</option><option>Toughness</option><option>Stamina</option>
+              <option>Manual Dexterity</option><option>Physical Coordination</option>
+              <option>Knowledge</option><option>Social Skills</option><option>Logic</option><option>Intuition</option><option>Quintessence</option>
+            </select>
+          </div>
+          <div class="field"><label>Damage Category (Attack)</label>
+            <select id="sf-damagecategory"><option value="">—</option>
+              <option value="slash">Slash</option><option value="pierce">Pierce</option><option value="crush">Crush</option>
+              <option value="burn">Burn</option><option value="shock">Shock</option><option value="freeze">Freeze</option><option value="corrode">Corrode</option>
+            </select>
+          </div>
+          <div class="field"><label>Restore Toughness</label><input type="text" id="sf-toughness" placeholder="0"></div>
+          <div class="field"><label>Restore Stamina</label><input type="text" id="sf-stamina" placeholder="0"></div>
+          <div class="field"><label>Restore Blood</label><input type="text" id="sf-blood" placeholder="0"></div>
+          <div class="field"><label>Clears (conditions)</label><input type="text" id="sf-clears" placeholder="e.g. bleeding, stunned"></div>
+          <div class="field"><label>Buff Attribute</label><input type="text" id="sf-buffattr" placeholder="e.g. Night Vision"></div>
+          <div class="field"><label>Buff Amount</label><input type="text" id="sf-buffamount" placeholder="0"></div>
+          <div class="field"><label>Buff Duration (min)</label><input type="text" id="sf-buffminutes" placeholder="e.g. 10-100"></div>
+        </div>
+        <div class="field" style="margin-top:10px;"><label>Description</label><textarea id="sf-description" rows="3" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;"></textarea></div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveSpell()">Save Spell</button>
+          <button class="btn danger" onclick="closeSpellForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th>Cast</th><th>Cost</th><th>Difficulty</th><th></th></tr></thead>
+        <tbody id="spellmgr-list"></tbody>
       </table>
     </div>
 
@@ -2404,6 +2477,12 @@ const DEFAULT_SKILLS = [
   { name:"Magic: Elemental",  type:"Arcane",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Quintessence"] },
   { name:"Magic: Healing",    type:"Arcane",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Intuition"] },
   { name:"Magic: Illusion",   type:"Arcane",     cost:5, req:"Quintessence 14+",          reqAttr:"Quintessence",reqVal:14, successAttrs:["Quintessence","SocialSkills"] },
+  { name:"Faith: Healing",    type:"Deific",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Intuition"] },
+  { name:"Divine Blessing",   type:"Deific",     cost:5, req:"Quintessence 14+",          reqAttr:"Quintessence",reqVal:14, successAttrs:["Quintessence","SocialSkills"] },
+  { name:"Hellfire",          type:"Demonic",    cost:5, req:"Quintessence 14+",          reqAttr:"Quintessence",reqVal:14, successAttrs:["Quintessence","Logic"] },
+  { name:"Demonic Pact",      type:"Demonic",    cost:5, req:"Quintessence 16+",          reqAttr:"Quintessence",reqVal:16, successAttrs:["Quintessence","Intuition"] },
+  { name:"Druidcraft",        type:"Nature",     cost:5, req:"Quintessence 12+",          reqAttr:"Quintessence",reqVal:12, successAttrs:["Quintessence","Intuition"] },
+  { name:"Beast Speech",      type:"Nature",     cost:5, req:"Quintessence 10+",          reqAttr:"Quintessence",reqVal:10, successAttrs:["Quintessence","SocialSkills"] },
   { name:"Medicine",          type:"Knowledge",  cost:4, req:"Logic 14+",                 reqAttr:"Logic",       reqVal:14, successAttrs:["Logic","ManualDex"] },
   { name:"Navigation",        type:"Knowledge",  cost:3, req:"Logic 12+",                 reqAttr:"Logic",       reqVal:12, successAttrs:["Logic","Knowledge"] },
   { name:"Perception",        type:"Physical",   cost:2, req:"",                          reqAttr:"",            reqVal:"", successAttrs:["Hearing","DayVision"] },
@@ -3304,6 +3383,50 @@ const DEFAULT_CONSUMABLES = [
 let CONSUMABLES = [...DEFAULT_CONSUMABLES];
 let editingConsumableIndex = null;
 
+// ── Spells ───────────────────────────────────────────────────────────────────
+// castingTime is already in whole ROUNDS (per the spell template), unlike
+// weapon/ranged actions whose dur is in 3-second units — don't run it through
+// the usual /3 conversion. cost is per-cast for a one-shot spell, or per-round
+// while `maintained` is true (Cost/Duration on the template). difficultyStat
+// is which of Logic/Intuition/Knowledge the casting check rolls against;
+// difficultyValue is the stat value needed for a ~90% (10% base failure)
+// chance — see _spellFailurePct. aoeShape/aoeSize are captured now (Phase 2
+// will act on them) as free-form text since the exact shape math isn't built
+// yet. Effect fields mirror the consumable shape (restore/clears/buff) for
+// the same reason: apply-to-target logic can be shared rather than
+// reinvented. damageStat/damageCategory are for Attack-type spells — max
+// damage is the caster's own stat (not a fixed weapon table value), and
+// category routes through the armor system the same way a weapon's category
+// does (see _armorProtectionKey).
+const DEFAULT_SPELLS = [
+  { name:"Fire Rose", range:"15 feet", castingTime:2, cost:2, maintained:false,
+    difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
+    aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
+    damageStat:"Logic", damageCategory:"burn",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. All creatures take a burn damage roll with maximum equal to the caster's Logic. Response options: Block (if shield equipped), Evade, Go Prone." },
+  { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
+    difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
+    aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
+    damageStat:"", damageCategory:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Reduces attackers' to-hit chance against the recipient by 50%. (Effect not yet mechanically wired — needs a defender-side attacker modifier, planned but not built in Phase 1.)" },
+  { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
+    difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
+    aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
+    damageStat:"", damageCategory:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase.)" },
+  { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
+    difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
+    aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
+    damageStat:"", damageCategory:"",
+    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
+];
+let SPELLS = [...DEFAULT_SPELLS];
+let editingSpellIndex = null;
+
 // ─── Hit Location Data ────────────────────────────────────────────────────────
 // matrix: 8 rows × 5 cols, values are part keys or null (re-roll).
 // parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift called-shot rolls.
@@ -3703,6 +3826,101 @@ function buildConsumablesManagerTable() {
   });
 }
 
+// ─── SPELL MANAGER ───────────────────────────────────────────────────────────
+function openSpellForm(index) {
+  editingSpellIndex = index;
+  const row = index !== null ? SPELLS[index] : null;
+  document.getElementById('spell-form-title').textContent = row ? 'Edit Spell' : 'New Spell';
+  document.getElementById('sf-name').value            = row ? row.name : '';
+  document.getElementById('sf-range').value           = row ? row.range : '';
+  document.getElementById('sf-castingtime').value     = row ? row.castingTime : '';
+  document.getElementById('sf-cost').value            = row ? row.cost : '';
+  document.getElementById('sf-maintained').value      = row && row.maintained ? '1' : '0';
+  document.getElementById('sf-difficultystat').value  = row ? row.difficultyStat : 'Logic';
+  document.getElementById('sf-difficultyvalue').value = row ? row.difficultyValue : '';
+  document.getElementById('sf-magicclass').value      = row ? row.magicClass : 'Arcane';
+  document.getElementById('sf-targettype').value      = row ? row.targetType : 'Self';
+  document.getElementById('sf-aoeshape').value        = row ? (row.aoeShape || '') : '';
+  document.getElementById('sf-aoesize').value         = row ? (row.aoeSize || '') : '';
+  document.getElementById('sf-spelltype').value       = row ? row.spellType : 'Attack';
+  document.getElementById('sf-damagestat').value      = row ? (row.damageStat || '') : '';
+  document.getElementById('sf-damagecategory').value  = row ? (row.damageCategory || '') : '';
+  document.getElementById('sf-toughness').value       = row ? row.restoreToughness : '';
+  document.getElementById('sf-stamina').value         = row ? row.restoreStamina : '';
+  document.getElementById('sf-blood').value           = row ? row.restoreBlood : '';
+  document.getElementById('sf-clears').value          = row ? (row.clears || '') : '';
+  document.getElementById('sf-buffattr').value        = row ? (row.buffAttr || '') : '';
+  document.getElementById('sf-buffamount').value      = row ? row.buffAmount : '';
+  document.getElementById('sf-buffminutes').value     = row ? (row.buffMinutes || '') : '';
+  document.getElementById('sf-description').value     = row ? (row.description || '') : '';
+  document.getElementById('spell-form').style.display = 'block';
+}
+
+function closeSpellForm() {
+  editingSpellIndex = null;
+  document.getElementById('spell-form').style.display = 'none';
+}
+
+function saveSpell() {
+  const name = document.getElementById('sf-name').value.trim();
+  if (!name) { alert('Spell name is required.'); return; }
+  const row = {
+    name,
+    range: document.getElementById('sf-range').value.trim(),
+    castingTime: parseFloat(document.getElementById('sf-castingtime').value) || 0,
+    cost: parseFloat(document.getElementById('sf-cost').value) || 0,
+    maintained: document.getElementById('sf-maintained').value === '1',
+    difficultyStat: document.getElementById('sf-difficultystat').value,
+    difficultyValue: parseFloat(document.getElementById('sf-difficultyvalue').value) || 0,
+    magicClass: document.getElementById('sf-magicclass').value,
+    targetType: document.getElementById('sf-targettype').value,
+    aoeShape: document.getElementById('sf-aoeshape').value,
+    aoeSize: document.getElementById('sf-aoesize').value.trim(),
+    spellType: document.getElementById('sf-spelltype').value,
+    damageStat: document.getElementById('sf-damagestat').value,
+    damageCategory: document.getElementById('sf-damagecategory').value,
+    restoreToughness: parseFloat(document.getElementById('sf-toughness').value) || 0,
+    restoreStamina: parseFloat(document.getElementById('sf-stamina').value) || 0,
+    restoreBlood: parseFloat(document.getElementById('sf-blood').value) || 0,
+    clears: document.getElementById('sf-clears').value.trim(),
+    buffAttr: document.getElementById('sf-buffattr').value.trim(),
+    buffAmount: parseFloat(document.getElementById('sf-buffamount').value) || 0,
+    buffMinutes: document.getElementById('sf-buffminutes').value.trim(),
+    description: document.getElementById('sf-description').value.trim(),
+  };
+  if (editingSpellIndex !== null) {
+    SPELLS[editingSpellIndex] = row;
+  } else {
+    SPELLS.push(row);
+  }
+  writeConfigToDisk();
+  closeSpellForm();
+  buildSpellManagerTable();
+}
+
+function deleteSpell(index) {
+  const row = SPELLS[index];
+  if (!confirm(`Delete "${row.name}"?`)) return;
+  closeSpellForm();
+  SPELLS.splice(index, 1);
+  writeConfigToDisk();
+  buildSpellManagerTable();
+}
+
+function buildSpellManagerTable() {
+  const tbody = document.getElementById('spellmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  SPELLS.forEach((row, i) => {
+    const cost = row.maintained ? `${row.cost}/round` : `${row.cost}`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td>${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSpellForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteSpell(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 function buildRangedWeaponsManagerTable() {
   const tbody = document.getElementById('rangedmgr-list');
   if (!tbody) return;
@@ -3736,7 +3954,7 @@ function showPanel(id) {
   if (id === 'speciesmgr') buildSpeciesManagerTable();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
 
 function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
@@ -4254,6 +4472,7 @@ function gatherConfigData() {
     meleeWeapons: MELEE_WEAPONS,
     rangedWeapons: RANGED_WEAPONS,
     consumables: CONSUMABLES,
+    spells: SPELLS,
   };
 }
 
@@ -4278,7 +4497,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260805a';
+const VERSION = 'v0.1.20260805b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -4826,6 +5045,7 @@ function _seedDefaults() {
   replaceArrayContents(MELEE_WEAPONS,  DEFAULT_MELEE_WEAPONS);
   replaceArrayContents(RANGED_WEAPONS, DEFAULT_RANGED_WEAPONS);
   replaceArrayContents(CONSUMABLES, DEFAULT_CONSUMABLES);
+  replaceArrayContents(SPELLS, DEFAULT_SPELLS);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    DEFAULT_ARMOR_TYPE_DATA);
 }
@@ -4931,6 +5151,7 @@ function applyConfigData(data) {
     }
   });
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
+  replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   migrateSkills();
@@ -4949,6 +5170,7 @@ function rebuildAllConfigUI() {
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   buildConsumablesManagerTable();
+  buildSpellManagerTable();
   recalc();
 }
 
@@ -5449,10 +5671,19 @@ function getAttackCategory(actionLabel) {
   return 'crush'; // smash, bash, crush, grab, push, etc.
 }
 
-// 3-way attack category → the armor system's protection key (8 damage types;
-// see ARMOR_PROTECTION_KEYS). Elemental columns are wired for future attacks.
+// Attack category → the armor system's protection key (8 damage types; see
+// ARMOR_PROTECTION_KEYS). Physical weapon attacks only ever produce slash/
+// pierce/crush (via getAttackCategory's label parsing); elemental categories
+// (burn/shock/freeze/corrode) are supplied directly by spell data
+// (Spell.damageCategory) rather than parsed from an action label — this is
+// the first thing to actually read those columns.
 function _armorProtectionKey(category) {
-  return category === 'slash' ? 'Slash' : category === 'pierce' ? 'Stab' : 'SmashBash';
+  const map = {
+    slash: 'Slash', pierce: 'Stab', crush: 'SmashBash',
+    burn: 'Burn', shock: 'Shock', freeze: 'Freeze', corrode: 'Corrode',
+    magic: 'Quintessence', // generic magic-damage category, if a spell needs one
+  };
+  return map[category] || 'SmashBash';
 }
 
 // Armor damage reduction, read from the SAME material table the character
@@ -5557,7 +5788,7 @@ function getEntity(ref) {
   // store or clear, so it un-reduces the instant Blood is healed/recovered.
   // Uses the BASE (pre-reduction) Toughness for the pool size so the % can't
   // spiral as Toughness itself shrinks from the loss.
-  const baseBloodMax = _bloodMax(Math.round(row._attrs.Toughness || 10));
+  const baseBloodMax = _bloodMax(Math.round(row._attrs.Toughness ?? 10));
   const bloodLossPct = baseBloodMax > 0 ? Math.min(1, Math.max(0, (row.damage?.blood || 0) / baseBloodMax)) : 0;
   if (bloodLossPct > 0) {
     if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
@@ -5584,7 +5815,7 @@ function getEntity(ref) {
     baseAttrs: row._attrs,
     held:      row.held_items || {},
     armor:     row.armor || {},
-    damage:    row.damage || { toughness: 0, stamina: 0 },
+    damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
     loadout,
@@ -5738,13 +5969,19 @@ const PART_TO_ARMOR_SLOT = {
 function _bloodMax(toughnessMax) {
   return Math.max(1, Math.round(toughnessMax || 10));
 }
+// Quintessence pool: equals the Quintessence attribute (can legitimately be 0
+// for a non-magical character — no forced minimum, unlike Blood/Stamina which
+// always have a body to draw on).
+function _quintMax(quintAttr) {
+  return Math.max(0, Math.round(quintAttr || 0));
+}
 
 async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
   staminaDmg = staminaDmg != null ? staminaDmg : toughnessDmg; // default same as toughness
   const ref = _entityRef(entityType, entityId);
   const ent = getEntity(ref);
   if (!ent) return;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
   let newTough = Math.max(0, (ent.damage.toughness || 0) + toughnessDmg);
   let newBlood = ent.damage.blood || 0;
   if (newTough > tMax) {           // overflow past depleted Toughness drains Blood
@@ -5752,9 +5989,10 @@ async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
     newTough = tMax;
   }
   await updateEntity(ref, { damage: {
-    toughness: newTough,
-    stamina:   Math.max(0, (ent.damage.stamina || 0) + staminaDmg),
-    blood:     newBlood,
+    toughness:    newTough,
+    stamina:      Math.max(0, (ent.damage.stamina || 0) + staminaDmg),
+    blood:        newBlood,
+    quintessence: ent.damage.quintessence || 0, // damage is written wholesale, not merged — preserve it
   }});
 }
 
@@ -5763,10 +6001,91 @@ async function recoverStamina(entityType, entityId, amount) {
   const ent = getEntity(ref);
   if (!ent) return;
   await updateEntity(ref, { damage: {
-    toughness: ent.damage.toughness || 0,
-    stamina:   Math.max(0, (ent.damage.stamina || 0) - amount),
-    blood:     ent.damage.blood || 0,
+    toughness:    ent.damage.toughness || 0,
+    stamina:      Math.max(0, (ent.damage.stamina || 0) - amount),
+    blood:        ent.damage.blood || 0,
+    quintessence: ent.damage.quintessence || 0,
   }});
+}
+
+// Regains 1 Quintessence per 3 rounds — unconditional (unlike Stamina, which
+// only regenerates for combatants who took no action). Called from the
+// round-boundary loop in atNext.
+async function recoverQuintessence(entityType, entityId, amount) {
+  const ref = _entityRef(entityType, entityId);
+  const ent = getEntity(ref);
+  if (!ent) return;
+  const qMax = _quintMax(ent.attrs.Quintessence);
+  if (qMax <= 0) return; // nothing to regenerate for a non-magical creature
+  await updateEntity(ref, { damage: {
+    toughness:    ent.damage.toughness || 0,
+    stamina:      ent.damage.stamina || 0,
+    blood:        ent.damage.blood || 0,
+    quintessence: Math.max(0, (ent.damage.quintessence || 0) - amount),
+  }});
+}
+
+// Pays a spell's Quintessence cost, cascading Quint → Stamina → Toughness →
+// Blood (always this order, 1:1) when the caster's magical reserve alone
+// isn't enough — "desperate wizards tapping into their own body." Draining
+// Toughness/Blood can down or kill the caster, same as taking a hit; the
+// caller is expected to have already checked _totalCastableResource so this
+// never gets called for an unpayable cost. Returns the per-pool breakdown so
+// the cast result can show exactly what was spent.
+async function _payQuintessence(ent, cost) {
+  const paid = { quint: 0, stamina: 0, toughness: 0, blood: 0 };
+  let remaining = Math.max(0, Math.round(cost || 0));
+
+  const qMax = _quintMax(ent.attrs.Quintessence);
+  const qCur = Math.max(0, qMax - (ent.damage.quintessence || 0));
+  paid.quint = Math.min(remaining, qCur);
+  remaining -= paid.quint;
+
+  if (remaining > 0) {
+    const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+    const sCur = Math.max(0, sMax - (ent.damage.stamina || 0));
+    paid.stamina = Math.min(remaining, sCur);
+    remaining -= paid.stamina;
+  }
+  if (remaining > 0) {
+    const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+    const tCur = Math.max(0, tMax - (ent.damage.toughness || 0));
+    paid.toughness = Math.min(remaining, tCur);
+    remaining -= paid.toughness;
+  }
+  if (remaining > 0) {
+    const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
+    const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
+    paid.blood = Math.min(remaining, bCur);
+    remaining -= paid.blood;
+  }
+
+  await updateEntity(ent.ref, { damage: {
+    quintessence: (ent.damage.quintessence || 0) + paid.quint,
+    stamina:      (ent.damage.stamina      || 0) + paid.stamina,
+    toughness:    (ent.damage.toughness    || 0) + paid.toughness,
+    blood:        (ent.damage.blood        || 0) + paid.blood,
+  }});
+
+  // Casting through Toughness/Blood can down or kill the caster.
+  if ((paid.toughness > 0 || paid.blood > 0) && ent.tokenId) {
+    await _checkDownedState(ent.tokenId, getEntity(ent.ref));
+  }
+  return paid;
+}
+
+// Total resource a caster could draw on across all 4 pools — used to gate
+// whether a cast can even be attempted before _payQuintessence ever runs.
+function _totalCastableResource(ent) {
+  const qMax = _quintMax(ent.attrs.Quintessence);
+  const qCur = Math.max(0, qMax - (ent.damage.quintessence || 0));
+  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  const sCur = Math.max(0, sMax - (ent.damage.stamina || 0));
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  const tCur = Math.max(0, tMax - (ent.damage.toughness || 0));
+  const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
+  const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
+  return qCur + sCur + tCur + bCur;
 }
 
 function _staminaCostForLabel(label) {
@@ -6086,8 +6405,8 @@ async function applyConsumable(consumable, targetToken, itemName, holderRef) {
   const ent = getEntity(targetRef);
   if (!ent) { showToast('Could not load target.', 'error'); return; }
 
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
-  const sMax = Math.max(1, Math.round(ent.attrs.Stamina || 10));
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
   const bMax = _bloodMax(tMax);
   const wasUnconscious = ent.conditions.has('unconscious');
   const wasDead = ent.conditions.has('dead');
@@ -6365,6 +6684,23 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
   });
 }
 
+// Spell casting-check failure %. Baseline is 10% (a caster at or above the
+// spell's Difficulty has a flat 90% success chance). For each point the
+// caster's relevant stat (Logic/Intuition/Knowledge) falls short of
+// Difficulty, add the next Fibonacci number to a running total on top of
+// that baseline — an accelerating curve, so being a little short is a minor
+// risk but being badly short is nearly hopeless. Deficit 0→10%, 1→11%,
+// 2→12%, 3→14%, 4→17%, 5→22%, 6→30%, 7→43%, 8→64%, 9+→effectively certain.
+function _spellFailurePct(statVal, difficultyValue) {
+  const deficit = Math.max(0, Math.round(difficultyValue || 0) - Math.round(statVal || 0));
+  let a = 1, b = 1, sum = 0;
+  for (let i = 0; i < deficit; i++) { sum += a; [a, b] = [b, a + b]; }
+  return Math.min(100, 10 + sum);
+}
+function _spellSuccessPct(statVal, difficultyValue) {
+  return Math.max(0, 100 - _spellFailurePct(statVal, difficultyValue));
+}
+
 // Shared target-% calc for a recovery save — used both to actually open the
 // roller (atResolveRecovery) and to preview the % on the action-dialog chip
 // before the player commits (panels.js), so the two can't drift apart.
@@ -6379,7 +6715,7 @@ function _recoverTarget(ent, tokenId, effectKey) {
   }
   const since = { stunned: 'stunsince:', bleeding: 'bleedsince:' }[effectKey];
   if (!since) return { pct: 0, rounds: 1 };
-  const tough  = Math.max(1, Math.round(ent?.baseAttrs?.Toughness || ent?.attrs?.Toughness || 10));
+  const tough  = Math.max(1, Math.round(ent?.baseAttrs?.Toughness ?? ent?.attrs?.Toughness ?? 10));
   const marker = [...getConditions(tokenId)].find(c => c.startsWith(since));
   const start  = marker ? (parseInt(marker.slice(since.length), 10) || _atSharedRound()) : _atSharedRound();
   const rounds = Math.max(1, _atSharedRound() - start + 1);
@@ -6405,7 +6741,7 @@ async function atResolveRecovery(combatantId, effectKey) {
       onComplete: async (n) => {
         const success = n <= 5 || (n < 96 && n <= target);
         if (!success) return;
-        const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+        const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
         await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: Math.max(0, tMax - 1) }) });
         await setCondition(token.id, 'unconscious', false);
       },
@@ -6424,6 +6760,156 @@ async function atResolveRecovery(combatantId, effectKey) {
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
       if (success) await setCondition(token.id, effectKey, false); // sweep clears the since marker
+    },
+  });
+}
+
+// ═══ SPELLCASTING (Phase 1: Self/Individual, single-target) ══════════════════
+// Does this entity know any skill of the given magic class (Arcane/Deific/
+// Demonic/Nature)? Generalizes the old hasArcane check so creatures can cast
+// too, not just characters — session_creatures needs its own `skills` column
+// (same jsonb-default migration as weapons/equipment) for this to find
+// anything on a creature.
+function hasMagicClass(ent, magicClass) {
+  return Object.keys(ent?.skills || {}).some(k => (SKILLS.find(s => s.name === k) || {}).type === magicClass);
+}
+
+// Begin casting a spell. Instant spells (castingTime 0) skip straight to
+// Complete. Otherwise occupies the caster's full-body slot as a windup for
+// the spell's casting time (already whole rounds, unlike other actions' 3-
+// second dur units) — mirrors the ranged-weapon Load/Fire two-step. Target
+// selection happens at Complete, not here: "on touching the individual with
+// the finished pattern" implies you reach for the target once it's ready.
+async function atCastSpell(casterCid, spellName) {
+  const spell = SPELLS.find(s => s.name === spellName);
+  if (!spell) return;
+  const ent = getEntity(casterCid);
+  if (!ent) return;
+  if (spell.targetType === 'Area' || spell.targetType === 'Item') {
+    showToast(`${spell.targetType}-target spells aren't built yet.`, 'error');
+    return;
+  }
+  if (_totalCastableResource(ent) < (spell.cost || 0)) {
+    showToast(`Not enough Quintessence (or Stamina/Toughness/Blood to draw on) to cast ${spell.name}.`, 'error');
+    return;
+  }
+  const rounds = Math.max(0, Math.round(spell.castingTime || 0));
+  if (rounds <= 0) { await atCompleteCast(casterCid, spellName); return; }
+
+  const c = atCombatants.find(x => x.id === casterCid);
+  if (!c) return;
+  if (!c.slots) c.slots = _newSlots();
+  for (const k of Object.keys(c.slots)) c.slots[k] = null;
+  c.slots.full = { label: `Casting: ${spell.name}`, startRound: atRound, durationRounds: rounds, locksAll: true };
+  if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
+    payload: { combatantId: casterCid, slot: 'full', label: c.slots.full.label, startRound: atRound, durationRounds: rounds, locksAll: true } });
+  renderAtList(); renderPlayCharacter();
+}
+
+// Complete a cast whose windup has finished (or resolve an Instant cast).
+// Self spells resolve immediately; Individual spells enter grab-style map
+// targeting (mirrors Consume) so the caster picks who receives it.
+async function atCompleteCast(casterCid, spellName) {
+  const c = atCombatants.find(x => x.id === casterCid);
+  if (c?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
+  const spell = SPELLS.find(s => s.name === spellName);
+  if (!spell) return;
+  if (spell.targetType === 'Self') {
+    await _resolveSpellCast(casterCid, spellName, casterCid);
+    return;
+  }
+  _dlgReopenId = casterCid;
+  atCloseModal();
+  enterAttackMode(casterCid, spell.name, 'Cast', false, _parseSpellRangeFt(spell.range));
+}
+
+// "15 feet" → 15; "Touch" or anything unparseable → 5 (adjacent).
+function _parseSpellRangeFt(rangeStr) {
+  const m = /(\d+(?:\.\d+)?)/.exec(rangeStr || '');
+  return m ? parseFloat(m[1]) : 5;
+}
+
+// Apply a spell's fixed effect fields to a target — same shape/semantics as
+// applyConsumable's restore/clears/buff block (kept separate rather than
+// shared, since a spell has no item to expend from inventory afterward).
+async function _applySpellEffectToTarget(spell, targetRef) {
+  if (targetRef.startsWith('char::')) await ensureEntityLoaded(targetRef);
+  const ent = getEntity(targetRef);
+  if (!ent) return;
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  const bMax = _bloodMax(tMax);
+  const wasUnconscious = ent.conditions.has('unconscious');
+  const wasDead = ent.conditions.has('dead');
+  const newDamage = {
+    toughness:    Math.max(0, Math.min(tMax, (ent.damage.toughness || 0) - (spell.restoreToughness || 0))),
+    stamina:      Math.max(0, Math.min(sMax, (ent.damage.stamina   || 0) - (spell.restoreStamina   || 0))),
+    blood:        Math.max(0, Math.min(bMax, (ent.damage.blood     || 0) - (spell.restoreBlood     || 0))),
+    quintessence: ent.damage.quintessence || 0,
+  };
+  await updateEntity(targetRef, { damage: newDamage });
+
+  if (!ent.tokenId) return;
+  const clears = (spell.clears || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  for (const key of clears) {
+    const def = CONDITION_DEFS.find(d => d.key.toLowerCase() === key || d.label.toLowerCase() === key);
+    if (def && ent.conditions.has(def.key)) await setCondition(ent.tokenId, def.key, false);
+  }
+  if (wasUnconscious && newDamage.toughness < tMax) await setCondition(ent.tokenId, 'unconscious', false);
+  if (wasDead && newDamage.blood < bMax) await setCondition(ent.tokenId, 'dead', false);
+  if (spell.buffAttr && spell.buffAmount) {
+    const attrDef = ATTRIBUTES.find(a => a.label === spell.buffAttr || a.key === spell.buffAttr);
+    if (attrDef) {
+      const t = mapTokens[ent.tokenId];
+      const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+      current.add(`buff:${attrDef.key}:${spell.buffAmount}`);
+      current.add('buffed');
+      t.conditions = [...current];
+      _refreshTokenBadges(ent.tokenId);
+      const { error } = await sb.from('map_tokens').update({ conditions: t.conditions }).eq('id', ent.tokenId);
+      if (error) _writeErrorToast(error, 'map_tokens (buff)');
+    }
+  }
+}
+
+// Resolves a completed cast: opens the shared roller for the casting check
+// (Fibonacci failure curve against the caster's Difficulty stat), pays the
+// Quintessence cascade regardless of outcome (the energy is spent whether or
+// not the pattern holds — a real failure-consequence table is future work),
+// and on success applies the spell's effect to the target.
+async function _resolveSpellCast(casterCid, spellName, targetRef) {
+  const spell = SPELLS.find(s => s.name === spellName);
+  if (!spell) return;
+  const casterEnt = getEntity(casterCid);
+  if (!casterEnt) { showToast('Could not load caster.', 'error'); return; }
+
+  const statVal = casterEnt.attrs[spell.difficultyStat] || 0;
+  const target = _spellSuccessPct(statVal, spell.difficultyValue);
+
+  openRoller({
+    label: `Cast: ${spell.name} — ${casterEnt.name}`,
+    target, targetLabel: `${spell.difficultyStat} check`,
+    onComplete: async (n) => {
+      const success = n <= 5 || (n < 96 && n <= target);
+      const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+      const paidParts = [];
+      if (paid.quint)      paidParts.push(`${paid.quint} Quint`);
+      if (paid.stamina)    paidParts.push(`${paid.stamina} Stamina`);
+      if (paid.toughness)  paidParts.push(`${paid.toughness} Toughness`);
+      if (paid.blood)      paidParts.push(`${paid.blood} Blood`);
+      const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
+
+      if (success) {
+        await _applySpellEffectToTarget(spell, targetRef);
+        const targetEnt = getEntity(targetRef);
+        const selfCast = targetRef === casterCid;
+        logCombat(`${casterEnt.name} casts ${spell.name}${selfCast ? '' : ' on ' + (targetEnt?.name || 'target')}${costNote}.`, 'good');
+        showToast(`${spell.name} cast successfully!${costNote}`, 'good');
+      } else {
+        logCombat(`${casterEnt.name} fails to cast ${spell.name}${costNote}.`, 'roll');
+        showToast(`${spell.name} fizzles.${costNote}`, 'warn');
+      }
+      refreshUI();
     },
   });
 }
@@ -6610,7 +7096,7 @@ async function atReleaseCarrying(bearerTokenId) {
 // Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
 async function applyBloodLoss(ent, amount) {
   if (!ent) return;
-  const bMax = _bloodMax(Math.round(ent.attrs.Toughness || 10));
+  const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
   const newBlood = Math.min(bMax, (ent.damage.blood || 0) + amount);
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { blood: newBlood }) });
 }
@@ -6620,7 +7106,7 @@ async function applyBloodLoss(ent, amount) {
 // bleed tick so bleeding-to-death works identically.
 async function _checkDownedState(tokenId, ent) {
   if (!ent || !tokenId) return null;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
   const bMax = _bloodMax(tMax);
   if ((ent.damage.blood || 0) >= bMax) {
     await setCondition(tokenId, 'unconscious', true);
@@ -6740,7 +7226,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel) {
     const ref = _entityRef(targetEntityType, targetEntityId);
     const ent = getEntity(ref);
     if (ent) {
-      const toughnessMax = Math.max(1, Math.round(ent.attrs.Toughness || 10));
+      const toughnessMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
       // Damage-triggered effects (bleeding, grab-hold now; stun/disarm later).
       // Runs even at 0 damage so a Grab (no damage) can still take hold; each
       // effect's own gate decides whether it applies.
@@ -6911,6 +7397,19 @@ async function atNext() {
     // Ongoing hit-effects (bleeding drains Blood) tick once per round, after
     // recovery has committed. GM-only path; writes sync out.
     for (const c of atCombatants) { await _tickHitEffects(c.id); }
+    // Quintessence regen: 1 point every 3 rounds, unconditional — no "took no
+    // action" gate like Stamina; magical reserves are a slow passive trickle.
+    if (atRound % 3 === 0) {
+      for (const c of atCombatants) {
+        const [type, rawId] = c.id.split('::');
+        if (type === 'char') {
+          await recoverQuintessence('character', rawId, 1);
+        } else {
+          const tok = mapTokens[rawId];
+          if (tok) await recoverQuintessence('creature', tok.entity_id, 1);
+        }
+      }
+    }
     atRound++;
     // Expire finished slot actions at round boundary
     atCombatants.forEach(c => {
@@ -9005,6 +9504,15 @@ function attackTokenClick(tokenId) {
     applyConsumable(consumable, target, itemName, holderRef);
     return true;
   }
+  // Cast (Individual-target spell): touching/aiming the finished pattern at
+  // whoever is clicked — self-targeting allowed (unlike a weapon attack),
+  // since a caster touching themselves is a normal thing to do.
+  if (attackActionLabel === 'Cast') {
+    const spellName = attackWeaponName, casterCid = attackCombatantId;
+    exitAttackMode();
+    _resolveSpellCast(casterCid, spellName, _tokenCid(target));
+    return true;
+  }
   if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
     exitAttackMode(); return true;
   }
@@ -10890,6 +11398,7 @@ switchGmTab = function(tab) {
               <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
               <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
               <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('spellmgr')">✨ Spells</button>
               <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
               <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
             </div>
@@ -10921,6 +11430,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260804b"></script>
+<script src="panels.js?v=20260805a"></script>
 </body>
 </html>
