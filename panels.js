@@ -808,7 +808,10 @@ function _dlgRender(body) {
           data: { dact: 'openspellpicker' },
         });
       }
-      arcaneHtml = _dlgSection('✨ Spells', spellChip, fullActive);
+      // Dim the section when full-body is locked by something ELSE (Evade,
+      // Sentinel, ...) — but not when it's locked by this very cast, since
+      // then the Complete chip is the one live, available action.
+      arcaneHtml = _dlgSection('✨ Spells', spellChip, fullActive && !inWindup);
     }
   }
 

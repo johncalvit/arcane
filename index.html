@@ -4500,7 +4500,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260805c';
+const VERSION = 'v0.1.20260805d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6795,7 +6795,7 @@ function _openSpellPickerModal(combatantId) {
 
   const overlay = document.createElement('div');
   overlay.id = 'spell-picker-modal';
-  overlay.style.cssText = `position:fixed;inset:0;z-index:1550;background:rgba(0,0,0,0.78);
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);
     display:flex;align-items:center;justify-content:center;`;
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
@@ -9881,12 +9881,13 @@ function attackTokenClick(tokenId) {
   }
 
   // ── Open called-shot picker, then hit roller ─────────────────────────────
+  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
   let subtitle = '';
   if (hitValue != null) {
     if (attackIsRanged && rangeIncrements > 0) {
-      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}`;
+      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
     } else {
-      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}`;
+      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
     }
   }
   _openCalledShotModal({
@@ -11528,6 +11529,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260805b"></script>
+<script src="panels.js?v=20260805c"></script>
 </body>
 </html>
