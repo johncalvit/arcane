@@ -1494,6 +1494,7 @@
           <div class="field"><label>Restore Stamina</label><input type="text" id="sf-stamina" placeholder="0"></div>
           <div class="field"><label>Restore Blood</label><input type="text" id="sf-blood" placeholder="0"></div>
           <div class="field"><label>Clears (conditions)</label><input type="text" id="sf-clears" placeholder="e.g. bleeding, stunned"></div>
+          <div class="field"><label>Sets Condition</label><input type="text" id="sf-setscondition" placeholder="e.g. obscured"></div>
           <div class="field"><label>Buff Attribute</label><input type="text" id="sf-buffattr" placeholder="e.g. Night Vision"></div>
           <div class="field"><label>Buff Amount</label><input type="text" id="sf-buffamount" placeholder="0"></div>
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="sf-buffminutes" placeholder="e.g. 10-100"></div>
@@ -3403,25 +3404,25 @@ const DEFAULT_SPELLS = [
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
     damageStat:"Logic", damageCategory:"burn",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. All creatures take a burn damage roll with maximum equal to the caster's Logic. Response options: Block (if shield equipped), Evade, Go Prone." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Reduces attackers' to-hit chance against the recipient by 50%. (Effect not yet mechanically wired — needs a defender-side attacker modifier, planned but not built in Phase 1.)" },
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
     damageStat:"", damageCategory:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"",
-    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
@@ -3849,6 +3850,7 @@ function openSpellForm(index) {
   document.getElementById('sf-stamina').value         = row ? row.restoreStamina : '';
   document.getElementById('sf-blood').value           = row ? row.restoreBlood : '';
   document.getElementById('sf-clears').value          = row ? (row.clears || '') : '';
+  document.getElementById('sf-setscondition').value   = row ? (row.setsCondition || '') : '';
   document.getElementById('sf-buffattr').value        = row ? (row.buffAttr || '') : '';
   document.getElementById('sf-buffamount').value      = row ? row.buffAmount : '';
   document.getElementById('sf-buffminutes').value     = row ? (row.buffMinutes || '') : '';
@@ -3883,6 +3885,7 @@ function saveSpell() {
     restoreStamina: parseFloat(document.getElementById('sf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('sf-blood').value) || 0,
     clears: document.getElementById('sf-clears').value.trim(),
+    setsCondition: document.getElementById('sf-setscondition').value.trim(),
     buffAttr: document.getElementById('sf-buffattr').value.trim(),
     buffAmount: parseFloat(document.getElementById('sf-buffamount').value) || 0,
     buffMinutes: document.getElementById('sf-buffminutes').value.trim(),
@@ -4497,7 +4500,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260805b';
+const VERSION = 'v0.1.20260805c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5468,6 +5471,8 @@ const CONDITION_DEFS = [
     desc:'Injured leg(s). Max speed is reduced by the proportion of legs hurt. Clear to heal.' },
   { key:'buffed',      label:'Buffed',      icon:'✨', color:'#c77dff',
     desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
+  { key:'obscured',    label:'Obscured',    icon:'🌫', color:'#8899aa',
+    desc:'Hard to see — darkness, foliage, mist, a Misted Form spell. Attacks against this target are 50% less likely to hit. Clear when the GM judges the concealment has ended.' },
 ];
 
 function getConditions(tokenId) {
@@ -6774,6 +6779,82 @@ function hasMagicClass(ent, magicClass) {
   return Object.keys(ent?.skills || {}).some(k => (SKILLS.find(s => s.name === k) || {}).type === magicClass);
 }
 
+// Spell-picker modal: lists every spell the caster knows (from their magic-
+// class skills) with a live success%/cost preview, rather than cramming
+// every known spell as its own chip in the action dialog — that stops
+// scaling once a caster knows more than a couple. Selecting one begins the
+// cast (atCastSpell); the dialog re-renders itself afterward.
+function _openSpellPickerModal(combatantId) {
+  const ent = getEntity(combatantId);
+  if (!ent) return;
+  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
+  const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
+
+  const existing = document.getElementById('spell-picker-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'spell-picker-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:1550;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
+  title.textContent = `${ent.name} — Choose a Spell`;
+  card.appendChild(title);
+
+  if (!known.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'font-size:0.8rem;color:var(--text-dim);text-align:center;';
+    empty.textContent = 'No spells known.';
+    card.appendChild(empty);
+  }
+
+  known.forEach(spell => {
+    const notBuilt = spell.targetType === 'Area' || spell.targetType === 'Item';
+    const successPct = _spellSuccessPct(ent.attrs[spell.difficultyStat] || 0, spell.difficultyValue);
+    const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
+    const row = document.createElement('button');
+    row.disabled = notBuilt;
+    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:14px;
+      width:100%;padding:9px 14px;border-radius:5px;text-align:left;font-family:Georgia,serif;
+      border:1px solid ${notBuilt ? 'var(--border)' : 'var(--gold)'};
+      background:${notBuilt ? 'var(--bg3)' : 'rgba(201,168,76,0.10)'};
+      color:${notBuilt ? 'var(--text-dim)' : 'var(--text)'};
+      cursor:${notBuilt ? 'not-allowed' : 'pointer'};opacity:${notBuilt ? '0.5' : '1'};`;
+    row.title = notBuilt ? `${spell.targetType}-target spells aren't built yet`
+                          : `${spell.range} · ${spell.castingTime === 0 ? 'Instant' : spell.castingTime + ' rd cast'} · ${spell.difficultyStat} ${spell.difficultyValue}`;
+    row.innerHTML = `<span>${_paEsc(spell.name)} <span style="font-size:0.68rem;color:var(--text-dim);">(${spell.magicClass} · ${spell.targetType})</span></span>
+      <span style="font-size:0.72rem;white-space:nowrap;">${successPct}% · ${costLabel}</span>`;
+    row.onclick = async () => {
+      if (notBuilt) return;
+      overlay.remove();
+      await atCastSpell(combatantId, spell.name);
+      if (typeof _dlgRender === 'function') {
+        const body = document.getElementById('at-dialog-body');
+        if (body) _dlgRender(body);
+      }
+    };
+    card.appendChild(row);
+  });
+
+  const cancel = document.createElement('button');
+  cancel.textContent = 'Cancel';
+  cancel.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
+    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+  cancel.onclick = () => overlay.remove();
+  card.appendChild(cancel);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
 // Begin casting a spell. Instant spells (castingTime 0) skip straight to
 // Complete. Otherwise occupies the caster's full-body slot as a windup for
 // the spell's casting time (already whole rounds, unlike other actions' 3-
@@ -6857,6 +6938,10 @@ async function _applySpellEffectToTarget(spell, targetRef) {
   }
   if (wasUnconscious && newDamage.toughness < tMax) await setCondition(ent.tokenId, 'unconscious', false);
   if (wasDead && newDamage.blood < bMax) await setCondition(ent.tokenId, 'dead', false);
+  if (spell.setsCondition) {
+    const condDef = CONDITION_DEFS.find(d => d.key === spell.setsCondition || d.label.toLowerCase() === spell.setsCondition.toLowerCase());
+    if (condDef) await setCondition(ent.tokenId, condDef.key, true);
+  }
   if (spell.buffAttr && spell.buffAmount) {
     const attrDef = ATTRIBUTES.find(a => a.label === spell.buffAttr || a.key === spell.buffAttr);
     if (attrDef) {
@@ -7418,6 +7503,14 @@ async function atNext() {
       for (const s of Object.keys(c.slots)) {
         const sl = c.slots[s];
         if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound) {
+          // A finished spell windup is NOT auto-cleared like every other
+          // timed action — unlike Reload (which just reverts to normal once
+          // expired, nothing further to do), a finished cast needs the
+          // player to actually click Complete to trigger the roll/cost/
+          // target. Auto-clearing here would silently discard the cast with
+          // no roll, no cost, and no visible outcome the moment its rounds
+          // ran out — which is exactly what was happening.
+          if (sl.label && sl.label.startsWith('Casting: ')) continue;
           if (token && _defCondFromLabel(sl.label)) _clearDefConds(token);
           c.slots[s] = null;
         }
@@ -9598,7 +9691,12 @@ function attackTokenClick(tokenId) {
   }
 
   // ── Hit threshold ─────────────────────────────────────────────────────────
-  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj : null;
+  // Obscured (Misted Form, darkness, foliage, etc.) halves the attacker's
+  // effective hit chance against this specific target — applied here, before
+  // the called-shot part-size multiplier, so it holds regardless of which
+  // body part gets targeted.
+  const targetObscured = getConditions(target.id).has('obscured');
+  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
 
   // ── Log action to tracker ─────────────────────────────────────────────────
@@ -11430,6 +11528,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260805a"></script>
+<script src="panels.js?v=20260805b"></script>
 </body>
 </html>

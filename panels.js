@@ -14,6 +14,7 @@
 // sessionCreatureCache, mapTokens, resolveAvatarUrl, backToMyCharacter,
 // _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
 // SPELLS, hasMagicClass, _spellSuccessPct, atCastSpell, atCompleteCast,
+// _openSpellPickerModal,
 // _slotRemaining, _slotCountdownLabel.
 
 function _paEsc(s) {
@@ -776,41 +777,38 @@ function _dlgRender(body) {
   }).join('');
 
   // ── Spells (characters OR creatures with a magic-class skill) ───────────────
+  // A single "Cast a Spell" chip opens a picker modal listing every spell the
+  // caster knows with a live success%/cost preview — showing each one as its
+  // own inline chip stopped scaling past a couple of known spells. While a
+  // cast is mid-windup, that spell's own lit/complete chip takes over instead.
   let arcaneHtml = '';
   if (ent && typeof SPELLS !== 'undefined' && typeof hasMagicClass === 'function') {
     const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
     if (knownClasses.length) {
-      const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
-      const spellChips = known.map(spell => {
-        const castLabel = `Casting: ${spell.name}`;
-        const cur = c.slots.full;
-        if (cur && cur.label === castLabel) {
-          const remaining = typeof _slotRemaining === 'function' ? _slotRemaining(cur) : 0;
-          if (remaining > 0) {
-            return _dlgChip({
-              label: `🔮 ${spell.name}`, sub: _slotCountdownLabel(cur), lit: true,
+      const cur = c.slots.full;
+      const inWindup = cur && typeof cur.label === 'string' && cur.label.startsWith('Casting: ');
+      let spellChip;
+      if (inWindup) {
+        const spellName = cur.label.slice('Casting: '.length);
+        const remaining = typeof _slotRemaining === 'function' ? _slotRemaining(cur) : 0;
+        spellChip = remaining > 0
+          ? _dlgChip({
+              label: `🔮 ${spellName}`, sub: _slotCountdownLabel(cur), lit: true,
               title: 'Forming the pattern — click to cancel',
               data: { dact: 'off', slot: 'full' },
+            })
+          : _dlgChip({
+              label: `✨ Complete: ${spellName}`, sub: 'ready',
+              title: 'The pattern is ready — cast it now',
+              data: { dact: 'completecast', spellName },
             });
-          }
-          return _dlgChip({
-            label: `✨ Complete: ${spell.name}`, sub: 'ready',
-            title: 'The pattern is ready — cast it now',
-            data: { dact: 'completecast', spellName: spell.name },
-          });
-        }
-        const successPct = _spellSuccessPct(attrs[spell.difficultyStat] || 0, spell.difficultyValue);
-        const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
-        const notBuilt = spell.targetType === 'Area' || spell.targetType === 'Item';
-        return _dlgChip({
-          label: `🔮 ${spell.name}`, sub: `${successPct}% · ${costLabel}`,
-          disabled: notBuilt,
-          title: notBuilt ? `${spell.targetType}-target spells aren't built yet`
-                           : `${spell.range} · ${spell.castingTime === 0 ? 'Instant' : spell.castingTime + ' rd cast'} · ${spell.difficultyStat} ${spell.difficultyValue}`,
-          data: { dact: 'castspell', spellName: spell.name },
+      } else {
+        spellChip = _dlgChip({
+          label: '🔮 Cast a Spell', title: 'Choose from spells you know',
+          data: { dact: 'openspellpicker' },
         });
-      }).join('');
-      arcaneHtml = _dlgSection('✨ Spells', spellChips, fullActive);
+      }
+      arcaneHtml = _dlgSection('✨ Spells', spellChip, fullActive);
     }
   }
 
@@ -992,6 +990,9 @@ async function _dlgAct(d, id, body) {
     case 'castspell':
       await atCastSpell(id, d.spellname);
       _dlgRender(body);
+      break;
+    case 'openspellpicker':
+      _openSpellPickerModal(id); // opens on top of the still-open dialog; re-renders on pick
       break;
     case 'completecast':
       await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
