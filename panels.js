@@ -14,7 +14,7 @@
 // sessionCreatureCache, mapTokens, resolveAvatarUrl, backToMyCharacter,
 // _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
 // SPELLS, hasMagicClass, _spellSuccessPct, atCastSpell, atCompleteCast,
-// _openSpellPickerModal,
+// _openSpellPickerModal, _maintainedSpellInfo, atStopMaintaining,
 // _slotRemaining, _slotCountdownLabel.
 
 function _paEsc(s) {
@@ -42,8 +42,8 @@ function _paSecHealth(ent, canEdit) {
   if (ent.type !== 'char' && !isGM()) return '';
   const entityType = ent.type === 'char' ? 'character' : 'creature';
   const html = canEdit
-    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id)
-    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage);
+    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id, ent.attrs.Quintessence)
+    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, null, null, ent.attrs.Quintessence);
   return _paSection('Health', html);
 }
 
@@ -785,10 +785,19 @@ function _dlgRender(body) {
   if (ent && typeof SPELLS !== 'undefined' && typeof hasMagicClass === 'function') {
     const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
     if (knownClasses.length) {
+      const maintaining = typeof _maintainedSpellInfo === 'function' ? _maintainedSpellInfo(combatantId) : null;
       const cur = c.slots.full;
       const inWindup = cur && typeof cur.label === 'string' && cur.label.startsWith('Casting: ');
       let spellChip;
-      if (inWindup) {
+      if (maintaining) {
+        // Lasts until stopped or the caster goes unconscious — persists
+        // across turns on its own, no re-casting needed each round.
+        spellChip = _dlgChip({
+          label: `🔮 ${maintaining.spell.name}`, sub: `active · ${maintaining.spell.cost}q/rd`, lit: true,
+          title: 'Click to stop maintaining this spell',
+          data: { dact: 'stopmaintain' },
+        });
+      } else if (inWindup) {
         const spellName = cur.label.slice('Casting: '.length);
         const remaining = typeof _slotRemaining === 'function' ? _slotRemaining(cur) : 0;
         spellChip = remaining > 0
@@ -996,6 +1005,10 @@ async function _dlgAct(d, id, body) {
       break;
     case 'openspellpicker':
       _openSpellPickerModal(id); // opens on top of the still-open dialog; re-renders on pick
+      break;
+    case 'stopmaintain':
+      await atStopMaintaining(id);
+      _dlgRender(body);
       break;
     case 'completecast':
       await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
