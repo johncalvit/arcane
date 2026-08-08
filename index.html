@@ -1501,6 +1501,7 @@
           <div class="field"><label>Restore Blood</label><input type="text" id="spf-blood" placeholder="0"></div>
           <div class="field"><label>Clears (conditions)</label><input type="text" id="spf-clears" placeholder="e.g. bleeding, stunned"></div>
           <div class="field"><label>Sets Condition</label><input type="text" id="spf-setscondition" placeholder="e.g. obscured"></div>
+          <div class="field"><label>Secondary Chance % (Attack, on hit)</label><input type="text" id="spf-secondarychance" placeholder="e.g. 60 — rolled like Bleeding; blank/100 = guaranteed"></div>
           <div class="field"><label>Buff Attribute</label><input type="text" id="spf-buffattr" placeholder="e.g. Night Vision"></div>
           <div class="field"><label>Buff Amount</label><input type="text" id="spf-buffamount" placeholder="0"></div>
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="spf-buffminutes" placeholder="e.g. 10-100"></div>
@@ -3417,7 +3418,7 @@ const DEFAULT_SPELLS = [
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
     damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. All creatures take a burn damage roll with maximum equal to the caster's Logic. Response options: Block (if shield equipped), Evade, Go Prone." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
@@ -3429,32 +3430,32 @@ const DEFAULT_SPELLS = [
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
-    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
   { name:"Storm Arc", range:"30 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling arc of lightning leaps from the caster's hand toward the target. Ranged attack, resolves like a bolt — cast successfully, then roll to hit; deals up to d10 Shock damage." },
   { name:"Acidic Spew", range:"20 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:12, magicClass:"Demonic", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"The caster spews a jet of corrosive bile at the target, eating through flesh and metal alike. Ranged attack; deals up to d8 Corrode damage." },
   { name:"Frost Fang", range:"15 feet", castingTime:1, cost:2, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Nature", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, Slows the target." },
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, has a 60% chance to Slow the target." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
 let editingSpellIndex = null;
@@ -3884,6 +3885,7 @@ function openSpellForm(index) {
   document.getElementById('spf-blood').value           = row ? row.restoreBlood : '';
   document.getElementById('spf-clears').value          = row ? (row.clears || '') : '';
   document.getElementById('spf-setscondition').value   = row ? (row.setsCondition || '') : '';
+  document.getElementById('spf-secondarychance').value = row && row.secondaryChance ? row.secondaryChance : '';
   document.getElementById('spf-buffattr').value        = row ? (row.buffAttr || '') : '';
   document.getElementById('spf-buffamount').value      = row ? row.buffAmount : '';
   document.getElementById('spf-buffminutes').value     = row ? (row.buffMinutes || '') : '';
@@ -3921,6 +3923,7 @@ function saveSpell() {
     restoreBlood: parseFloat(document.getElementById('spf-blood').value) || 0,
     clears: document.getElementById('spf-clears').value.trim(),
     setsCondition: document.getElementById('spf-setscondition').value.trim(),
+    secondaryChance: parseFloat(document.getElementById('spf-secondarychance').value) || 0,
     buffAttr: document.getElementById('spf-buffattr').value.trim(),
     buffAmount: parseFloat(document.getElementById('spf-buffamount').value) || 0,
     buffMinutes: document.getElementById('spf-buffminutes').value.trim(),
@@ -4535,7 +4538,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260807a';
+const VERSION = 'v0.1.20260808a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6642,6 +6645,21 @@ const HIT_EFFECTS = [
       await setCondition(ctx.targetTokenId, 'slowed', true);
     },
   },
+  {
+    // A spell's own secondary condition (e.g. Frost Fang's Slow) rolls a
+    // flat spell-defined chance instead of a location-based one — magic
+    // doesn't care which body part it hits. Reuses whatever onTick/badge
+    // behavior the target condition already has elsewhere in this registry:
+    // a spell that sets 'bleeding' this way drains blood every round exactly
+    // like a weapon wound would, with no extra code needed here or in future
+    // spells — just set setsCondition + secondaryChance on the spell.
+    key: 'spell-secondary',
+    gate: ctx => !!(ctx.spell?.setsCondition && ctx.finalDamage > 0 && !ctx.conds.has(ctx.spell.setsCondition)),
+    chance: ctx => Math.max(0, Math.min(1, (ctx.spell.secondaryChance || 100) / 100)),
+    labelFor: ctx => CONDITION_DEFS.find(d => d.key === ctx.spell.setsCondition)?.label || ctx.spell.setsCondition,
+    iconFor:  ctx => CONDITION_DEFS.find(d => d.key === ctx.spell.setsCondition)?.icon || '✨',
+    onHit: async ctx => { await _applySpellCondition(ctx.targetTokenId, ctx.spell.setsCondition); },
+  },
 ];
 
 // Opposed Power + Coordination threshold for a grapple contest (d100 roll-under).
@@ -6956,10 +6974,26 @@ function _spellIsRanged(spell) {
   return !/touch/i.test(spell?.range || '');
 }
 
+// Set a single condition by key/label, same as a weapon-inflicted one —
+// shared by guaranteed spell effects (_applySpellEffectToTarget) and the
+// chance-rolled 'spell-secondary' HIT_EFFECTS entry below.
+async function _applySpellCondition(tokenId, conditionKey) {
+  const condDef = CONDITION_DEFS.find(d => d.key === conditionKey || d.label.toLowerCase() === conditionKey.toLowerCase());
+  if (!condDef) return;
+  await setCondition(tokenId, condDef.key, true);
+  if (condDef.key === 'bleeding') await setCondition(tokenId, 'bleedsince:' + _atSharedRound(), true);
+  if (condDef.key === 'stunned')  await setCondition(tokenId, 'stunsince:' + _atSharedRound(), true);
+  // 'slowed' only actually reduces speed via a legdmg: marker
+  // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
+  // tied to a real struck leg, so add a synthetic one. Harmless if it
+  // collides with a real leg-hit marker; still just counts as one.
+  if (condDef.key === 'slowed') await setCondition(tokenId, 'legdmg:frostbite', true);
+}
+
 // Apply a spell's fixed effect fields to a target — same shape/semantics as
 // applyConsumable's restore/clears/buff block (kept separate rather than
 // shared, since a spell has no item to expend from inventory afterward).
-async function _applySpellEffectToTarget(spell, targetRef) {
+async function _applySpellEffectToTarget(spell, targetRef, opts = {}) {
   if (targetRef.startsWith('char::')) await ensureEntityLoaded(targetRef);
   const ent = getEntity(targetRef);
   if (!ent) return;
@@ -6984,17 +7018,7 @@ async function _applySpellEffectToTarget(spell, targetRef) {
   }
   if (wasUnconscious && newDamage.toughness < tMax) await setCondition(ent.tokenId, 'unconscious', false);
   if (wasDead && newDamage.blood < bMax) await setCondition(ent.tokenId, 'dead', false);
-  if (spell.setsCondition) {
-    const condDef = CONDITION_DEFS.find(d => d.key === spell.setsCondition || d.label.toLowerCase() === spell.setsCondition.toLowerCase());
-    if (condDef) {
-      await setCondition(ent.tokenId, condDef.key, true);
-      // 'slowed' only actually reduces speed via a legdmg: marker
-      // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
-      // tied to a real struck leg, so add a synthetic one. Harmless if it
-      // collides with a real leg-hit marker; still just counts as one.
-      if (condDef.key === 'slowed') await setCondition(ent.tokenId, 'legdmg:frostbite', true);
-    }
-  }
+  if (spell.setsCondition && !opts.skipCondition) await _applySpellCondition(ent.tokenId, spell.setsCondition);
   if (spell.buffAttr && spell.buffAmount) {
     const attrDef = ATTRIBUTES.find(a => a.label === spell.buffAttr || a.key === spell.buffAttr);
     if (attrDef) {
@@ -7409,10 +7433,15 @@ async function _runHitEffects(ctx, dmgEl) {
     if (eff.gate && !eff.gate(ctx)) continue;
     let applied, line;
     if (eff.chance) {
+      // labelFor/iconFor let one registry entry cover many outcomes (e.g.
+      // 'spell-secondary' rolls whatever condition the spell itself names)
+      // instead of a fixed label/icon per entry.
+      const label = eff.labelFor ? eff.labelFor(ctx) : eff.label;
+      const icon  = eff.iconFor  ? eff.iconFor(ctx)  : eff.icon;
       const pct  = Math.round(eff.chance(ctx) * 100);
       const roll = Math.floor(Math.random() * 100) + 1; // 1..100
       applied = roll <= pct;
-      line = `${eff.label} ${pct}% · rolled ${roll} → ${applied ? (eff.icon || '•') + ' ' + eff.label : 'no ' + eff.label.toLowerCase()}`;
+      line = `${label} ${pct}% · rolled ${roll} → ${applied ? (icon || '•') + ' ' + label : 'no ' + label.toLowerCase()}`;
     } else if (eff.save) {
       // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
       applied = false; line = '';
@@ -7533,11 +7562,14 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
         // only fallback — set damageType explicitly so location-effect
         // chances (stun/slow) read the real category.
         damageType: ctx.damageCategory || undefined,
+        // Lets the generic 'spell-secondary' HIT_EFFECTS entry (below) roll
+        // a spell's own secondary condition, e.g. Frost Fang's Slow.
+        spell: ctx.spell,
       }, dmgEl);
-      // A spell's own guaranteed on-hit effect (e.g. Frost Fang's Slow) —
-      // separate from the chance-based physical HIT_EFFECTS above, since
-      // it's part of the spell's definition, not a location-based roll.
-      if (ctx.spell && finalDamage > 0) await _applySpellEffectToTarget(ctx.spell, ref);
+      // A spell's restore/clears/buff fields still apply unconditionally on
+      // a hit; its secondary CONDITION (setsCondition) is now rolled above,
+      // inside _runHitEffects, same as bleeding — so skip it here.
+      if (ctx.spell && finalDamage > 0) await _applySpellEffectToTarget(ctx.spell, ref, { skipCondition: true });
       // Downed state — re-read in case an effect shifted Blood
       const downed = await _checkDownedState(targetTokenId, getEntity(ref));
       if (downed === 'dead' && dmgEl)
