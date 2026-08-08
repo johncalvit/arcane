@@ -1494,6 +1494,8 @@
               <option value="burn">Burn</option><option value="shock">Shock</option><option value="freeze">Freeze</option><option value="corrode">Corrode</option>
             </select>
           </div>
+          <div class="field"><label>Damage Max (Attack, fixed die)</label><input type="text" id="sf-damagemax" placeholder="e.g. 10 for d10 — overrides Damage Stat if set"></div>
+          <div class="field"><label>Hit Formula (Attack, ranged)</label><input type="text" id="sf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="sf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="sf-stamina" placeholder="0"></div>
           <div class="field"><label>Restore Blood</label><input type="text" id="sf-blood" placeholder="0"></div>
@@ -3414,27 +3416,45 @@ const DEFAULT_SPELLS = [
   { name:"Fire Rose", range:"15 feet", castingTime:2, cost:2, maintained:false,
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
-    damageStat:"Logic", damageCategory:"burn",
+    damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. All creatures take a burn damage roll with maximum equal to the caster's Logic. Response options: Block (if shield equipped), Evade, Go Prone." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
-    damageStat:"", damageCategory:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
-    damageStat:"", damageCategory:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
-    damageStat:"", damageCategory:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
     restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
+  { name:"Storm Arc", range:"30 feet", castingTime:1, cost:3, maintained:false,
+    difficultyStat:"Logic", difficultyValue:13, magicClass:"Arcane", targetType:"Individual",
+    aoeShape:"", aoeSize:"", spellType:"Attack",
+    damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A crackling arc of lightning leaps from the caster's hand toward the target. Ranged attack, resolves like a bolt — cast successfully, then roll to hit; deals up to d10 Shock damage." },
+  { name:"Acidic Spew", range:"20 feet", castingTime:1, cost:3, maintained:false,
+    difficultyStat:"Logic", difficultyValue:12, magicClass:"Demonic", targetType:"Individual",
+    aoeShape:"", aoeSize:"", spellType:"Attack",
+    damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"The caster spews a jet of corrosive bile at the target, eating through flesh and metal alike. Ranged attack; deals up to d8 Corrode damage." },
+  { name:"Frost Fang", range:"15 feet", castingTime:1, cost:2, maintained:false,
+    difficultyStat:"Intuition", difficultyValue:12, magicClass:"Nature", targetType:"Individual",
+    aoeShape:"", aoeSize:"", spellType:"Attack",
+    damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, Slows the target." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
 let editingSpellIndex = null;
@@ -3857,6 +3877,8 @@ function openSpellForm(index) {
   document.getElementById('sf-spelltype').value       = row ? row.spellType : 'Attack';
   document.getElementById('sf-damagestat').value      = row ? (row.damageStat || '') : '';
   document.getElementById('sf-damagecategory').value  = row ? (row.damageCategory || '') : '';
+  document.getElementById('sf-damagemax').value       = row && row.damageMax ? row.damageMax : '';
+  document.getElementById('sf-hitformula').value      = row ? (row.hitFormula || '') : '';
   document.getElementById('sf-toughness').value       = row ? row.restoreToughness : '';
   document.getElementById('sf-stamina').value         = row ? row.restoreStamina : '';
   document.getElementById('sf-blood').value           = row ? row.restoreBlood : '';
@@ -3892,6 +3914,8 @@ function saveSpell() {
     spellType: document.getElementById('sf-spelltype').value,
     damageStat: document.getElementById('sf-damagestat').value,
     damageCategory: document.getElementById('sf-damagecategory').value,
+    damageMax: parseFloat(document.getElementById('sf-damagemax').value) || 0,
+    hitFormula: document.getElementById('sf-hitformula').value.trim(),
     restoreToughness: parseFloat(document.getElementById('sf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('sf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('sf-blood').value) || 0,
@@ -4511,7 +4535,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260805e';
+const VERSION = 'v0.1.20260805f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6918,13 +6942,18 @@ async function atCompleteCast(casterCid, spellName) {
   }
   _dlgReopenId = casterCid;
   atCloseModal();
-  enterAttackMode(casterCid, spell.name, 'Cast', false, _parseSpellRangeFt(spell.range));
+  enterAttackMode(casterCid, spell.name, 'Cast', _spellIsRanged(spell), _parseSpellRangeFt(spell.range));
 }
 
 // "15 feet" → 15; "Touch" or anything unparseable → 5 (adjacent).
 function _parseSpellRangeFt(rangeStr) {
   const m = /(\d+(?:\.\d+)?)/.exec(rangeStr || '');
   return m ? parseFloat(m[1]) : 5;
+}
+// A real distance (not Touch) gets the same range-circle/distance-penalty
+// treatment as a ranged weapon.
+function _spellIsRanged(spell) {
+  return !/touch/i.test(spell?.range || '');
 }
 
 // Apply a spell's fixed effect fields to a target — same shape/semantics as
@@ -6957,7 +6986,14 @@ async function _applySpellEffectToTarget(spell, targetRef) {
   if (wasDead && newDamage.blood < bMax) await setCondition(ent.tokenId, 'dead', false);
   if (spell.setsCondition) {
     const condDef = CONDITION_DEFS.find(d => d.key === spell.setsCondition || d.label.toLowerCase() === spell.setsCondition.toLowerCase());
-    if (condDef) await setCondition(ent.tokenId, condDef.key, true);
+    if (condDef) {
+      await setCondition(ent.tokenId, condDef.key, true);
+      // 'slowed' only actually reduces speed via a legdmg: marker
+      // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
+      // tied to a real struck leg, so add a synthetic one. Harmless if it
+      // collides with a real leg-hit marker; still just counts as one.
+      if (condDef.key === 'slowed') await setCondition(ent.tokenId, 'legdmg:frostbite', true);
+    }
   }
   if (spell.buffAttr && spell.buffAmount) {
     const attrDef = ATTRIBUTES.find(a => a.label === spell.buffAttr || a.key === spell.buffAttr);
@@ -7068,18 +7104,95 @@ async function _resolveSpellCast(casterCid, spellName, targetRef) {
       const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
 
       if (success) {
-        await _applySpellEffectToTarget(spell, targetRef);
-        if (spell.maintained) await _startMaintaining(casterEnt, spell, targetRef);
-        const targetEnt = getEntity(targetRef);
-        const selfCast = targetRef === casterCid;
-        logCombat(`${casterEnt.name} casts ${spell.name}${selfCast ? '' : ' on ' + (targetEnt?.name || 'target')}${costNote}.`, 'good');
-        showToast(`${spell.name} cast successfully!${costNote}`, 'good');
+        // Attack-type spells with a Hit Formula resolve like a ranged
+        // weapon from here — the casting check only confirms the pattern
+        // held; it still has to actually connect with the target, through
+        // the same defense/called-shot/roller flow a weapon attack uses.
+        if (spell.spellType === 'Attack' && spell.hitFormula) {
+          showToast(`${spell.name} takes shape!${costNote}`, 'good');
+          const targetTok = _pathFindToken(targetRef);
+          if (targetTok) await _resolveSpellAttack(casterEnt, spell, targetTok);
+        } else {
+          await _applySpellEffectToTarget(spell, targetRef);
+          if (spell.maintained) await _startMaintaining(casterEnt, spell, targetRef);
+          const targetEnt = getEntity(targetRef);
+          const selfCast = targetRef === casterCid;
+          logCombat(`${casterEnt.name} casts ${spell.name}${selfCast ? '' : ' on ' + (targetEnt?.name || 'target')}${costNote}.`, 'good');
+          showToast(`${spell.name} cast successfully!${costNote}`, 'good');
+        }
       } else {
         logCombat(`${casterEnt.name} fails to cast ${spell.name}${costNote}.`, 'roll');
         showToast(`${spell.name} fizzles.${costNote}`, 'warn');
       }
       refreshUI();
     },
+  });
+}
+
+// Attack-type spell with a Hit Formula, once casting succeeds: reuses the
+// exact target-size/range-penalty/Obscured/defense-option/called-shot/roller
+// machinery a ranged weapon attack gets (_buildDefenseOptions,
+// _openCalledShotModal), but damage is capped by the spell's own damageMax
+// (or damageStat) and category — NOT the caster's Power, since magic damage
+// shouldn't scale with physical strength. See _applyDamageAfterHit's
+// ctx.damageCategory/ctx.spell handling for how that's threaded through.
+async function _resolveSpellAttack(casterEnt, spell, targetToken) {
+  const casterToken = _pathFindToken(casterEnt.ref);
+  const hitValue = calcHitValue(spell.hitFormula, casterEnt.attrs);
+
+  const rangeFt = _parseSpellRangeFt(spell.range);
+  let rangePenalty = 0, distanceFt = 0, rangeIncrements = 0;
+  if (casterToken && mapScalePPF > 0 && rangeFt > 0) {
+    const aX = (casterToken.x_pct / 100) * mapImgW, aY = (casterToken.y_pct / 100) * mapImgH;
+    const tX = (targetToken.x_pct / 100) * mapImgW, tY = (targetToken.y_pct / 100) * mapImgH;
+    distanceFt = Math.hypot(tX - aX, tY - aY) / mapScalePPF;
+    rangeIncrements = Math.round(distanceFt / rangeFt);
+    rangePenalty = rangeIncrements;
+  }
+  const adjustedHit = hitValue != null ? Math.max(0, hitValue - rangePenalty) : null;
+
+  let targetAdj = 5;
+  if (targetToken.entity_type === 'character' && playCharCache[targetToken.entity_id]) {
+    targetAdj = calcTargetAdjFromRow(playCharCache[targetToken.entity_id]);
+  } else if (targetToken.entity_type === 'creature') {
+    const race = RACE_DATA[targetToken.species] || {};
+    targetAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
+  }
+  const targetObscured = getConditions(targetToken.id).has('obscured');
+  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) : null;
+  const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
+
+  const { defenseOptions, targetBodyType } = _buildDefenseOptions(targetToken, true, rawThreshold);
+
+  const atkPower = casterEnt.attrs.Power || 1;
+  const dmgCap   = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 10);
+  // _applyDamageAfterHit's roll is atkPower × maxPowerMod — pick maxPowerMod
+  // so that product cancels back down to exactly dmgCap regardless of the
+  // caster's actual Power, reusing that function unmodified for the roll.
+  const maxPowerMod = dmgCap / Math.max(1, atkPower);
+
+  const damageContext = {
+    targetEntityType: targetToken.entity_type,
+    targetEntityId:   targetToken.entity_id,
+    targetTokenId:    targetToken.id,
+    atkPower,
+    weaponRow:   { damageMax: dmgCap, maxPowerMod },
+    actionLabel: spell.name,
+    attackerCombatantId: casterEnt.ref,
+    damageCategory: spell.damageCategory || undefined,
+    spell,
+  };
+
+  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
+  const subtitle = hitValue != null
+    ? (rangeIncrements > 0
+        ? `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`
+        : `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`)
+    : '';
+
+  _openCalledShotModal({
+    bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
+    actionLabel: spell.name, defenseOptions, strayContext: null, damageContext,
   });
 }
 
@@ -7347,7 +7460,10 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   }
   const armorSlot = PART_TO_ARMOR_SLOT[hitPart] || 'torso';
   const armorType = targetArmor[armorSlot] || 'None';
-  const category  = getAttackCategory(actionLabel);
+  // Spell attacks (ctx.damageCategory set) supply their own elemental
+  // category directly instead of it being parsed from the action label —
+  // physical weapons only ever produce slash/pierce/crush that way.
+  const category  = ctx.damageCategory || getAttackCategory(actionLabel);
   // Gap: a precise enough TO-HIT roll (not the damage roll) finds a weak
   // point and bypasses this armor's DR entirely for the hit, regardless of
   // how good the armor otherwise is.
@@ -7412,7 +7528,16 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
         targetTokenId, targetEntityType, targetEntityId,
         actionLabel, attackerCombatantId: ctx.attackerCombatantId,
         conds: getConditions(targetTokenId),
+        // Elemental categories (shock/freeze/corrode/burn) would otherwise
+        // collapse to 'smashbash' inside _damageType's slash/stab/smashbash-
+        // only fallback — set damageType explicitly so location-effect
+        // chances (stun/slow) read the real category.
+        damageType: ctx.damageCategory || undefined,
       }, dmgEl);
+      // A spell's own guaranteed on-hit effect (e.g. Frost Fang's Slow) —
+      // separate from the chance-based physical HIT_EFFECTS above, since
+      // it's part of the spell's definition, not a location-based roll.
+      if (ctx.spell && finalDamage > 0) await _applySpellEffectToTarget(ctx.spell, ref);
       // Downed state — re-read in case an effect shifted Blood
       const downed = await _checkDownedState(targetTokenId, getEntity(ref));
       if (downed === 'dead' && dmgEl)
@@ -9856,7 +9981,31 @@ function attackTokenClick(tokenId) {
 
   exitAttackMode();
 
-  // ── Defender's available Block / Parry actions ────────────────────────────
+  const { defenseOptions, targetBodyType } = _buildDefenseOptions(target, wasRanged, rawThreshold);
+
+  // ── Open called-shot picker, then hit roller ─────────────────────────────
+  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
+  let subtitle = '';
+  if (hitValue != null) {
+    if (attackIsRanged && rangeIncrements > 0) {
+      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
+    } else {
+      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
+    }
+  }
+  _openCalledShotModal({
+    bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
+    actionLabel, defenseOptions, strayContext, damageContext,
+  });
+  return true;
+}
+
+// Extracted from attackTokenClick so ranged spell attacks (_resolveSpellAttack)
+// can reuse the exact same Block/Parry/Evade/Go-Prone logic a weapon attack
+// gets, instead of re-deriving it. `target` is a map token; `wasRanged` and
+// `rawThreshold` (pre-defense hit threshold, for the Go-Prone half-size
+// option) come from whatever's targeting this defender right now.
+function _buildDefenseOptions(target, wasRanged, rawThreshold) {
   let targetBodyType = 'Humanoid';
   const defenseOptions = [];
   if (target.entity_type === 'character' && playCharCache[target.entity_id]) {
@@ -9997,27 +10146,7 @@ function attackTokenClick(tokenId) {
     }
   }
 
-  // ── Open called-shot picker, then hit roller ─────────────────────────────
-  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
-  let subtitle = '';
-  if (hitValue != null) {
-    if (attackIsRanged && rangeIncrements > 0) {
-      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
-    } else {
-      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
-    }
-  }
-  _openCalledShotModal({
-    bodyType: targetBodyType,
-    baseThreshold: threshold,
-    baseSubtitle: subtitle,
-    actionLabel,
-    defenseOptions,
-    strayContext,
-    damageContext,
-  });
-
-  return true;
+  return { defenseOptions, targetBodyType };
 }
 
 // Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
