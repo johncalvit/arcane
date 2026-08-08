@@ -1457,55 +1457,55 @@
       <div id="spell-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
         <h3 id="spell-form-title" style="margin-top:0;">New Spell</h3>
         <div class="grid-3">
-          <div class="field"><label>Name</label><input type="text" id="sf-name" placeholder="e.g. Fire Rose"></div>
-          <div class="field"><label>Range</label><input type="text" id="sf-range" placeholder="e.g. 15 feet, Touch"></div>
-          <div class="field"><label>Casting Time (rounds)</label><input type="text" id="sf-castingtime" placeholder="0 = Instant"></div>
-          <div class="field"><label>Cost</label><input type="text" id="sf-cost" placeholder="0"></div>
+          <div class="field"><label>Name</label><input type="text" id="spf-name" placeholder="e.g. Fire Rose"></div>
+          <div class="field"><label>Range</label><input type="text" id="spf-range" placeholder="e.g. 15 feet, Touch"></div>
+          <div class="field"><label>Casting Time (rounds)</label><input type="text" id="spf-castingtime" placeholder="0 = Instant"></div>
+          <div class="field"><label>Cost</label><input type="text" id="spf-cost" placeholder="0"></div>
           <div class="field"><label>Maintained (cost is per round)</label>
-            <select id="sf-maintained"><option value="0">No — one-time cost</option><option value="1">Yes — per round while sustained</option></select>
+            <select id="spf-maintained"><option value="0">No — one-time cost</option><option value="1">Yes — per round while sustained</option></select>
           </div>
           <div class="field"><label>Difficulty Stat</label>
-            <select id="sf-difficultystat"><option>Logic</option><option>Intuition</option><option>Knowledge</option></select>
+            <select id="spf-difficultystat"><option>Logic</option><option>Intuition</option><option>Knowledge</option></select>
           </div>
-          <div class="field"><label>Difficulty Value</label><input type="text" id="sf-difficultyvalue" placeholder="14"></div>
+          <div class="field"><label>Difficulty Value</label><input type="text" id="spf-difficultyvalue" placeholder="14"></div>
           <div class="field"><label>Magic Class</label>
-            <select id="sf-magicclass"><option>Arcane</option><option>Deific</option><option>Demonic</option><option>Nature</option></select>
+            <select id="spf-magicclass"><option>Arcane</option><option>Deific</option><option>Demonic</option><option>Nature</option></select>
           </div>
           <div class="field"><label>Target Type</label>
-            <select id="sf-targettype"><option>Self</option><option>Individual</option><option>Item</option><option>Area</option></select>
+            <select id="spf-targettype"><option>Self</option><option>Individual</option><option>Item</option><option>Area</option></select>
           </div>
           <div class="field"><label>Area Shape</label>
-            <select id="sf-aoeshape"><option value="">—</option><option>Circle</option><option>Sector</option><option>Rectangle</option></select>
+            <select id="spf-aoeshape"><option value="">—</option><option>Circle</option><option>Sector</option><option>Rectangle</option></select>
           </div>
-          <div class="field"><label>Area Size</label><input type="text" id="sf-aoesize" placeholder="e.g. 45°, 15 ft radius"></div>
+          <div class="field"><label>Area Size</label><input type="text" id="spf-aoesize" placeholder="e.g. 45°, 15 ft radius"></div>
           <div class="field"><label>Spell Type</label>
-            <select id="sf-spelltype"><option value="Attack">Attack</option><option value="Buff/Debuff">Buff/Debuff</option><option value="Control">Control</option><option value="Creation">Creation</option><option value="Summon/Transport">Summon/Transport</option></select>
+            <select id="spf-spelltype"><option value="Attack">Attack</option><option value="Buff/Debuff">Buff/Debuff</option><option value="Control">Control</option><option value="Creation">Creation</option><option value="Summon/Transport">Summon/Transport</option></select>
           </div>
           <div class="field"><label>Damage Stat (Attack)</label>
-            <select id="sf-damagestat"><option value="">—</option>
+            <select id="spf-damagestat"><option value="">—</option>
               <option>Power</option><option>Speed</option><option>Toughness</option><option>Stamina</option>
               <option>Manual Dexterity</option><option>Physical Coordination</option>
               <option>Knowledge</option><option>Social Skills</option><option>Logic</option><option>Intuition</option><option>Quintessence</option>
             </select>
           </div>
           <div class="field"><label>Damage Category (Attack)</label>
-            <select id="sf-damagecategory"><option value="">—</option>
+            <select id="spf-damagecategory"><option value="">—</option>
               <option value="slash">Slash</option><option value="pierce">Pierce</option><option value="crush">Crush</option>
               <option value="burn">Burn</option><option value="shock">Shock</option><option value="freeze">Freeze</option><option value="corrode">Corrode</option>
             </select>
           </div>
-          <div class="field"><label>Damage Max (Attack, fixed die)</label><input type="text" id="sf-damagemax" placeholder="e.g. 10 for d10 — overrides Damage Stat if set"></div>
-          <div class="field"><label>Hit Formula (Attack, ranged)</label><input type="text" id="sf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
-          <div class="field"><label>Restore Toughness</label><input type="text" id="sf-toughness" placeholder="0"></div>
-          <div class="field"><label>Restore Stamina</label><input type="text" id="sf-stamina" placeholder="0"></div>
-          <div class="field"><label>Restore Blood</label><input type="text" id="sf-blood" placeholder="0"></div>
-          <div class="field"><label>Clears (conditions)</label><input type="text" id="sf-clears" placeholder="e.g. bleeding, stunned"></div>
-          <div class="field"><label>Sets Condition</label><input type="text" id="sf-setscondition" placeholder="e.g. obscured"></div>
-          <div class="field"><label>Buff Attribute</label><input type="text" id="sf-buffattr" placeholder="e.g. Night Vision"></div>
-          <div class="field"><label>Buff Amount</label><input type="text" id="sf-buffamount" placeholder="0"></div>
-          <div class="field"><label>Buff Duration (min)</label><input type="text" id="sf-buffminutes" placeholder="e.g. 10-100"></div>
+          <div class="field"><label>Damage Max (Attack, fixed die)</label><input type="text" id="spf-damagemax" placeholder="e.g. 10 for d10 — overrides Damage Stat if set"></div>
+          <div class="field"><label>Hit Formula (Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
+          <div class="field"><label>Restore Toughness</label><input type="text" id="spf-toughness" placeholder="0"></div>
+          <div class="field"><label>Restore Stamina</label><input type="text" id="spf-stamina" placeholder="0"></div>
+          <div class="field"><label>Restore Blood</label><input type="text" id="spf-blood" placeholder="0"></div>
+          <div class="field"><label>Clears (conditions)</label><input type="text" id="spf-clears" placeholder="e.g. bleeding, stunned"></div>
+          <div class="field"><label>Sets Condition</label><input type="text" id="spf-setscondition" placeholder="e.g. obscured"></div>
+          <div class="field"><label>Buff Attribute</label><input type="text" id="spf-buffattr" placeholder="e.g. Night Vision"></div>
+          <div class="field"><label>Buff Amount</label><input type="text" id="spf-buffamount" placeholder="0"></div>
+          <div class="field"><label>Buff Duration (min)</label><input type="text" id="spf-buffminutes" placeholder="e.g. 10-100"></div>
         </div>
-        <div class="field" style="margin-top:10px;"><label>Description</label><textarea id="sf-description" rows="3" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;"></textarea></div>
+        <div class="field" style="margin-top:10px;"><label>Description</label><textarea id="spf-description" rows="3" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;"></textarea></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveSpell()">Save Spell</button>
           <button class="btn danger" onclick="closeSpellForm()">Cancel</button>
@@ -3863,31 +3863,31 @@ function openSpellForm(index) {
   editingSpellIndex = index;
   const row = index !== null ? SPELLS[index] : null;
   document.getElementById('spell-form-title').textContent = row ? 'Edit Spell' : 'New Spell';
-  document.getElementById('sf-name').value            = row ? row.name : '';
-  document.getElementById('sf-range').value           = row ? row.range : '';
-  document.getElementById('sf-castingtime').value     = row ? row.castingTime : '';
-  document.getElementById('sf-cost').value            = row ? row.cost : '';
-  document.getElementById('sf-maintained').value      = row && row.maintained ? '1' : '0';
-  document.getElementById('sf-difficultystat').value  = row ? row.difficultyStat : 'Logic';
-  document.getElementById('sf-difficultyvalue').value = row ? row.difficultyValue : '';
-  document.getElementById('sf-magicclass').value      = row ? row.magicClass : 'Arcane';
-  document.getElementById('sf-targettype').value      = row ? row.targetType : 'Self';
-  document.getElementById('sf-aoeshape').value        = row ? (row.aoeShape || '') : '';
-  document.getElementById('sf-aoesize').value         = row ? (row.aoeSize || '') : '';
-  document.getElementById('sf-spelltype').value       = row ? row.spellType : 'Attack';
-  document.getElementById('sf-damagestat').value      = row ? (row.damageStat || '') : '';
-  document.getElementById('sf-damagecategory').value  = row ? (row.damageCategory || '') : '';
-  document.getElementById('sf-damagemax').value       = row && row.damageMax ? row.damageMax : '';
-  document.getElementById('sf-hitformula').value      = row ? (row.hitFormula || '') : '';
-  document.getElementById('sf-toughness').value       = row ? row.restoreToughness : '';
-  document.getElementById('sf-stamina').value         = row ? row.restoreStamina : '';
-  document.getElementById('sf-blood').value           = row ? row.restoreBlood : '';
-  document.getElementById('sf-clears').value          = row ? (row.clears || '') : '';
-  document.getElementById('sf-setscondition').value   = row ? (row.setsCondition || '') : '';
-  document.getElementById('sf-buffattr').value        = row ? (row.buffAttr || '') : '';
-  document.getElementById('sf-buffamount').value      = row ? row.buffAmount : '';
-  document.getElementById('sf-buffminutes').value     = row ? (row.buffMinutes || '') : '';
-  document.getElementById('sf-description').value     = row ? (row.description || '') : '';
+  document.getElementById('spf-name').value            = row ? row.name : '';
+  document.getElementById('spf-range').value           = row ? row.range : '';
+  document.getElementById('spf-castingtime').value     = row ? row.castingTime : '';
+  document.getElementById('spf-cost').value            = row ? row.cost : '';
+  document.getElementById('spf-maintained').value      = row && row.maintained ? '1' : '0';
+  document.getElementById('spf-difficultystat').value  = row ? row.difficultyStat : 'Logic';
+  document.getElementById('spf-difficultyvalue').value = row ? row.difficultyValue : '';
+  document.getElementById('spf-magicclass').value      = row ? row.magicClass : 'Arcane';
+  document.getElementById('spf-targettype').value      = row ? row.targetType : 'Self';
+  document.getElementById('spf-aoeshape').value        = row ? (row.aoeShape || '') : '';
+  document.getElementById('spf-aoesize').value         = row ? (row.aoeSize || '') : '';
+  document.getElementById('spf-spelltype').value       = row ? row.spellType : 'Attack';
+  document.getElementById('spf-damagestat').value      = row ? (row.damageStat || '') : '';
+  document.getElementById('spf-damagecategory').value  = row ? (row.damageCategory || '') : '';
+  document.getElementById('spf-damagemax').value       = row && row.damageMax ? row.damageMax : '';
+  document.getElementById('spf-hitformula').value      = row ? (row.hitFormula || '') : '';
+  document.getElementById('spf-toughness').value       = row ? row.restoreToughness : '';
+  document.getElementById('spf-stamina').value         = row ? row.restoreStamina : '';
+  document.getElementById('spf-blood').value           = row ? row.restoreBlood : '';
+  document.getElementById('spf-clears').value          = row ? (row.clears || '') : '';
+  document.getElementById('spf-setscondition').value   = row ? (row.setsCondition || '') : '';
+  document.getElementById('spf-buffattr').value        = row ? (row.buffAttr || '') : '';
+  document.getElementById('spf-buffamount').value      = row ? row.buffAmount : '';
+  document.getElementById('spf-buffminutes').value     = row ? (row.buffMinutes || '') : '';
+  document.getElementById('spf-description').value     = row ? (row.description || '') : '';
   document.getElementById('spell-form').style.display = 'block';
 }
 
@@ -3897,34 +3897,34 @@ function closeSpellForm() {
 }
 
 function saveSpell() {
-  const name = document.getElementById('sf-name').value.trim();
+  const name = document.getElementById('spf-name').value.trim();
   if (!name) { alert('Spell name is required.'); return; }
   const row = {
     name,
-    range: document.getElementById('sf-range').value.trim(),
-    castingTime: parseFloat(document.getElementById('sf-castingtime').value) || 0,
-    cost: parseFloat(document.getElementById('sf-cost').value) || 0,
-    maintained: document.getElementById('sf-maintained').value === '1',
-    difficultyStat: document.getElementById('sf-difficultystat').value,
-    difficultyValue: parseFloat(document.getElementById('sf-difficultyvalue').value) || 0,
-    magicClass: document.getElementById('sf-magicclass').value,
-    targetType: document.getElementById('sf-targettype').value,
-    aoeShape: document.getElementById('sf-aoeshape').value,
-    aoeSize: document.getElementById('sf-aoesize').value.trim(),
-    spellType: document.getElementById('sf-spelltype').value,
-    damageStat: document.getElementById('sf-damagestat').value,
-    damageCategory: document.getElementById('sf-damagecategory').value,
-    damageMax: parseFloat(document.getElementById('sf-damagemax').value) || 0,
-    hitFormula: document.getElementById('sf-hitformula').value.trim(),
-    restoreToughness: parseFloat(document.getElementById('sf-toughness').value) || 0,
-    restoreStamina: parseFloat(document.getElementById('sf-stamina').value) || 0,
-    restoreBlood: parseFloat(document.getElementById('sf-blood').value) || 0,
-    clears: document.getElementById('sf-clears').value.trim(),
-    setsCondition: document.getElementById('sf-setscondition').value.trim(),
-    buffAttr: document.getElementById('sf-buffattr').value.trim(),
-    buffAmount: parseFloat(document.getElementById('sf-buffamount').value) || 0,
-    buffMinutes: document.getElementById('sf-buffminutes').value.trim(),
-    description: document.getElementById('sf-description').value.trim(),
+    range: document.getElementById('spf-range').value.trim(),
+    castingTime: parseFloat(document.getElementById('spf-castingtime').value) || 0,
+    cost: parseFloat(document.getElementById('spf-cost').value) || 0,
+    maintained: document.getElementById('spf-maintained').value === '1',
+    difficultyStat: document.getElementById('spf-difficultystat').value,
+    difficultyValue: parseFloat(document.getElementById('spf-difficultyvalue').value) || 0,
+    magicClass: document.getElementById('spf-magicclass').value,
+    targetType: document.getElementById('spf-targettype').value,
+    aoeShape: document.getElementById('spf-aoeshape').value,
+    aoeSize: document.getElementById('spf-aoesize').value.trim(),
+    spellType: document.getElementById('spf-spelltype').value,
+    damageStat: document.getElementById('spf-damagestat').value,
+    damageCategory: document.getElementById('spf-damagecategory').value,
+    damageMax: parseFloat(document.getElementById('spf-damagemax').value) || 0,
+    hitFormula: document.getElementById('spf-hitformula').value.trim(),
+    restoreToughness: parseFloat(document.getElementById('spf-toughness').value) || 0,
+    restoreStamina: parseFloat(document.getElementById('spf-stamina').value) || 0,
+    restoreBlood: parseFloat(document.getElementById('spf-blood').value) || 0,
+    clears: document.getElementById('spf-clears').value.trim(),
+    setsCondition: document.getElementById('spf-setscondition').value.trim(),
+    buffAttr: document.getElementById('spf-buffattr').value.trim(),
+    buffAmount: parseFloat(document.getElementById('spf-buffamount').value) || 0,
+    buffMinutes: document.getElementById('spf-buffminutes').value.trim(),
+    description: document.getElementById('spf-description').value.trim(),
   };
   if (editingSpellIndex !== null) {
     SPELLS[editingSpellIndex] = row;
@@ -4535,7 +4535,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260805f';
+const VERSION = 'v0.1.20260807a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
