@@ -4559,7 +4559,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260810b';
+const VERSION = 'v0.1.20260810c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6613,12 +6613,18 @@ const HIT_EFFECTS = [
     deathMsg: 'bled out',
   },
   {
-    // Acid Shower's residual burn — a plain damage-over-time tick, no
-    // gate/chance/onHit of its own since the condition is only ever set
-    // directly (by the AOE save resolver), never rolled off a hit like
-    // Bleeding. Shake off via atResolveRecovery same as Stun (see
-    // _recoverTarget's 'corroding' entry).
+    // Acid Shower's residual burn — a plain damage-over-time tick, no onHit
+    // of its own since the condition is only ever set directly (by the AOE
+    // save resolver), never rolled off a hit like Bleeding. gate:()=>false
+    // keeps it OUT of _runHitEffects entirely — without it, an entry with no
+    // gate/chance/save falls into that loop's "always applies" branch and
+    // prints "Corroding" on every single hit, weapon or spell (found live:
+    // it showed up on a plain Slash attack). _tickHitEffects doesn't consult
+    // gate at all, so the actual per-round drain is unaffected. Shake off
+    // via atResolveRecovery same as Stun (see _recoverTarget's 'corroding'
+    // entry).
     key: 'corroding', label: 'Corroding', icon: '🧪',
+    gate: () => false,
     onTick: async ent => { await applyToughnessDamage(ent, 1); },
     deathMsg: 'corroded away',
   },
