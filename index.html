@@ -1496,7 +1496,8 @@
             </select>
           </div>
           <div class="field"><label>Damage Max (Attack, fixed die)</label><input type="text" id="spf-damagemax" placeholder="e.g. 10 for d10 — overrides Damage Stat if set"></div>
-          <div class="field"><label>Hit Formula (Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
+          <div class="field"><label>Hit Formula (Individual Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
+          <div class="field"><label>Save Formula (Area spells)</label><input type="text" id="spf-saveformula" placeholder="e.g. Power + Speed + Physical Coordination"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="spf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="spf-stamina" placeholder="0"></div>
           <div class="field"><label>Restore Blood</label><input type="text" id="spf-blood" placeholder="0"></div>
@@ -3413,50 +3414,65 @@ let editingConsumableIndex = null;
 // reinvented. damageStat/damageCategory are for Attack-type spells — max
 // damage is the caster's own stat (not a fixed weapon table value), and
 // category routes through the armor system the same way a weapon's category
-// does (see _armorProtectionKey).
+// does (see _armorProtectionKey). Area spells additionally use saveFormula —
+// each token caught in the area rolls under their OWN attrs plugged into
+// that formula (a save) rather than the caster rolling a hitFormula attack;
+// see _resolveSpellAoe.
 const DEFAULT_SPELLS = [
   { name:"Fire Rose", range:"15 feet", castingTime:2, cost:2, maintained:false,
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
-    damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"",
+    damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. All creatures take a burn damage roll with maximum equal to the caster's Logic. Response options: Block (if shield equipped), Evade, Go Prone." },
+    description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. Anyone caught who fails a Power+Speed+Coordination save takes a burn damage roll with maximum equal to the caster's Logic." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
-    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", buffAttr:"", buffAmount:0, buffMinutes:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
-    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase.)" },
+    description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase; Rectangle isn't a supported AOE shape yet either.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
-    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
     restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
   { name:"Storm Arc", range:"30 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
-    damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic",
+    damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic", saveFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling arc of lightning leaps from the caster's hand toward the target. Ranged attack, resolves like a bolt — cast successfully, then roll to hit; deals up to d10 Shock damage." },
   { name:"Acidic Spew", range:"20 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:12, magicClass:"Demonic", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
-    damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic",
+    damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic", saveFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"The caster spews a jet of corrosive bile at the target, eating through flesh and metal alike. Ranged attack; deals up to d8 Corrode damage." },
   { name:"Frost Fang", range:"15 feet", castingTime:1, cost:2, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Nature", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
-    damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic",
+    damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic", saveFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, has a 60% chance to Slow the target." },
+  { name:"Mire Pool", range:"50 feet", castingTime:1, cost:5, maintained:true,
+    difficultyStat:"Logic", difficultyValue:13, magicClass:"Nature", targetType:"Area",
+    aoeShape:"Circle", aoeSize:"20 ft diameter", spellType:"Control",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A pool of clinging mire wells up in a 20-foot circle. Anyone standing in it when it's cast who fails a Power+Speed+Coordination save is Slowed (shake off with a Power-based save, same as Stun). Only catches whoever's there at the moment of casting — it doesn't re-check anyone who wanders in later." },
+  { name:"Acid Shower", range:"100 feet", castingTime:1, cost:5, maintained:true,
+    difficultyStat:"Logic", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
+    aoeShape:"Circle", aoeSize:"10 ft diameter", spellType:"Attack",
+    damageStat:"", damageCategory:"corrode", damageMax:12, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"corroding", secondaryChance:50, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A burst of caustic droplets rains over a 10-foot circle. Anyone in it who fails a Power+Speed+Coordination save takes up to d12 Corrode damage, with a 50% chance the acid keeps burning (Corroding — 1 damage/round until shaken off). Only catches whoever's there at the moment of casting." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
 let editingSpellIndex = null;
@@ -3881,6 +3897,7 @@ function openSpellForm(index) {
   document.getElementById('spf-damagecategory').value  = row ? (row.damageCategory || '') : '';
   document.getElementById('spf-damagemax').value       = row && row.damageMax ? row.damageMax : '';
   document.getElementById('spf-hitformula').value      = row ? (row.hitFormula || '') : '';
+  document.getElementById('spf-saveformula').value     = row ? (row.saveFormula || '') : '';
   document.getElementById('spf-toughness').value       = row ? row.restoreToughness : '';
   document.getElementById('spf-stamina').value         = row ? row.restoreStamina : '';
   document.getElementById('spf-blood').value           = row ? row.restoreBlood : '';
@@ -3919,6 +3936,7 @@ function saveSpell() {
     damageCategory: document.getElementById('spf-damagecategory').value,
     damageMax: parseFloat(document.getElementById('spf-damagemax').value) || 0,
     hitFormula: document.getElementById('spf-hitformula').value.trim(),
+    saveFormula: document.getElementById('spf-saveformula').value.trim(),
     restoreToughness: parseFloat(document.getElementById('spf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('spf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('spf-blood').value) || 0,
@@ -4541,7 +4559,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260809b';
+const VERSION = 'v0.1.20260810a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5509,7 +5527,9 @@ const CONDITION_DEFS = [
   { key:'carrying',    label:'Carrying',    icon:'🐴', color:'#7fb069',
     desc:'Willingly carrying or being ridden by one or more others. They move with this token; their weight slows it.' },
   { key:'slowed',      label:'Slowed',      icon:'🦵', color:'#c99a40',
-    desc:'Injured leg(s). Max speed is reduced by the proportion of legs hurt. Clear to heal.' },
+    desc:'Reduced speed — from an injured leg (clear to heal) or a spell effect (shake off with a Power-based save, escalating each round like Stun).' },
+  { key:'corroding',   label:'Corroding',   icon:'🧪', color:'#7ec850',
+    desc:'Acid still eating at them — 1 Corrode damage each round. Shake off with a Toughness-based save, escalating each round like Stun.' },
   { key:'buffed',      label:'Buffed',      icon:'✨', color:'#c77dff',
     desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
   { key:'obscured',    label:'Obscured',    icon:'🌫', color:'#8899aa',
@@ -6590,6 +6610,17 @@ const HIT_EFFECTS = [
       await setCondition(ctx.targetTokenId, 'bleedsince:' + _atSharedRound(), true);
     },
     onTick: async ent => { await applyBloodLoss(ent, _BLEED_RATE); }, // drain stays automatic
+    deathMsg: 'bled out',
+  },
+  {
+    // Acid Shower's residual burn — a plain damage-over-time tick, no
+    // gate/chance/onHit of its own since the condition is only ever set
+    // directly (by the AOE save resolver), never rolled off a hit like
+    // Bleeding. Shake off via atResolveRecovery same as Stun (see
+    // _recoverTarget's 'corroding' entry).
+    key: 'corroding', label: 'Corroding', icon: '🧪',
+    onTick: async ent => { await applyToughnessDamage(ent, 1); },
+    deathMsg: 'corroded away',
   },
   {
     key: 'held', label: 'Grabbed',
@@ -6780,13 +6811,21 @@ function _recoverTarget(ent, tokenId, effectKey) {
   if (effectKey === 'unconscious') {
     return { pct: Math.max(1, Math.min(99, Math.round(ent?.attrs?.Toughness || 0))), rounds: 1 };
   }
-  const since = { stunned: 'stunsince:', bleeding: 'bleedsince:' }[effectKey];
-  if (!since) return { pct: 0, rounds: 1 };
-  const tough  = Math.max(1, Math.round(ent?.baseAttrs?.Toughness ?? ent?.attrs?.Toughness ?? 10));
-  const marker = [...getConditions(tokenId)].find(c => c.startsWith(since));
-  const start  = marker ? (parseInt(marker.slice(since.length), 10) || _atSharedRound()) : _atSharedRound();
-  const rounds = Math.max(1, _atSharedRound() - start + 1);
-  return { pct: tough * rounds, rounds };
+  // Slowed (spell-inflicted) and Corroding escalate the same way, just off a
+  // different base stat: Power for a save-off Slow, Toughness (same as Stun)
+  // for Corroding.
+  const cfg = {
+    stunned:   { since: 'stunsince:',    stat: 'Toughness' },
+    bleeding:  { since: 'bleedsince:',   stat: 'Toughness' },
+    slowed:    { since: 'slowsince:',    stat: 'Power' },
+    corroding: { since: 'corrodesince:', stat: 'Toughness' },
+  }[effectKey];
+  if (!cfg) return { pct: 0, rounds: 1 };
+  const statVal = Math.max(1, Math.round(ent?.baseAttrs?.[cfg.stat] ?? ent?.attrs?.[cfg.stat] ?? 10));
+  const marker  = [...getConditions(tokenId)].find(c => c.startsWith(cfg.since));
+  const start   = marker ? (parseInt(marker.slice(cfg.since.length), 10) || _atSharedRound()) : _atSharedRound();
+  const rounds  = Math.max(1, _atSharedRound() - start + 1);
+  return { pct: statVal * rounds, rounds };
 }
 
 // Manual recovery save through the shared roller — the acting player (or the
@@ -6817,8 +6856,10 @@ async function atResolveRecovery(combatantId, effectKey) {
   }
 
   const cfg = {
-    stunned:  { label: 'Shake Off Stun' },
-    bleeding: { label: 'Stanch Bleeding' },
+    stunned:   { label: 'Shake Off Stun' },
+    bleeding:  { label: 'Stanch Bleeding' },
+    slowed:    { label: 'Shake Off Slow' },
+    corroding: { label: 'Neutralize Acid' },
   }[effectKey];
   if (!cfg) return;
   openRoller({
@@ -6879,7 +6920,7 @@ function _openSpellPickerModal(combatantId) {
   }
 
   known.forEach(spell => {
-    const notBuilt = spell.targetType === 'Area' || spell.targetType === 'Item';
+    const notBuilt = spell.targetType === 'Item' || (spell.targetType === 'Area' && spell.aoeShape !== 'Circle' && spell.aoeShape !== 'Sector');
     const successPct = _spellSuccessPct(ent.attrs[spell.difficultyStat] || 0, spell.difficultyValue);
     const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
     const row = document.createElement('button');
@@ -6928,8 +6969,8 @@ async function atCastSpell(casterCid, spellName) {
   if (!spell) return;
   const ent = getEntity(casterCid);
   if (!ent) return;
-  if (spell.targetType === 'Area' || spell.targetType === 'Item') {
-    showToast(`${spell.targetType}-target spells aren't built yet.`, 'error');
+  if (spell.targetType === 'Item' || (spell.targetType === 'Area' && spell.aoeShape !== 'Circle' && spell.aoeShape !== 'Sector')) {
+    showToast(`${spell.name} isn't buildable yet.`, 'error');
     return;
   }
   if (_totalCastableResource(ent) < (spell.cost || 0)) {
@@ -6963,6 +7004,10 @@ async function atCompleteCast(casterCid, spellName) {
   }
   _dlgReopenId = casterCid;
   atCloseModal();
+  if (spell.targetType === 'Area') {
+    enterAoeCastMode(casterCid, spell);
+    return;
+  }
   enterAttackMode(casterCid, spell.name, 'Cast', _spellIsRanged(spell), _parseSpellRangeFt(spell.range));
 }
 
@@ -6977,6 +7022,204 @@ function _spellIsRanged(spell) {
   return !/touch/i.test(spell?.range || '');
 }
 
+// ═══ AOE SPELLS (Circle/Sector, save-based) ═══════════════════════════════════
+// "20 ft diameter" / "45°, 15 ft radius" → { radius, angle }. angle > 0 means
+// Sector (emanates from the caster, oriented toward the clicked point);
+// angle === 0 means Circle (centered ON the clicked point).
+function _parseAoeGeometry(spell) {
+  const size = spell?.aoeSize || '';
+  let radius = 0;
+  const radM = size.match(/(\d+(?:\.\d+)?)\s*(?:ft|feet|foot)?\s*radius/i);
+  const diaM = size.match(/(\d+(?:\.\d+)?)\s*(?:ft|feet|foot)?\s*(?:diameter|dia\b)/i);
+  if (radM) radius = parseFloat(radM[1]);
+  else if (diaM) radius = parseFloat(diaM[1]) / 2;
+  let angle = 0;
+  const angM = size.match(/(\d+(?:\.\d+)?)\s*°/);
+  if (angM) angle = parseFloat(angM[1]);
+  return { radius, angle };
+}
+
+// Map-click targeting for Area spells — a parallel, smaller cousin of
+// attackMode (see enterAttackMode) since it needs to capture a raw click on
+// the MAP itself, not on a token.
+let aoeMode = false, aoeCasterCid = null, aoeSpell = null, aoeRangeFt = 0;
+
+function enterAoeCastMode(casterCid, spell) {
+  if (attackMode) exitAttackMode();
+  if (pathMode)   exitPathMode();
+  if (aoeMode)    exitAoeCastMode();
+  aoeMode      = true;
+  aoeCasterCid = casterCid;
+  aoeSpell     = spell;
+  aoeRangeFt   = _parseSpellRangeFt(spell.range);
+  document.getElementById('map-viewport').classList.add('attack-mode'); // reuse the same crosshair cursor
+  document.getElementById('aoe-svg').style.display = 'block';
+  drawAoeRangeCircle();
+}
+
+function exitAoeCastMode() {
+  aoeMode = false;
+  aoeCasterCid = null;
+  aoeSpell = null;
+  document.getElementById('map-viewport').classList.remove('attack-mode');
+  const svg = document.getElementById('aoe-svg');
+  svg.style.display = 'none';
+  svg.innerHTML = '';
+}
+
+function drawAoeRangeCircle() {
+  if (!aoeCasterCid || mapScalePPF <= 0) return;
+  const token = _pathFindToken(aoeCasterCid);
+  if (!token) return;
+  const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
+  const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
+  const tokenHalfVp = (getTokenSize(token) / 2) * mapScale;
+  const radiusPx = tokenHalfVp + aoeRangeFt * mapScalePPF * mapScale;
+
+  const svg = document.getElementById('aoe-svg');
+  svg.innerHTML = '';
+  const color = '#c060e0', fill = 'rgba(192,96,224,0.12)';
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('cx', vpX);
+  circle.setAttribute('cy', vpY);
+  circle.setAttribute('r', Math.max(1, radiusPx));
+  circle.setAttribute('fill', fill);
+  circle.setAttribute('stroke', color);
+  circle.setAttribute('stroke-width', '2');
+  svg.appendChild(circle);
+
+  const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  prompt.setAttribute('x', vpX);
+  prompt.setAttribute('y', vpY + radiusPx + 16);
+  prompt.setAttribute('text-anchor', 'middle');
+  prompt.setAttribute('fill', 'rgba(192,96,224,0.85)');
+  prompt.setAttribute('font-size', '11');
+  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  prompt.textContent = `${aoeSpell.name} — click where to aim it · Esc to cancel`;
+  svg.appendChild(prompt);
+}
+
+// Hooked into the map's mousedown chain (see the initMapInteraction patch),
+// same slot as measure/cal/path — captures a raw map click rather than a
+// token click, since an Area spell targets a POINT, not a combatant.
+function aoeMouseDown(e) {
+  if (!aoeMode) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  const xPct = (imgX / mapImgW) * 100, yPct = (imgY / mapImgH) * 100;
+
+  const casterCid  = aoeCasterCid, spell = aoeSpell;
+  const casterToken = _pathFindToken(casterCid);
+  // Sector spells aim FROM the caster (the click just sets facing), so range
+  // doesn't gate the click itself — Circle spells place their center AT the
+  // click point, which must be within the spell's range.
+  if (spell.aoeShape !== 'Sector' && casterToken && mapScalePPF > 0) {
+    const aX = (casterToken.x_pct / 100) * mapImgW, aY = (casterToken.y_pct / 100) * mapImgH;
+    const tX = (xPct / 100) * mapImgW, tY = (yPct / 100) * mapImgH;
+    const distFt = Math.hypot(tX - aX, tY - aY) / mapScalePPF;
+    if (distFt > aoeRangeFt) { showToast(`Out of range (${Math.round(distFt)} ft, max ${aoeRangeFt} ft).`, 'warn'); return true; }
+  }
+
+  exitAoeCastMode();
+  _resolveSpellCast(casterCid, spell.name, casterCid, { xPct, yPct });
+  return true;
+}
+
+// Resolve an Area spell once the casting check succeeds: find every token
+// caught in the shape (Circle centered on the click, or Sector emanating
+// from the caster toward the click), then walk each one through its own
+// save via the shared roller, one at a time. Whoever triggered the cast
+// rolls every save themselves — there's no per-player remote save-prompt
+// yet (that would need the same broadcast plumbing the defense-option flow
+// has); a reasonable follow-up, not built here.
+async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
+  const { radius, angle } = _parseAoeGeometry(spell);
+  if (radius <= 0) { showToast(`${spell.name} has no configured area size.`, 'error'); return; }
+  const casterToken = _pathFindToken(casterEnt.ref);
+  if (!casterToken || mapScalePPF <= 0 || !aoePoint) { showToast('No map/scale to resolve the area.', 'error'); return; }
+
+  const toFt = (xPct, yPct) => ({ x: (xPct / 100) * mapImgW / mapScalePPF, y: (yPct / 100) * mapImgH / mapScalePPF });
+  const casterFt = toFt(casterToken.x_pct, casterToken.y_pct);
+  const centerFt = toFt(aoePoint.xPct, aoePoint.yPct);
+  const dirAngle = Math.atan2(centerFt.y - casterFt.y, centerFt.x - casterFt.x);
+
+  const targets = Object.values(mapTokens).filter(t => {
+    if (t.id === casterToken.id) return false;
+    if (!t.entity_type || !t.entity_id) return false;
+    const tFt = toFt(t.x_pct, t.y_pct);
+    if (angle > 0) {
+      const dist = Math.hypot(tFt.x - casterFt.x, tFt.y - casterFt.y);
+      if (dist > radius) return false;
+      let diff = Math.abs(Math.atan2(tFt.y - casterFt.y, tFt.x - casterFt.x) - dirAngle);
+      if (diff > Math.PI) diff = 2 * Math.PI - diff;
+      return diff <= (angle / 2) * Math.PI / 180;
+    }
+    return Math.hypot(tFt.x - centerFt.x, tFt.y - centerFt.y) <= radius;
+  });
+
+  if (!targets.length) { showToast(`${spell.name} catches no one.`, 'warn'); return; }
+  logCombat(`${spell.name} catches ${targets.length} in the area.`, 'roll');
+  await _resolveAoeQueue(casterEnt, spell, targets, 0);
+}
+
+async function _resolveAoeQueue(casterEnt, spell, targets, i) {
+  if (i >= targets.length) { refreshUI(); return; }
+  const token = targets[i];
+  const ref   = _tokenCid(token);
+  if (token.entity_type === 'character') await ensureEntityLoaded(ref);
+  const ent  = getEntity(ref);
+  const next = () => _resolveAoeQueue(casterEnt, spell, targets, i + 1);
+  if (!ent) { next(); return; }
+
+  const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
+  const target  = saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
+
+  openRoller({
+    label: `${spell.name} — ${ent.name} saves`,
+    target, targetLabel: 'roll under to resist',
+    onComplete: async (n) => {
+      const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
+      if (!saved) await _applyAoeFailure(casterEnt, spell, ent, token);
+      next();
+    },
+  });
+}
+
+// A target that failed its save: direct damage (capped by damageMax, or the
+// CASTER's own damageStat if set — e.g. Fire Rose's burn maxes at the
+// caster's Logic, not the target's — matching a single-target attack
+// spell's dmgCap logic in _resolveSpellAttack), through that armor slot's DR
+// for the spell's damageCategory (torso — an area effect has no called-shot
+// location, and there's no to-hit roll for the armor-gap mechanic to key
+// off), then an independent secondaryChance roll for setsCondition — a
+// residual effect layered on top of the direct hit, e.g. Acid Shower's
+// Corroding.
+async function _applyAoeFailure(casterEnt, spell, ent, token) {
+  const dmgCap = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 0);
+  if (dmgCap > 0) {
+    const armorType = (ent.armor && ent.armor.torso) || 'None';
+    const dr  = getArmorDR(armorType, spell.damageCategory || '');
+    const raw = Math.random() * (dmgCap - 1) + 1;
+    const dmg = Math.max(0, Math.round(Math.max(0, raw - dr)));
+    if (dmg > 0) {
+      const entityType = ent.type === 'char' ? 'character' : 'creature';
+      await applyDamage(entityType, ent.id, dmg, 0);
+      logCombat(`${ent.name} takes ${dmg} ${spell.damageCategory || ''} damage from ${spell.name}.`, 'hit');
+    } else {
+      logCombat(`${ent.name}'s armor absorbs ${spell.name}.`, 'roll');
+    }
+  }
+  if (spell.setsCondition) {
+    const roll = Math.floor(Math.random() * 100) + 1;
+    if (roll <= (spell.secondaryChance || 100)) await _applySpellCondition(token.id, spell.setsCondition);
+  }
+  const after = getEntity(ent.ref);
+  await _checkDownedState(token.id, after);
+}
+
 // Set a single condition by key/label, same as a weapon-inflicted one —
 // shared by guaranteed spell effects (_applySpellEffectToTarget) and the
 // chance-rolled 'spell-secondary' HIT_EFFECTS entry below.
@@ -6984,13 +7227,20 @@ async function _applySpellCondition(tokenId, conditionKey) {
   const condDef = CONDITION_DEFS.find(d => d.key === conditionKey || d.label.toLowerCase() === conditionKey.toLowerCase());
   if (!condDef) return;
   await setCondition(tokenId, condDef.key, true);
-  if (condDef.key === 'bleeding') await setCondition(tokenId, 'bleedsince:' + _atSharedRound(), true);
-  if (condDef.key === 'stunned')  await setCondition(tokenId, 'stunsince:' + _atSharedRound(), true);
-  // 'slowed' only actually reduces speed via a legdmg: marker
-  // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
-  // tied to a real struck leg, so add a synthetic one. Harmless if it
-  // collides with a real leg-hit marker; still just counts as one.
-  if (condDef.key === 'slowed') await setCondition(tokenId, 'legdmg:frostbite', true);
+  if (condDef.key === 'bleeding')  await setCondition(tokenId, 'bleedsince:' + _atSharedRound(), true);
+  if (condDef.key === 'stunned')   await setCondition(tokenId, 'stunsince:' + _atSharedRound(), true);
+  if (condDef.key === 'corroding') await setCondition(tokenId, 'corrodesince:' + _atSharedRound(), true);
+  if (condDef.key === 'slowed') {
+    // 'slowed' only actually reduces speed via a legdmg: marker
+    // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
+    // tied to a real struck leg, so add a synthetic one. Harmless if it
+    // collides with a real leg-hit marker; still just counts as one.
+    await setCondition(tokenId, 'legdmg:frostbite', true);
+    // Also lets a spell-inflicted slow be shaken off via a Power-based save
+    // (atResolveRecovery/_recoverTarget's 'slowed' entry) as an alternative
+    // to healing the leg — see the CONDITION_DEFS description.
+    await setCondition(tokenId, 'slowsince:' + _atSharedRound(), true);
+  }
 }
 
 // Apply a spell's fixed effect fields to a target — same shape/semantics as
@@ -7079,7 +7329,9 @@ async function atStopMaintaining(casterRef, opts) {
   const info = _maintainedSpellInfo(casterRef);
   if (!info) return;
   await setCondition(info.token.id, info.marker, false);
-  const targetToken = _pathFindToken(info.targetRef);
+  // Area spells (Mire Pool, ...) maintain purely for cost — no single
+  // target to unwind an effect from; targetRef is null for those.
+  const targetToken = info.targetRef ? _pathFindToken(info.targetRef) : null;
   if (targetToken) {
     if (info.spell.setsCondition) {
       const condDef = CONDITION_DEFS.find(d => d.key === info.spell.setsCondition || d.label.toLowerCase() === info.spell.setsCondition.toLowerCase());
@@ -7108,7 +7360,9 @@ async function atStopMaintaining(casterRef, opts) {
 // Quintessence cascade regardless of outcome (the energy is spent whether or
 // not the pattern holds — a real failure-consequence table is future work),
 // and on success applies the spell's effect to the target.
-async function _resolveSpellCast(casterCid, spellName, targetRef) {
+// `aoePoint` ({xPct,yPct}) is set instead of a real targetRef for Area
+// spells — see enterAoeCastMode/aoeMouseDown.
+async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   const spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
   const casterEnt = getEntity(casterCid);
@@ -7131,11 +7385,21 @@ async function _resolveSpellCast(casterCid, spellName, targetRef) {
       const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
 
       if (success) {
+        if (spell.targetType === 'Area') {
+          // Area spells resolve as a burst: everyone caught at the moment
+          // of casting saves; nothing further re-checks the area later
+          // (see the spell descriptions). Still starts the maintain-drain
+          // loop below if the spell is maintained, purely for cost — no
+          // target to unwind an effect from when it's later stopped.
+          showToast(`${spell.name} erupts!${costNote}`, 'good');
+          logCombat(`${casterEnt.name} casts ${spell.name}${costNote}.`, 'good');
+          if (spell.maintained) await _startMaintaining(casterEnt, spell, null);
+          await _resolveSpellAoe(casterEnt, spell, aoePoint);
         // Attack-type spells with a Hit Formula resolve like a ranged
         // weapon from here — the casting check only confirms the pattern
         // held; it still has to actually connect with the target, through
         // the same defense/called-shot/roller flow a weapon attack uses.
-        if (spell.spellType === 'Attack' && spell.hitFormula) {
+        } else if (spell.spellType === 'Attack' && spell.hitFormula) {
           showToast(`${spell.name} takes shape!${costNote}`, 'good');
           const targetTok = _pathFindToken(targetRef);
           if (targetTok) await _resolveSpellAttack(casterEnt, spell, targetTok);
@@ -7410,6 +7674,18 @@ async function applyBloodLoss(ent, amount) {
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { blood: newBlood }) });
 }
 
+// Direct Toughness drain that ignores armor (a residual effect already past
+// it, e.g. Corroding's ongoing burn) — same overflow-into-Blood behavior as
+// applyDamage, just keyed off an already-loaded entity like applyBloodLoss.
+async function applyToughnessDamage(ent, amount) {
+  if (!ent) return;
+  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  let newTough = Math.max(0, (ent.damage.toughness || 0) + amount);
+  let newBlood = ent.damage.blood || 0;
+  if (newTough > tMax) { newBlood += newTough - tMax; newTough = tMax; }
+  await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: newTough, blood: newBlood }) });
+}
+
 // Shared downed-state detection: Toughness 0 = unconscious, Blood 0 = dead.
 // Returns 'dead' | 'unconscious' | null. Used by both hit resolution and the
 // bleed tick so bleeding-to-death works identically.
@@ -7471,8 +7747,8 @@ async function _tickHitEffects(combatantId) {
     const after = getEntity(combatantId);
     const downed = await _checkDownedState(token.id, after);
     if (downed === 'dead') {
-      await setCondition(token.id, eff.key, false); // stop bleeding once dead
-      logCombat(`${after?.name || token.label || 'Someone'} bled out — ☠ dead`, 'kill');
+      await setCondition(token.id, eff.key, false); // stop the tick once dead
+      logCombat(`${after?.name || token.label || 'Someone'} ${eff.deathMsg || 'died'} — ☠ dead`, 'kill');
     }
   }
 }
@@ -10577,6 +10853,10 @@ document.addEventListener('keydown', e => {
       exitAttackMode(); e.stopPropagation();
       if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null; // manual abort — don't reopen later
     }
+    else if (aoeMode) {
+      exitAoeCastMode(); e.stopPropagation();
+      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
+    }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
   }
 });
@@ -10594,6 +10874,7 @@ const _origExitPlayMode = exitPlayMode;
 exitPlayMode = function() {
   _origExitPlayMode();
   if (attackMode) exitAttackMode();
+  if (aoeMode)    exitAoeCastMode();
   if (pathMode)   exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
@@ -11079,6 +11360,7 @@ initMapInteraction = function() {
   vp.addEventListener('mousedown', e => {
     if (calMouseDown(e))     { e.stopImmediatePropagation(); return; }
     if (measureMouseDown(e)) { e.stopImmediatePropagation(); return; }
+    if (aoeMouseDown(e))     { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))    { e.stopImmediatePropagation(); }
   }, true);
 
@@ -11609,6 +11891,9 @@ switchGmTab = function(tab) {
         <!-- attack range SVG overlay -->
         <svg id="attack-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:26;overflow:visible;"></svg>
+        <!-- AOE spell targeting overlay -->
+        <svg id="aoe-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;display:none;z-index:26;overflow:visible;"></svg>
         <!-- stray shot ray overlay -->
         <svg id="stray-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:27;overflow:visible;"></svg>
@@ -11813,6 +12098,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260805d"></script>
+<script src="panels.js?v=20260810a"></script>
 </body>
 </html>
