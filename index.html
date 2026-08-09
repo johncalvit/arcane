@@ -4559,7 +4559,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260810a';
+const VERSION = 'v0.1.20260810b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7054,7 +7054,7 @@ function enterAoeCastMode(casterCid, spell) {
   aoeRangeFt   = _parseSpellRangeFt(spell.range);
   document.getElementById('map-viewport').classList.add('attack-mode'); // reuse the same crosshair cursor
   document.getElementById('aoe-svg').style.display = 'block';
-  drawAoeRangeCircle();
+  _aoeRedraw(null, null);
 }
 
 function exitAoeCastMode() {
@@ -7067,30 +7067,84 @@ function exitAoeCastMode() {
   svg.innerHTML = '';
 }
 
-function drawAoeRangeCircle() {
-  if (!aoeCasterCid || mapScalePPF <= 0) return;
+// Straight-line distance in feet from the caster to a map point (xPct/yPct),
+// used both to color-code the live preview and to gate an actual click.
+function _aoeDistFt(xPct, yPct) {
+  const token = _pathFindToken(aoeCasterCid);
+  if (!token || mapScalePPF <= 0) return 0;
+  const aX = (token.x_pct / 100) * mapImgW, aY = (token.y_pct / 100) * mapImgH;
+  const tX = (xPct / 100) * mapImgW,        tY = (yPct / 100) * mapImgH;
+  return Math.hypot(tX - aX, tY - aY) / mapScalePPF;
+}
+
+// Redraws the whole AOE overlay for the current cursor position (null before
+// the first mousemove, i.e. right after entering the mode). Circle spells
+// show a dashed ring for the caster's max range plus a SOLID circle sized to
+// the spell's actual footprint, centered on the cursor, so it can be placed
+// precisely before clicking — colored red when the cursor is out of range.
+// Sector spells have no separate range ring (their own radius IS the reach);
+// instead the wedge itself pivots live to face the cursor.
+function _aoeRedraw(cursorXPct, cursorYPct) {
+  const svg = document.getElementById('aoe-svg');
+  svg.innerHTML = '';
+  if (!aoeCasterCid || !aoeSpell || mapScalePPF <= 0) return;
   const token = _pathFindToken(aoeCasterCid);
   if (!token) return;
   const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
   const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
-  const tokenHalfVp = (getTokenSize(token) / 2) * mapScale;
-  const radiusPx = tokenHalfVp + aoeRangeFt * mapScalePPF * mapScale;
+  const pxPerFt = mapScalePPF * mapScale;
+  const { radius, angle } = _parseAoeGeometry(aoeSpell);
+  const color = '#c060e0', outColor = '#e05050';
+  let promptY = vpY + (getTokenSize(token) / 2) * mapScale + 16;
 
-  const svg = document.getElementById('aoe-svg');
-  svg.innerHTML = '';
-  const color = '#c060e0', fill = 'rgba(192,96,224,0.12)';
-  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-  circle.setAttribute('cx', vpX);
-  circle.setAttribute('cy', vpY);
-  circle.setAttribute('r', Math.max(1, radiusPx));
-  circle.setAttribute('fill', fill);
-  circle.setAttribute('stroke', color);
-  circle.setAttribute('stroke-width', '2');
-  svg.appendChild(circle);
+  if (angle > 0) {
+    // Sector: a wedge from the caster, oriented toward the cursor (defaults
+    // pointing right if the mouse hasn't moved over the map yet).
+    const dirVpX = cursorXPct != null ? (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX : vpX + 1;
+    const dirVpY = cursorYPct != null ? (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY : vpY;
+    const dirAngle = Math.atan2(dirVpY - vpY, dirVpX - vpX);
+    const halfRad  = (angle / 2) * Math.PI / 180;
+    const r = Math.max(1, radius * pxPerFt);
+    const x1 = vpX + Math.cos(dirAngle - halfRad) * r, y1 = vpY + Math.sin(dirAngle - halfRad) * r;
+    const x2 = vpX + Math.cos(dirAngle + halfRad) * r, y2 = vpY + Math.sin(dirAngle + halfRad) * r;
+    const largeArc = angle > 180 ? 1 : 0;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${vpX} ${vpY} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`);
+    path.setAttribute('fill', 'rgba(192,96,224,0.22)');
+    path.setAttribute('stroke', color);
+    path.setAttribute('stroke-width', '2');
+    svg.appendChild(path);
+    promptY = Math.max(promptY, vpY + r + 16);
+  } else {
+    const rangeRadiusPx = (getTokenSize(token) / 2) * mapScale + aoeRangeFt * pxPerFt;
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('cx', vpX); ring.setAttribute('cy', vpY);
+    ring.setAttribute('r', Math.max(1, rangeRadiusPx));
+    ring.setAttribute('fill', 'none');
+    ring.setAttribute('stroke', 'rgba(192,96,224,0.5)');
+    ring.setAttribute('stroke-width', '1.5');
+    ring.setAttribute('stroke-dasharray', '5,4');
+    svg.appendChild(ring);
+    promptY = Math.max(promptY, vpY + rangeRadiusPx + 16);
+
+    if (cursorXPct != null) {
+      const cX = (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX;
+      const cY = (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY;
+      const inRange   = _aoeDistFt(cursorXPct, cursorYPct) <= aoeRangeFt;
+      const fpColor   = inRange ? color : outColor;
+      const footprint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      footprint.setAttribute('cx', cX); footprint.setAttribute('cy', cY);
+      footprint.setAttribute('r', Math.max(1, radius * pxPerFt));
+      footprint.setAttribute('fill', inRange ? 'rgba(192,96,224,0.30)' : 'rgba(224,80,80,0.30)');
+      footprint.setAttribute('stroke', fpColor);
+      footprint.setAttribute('stroke-width', '2');
+      svg.appendChild(footprint);
+    }
+  }
 
   const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   prompt.setAttribute('x', vpX);
-  prompt.setAttribute('y', vpY + radiusPx + 16);
+  prompt.setAttribute('y', promptY);
   prompt.setAttribute('text-anchor', 'middle');
   prompt.setAttribute('fill', 'rgba(192,96,224,0.85)');
   prompt.setAttribute('font-size', '11');
@@ -7098,6 +7152,17 @@ function drawAoeRangeCircle() {
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   prompt.textContent = `${aoeSpell.name} — click where to aim it · Esc to cancel`;
   svg.appendChild(prompt);
+}
+
+// Hooked into the map's mousemove chain (see the initMapInteraction patch) —
+// redraws the live footprint preview as the caster's player aims.
+function aoeMouseMove(e) {
+  if (!aoeMode) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  _aoeRedraw((imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
 }
 
 // Hooked into the map's mousedown chain (see the initMapInteraction patch),
@@ -7111,15 +7176,12 @@ function aoeMouseDown(e) {
   const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
   const xPct = (imgX / mapImgW) * 100, yPct = (imgY / mapImgH) * 100;
 
-  const casterCid  = aoeCasterCid, spell = aoeSpell;
-  const casterToken = _pathFindToken(casterCid);
+  const casterCid = aoeCasterCid, spell = aoeSpell;
   // Sector spells aim FROM the caster (the click just sets facing), so range
-  // doesn't gate the click itself — Circle spells place their center AT the
-  // click point, which must be within the spell's range.
-  if (spell.aoeShape !== 'Sector' && casterToken && mapScalePPF > 0) {
-    const aX = (casterToken.x_pct / 100) * mapImgW, aY = (casterToken.y_pct / 100) * mapImgH;
-    const tX = (xPct / 100) * mapImgW, tY = (yPct / 100) * mapImgH;
-    const distFt = Math.hypot(tX - aX, tY - aY) / mapScalePPF;
+  // doesn't gate the click itself — Circle spells place their footprint's
+  // center AT the click point, which must be within the spell's range.
+  if (spell.aoeShape !== 'Sector') {
+    const distFt = _aoeDistFt(xPct, yPct);
     if (distFt > aoeRangeFt) { showToast(`Out of range (${Math.round(distFt)} ft, max ${aoeRangeFt} ft).`, 'warn'); return true; }
   }
 
@@ -11368,7 +11430,7 @@ initMapInteraction = function() {
     if (pathMode) { e.preventDefault(); pathCommit(); }
   });
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); pathMouseMove(e); });
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); pathMouseMove(e); });
   window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e); });
 };
 
