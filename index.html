@@ -899,7 +899,10 @@
     <h1 id="app-title">⚔ Arcane Character Builder</h1>
     <div class="subtitle" id="app-subtitle">Design your character — traits, stats, skills &amp; loadout</div>
   </div>
-  <button class="play-btn" id="play-mode-btn" onclick="enterPlayMode()">▶ Play Mode</button>
+  <div style="margin-left:auto;display:flex;gap:8px;">
+    <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="enterPlayMode()">▶ Play Mode</button>
+    <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="enterConfigMode()">⚙ GM Config Mode</button>
+  </div>
 </header>
 
 <div class="app-layout">
@@ -931,7 +934,6 @@
 
     <!-- CONFIG MODE NAV -->
     <div id="gm-config-nav" style="display:none;">
-      <button class="nav-btn" onclick="exitConfigMode()" style="color:var(--text-dim);font-size:0.78rem;">← Character Design</button>
       <div class="nav-section">Game Configuration</div>
       <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species Manager</button>
       <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
@@ -4000,7 +4002,9 @@ const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr'
 function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
   document.getElementById('gm-config-nav').style.display  = '';
-  document.getElementById('play-mode-btn').style.display  = 'none';
+  const cfgBtn = document.getElementById('config-mode-btn');
+  cfgBtn.textContent = '✎ Character Design Mode';
+  cfgBtn.onclick = exitConfigMode;
   document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
   document.getElementById('app-subtitle').textContent     = 'Manage species, weapons, armor and skills';
   showPanel(panel || 'skillmgr');
@@ -4009,7 +4013,9 @@ function enterConfigMode(panel) {
 function exitConfigMode() {
   document.getElementById('gm-config-nav').style.display  = 'none';
   document.getElementById('char-nav').style.display       = '';
-  document.getElementById('play-mode-btn').style.display  = '';
+  const cfgBtn = document.getElementById('config-mode-btn');
+  cfgBtn.textContent = '⚙ GM Config Mode';
+  cfgBtn.onclick = () => enterConfigMode();
   document.getElementById('app-title').textContent        = '⚔ Arcane Character Builder';
   document.getElementById('app-subtitle').textContent     = 'Design your character — traits, stats, skills & loadout';
   showPanel('overview');
@@ -4538,7 +4544,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260808a';
+const VERSION = 'v0.1.20260809a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11529,7 +11535,10 @@ switchGmTab = function(tab) {
   <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;">
     <span id="play-title" style="font-size:0.9rem;font-weight:600;color:var(--gold2);letter-spacing:0.04em;">✦ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
-    <button class="play-btn exit" style="margin-left:auto;" onclick="exitPlayMode()">✕ Exit Play Mode</button>
+    <div style="margin-left:auto;display:flex;gap:8px;">
+      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
+      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
+    </div>
   </div>
 
   <!-- main play layout -->
