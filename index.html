@@ -39,15 +39,15 @@
     align-items: center;
     gap: 16px;
   }
-  header h1 {
+  .mode-title {
+    display: block;
     font-size: 1.25rem;
+    font-weight: bold;
     color: var(--gold2);
     letter-spacing: 0.1em;
     text-transform: uppercase;
     text-shadow: 0 0 24px rgba(201,168,76,0.4);
   }
-  header .subtitle { color: var(--text-dim); font-size: 0.76rem; font-style: italic; }
-
   .app-layout {
     display: grid;
     grid-template-columns: 195px 1fr;
@@ -896,8 +896,7 @@
 
 <header>
   <div>
-    <h1 id="app-title">⚔ Arcane Character Builder</h1>
-    <div class="subtitle" id="app-subtitle">Design your character — traits, stats, skills &amp; loadout</div>
+    <h1 id="app-title" class="mode-title">✦ Arcane Character Builder</h1>
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;">
     <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="enterPlayMode()">▶ Play Mode</button>
@@ -4006,7 +4005,6 @@ function enterConfigMode(panel) {
   cfgBtn.textContent = '✎ Character Design Mode';
   cfgBtn.onclick = exitConfigMode;
   document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
-  document.getElementById('app-subtitle').textContent     = 'Manage species, weapons, armor and skills';
   showPanel(panel || 'skillmgr');
 }
 
@@ -4016,8 +4014,7 @@ function exitConfigMode() {
   const cfgBtn = document.getElementById('config-mode-btn');
   cfgBtn.textContent = '⚙ GM Config Mode';
   cfgBtn.onclick = () => enterConfigMode();
-  document.getElementById('app-title').textContent        = '⚔ Arcane Character Builder';
-  document.getElementById('app-subtitle').textContent     = 'Design your character — traits, stats, skills & loadout';
+  document.getElementById('app-title').textContent        = '✦ Arcane Character Builder';
   showPanel('overview');
 }
 
@@ -4544,7 +4541,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260809a';
+const VERSION = 'v0.1.20260809b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5436,8 +5433,8 @@ function enterPlayMode() {
 
   const campaignName = document.getElementById('nav-campaign').textContent || '';
   document.getElementById('play-title').textContent = campaignName
-    ? `✦ Arcane — ${campaignName}`
-    : '✦ Arcane';
+    ? `⚔ Arcane — ${campaignName}`
+    : '⚔ Arcane';
 
   // Layout: GM gets right panel
   const layout = document.getElementById('play-layout');
@@ -11533,7 +11530,7 @@ switchGmTab = function(tab) {
 <div id="play-mode">
   <!-- toolbar row -->
   <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;">
-    <span id="play-title" style="font-size:0.9rem;font-weight:600;color:var(--gold2);letter-spacing:0.04em;">✦ Arcane</span>
+    <span id="play-title" class="mode-title">⚔ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div style="margin-left:auto;display:flex;gap:8px;">
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
