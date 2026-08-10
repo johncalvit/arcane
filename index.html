@@ -1498,9 +1498,7 @@
           <div class="field"><label>Damage Max (Attack, fixed die)</label><input type="text" id="spf-damagemax" placeholder="e.g. 10 for d10 — overrides Damage Stat if set"></div>
           <div class="field"><label>Hit Formula (Individual Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
           <div class="field"><label>Save Formula (Area spells)</label><input type="text" id="spf-saveformula" placeholder="e.g. Power + Speed + Physical Coordination"></div>
-          <div class="field"><label>Drain Quintessence? (Area, on failed save)</label>
-            <select id="spf-drainquint"><option value="0">No — normal damage roll</option><option value="1">Yes — drains the target's Quintessence pool instead</option></select>
-          </div>
+          <div class="field"><label>Drain Attribute (Area, on failed save)</label><input type="text" id="spf-drainattribute" placeholder="e.g. Quintessence, Power, Speed — blank = normal damage roll"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="spf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="spf-stamina" placeholder="0"></div>
           <div class="field"><label>Restore Blood</label><input type="text" id="spf-blood" placeholder="0"></div>
@@ -3426,66 +3424,66 @@ const DEFAULT_SPELLS = [
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
     damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. Anyone caught who fails a Power+Speed+Coordination save takes a burn damage roll with maximum equal to the caster's Logic." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase; Rectangle isn't a supported AOE shape yet either.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
   { name:"Storm Arc", range:"30 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling arc of lightning leaps from the caster's hand toward the target. Ranged attack, resolves like a bolt — cast successfully, then roll to hit; deals up to d10 Shock damage." },
   { name:"Acidic Spew", range:"20 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:12, magicClass:"Demonic", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"The caster spews a jet of corrosive bile at the target, eating through flesh and metal alike. Ranged attack; deals up to d8 Corrode damage." },
   { name:"Frost Fang", range:"15 feet", castingTime:1, cost:2, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Nature", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, has a 60% chance to Slow the target." },
   { name:"Mire Pool", range:"50 feet", castingTime:1, cost:5, maintained:true,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Nature", targetType:"Area",
     aoeShape:"Circle", aoeSize:"20 ft diameter", spellType:"Control",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:0, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A pool of clinging mire wells up in a 20-foot circle. Anyone standing in it when it's cast who fails a Power+Speed+Coordination save is Slowed (shake off with a Power-based save, same as Stun). Only catches whoever's there at the moment of casting — it doesn't re-check anyone who wanders in later." },
   { name:"Acid Shower", range:"100 feet", castingTime:1, cost:5, maintained:true,
     difficultyStat:"Logic", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Circle", aoeSize:"10 ft diameter", spellType:"Attack",
     damageStat:"", damageCategory:"corrode", damageMax:12, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"corroding", secondaryChance:50, drainQuintessence:false, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"corroding", secondaryChance:50, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A burst of caustic droplets rains over a 10-foot circle. Anyone in it who fails a Power+Speed+Coordination save takes up to d12 Corrode damage, with a 50% chance the acid keeps burning (Corroding — 1 damage/round until shaken off). Only catches whoever's there at the moment of casting." },
   { name:"Lightning Bolt", range:"60 feet", castingTime:1, cost:4, maintained:false,
     difficultyStat:"Logic", difficultyValue:14, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Line", aoeSize:"60 ft long, 5 ft wide", spellType:"Attack",
-    damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainQuintessence:false,
+    damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling bolt of lightning blasts out from the caster in a straight line, punching through anyone in its path rather than stopping at the first target. Everyone in the 60-foot line who fails a Power+Speed+Coordination save takes up to d10 Shock damage." },
   { name:"Quintessence Arrow", range:"40 feet", castingTime:1, cost:4, maintained:false,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Line", aoeSize:"40 ft long, 3 ft wide", spellType:"Attack",
-    damageStat:"", damageCategory:"", damageMax:6, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainQuintessence:true,
+    damageStat:"", damageCategory:"", damageMax:6, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"Quintessence",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A narrow, needle-thin lance of raw quintessence streaks out in a straight line, unraveling the magical reserves of anyone it passes through. Everyone in the 40-foot line who fails a Power+Speed+Coordination save loses up to 6 Quintessence — a real threat to other casters, and no threat at all to a target with none to lose." },
 ];
@@ -3913,7 +3911,7 @@ function openSpellForm(index) {
   document.getElementById('spf-damagemax').value       = row && row.damageMax ? row.damageMax : '';
   document.getElementById('spf-hitformula').value      = row ? (row.hitFormula || '') : '';
   document.getElementById('spf-saveformula').value     = row ? (row.saveFormula || '') : '';
-  document.getElementById('spf-drainquint').value      = row && row.drainQuintessence ? '1' : '0';
+  document.getElementById('spf-drainattribute').value  = row ? (row.drainAttribute || '') : '';
   document.getElementById('spf-toughness').value       = row ? row.restoreToughness : '';
   document.getElementById('spf-stamina').value         = row ? row.restoreStamina : '';
   document.getElementById('spf-blood').value           = row ? row.restoreBlood : '';
@@ -3953,7 +3951,7 @@ function saveSpell() {
     damageMax: parseFloat(document.getElementById('spf-damagemax').value) || 0,
     hitFormula: document.getElementById('spf-hitformula').value.trim(),
     saveFormula: document.getElementById('spf-saveformula').value.trim(),
-    drainQuintessence: document.getElementById('spf-drainquint').value === '1',
+    drainAttribute: document.getElementById('spf-drainattribute').value.trim(),
     restoreToughness: parseFloat(document.getElementById('spf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('spf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('spf-blood').value) || 0,
@@ -4576,7 +4574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260811a';
+const VERSION = 'v0.1.20260811b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7329,25 +7327,55 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
   });
 }
 
-// Quintessence Arrow's failure branch: drains the TARGET's own Quintessence
-// pool instead of dealing Toughness damage — a real anti-caster tool that
-// does nothing to a target with none to drain. No armor DR (there's no
-// armor column for "protects your inner magical reserve"). Capped by
-// damageMax same as a normal damage roll, just applied to a different pool.
-async function _applyQuintessenceDrain(spell, ent) {
-  const qMax = _quintMax(ent.attrs.Quintessence);
-  const already = ent.damage.quintessence || 0;
-  const room = qMax - already;
-  if (qMax <= 0 || room <= 0) {
-    logCombat(`${ent.name} has no Quintessence left for ${spell.name} to drain.`, 'roll');
-    return;
-  }
+// A spell's failure branch when it drains an attribute (spell.drainAttribute,
+// e.g. Quintessence Arrow) instead of dealing normal damage — a real
+// anti-target tool: does nothing to a target with none of that attribute to
+// lose. No armor DR either way (there's no armor column for "protects your
+// inner reserves"). Toughness/Stamina/Quintessence have a real tracked
+// damage.X pool, so those drain directly from it, capped at the pool's max
+// (unlike normal damage, this never overflows into Blood — draining knocks
+// someone out, it doesn't kill them outright). Any other attribute (Power,
+// Speed, Logic, ...) has no pool to drain, so it's applied as a temporary
+// debuff instead — the exact same buff:<key>:<amount> marker a potion's
+// positive buff already uses (see _applySpellEffectToTarget's buffAttr
+// block), just negative; cleared the same GM-judged way any other timed
+// buff is. Capped by damageMax same as a normal damage roll either way.
+const _DRAIN_POOL_KEYS = { Toughness: 'toughness', Stamina: 'stamina', Quintessence: 'quintessence' };
+async function _applyAttributeDrain(spell, ent, token) {
+  const attrDef = ATTRIBUTES.find(a => a.label === spell.drainAttribute || a.key === spell.drainAttribute);
+  if (!attrDef) return;
   const dmgCap = spell.damageMax || 0;
-  const raw    = dmgCap > 0 ? Math.random() * (dmgCap - 1) + 1 : 0;
-  const drain  = Math.max(0, Math.round(Math.min(raw, room)));
-  if (drain <= 0) return;
-  await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { quintessence: already + drain }) });
-  logCombat(`${ent.name} loses ${drain} Quintessence to ${spell.name}.`, 'hit');
+  if (dmgCap <= 0) return;
+  const raw = Math.random() * (dmgCap - 1) + 1;
+
+  const poolKey = _DRAIN_POOL_KEYS[attrDef.key];
+  if (poolKey) {
+    const max = poolKey === 'quintessence'
+      ? _quintMax(ent.attrs.Quintessence)
+      : Math.max(1, Math.round(ent.attrs[attrDef.key] ?? 10));
+    const already = ent.damage[poolKey] || 0;
+    const room = max - already;
+    if (max <= 0 || room <= 0) {
+      logCombat(`${ent.name} has no ${attrDef.label} left for ${spell.name} to drain.`, 'roll');
+      return;
+    }
+    const drain = Math.max(0, Math.round(Math.min(raw, room)));
+    if (drain <= 0) return;
+    await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { [poolKey]: already + drain }) });
+    logCombat(`${ent.name} loses ${drain} ${attrDef.label} to ${spell.name}.`, 'hit');
+  } else {
+    const amount = -Math.max(1, Math.round(raw));
+    const t = mapTokens[token.id];
+    if (!t) return;
+    const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+    current.add(`buff:${attrDef.key}:${amount}`);
+    current.add('buffed');
+    t.conditions = [...current];
+    _refreshTokenBadges(token.id);
+    const { error } = await sb.from('map_tokens').update({ conditions: t.conditions }).eq('id', token.id);
+    if (error) _writeErrorToast(error, 'map_tokens (drain)');
+    logCombat(`${ent.name}'s ${attrDef.label} drops by ${-amount} from ${spell.name}.`, 'hit');
+  }
 }
 
 // A target that failed its save: direct damage (capped by damageMax, or the
@@ -7358,11 +7386,11 @@ async function _applyQuintessenceDrain(spell, ent) {
 // location, and there's no to-hit roll for the armor-gap mechanic to key
 // off), then an independent secondaryChance roll for setsCondition — a
 // residual effect layered on top of the direct hit, e.g. Acid Shower's
-// Corroding. drainQuintessence spells (Quintessence Arrow) skip the normal
-// damage roll entirely in favor of _applyQuintessenceDrain.
+// Corroding. drainAttribute spells (Quintessence Arrow) skip the normal
+// damage roll entirely in favor of _applyAttributeDrain.
 async function _applyAoeFailure(casterEnt, spell, ent, token) {
-  if (spell.drainQuintessence) {
-    await _applyQuintessenceDrain(spell, ent);
+  if (spell.drainAttribute) {
+    await _applyAttributeDrain(spell, ent, token);
   } else {
     const dmgCap = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 0);
     if (dmgCap > 0) {
