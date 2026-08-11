@@ -4574,7 +4574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260811c';
+const VERSION = 'v0.1.20260812a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7258,11 +7258,16 @@ function aoeMouseDown(e) {
 // caught in the shape (Circle centered on the click, Sector emanating from
 // the caster toward the click, or Line — a fixed-length/width beam from the
 // caster toward the click, hitting everyone along it, not just the first
-// target), then walk each one through its own save via the shared roller,
-// one at a time. Whoever triggered the cast rolls every save themselves —
-// there's no per-player remote save-prompt yet (that would need the same
-// broadcast plumbing the defense-option flow has); a reasonable follow-up,
-// not built here.
+// target). Creature/monster targets go through _resolveAoeBundle — a single
+// summary screen with one "Roll All" instead of a full spin-and-reveal
+// roller per monster, since playtesters found a long chain of those
+// confusing to sit through with no real payoff (no player is watching a
+// monster's own save with any stake in it). Player characters still get the
+// individual roller via _resolveAoeQueue, since THEIR save is the moment
+// that matters — there's no per-player remote save-prompt yet (that would
+// need the same broadcast plumbing the defense-option flow has), so the GM
+// is still the one rolling it for now, but it keeps the one-at-a-time
+// ceremony a personal save deserves.
 async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
   const { radius, angle, length, width } = _parseAoeGeometry(spell);
   const shape = spell.aoeShape;
@@ -7301,9 +7306,107 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
 
   if (!targets.length) { showToast(`${spell.name} catches no one.`, 'warn'); return; }
   logCombat(`${spell.name} catches ${targets.length} in the area.`, 'roll');
-  await _resolveAoeQueue(casterEnt, spell, targets, 0);
+
+  const creatureTargets  = targets.filter(t => t.entity_type === 'creature');
+  const characterTargets = targets.filter(t => t.entity_type === 'character');
+  if (creatureTargets.length)  await _resolveAoeBundle(casterEnt, spell, creatureTargets);
+  if (characterTargets.length) await _resolveAoeQueue(casterEnt, spell, characterTargets, 0);
 }
 
+// One summary screen listing every caught creature with its save% up front,
+// and a single "Roll All Saves" button — rather than N separate full-screen
+// rollers the GM has to click through one at a time. Each row reveals its
+// own roll/outcome with a short stagger (still feels like real dice, not an
+// instant dump) but needs no per-target interaction. Resolves the returned
+// promise once the GM closes the results, so a caller can await it before
+// moving on to anything that should happen after (e.g. character saves).
+async function _resolveAoeBundle(casterEnt, spell, targets) {
+  const rows = targets.map(token => {
+    const ent = getEntity(_tokenCid(token));
+    if (!ent) return null;
+    const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
+    const target = saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
+    return { token, ent, target };
+  }).filter(Boolean);
+  if (!rows.length) return;
+
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.id = 'aoe-bundle-modal';
+    overlay.style.cssText = `position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);
+      display:flex;align-items:center;justify-content:center;`;
+
+    const card = document.createElement('div');
+    card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+      padding:22px 26px;min-width:340px;max-width:94vw;max-height:80vh;overflow-y:auto;
+      display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
+    title.textContent = `${spell.name} — Monster Saves`;
+    card.appendChild(title);
+
+    const sub = document.createElement('div');
+    sub.style.cssText = 'font-size:0.76rem;color:var(--text-dim);text-align:center;margin-bottom:4px;';
+    sub.textContent = `${rows.length} caught in the area`;
+    card.appendChild(sub);
+
+    const list = document.createElement('div');
+    list.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
+    rows.forEach((r, i) => {
+      const row = document.createElement('div');
+      row.id = `aoe-bundle-row-${i}`;
+      row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:10px;
+        padding:7px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);font-size:0.82rem;`;
+      row.innerHTML = `<span>${_paEsc(r.ent.name)}</span><span style="color:var(--text-dim);font-size:0.74rem;">save ${r.target}%</span>`;
+      list.appendChild(row);
+    });
+    card.appendChild(list);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;justify-content:center;margin-top:6px;';
+    const rollBtn = document.createElement('button');
+    rollBtn.textContent = '🎲 Roll All Saves';
+    rollBtn.style.cssText = `padding:8px 20px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+      font-size:0.85rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--gold2);`;
+    btnRow.appendChild(rollBtn);
+    card.appendChild(btnRow);
+
+    rollBtn.onclick = async () => {
+      rollBtn.disabled = true;
+      rollBtn.textContent = 'Rolling…';
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const n = Math.floor(Math.random() * 100) + 1;
+        const saved = n <= 5 || (n < 96 && n <= r.target); // mirror the roller's crit rules
+        if (!saved) await _applyAoeFailure(casterEnt, spell, r.ent, r.token);
+        const rowEl = document.getElementById(`aoe-bundle-row-${i}`);
+        if (rowEl) {
+          rowEl.style.borderColor = saved ? 'var(--border)' : '#e05555';
+          rowEl.innerHTML = `<span>${_paEsc(r.ent.name)}</span>
+            <span style="color:${saved ? 'var(--text-dim)' : '#e05555'};font-size:0.74rem;">rolled ${n} → ${saved ? 'SAVE' : 'FAIL'}</span>`;
+        }
+        await new Promise(res => setTimeout(res, 220)); // light stagger — still reads as dice, not a dump
+      }
+      refreshUI();
+      btnRow.innerHTML = '';
+      const closeBtn = document.createElement('button');
+      closeBtn.textContent = 'Close';
+      closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+        font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+      closeBtn.onclick = () => { overlay.remove(); resolve(); };
+      btnRow.appendChild(closeBtn);
+    };
+
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+  });
+}
+
+// Only ever called with player-character targets now (see _resolveSpellAoe)
+// — creatures go through the bundled _resolveAoeBundle instead. Kept as a
+// one-at-a-time roller since each of THESE saves is a personal moment for
+// whoever's playing that character, worth its own spin.
 async function _resolveAoeQueue(casterEnt, spell, targets, i) {
   if (i >= targets.length) { refreshUI(); return; }
   const token = targets[i];
@@ -7315,9 +7418,10 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
 
   const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
   const target  = saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
+  const progress = targets.length > 1 ? ` (${i + 1} of ${targets.length})` : '';
 
   openRoller({
-    label: `${spell.name} — ${ent.name} saves`,
+    label: `${spell.name} — ${ent.name} saves${progress}`,
     target, targetLabel: 'roll under to resist',
     onComplete: async (n) => {
       const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
