@@ -4574,7 +4574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260811b';
+const VERSION = 'v0.1.20260811c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7922,7 +7922,16 @@ async function _runHitEffects(ctx, dmgEl) {
     } else {
       applied = true; line = eff.label;
     }
-    if (applied && eff.onHit) await eff.onHit(ctx);
+    if (applied && eff.onHit) {
+      await eff.onHit(ctx);
+      // Keep conds live for the rest of THIS pass — an earlier entry's onHit
+      // (e.g. a physical head-hit Stun) can set the same condition key a
+      // later entry also gates on (e.g. a spell's own setsCondition secondary
+      // effect happening to be "stunned" too), and without this refresh the
+      // later entry still sees the stale pre-loop snapshot and double-rolls/
+      // double-applies the same condition.
+      ctx.conds = getConditions(ctx.targetTokenId);
+    }
     if (dmgEl && line) {
       dmgEl.innerHTML += `<div style="font-size:0.72rem;color:${applied ? '#e05555' : 'var(--text-dim)'};margin-top:3px;">${line}</div>`;
     }
