@@ -916,6 +916,8 @@
       <div class="nav-section">Equipment</div>
       <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
       <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
+      <div class="nav-section">Magic</div>
+      <button class="nav-btn" onclick="showPanel('spellbook')">📖 Spell Book</button>
       <div class="nav-section">Summary</div>
       <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
       <div class="nav-section">File</div>
@@ -1566,6 +1568,13 @@
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
     </div>
 
+    <!-- SPELL BOOK -->
+    <div id="panel-spellbook" class="panel">
+      <h2>Spell Book</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Every spell this character has access to, based on their invested magic-class skills (Arcane, Deific, Demonic, Nature).</p>
+      <div id="spellbook-list"></div>
+    </div>
+
     <!-- PLAYSHEET -->
     <div id="panel-playsheet" class="panel playsheet">
       <h2>Character Playsheet</h2>
@@ -1652,10 +1661,16 @@
           <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
         </div>
       </div>
-      <div class="ps-block">
+      <div class="ps-block" style="margin-bottom:16px;">
         <h4 class="collapsible" onclick="toggleCollapse('psfeatures')">Selected Features<span class="collapse-arrow" id="arrow-psfeatures">▼</span></h4>
         <div class="collapse-body" id="body-psfeatures">
           <div id="ps-features" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
+        </div>
+      </div>
+      <div class="ps-block">
+        <h4 class="collapsible" onclick="toggleCollapse('psspellbook')">Spell Book<span class="collapse-arrow" id="arrow-psspellbook">▼</span></h4>
+        <div class="collapse-body" id="body-psspellbook">
+          <div id="ps-spellbook" style="color:var(--text-dim);font-size:0.85rem;">No spells known.</div>
         </div>
       </div>
     </div>
@@ -2027,6 +2042,12 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-features').innerHTML = checkedFeatures.length
     ? checkedFeatures.map(f=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${f}</div>`).join('')
     : '<span style="color:var(--text-dim)">None selected.</span>';
+
+  // Spell Book
+  const knownSpells = _builderKnownSpells();
+  document.getElementById('ps-spellbook').innerHTML = knownSpells.length
+    ? knownSpells.map(_spellDetailCardHTML).join('')
+    : '<span style="color:var(--text-dim)">No spells known.</span>';
 
   // Loadout (weapons + equipment)
   const weaponRows = [...document.querySelectorAll('#weapon-list tr')].map(tr =>
@@ -2623,6 +2644,65 @@ function buildSkillList() {
       </div>`;
     container.appendChild(item);
   }
+}
+
+// ─── SPELL BOOK (character builder + playsheet) ────────────────────────────
+// Which magic classes (Arcane/Deific/Demonic/Nature) this character has
+// access to — same rule _openSpellPickerModal uses in Play Mode
+// (hasMagicClass, keyed off SKILLS the entity actually knows), just read
+// off skillInvestments (the builder's own in-progress state) instead of a
+// saved entity's `skills` object, since a character being built here has no
+// entity row yet.
+function _builderKnownMagicClasses() {
+  return ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls =>
+    Object.entries(skillInvestments).some(([name, pts]) =>
+      pts > 0 && (SKILLS.find(s => s.name === name) || {}).type === cls));
+}
+
+// One spell's full reference card — shared by the dedicated Spell Book panel
+// and the Playsheet's own Spell Book section, so the two can't drift apart.
+function _spellDetailCardHTML(spell) {
+  const castingTimeLabel = spell.castingTime === 0 ? 'Instant' : `${spell.castingTime} rd`;
+  const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''} Quintessence`;
+  const difficultyLabel = spell.difficultyStat ? `${spell.difficultyStat} ${spell.difficultyValue}` : '—';
+  const isArea = spell.targetType === 'Area';
+  const areaShape = isArea ? (spell.aoeShape || '—') : '—';
+  const areaSize  = isArea ? (spell.aoeSize || '—') : '—';
+  const damageType = spell.drainAttribute ? `${spell.drainAttribute} (drain)` : (spell.damageCategory || '—');
+  const maxDamage  = spell.damageMax ? spell.damageMax
+    : spell.damageStat ? `${spell.damageStat} (caster's)`
+    : '—';
+  return `
+    <div class="ps-block" style="margin-bottom:10px;">
+      <h4 style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;">
+        <span>${_paEsc(spell.name)}</span>
+        <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;text-transform:uppercase;letter-spacing:0.04em;">${_paEsc(spell.magicClass)} · ${_paEsc(spell.spellType)}</span>
+      </h4>
+      ${spell.description ? `<div style="font-size:0.82rem;color:var(--text-dim);font-style:italic;margin:4px 0 8px;">${_paEsc(spell.description)}</div>` : ''}
+      <div class="ps-row"><span class="ps-label">Range</span><span class="ps-val">${_paEsc(spell.range || '—')}</span></div>
+      <div class="ps-row"><span class="ps-label">Casting Time</span><span class="ps-val">${castingTimeLabel}</span></div>
+      <div class="ps-row"><span class="ps-label">Cost</span><span class="ps-val">${costLabel}</span></div>
+      <div class="ps-row"><span class="ps-label">Class</span><span class="ps-val">${_paEsc(spell.magicClass)}</span></div>
+      <div class="ps-row"><span class="ps-label">Difficulty</span><span class="ps-val">${difficultyLabel}</span></div>
+      <div class="ps-row"><span class="ps-label">Area Shape</span><span class="ps-val">${_paEsc(areaShape)}</span></div>
+      <div class="ps-row"><span class="ps-label">Area Size</span><span class="ps-val">${_paEsc(areaSize)}</span></div>
+      <div class="ps-row"><span class="ps-label">Damage Type</span><span class="ps-val">${_paEsc(String(damageType))}</span></div>
+      <div class="ps-row"><span class="ps-label">Max Damage</span><span class="ps-val">${_paEsc(String(maxDamage))}</span></div>
+    </div>`;
+}
+
+function _builderKnownSpells() {
+  const knownClasses = _builderKnownMagicClasses();
+  return (typeof SPELLS !== 'undefined' ? SPELLS : []).filter(s => knownClasses.includes(s.magicClass));
+}
+
+function buildSpellBookPanel() {
+  const container = document.getElementById('spellbook-list');
+  if (!container) return;
+  const known = _builderKnownSpells();
+  container.innerHTML = known.length
+    ? known.map(_spellDetailCardHTML).join('')
+    : '<p style="color:var(--text-dim);font-size:0.85rem;">No spells known yet — invest points in an Arcane, Deific, Demonic, or Nature skill to unlock spells of that class.</p>';
 }
 
 // ─── SKILL MANAGER ──────────────────────────────────────────────────────────
@@ -4027,6 +4107,7 @@ function showPanel(id) {
   if (id === 'playsheet')  recalc();
   if (id === 'skillmgr')   buildSkillManagerTable();
   if (id === 'speciesmgr') buildSpeciesManagerTable();
+  if (id === 'spellbook')  buildSpellBookPanel();
 }
 
 const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
@@ -4574,7 +4655,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260812d';
+const VERSION = 'v0.1.20260813a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
