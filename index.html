@@ -4574,7 +4574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260812b';
+const VERSION = 'v0.1.20260812c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7426,7 +7426,17 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
     target, targetLabel: 'roll under to resist',
     onComplete: async (n) => {
       const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
-      if (!saved) await _applyAoeFailure(casterEnt, spell, ent, token);
+      const effectText = saved ? '' : await _applyAoeFailure(casterEnt, spell, ent, token);
+      // Same effect summary the monster bundle shows on its rows, just in
+      // the individual roller's own damage-display slot — openRoller resets
+      // this on every open, so it's already clean for this target.
+      const dmgEl = document.getElementById('roller-damage-display');
+      if (dmgEl) {
+        dmgEl.style.display = 'block';
+        dmgEl.innerHTML = saved
+          ? `<div style="font-size:0.9rem;color:var(--gold2);">Resisted — no effect.</div>`
+          : `<div style="font-size:0.9rem;color:#e05555;">${_paEsc(effectText || 'Failed the save.')}</div>`;
+      }
       next();
     },
   });
