@@ -4574,7 +4574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260812a';
+const VERSION = 'v0.1.20260812b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7379,12 +7379,13 @@ async function _resolveAoeBundle(casterEnt, spell, targets) {
         const r = rows[i];
         const n = Math.floor(Math.random() * 100) + 1;
         const saved = n <= 5 || (n < 96 && n <= r.target); // mirror the roller's crit rules
-        if (!saved) await _applyAoeFailure(casterEnt, spell, r.ent, r.token);
+        const effectText = saved ? '' : await _applyAoeFailure(casterEnt, spell, r.ent, r.token);
         const rowEl = document.getElementById(`aoe-bundle-row-${i}`);
         if (rowEl) {
           rowEl.style.borderColor = saved ? 'var(--border)' : '#e05555';
+          const outcome = saved ? 'SAVE' : `FAIL${effectText ? ' — ' + _paEsc(effectText) : ''}`;
           rowEl.innerHTML = `<span>${_paEsc(r.ent.name)}</span>
-            <span style="color:${saved ? 'var(--text-dim)' : '#e05555'};font-size:0.74rem;">rolled ${n} → ${saved ? 'SAVE' : 'FAIL'}</span>`;
+            <span style="color:${saved ? 'var(--text-dim)' : '#e05555'};font-size:0.74rem;">rolled ${n} → ${outcome}</span>`;
         }
         await new Promise(res => setTimeout(res, 220)); // light stagger — still reads as dice, not a dump
       }
@@ -7444,12 +7445,16 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
 // positive buff already uses (see _applySpellEffectToTarget's buffAttr
 // block), just negative; cleared the same GM-judged way any other timed
 // buff is. Capped by damageMax same as a normal damage roll either way.
+// Returns a short human-readable summary of what happened ("−4 Quintessence",
+// "Power −3", "no Quintessence to drain") — surfaced in the monster-save
+// bundle screen (_resolveAoeBundle) alongside the roll itself, and folded
+// into _applyAoeFailure's own summary either way.
 const _DRAIN_POOL_KEYS = { Toughness: 'toughness', Stamina: 'stamina', Quintessence: 'quintessence' };
 async function _applyAttributeDrain(spell, ent, token) {
   const attrDef = ATTRIBUTES.find(a => a.label === spell.drainAttribute || a.key === spell.drainAttribute);
-  if (!attrDef) return;
+  if (!attrDef) return '';
   const dmgCap = spell.damageMax || 0;
-  if (dmgCap <= 0) return;
+  if (dmgCap <= 0) return '';
   const raw = Math.random() * (dmgCap - 1) + 1;
 
   const poolKey = _DRAIN_POOL_KEYS[attrDef.key];
@@ -7461,16 +7466,17 @@ async function _applyAttributeDrain(spell, ent, token) {
     const room = max - already;
     if (max <= 0 || room <= 0) {
       logCombat(`${ent.name} has no ${attrDef.label} left for ${spell.name} to drain.`, 'roll');
-      return;
+      return `no ${attrDef.label} to drain`;
     }
     const drain = Math.max(0, Math.round(Math.min(raw, room)));
-    if (drain <= 0) return;
+    if (drain <= 0) return 'no effect';
     await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { [poolKey]: already + drain }) });
     logCombat(`${ent.name} loses ${drain} ${attrDef.label} to ${spell.name}.`, 'hit');
+    return `−${drain} ${attrDef.label}`;
   } else {
     const amount = -Math.max(1, Math.round(raw));
     const t = mapTokens[token.id];
-    if (!t) return;
+    if (!t) return '';
     const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
     current.add(`buff:${attrDef.key}:${amount}`);
     current.add('buffed');
@@ -7479,6 +7485,7 @@ async function _applyAttributeDrain(spell, ent, token) {
     const { error } = await sb.from('map_tokens').update({ conditions: t.conditions }).eq('id', token.id);
     if (error) _writeErrorToast(error, 'map_tokens (drain)');
     logCombat(`${ent.name}'s ${attrDef.label} drops by ${-amount} from ${spell.name}.`, 'hit');
+    return `${attrDef.label} ${amount}`;
   }
 }
 
@@ -7492,9 +7499,14 @@ async function _applyAttributeDrain(spell, ent, token) {
 // residual effect layered on top of the direct hit, e.g. Acid Shower's
 // Corroding. drainAttribute spells (Quintessence Arrow) skip the normal
 // damage roll entirely in favor of _applyAttributeDrain.
+// Returns a short summary of everything that happened ("9 corrode dmg,
+// Corroding, unconscious") so a caller can show it next to the roll itself —
+// see _resolveAoeBundle, which prints it right on the monster's own row
+// instead of leaving the GM to go dig it out of the combat log.
 async function _applyAoeFailure(casterEnt, spell, ent, token) {
+  let effectText = '';
   if (spell.drainAttribute) {
-    await _applyAttributeDrain(spell, ent, token);
+    effectText = await _applyAttributeDrain(spell, ent, token);
   } else {
     const dmgCap = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 0);
     if (dmgCap > 0) {
@@ -7506,17 +7518,29 @@ async function _applyAoeFailure(casterEnt, spell, ent, token) {
         const entityType = ent.type === 'char' ? 'character' : 'creature';
         await applyDamage(entityType, ent.id, dmg, 0);
         logCombat(`${ent.name} takes ${dmg} ${spell.damageCategory || ''} damage from ${spell.name}.`, 'hit');
+        effectText = `${dmg} ${spell.damageCategory || ''} dmg`.trim();
       } else {
         logCombat(`${ent.name}'s armor absorbs ${spell.name}.`, 'roll');
+        effectText = 'armor absorbs';
       }
     }
   }
+  let condText = '';
   if (spell.setsCondition) {
     const roll = Math.floor(Math.random() * 100) + 1;
-    if (roll <= (spell.secondaryChance || 100)) await _applySpellCondition(token.id, spell.setsCondition);
+    if (roll <= (spell.secondaryChance || 100)) {
+      await _applySpellCondition(token.id, spell.setsCondition);
+      const condDef = CONDITION_DEFS.find(d => d.key === spell.setsCondition || d.label.toLowerCase() === spell.setsCondition.toLowerCase());
+      condText = condDef ? condDef.label : spell.setsCondition;
+    }
   }
   const after = getEntity(ent.ref);
-  await _checkDownedState(token.id, after);
+  const downed = await _checkDownedState(token.id, after);
+
+  const parts = [effectText, condText].filter(Boolean);
+  if (downed === 'unconscious') parts.push('unconscious');
+  if (downed === 'dead') parts.push('dead');
+  return parts.join(', ');
 }
 
 // Set a single condition by key/label, same as a weapon-inflicted one —
