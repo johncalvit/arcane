@@ -15,7 +15,7 @@
 // _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
 // SPELLS, hasMagicClass, _spellSuccessPct, atCastSpell, atCompleteCast,
 // _openSpellPickerModal, _maintainedSpellInfo, atStopMaintaining,
-// _slotRemaining, _slotCountdownLabel.
+// _slotRemaining, _slotCountdownLabel, _openPlaySpellBookModal.
 
 function _paEsc(s) {
   return String(s == null ? '' : s)
@@ -225,6 +225,25 @@ function _paSecSkills(skills, attrs) {
   return _paSection('Skills', content);
 }
 
+// Just a link into the full reference (_openPlaySpellBookModal, index.html) —
+// same reasoning as the Cast a Spell chip in the action dialog: dumping every
+// known spell's full card inline stops scaling past a couple of spells, so
+// this stays a single button regardless of how many are known. Hidden
+// entirely for non-casters (no magic-class skill at all) rather than showing
+// an empty section.
+function _paSecSpellBook(ent) {
+  if (typeof hasMagicClass !== 'function' || typeof SPELLS === 'undefined') return '';
+  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
+  if (!knownClasses.length) return '';
+  const count = SPELLS.filter(s => knownClasses.includes(s.magicClass)).length;
+  const content = `<button data-pa="open-spellbook" data-cid="${_paEsc(ent.ref)}"
+    style="width:100%;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;
+    font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.10);color:var(--text);">
+    📖 View Spell Book <span style="color:var(--text-dim);font-size:0.72rem;">(${count})</span>
+  </button>`;
+  return _paSection('Magic', content);
+}
+
 // ── Event delegation ──────────────────────────────────────────────────────────
 // Bound by assignment (el.onclick = …) so re-renders never stack listeners.
 
@@ -242,6 +261,7 @@ function _paBind(el, ctx) {
       case 'back': backToMyCharacter(); break;
       case 'cond': setCondition(d.token, d.key, d.on === '1'); break;
       case 'roll-skill': openRoller({ label: d.name, target: +d.pct, targetLabel: 'or less' }); break;
+      case 'open-spellbook': _openPlaySpellBookModal(d.cid); break;
       case 'roll-init': atRollInitiative(d.id); break;
       case 'open-slot': atOpenSlotModal(d.id, d.slot); break;
       case 'clear-slot': atClearSlot(d.id, d.slot); break;
@@ -332,7 +352,8 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecStats(attrs, ent.baseAttrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
-    ${_paSecSkills(skills, attrs)}`;
+    ${_paSecSkills(skills, attrs)}
+    ${_paSecSpellBook(ent)}`;
 
   _paBind(el, { ent, isOwnSheet });
 }

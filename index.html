@@ -4655,7 +4655,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260813a';
+const VERSION = 'v0.1.20260813b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7061,6 +7061,58 @@ function _openSpellPickerModal(combatantId) {
     font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
   cancel.onclick = () => overlay.remove();
   card.appendChild(cancel);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
+// Read-only reference view for Play Mode — the "📖 View Spell Book" button in
+// the compact character panel (_paSecSpellBook, panels.js). Unlike
+// _openSpellPickerModal (pick one to cast, only during an action), this is
+// just the full detail cards from the Character Builder's Spell Book
+// (_spellDetailCardHTML), viewable any time regardless of combat/turn state.
+function _openPlaySpellBookModal(combatantId) {
+  const ent = getEntity(combatantId);
+  if (!ent) return;
+  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
+  const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
+
+  const existing = document.getElementById('spellbook-view-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'spellbook-view-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
+  title.textContent = `${ent.name} — Spell Book`;
+  card.appendChild(title);
+
+  if (!known.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'font-size:0.8rem;color:var(--text-dim);text-align:center;';
+    empty.textContent = 'No spells known.';
+    card.appendChild(empty);
+  } else {
+    const list = document.createElement('div');
+    list.innerHTML = known.map(_spellDetailCardHTML).join('');
+    card.appendChild(list);
+  }
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
+    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+  closeBtn.onclick = () => overlay.remove();
+  card.appendChild(closeBtn);
 
   overlay.appendChild(card);
   document.body.appendChild(overlay);
@@ -12531,6 +12583,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260810a"></script>
+<script src="panels.js?v=20260813a"></script>
 </body>
 </html>
