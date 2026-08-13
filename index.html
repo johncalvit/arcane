@@ -1686,13 +1686,13 @@
 
 // All attribute multipliers default to 1 (neutral). Height = base height in inches, Weight = body-weight multiplier.
 const DEFAULT_RACE_DATA = {
-  Human:   { BodyType:'Humanoid', Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.5, Height:66, Weight:1   },
-  Dwarf:   { BodyType:'Humanoid', Power:1.2, Speed:0.8, Toughness:1.3, Stamina:1.2, ManualDex:1.1, PhysNimble:0.9, Knowledge:1,   SocialSkills:0.9, Intellect:1,   Intuition:0.9, Quintessence:0.3, DayVision:0.8, Hearing:1.1, Smell:1,   Taste:1.1, NightVision:1.2, Height:50, Weight:1.1 },
-  Elf:     { BodyType:'Humanoid', Power:0.9, Speed:1.1, Toughness:0.8, Stamina:0.9, ManualDex:1.2, PhysNimble:1.2, Knowledge:1.2, SocialSkills:1.1, Intellect:1.1, Intuition:1.2, Quintessence:1.5, DayVision:1.3, Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:68, Weight:0.85},
-  Gnome:   { BodyType:'Humanoid', Power:0.7, Speed:0.8, Toughness:0.8, Stamina:0.8, ManualDex:1.3, PhysNimble:1.1, Knowledge:1.3, SocialSkills:1,   Intellect:1.3, Intuition:1.1, Quintessence:1.2, DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:42, Weight:0.5 },
-  Goblin:  { BodyType:'Humanoid', Power:0.8, Speed:1.2, Toughness:0.9, Stamina:1,   ManualDex:1.1, PhysNimble:1.3, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:1,   Quintessence:0.3, DayVision:0.9, Hearing:1.2, Smell:1.1, Taste:1,   NightVision:1.3, Height:48, Weight:0.6 },
-  Ogre:    { BodyType:'Humanoid', Power:1.8, Speed:0.7, Toughness:1.6, Stamina:1.5, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.6, SocialSkills:0.7, Intellect:0.7, Intuition:0.8, Quintessence:0.2, DayVision:0.8, Hearing:0.9, Smell:1.2, Taste:0.8, NightVision:0.8, Height:90, Weight:2.5 },
-  Halfling:{ BodyType:'Humanoid', Power:0.8, Speed:0.9, Toughness:0.9, Stamina:1,   ManualDex:1.2, PhysNimble:1.2, Knowledge:1,   SocialSkills:1.2, Intellect:1,   Intuition:1.1, Quintessence:0.4, DayVision:1,   Hearing:1.1, Smell:1.1, Taste:1.2, NightVision:0.8, Height:40, Weight:0.55},
+  Human:   { BodyType:'Humanoid', Fly:0, Swim:0, Power:1,   Speed:1,   Toughness:1,   Stamina:1,   ManualDex:1,   PhysNimble:1,   Knowledge:1,   SocialSkills:1,   Intellect:1,   Intuition:1,   Quintessence:0.5, DayVision:1,   Hearing:1,   Smell:1,   Taste:1,   NightVision:0.5, Height:66, Weight:1   },
+  Dwarf:   { BodyType:'Humanoid', Fly:0, Swim:0, Power:1.2, Speed:0.8, Toughness:1.3, Stamina:1.2, ManualDex:1.1, PhysNimble:0.9, Knowledge:1,   SocialSkills:0.9, Intellect:1,   Intuition:0.9, Quintessence:0.3, DayVision:0.8, Hearing:1.1, Smell:1,   Taste:1.1, NightVision:1.2, Height:50, Weight:1.1 },
+  Elf:     { BodyType:'Humanoid', Fly:0, Swim:0, Power:0.9, Speed:1.1, Toughness:0.8, Stamina:0.9, ManualDex:1.2, PhysNimble:1.2, Knowledge:1.2, SocialSkills:1.1, Intellect:1.1, Intuition:1.2, Quintessence:1.5, DayVision:1.3, Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:68, Weight:0.85},
+  Gnome:   { BodyType:'Humanoid', Fly:0, Swim:0, Power:0.7, Speed:0.8, Toughness:0.8, Stamina:0.8, ManualDex:1.3, PhysNimble:1.1, Knowledge:1.3, SocialSkills:1,   Intellect:1.3, Intuition:1.1, Quintessence:1.2, DayVision:1,   Hearing:1.2, Smell:1,   Taste:1,   NightVision:1,   Height:42, Weight:0.5 },
+  Goblin:  { BodyType:'Humanoid', Fly:0, Swim:0, Power:0.8, Speed:1.2, Toughness:0.9, Stamina:1,   ManualDex:1.1, PhysNimble:1.3, Knowledge:0.8, SocialSkills:0.8, Intellect:0.9, Intuition:1,   Quintessence:0.3, DayVision:0.9, Hearing:1.2, Smell:1.1, Taste:1,   NightVision:1.3, Height:48, Weight:0.6 },
+  Ogre:    { BodyType:'Humanoid', Fly:0, Swim:0, Power:1.8, Speed:0.7, Toughness:1.6, Stamina:1.5, ManualDex:0.7, PhysNimble:0.7, Knowledge:0.6, SocialSkills:0.7, Intellect:0.7, Intuition:0.8, Quintessence:0.2, DayVision:0.8, Hearing:0.9, Smell:1.2, Taste:0.8, NightVision:0.8, Height:90, Weight:2.5 },
+  Halfling:{ BodyType:'Humanoid', Fly:0, Swim:0, Power:0.8, Speed:0.9, Toughness:0.9, Stamina:1,   ManualDex:1.2, PhysNimble:1.2, Knowledge:1,   SocialSkills:1.2, Intellect:1,   Intuition:1.1, Quintessence:0.4, DayVision:1,   Hearing:1.1, Smell:1.1, Taste:1.2, NightVision:0.8, Height:40, Weight:0.55},
 };
 
 const DEFAULT_GENDER_DATA = {
@@ -1806,6 +1806,8 @@ let statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:1
 const ATTRIBUTES = [
   { key:'Power',          label:'Power',               rawStat:'Strength',    raceKey:'Power',        desc:'Damage & lifting. Can deadlift 10× Power.',          group:'physical' },
   { key:'Speed',          label:'Speed',               rawStat:'Strength',    raceKey:'Speed',        desc:'Movement speed in feet per second.',                  group:'physical' },
+  { key:'Fly',            label:'Fly Speed',           rawStat:'Strength',    raceKey:'Fly',   raceDefault:0, desc:'Flight speed in feet per second, for species capable of flight. 0 = cannot fly.', group:'physical' },
+  { key:'Swim',           label:'Swim Speed',          rawStat:'Strength',    raceKey:'Swim',  raceDefault:0, desc:'Swimming speed in feet per second, beyond ordinary movement. 0 = no innate swim bonus.', group:'physical' },
   { key:'Toughness',      label:'Toughness',           rawStat:'Endurance',   raceKey:'Toughness',    desc:'Absorb & withstand physical damage, ability to heal.',group:'physical' },
   { key:'Stamina',        label:'Stamina',             rawStat:'Endurance',   raceKey:'Stamina',      desc:'Energy for physical activity.',                       group:'physical' },
   { key:'ManualDex',      label:'Manual Dexterity',    rawStat:'Agility',     raceKey:'ManualDex',    desc:'Fine motor skills with hands.',                       group:'physical' },
@@ -1851,7 +1853,11 @@ function calcAttributes() {
   const results = {};
   for (const attr of ATTRIBUTES) {
     const rawVal = statValues[attr.rawStat] || 0;
-    const rM = (RACE_DATA[race]   || {})[attr.raceKey]  || 1;
+    // ?? not || — a species with an explicit 0 (or, for Fly/Swim, no entry
+    // at all — see raceDefault) must compute to 0, not silently fall back to
+    // a 1× "same as everyone else" modifier. Most attributes have no
+    // raceDefault and keep the old implicit 1× when genuinely unset.
+    const rM = (RACE_DATA[race] || {})[attr.raceKey] ?? (attr.raceDefault ?? 1);
     const gM = getModifier(GENDER_DATA, gender, attr.key);
     const aM = getModifier(AGE_DATA,    age,    attr.key);
     const hM = getModifier(HEIGHT_DATA, height, attr.key);
@@ -4135,7 +4141,7 @@ function exitConfigMode() {
 // ── Species Manager ───────────────────────────────────────────────────────────
 let _speciesEditName = null; // null = new, string = editing existing
 
-const SPECIES_ATTR_FIELDS = ATTRIBUTES.map(a => ({ raceKey: a.raceKey, label: a.label, group: a.group }));
+const SPECIES_ATTR_FIELDS = ATTRIBUTES.map(a => ({ raceKey: a.raceKey, label: a.label, group: a.group, raceDefault: a.raceDefault ?? 1 }));
 
 let speciesMgrShowMonsters = true;
 function setSpeciesMgrFilter(showAll) {
@@ -4177,7 +4183,7 @@ function _buildSpeciesAttrInputs() {
       const div = document.createElement('div');
       div.className = 'field';
       div.innerHTML = `<label>${f.label}</label>
-        <input type="number" id="smgr-attr-${f.raceKey}" min="0.1" max="10" step="0.05" value="1">`;
+        <input type="number" id="smgr-attr-${f.raceKey}" min="0" max="10" step="0.05" value="${f.raceDefault}">`;
       container.appendChild(div);
     });
   });
@@ -4199,7 +4205,7 @@ function openSpeciesForm(name) {
 
   SPECIES_ATTR_FIELDS.forEach(f => {
     const el = document.getElementById('smgr-attr-' + f.raceKey);
-    if (el) el.value = d[f.raceKey] ?? 1;
+    if (el) el.value = d[f.raceKey] ?? f.raceDefault;
   });
 
   document.getElementById('species-form').style.display = 'block';
@@ -4245,7 +4251,10 @@ function saveSpecies() {
   };
   SPECIES_ATTR_FIELDS.forEach(f => {
     const el = document.getElementById('smgr-attr-' + f.raceKey);
-    entry[f.raceKey] = parseFloat(el?.value) || 1;
+    // Not `|| f.raceDefault` — a GM-entered 0 (e.g. "this species cannot
+    // fly") is falsy and would silently save as the default instead.
+    const v = parseFloat(el?.value);
+    entry[f.raceKey] = Number.isNaN(v) ? f.raceDefault : v;
   });
 
   RACE_DATA[nameInput] = entry;
@@ -4655,7 +4664,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260813e';
+const VERSION = 'v0.1.20260814a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11013,7 +11022,7 @@ function calcAttributesFromData(data) {
   const results = {};
   for (const attr of ATTRIBUTES) {
     const rawVal = stats[attr.rawStat] || 0;
-    const rM = (RACE_DATA[race]   || {})[attr.raceKey] || 1;
+    const rM = (RACE_DATA[race] || {})[attr.raceKey] ?? (attr.raceDefault ?? 1);
     const gM = getModifier(GENDER_DATA, gender, attr.key);
     const aM = getModifier(AGE_DATA,    age,    attr.key);
     const hM = getModifier(HEIGHT_DATA, height, attr.key);
