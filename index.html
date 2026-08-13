@@ -4655,7 +4655,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260813c';
+const VERSION = 'v0.1.20260813d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5554,6 +5554,7 @@ function enterPlayMode() {
   const layout = document.getElementById('play-layout');
   const gmPanel = document.getElementById('play-gm-panel');
   const gmToolbar = document.getElementById('map-toolbar-gm');
+  const authoringToolbar = document.getElementById('map-toolbar-authoring');
   const resizeRight = document.getElementById('resize-right');
   if (isGM()) {
     gmPanel.style.display = 'flex';
@@ -5563,11 +5564,13 @@ function enterPlayMode() {
       <div class="tb-sep"></div>
       <span class="tb-label">GM:</span>
       <button class="btn-sm btn-text" onclick="triggerMapUpload()">⬆ Upload</button>`;
+    if (authoringToolbar) authoringToolbar.style.display = 'flex';
     loadMapLibrary();
   } else {
     gmPanel.style.display = 'none';
     resizeRight.style.display = 'none';
     gmToolbar.style.display = 'none';
+    if (authoringToolbar) authoringToolbar.style.display = 'none';
   }
 
   renderPlayCharacter();
@@ -11386,26 +11389,26 @@ let calStartX  = 0;
 let calStartY  = 0;
 let mapScalePPF = 0;  // pixels per foot for the active map
 
-// ── GM toolbar: add calibrate button ─────────────────────────────────────────
-// Patched into enterPlayMode via the gmToolbar innerHTML already set in
-// enterPlayMode; we extend it here after the fact.
+// ── Map Setup toolbar: add calibrate button ──────────────────────────────────
+// Lives in #map-toolbar-authoring (a separate row from the always-visible
+// zoom/Measure/Path/Upload row) — map setup tools are used far less often
+// and were crowding the main row.
 const _origEnterPlayModeS3 = enterPlayMode;
 enterPlayMode = function() {
   _origEnterPlayModeS3();
   if (isGM()) {
-    const tb = document.getElementById('map-toolbar-gm');
+    const tb = document.getElementById('map-toolbar-authoring');
     if (tb) tb.insertAdjacentHTML('beforeend',
-      `<div class="tb-sep"></div>
-       <button class="btn-sm btn-text" id="cal-btn" onclick="toggleCalibrationMode()">📏 Calibrate</button>`);
+      `<button class="btn-sm btn-text" id="cal-btn" onclick="toggleCalibrationMode()">📏 Calibrate</button>`);
   }
 };
 
-// ── GM toolbar: add wall/obstacle drawing tools ──────────────────────────────
+// ── Map Setup toolbar: add wall/obstacle drawing tools ───────────────────────
 const _origEnterPlayModeWalls = enterPlayMode;
 enterPlayMode = function() {
   _origEnterPlayModeWalls();
   if (isGM()) {
-    const tb = document.getElementById('map-toolbar-gm');
+    const tb = document.getElementById('map-toolbar-authoring');
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="wall-btn" onclick="toggleWallMode()">🧱 Walls</button>
@@ -12672,6 +12675,12 @@ switchGmTab = function(tab) {
         <div class="tb-sep"></div>
         <!-- GM-only controls inserted here by JS -->
         <div id="map-toolbar-gm" style="display:none;align-items:center;gap:6px;"></div>
+      </div>
+      <!-- GM map-authoring tools (Calibrate, Walls) — separate row so the
+           always-available viewing/movement controls above don't get
+           crowded by setup tools that are used far less often. -->
+      <div class="map-toolbar" id="map-toolbar-authoring" style="display:none;align-items:center;gap:6px;border-top:1px solid var(--border);">
+        <span class="tb-label">Map Setup:</span>
       </div>
       <div class="map-viewport" id="map-viewport">
         <div class="map-canvas" id="map-canvas">
