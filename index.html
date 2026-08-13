@@ -4655,7 +4655,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260813d';
+const VERSION = 'v0.1.20260813e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11893,6 +11893,8 @@ function enterWallMode() {
   if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
   const svg = document.getElementById('wall-svg');
   if (svg) svg.style.display = 'block';
+  const hint = document.getElementById('wall-mode-hint');
+  if (hint) hint.style.display = 'block';
   drawWalls();
 }
 
@@ -11904,6 +11906,8 @@ function exitWallMode() {
   document.getElementById('map-viewport').classList.remove('cal-mode');
   const btn = document.getElementById('wall-btn');
   if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+  const hint = document.getElementById('wall-mode-hint');
+  if (hint) hint.style.display = 'none';
   drawWalls(); // clear the in-progress preview, keep committed walls visible
 }
 
@@ -12685,6 +12689,18 @@ switchGmTab = function(tab) {
       <div class="map-viewport" id="map-viewport">
         <div class="map-canvas" id="map-canvas">
           <img id="map-img" src="" alt="" style="display:none;" draggable="false">
+        </div>
+        <!-- persistent reminder while a map click-capturing mode is active —
+             fixed to the viewport (not map/token coordinates) so it stays
+             visible regardless of pan/zoom. Wall mode swallows every click
+             on the map (same as attack/AOE targeting or path drawing
+             already do) so tokens can't be clicked until it's exited; this
+             makes that, and the way out, obvious instead of a silent trap. -->
+        <div id="wall-mode-hint" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+             z-index:30;background:rgba(20,15,5,0.92);border:1px solid var(--gold);border-radius:5px;
+             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:Georgia,serif;
+             white-space:nowrap;pointer-events:none;">
+          🧱 Wall Mode — click to draw · double-click/right-click to finish a Line · <b>Esc</b> or the <b>Walls</b> button to exit
         </div>
         <div class="map-placeholder" id="map-placeholder">
           <div class="big-icon">🗺</div>
