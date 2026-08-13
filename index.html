@@ -1501,6 +1501,7 @@
           <div class="field"><label>Hit Formula (Individual Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
           <div class="field"><label>Save Formula (Area spells)</label><input type="text" id="spf-saveformula" placeholder="e.g. Power + Speed + Physical Coordination"></div>
           <div class="field"><label>Drain Attribute (Area, on failed save)</label><input type="text" id="spf-drainattribute" placeholder="e.g. Quintessence, Power, Speed — blank = normal damage roll"></div>
+          <div class="field"><label>Obstacle HP (Creation spells)</label><input type="text" id="spf-obstaclehp" placeholder="e.g. 200 — a Line obstacle this durable, blocking vision+movement, until destroyed or unmaintained"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="spf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="spf-stamina" placeholder="0"></div>
           <div class="field"><label>Restore Blood</label><input type="text" id="spf-blood" placeholder="0"></div>
@@ -3510,67 +3511,67 @@ const DEFAULT_SPELLS = [
     difficultyStat:"Knowledge", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Sector", aoeSize:"45°, 15 ft radius", spellType:"Attack",
     damageStat:"Logic", damageCategory:"burn", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On forming the quintessence pattern, fire spouts from the caster's talisman, burning a sector out to 15 feet. Anyone caught who fails a Power+Speed+Coordination save takes a burn damage roll with maximum equal to the caster's Logic." },
   { name:"Misted Form", range:"Touch", castingTime:4, cost:1, maintained:true,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
-    aoeShape:"Rectangle", aoeSize:"10 ft wide, 5 ft tall, 1 ft thick", spellType:"Creation",
+    aoeShape:"Line", aoeSize:"10 ft long, 1 ft wide", spellType:"Creation",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet. The wall is 10 feet wide, 5 feet tall, 1 foot thick, blocks all attacks, and can take 200 points of damage. Melts within 1 hour (GM's discretion). (Not yet buildable — needs the obstacle/drawing-tools system, planned for a later phase; Rectangle isn't a supported AOE shape yet either.)" },
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", obstacleHp:200, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"On forming the quintessence pattern, the mage causes a wall of ice to form within 10 feet, aimed wherever the caster targets. The wall is 10 feet long, blocks vision and movement, and can take 200 points of damage before it breaks. Fades on its own if the caster stops maintaining it (or is unable to); the GM can otherwise judge it melted after about an hour. (Height/thickness are flavor only — the map is 2D, so only the wall's length and blocking matter for play.)" },
   { name:"Minor Heal", range:"Touch", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Deific", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
-    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A minor working of restorative magic — mends the target's wounds by channeling stored power into flesh." },
   { name:"Storm Arc", range:"30 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Arcane", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling arc of lightning leaps from the caster's hand toward the target. Ranged attack, resolves like a bolt — cast successfully, then roll to hit; deals up to d10 Shock damage." },
   { name:"Acidic Spew", range:"20 feet", castingTime:1, cost:3, maintained:false,
     difficultyStat:"Logic", difficultyValue:12, magicClass:"Demonic", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"corrode", damageMax:8, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"The caster spews a jet of corrosive bile at the target, eating through flesh and metal alike. Ranged attack; deals up to d8 Corrode damage." },
   { name:"Frost Fang", range:"15 feet", castingTime:1, cost:2, maintained:false,
     difficultyStat:"Intuition", difficultyValue:12, magicClass:"Nature", targetType:"Individual",
     aoeShape:"", aoeSize:"", spellType:"Attack",
     damageStat:"", damageCategory:"freeze", damageMax:4, hitFormula:"Day Vision + Logic", saveFormula:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:60, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"Jagged shards of ice lance toward the target, biting deep and numbing their limbs. Ranged attack; deals up to d4 Freeze damage and, on a hit, has a 60% chance to Slow the target." },
   { name:"Mire Pool", range:"50 feet", castingTime:1, cost:5, maintained:true,
     difficultyStat:"Logic", difficultyValue:13, magicClass:"Nature", targetType:"Area",
     aoeShape:"Circle", aoeSize:"20 ft diameter", spellType:"Control",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:0, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"slowed", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A pool of clinging mire wells up in a 20-foot circle. Anyone standing in it when it's cast who fails a Power+Speed+Coordination save is Slowed (shake off with a Power-based save, same as Stun). Only catches whoever's there at the moment of casting — it doesn't re-check anyone who wanders in later." },
   { name:"Acid Shower", range:"100 feet", castingTime:1, cost:5, maintained:true,
     difficultyStat:"Logic", difficultyValue:14, magicClass:"Demonic", targetType:"Area",
     aoeShape:"Circle", aoeSize:"10 ft diameter", spellType:"Attack",
     damageStat:"", damageCategory:"corrode", damageMax:12, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"corroding", secondaryChance:50, drainAttribute:"", buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"corroding", secondaryChance:50, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A burst of caustic droplets rains over a 10-foot circle. Anyone in it who fails a Power+Speed+Coordination save takes up to d12 Corrode damage, with a 50% chance the acid keeps burning (Corroding — 1 damage/round until shaken off). Only catches whoever's there at the moment of casting." },
   { name:"Lightning Bolt", range:"60 feet", castingTime:1, cost:4, maintained:false,
     difficultyStat:"Logic", difficultyValue:14, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Line", aoeSize:"60 ft long, 5 ft wide", spellType:"Attack",
     damageStat:"", damageCategory:"shock", damageMax:10, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A crackling bolt of lightning blasts out from the caster in a straight line, punching through anyone in its path rather than stopping at the first target. Everyone in the 60-foot line who fails a Power+Speed+Coordination save takes up to d10 Shock damage." },
   { name:"Quintessence Arrow", range:"40 feet", castingTime:1, cost:4, maintained:false,
     difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Line", aoeSize:"40 ft long, 3 ft wide", spellType:"Attack",
     damageStat:"", damageCategory:"", damageMax:6, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"Quintessence",
-    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A narrow, needle-thin lance of raw quintessence streaks out in a straight line, unraveling the magical reserves of anyone it passes through. Everyone in the 40-foot line who fails a Power+Speed+Coordination save loses up to 6 Quintessence — a real threat to other casters, and no threat at all to a target with none to lose." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
@@ -3998,6 +3999,7 @@ function openSpellForm(index) {
   document.getElementById('spf-hitformula').value      = row ? (row.hitFormula || '') : '';
   document.getElementById('spf-saveformula').value     = row ? (row.saveFormula || '') : '';
   document.getElementById('spf-drainattribute').value  = row ? (row.drainAttribute || '') : '';
+  document.getElementById('spf-obstaclehp').value      = row && row.obstacleHp ? row.obstacleHp : '';
   document.getElementById('spf-toughness').value       = row ? row.restoreToughness : '';
   document.getElementById('spf-stamina').value         = row ? row.restoreStamina : '';
   document.getElementById('spf-blood').value           = row ? row.restoreBlood : '';
@@ -4038,6 +4040,7 @@ function saveSpell() {
     hitFormula: document.getElementById('spf-hitformula').value.trim(),
     saveFormula: document.getElementById('spf-saveformula').value.trim(),
     drainAttribute: document.getElementById('spf-drainattribute').value.trim(),
+    obstacleHp: parseFloat(document.getElementById('spf-obstaclehp').value) || 0,
     restoreToughness: parseFloat(document.getElementById('spf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('spf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('spf-blood').value) || 0,
@@ -4664,7 +4667,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814a';
+const VERSION = 'v0.1.20260814b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7405,6 +7408,50 @@ function aoeMouseDown(e) {
   return true;
 }
 
+// Creation spells (Ice Shield, ...) place a real obstacle instead of
+// resolving saves: a Line-type wall (see the map's own wall-drawing tool,
+// _wallCommit) of the spell's configured length, aimed from the caster
+// toward the click — same click-sets-facing convention every other Line/
+// Sector AOE spell already uses. Tagged with maxHp/hp (obstacleHp) and
+// maintainedBy so it (a) can be worn down and destroyed like real terrain,
+// and (b) disappears on its own via atStopMaintaining once the caster stops
+// sustaining it (goes unconscious, runs out of Quintessence, or stops
+// deliberately) — matching "fades if the caster stops maintaining it."
+// Unlike GM-drawn walls (invisible authoring geometry, shown only while
+// actively editing), an obstacle a PLAYER can see appear needs to actually
+// be visible on the map for everyone, all the time — see drawWalls().
+async function _resolveSpellObstacle(casterEnt, spell, aoePoint) {
+  const { length, width } = _parseAoeGeometry(spell);
+  if (length <= 0) { showToast(`${spell.name} has no configured size.`, 'error'); return; }
+  const casterToken = _pathFindToken(casterEnt.ref);
+  if (!casterToken || mapScalePPF <= 0 || !aoePoint) { showToast('No map/scale to place the obstacle.', 'error'); return; }
+
+  const toFt  = (xPct, yPct) => ({ x: (xPct / 100) * mapImgW / mapScalePPF, y: (yPct / 100) * mapImgH / mapScalePPF });
+  const toPct = (ft) => ({ x_pct: Math.min(100, Math.max(0, (ft.x * mapScalePPF / mapImgW) * 100)),
+                            y_pct: Math.min(100, Math.max(0, (ft.y * mapScalePPF / mapImgH) * 100)) });
+  const casterFt = toFt(casterToken.x_pct, casterToken.y_pct);
+  const aimFt    = toFt(aoePoint.xPct, aoePoint.yPct);
+  const dirLen   = Math.hypot(aimFt.x - casterFt.x, aimFt.y - casterFt.y) || 1;
+  const ux = (aimFt.x - casterFt.x) / dirLen, uy = (aimFt.y - casterFt.y) / dirLen;
+  const endFt = { x: casterFt.x + ux * length, y: casterFt.y + uy * length };
+
+  const hp = spell.obstacleHp || 0;
+  const wall = {
+    id: 'wall-' + Date.now() + '-' + Math.round(Math.random() * 9999),
+    type: 'line',
+    points: [toPct(casterFt), toPct(endFt)],
+    blocksVision: true, blocksMovement: true,
+    createdBy: casterEnt.name, spellName: spell.name,
+  };
+  if (hp > 0) { wall.hp = hp; wall.maxHp = hp; }
+  if (spell.maintained) wall.maintainedBy = casterEnt.ref;
+  mapWalls.push(wall);
+  await saveMapWalls();
+  drawWalls();
+  logCombat(`${spell.name} forms a barrier${hp ? ` (${hp} HP)` : ''}.`, 'good');
+  refreshUI();
+}
+
 // Resolve an Area spell once the casting check succeeds: find every token
 // caught in the shape (Circle centered on the click, Sector emanating from
 // the caster toward the click, or Line — a fixed-length/width beam from the
@@ -7832,6 +7879,15 @@ async function atStopMaintaining(casterRef, opts) {
       }
     }
   }
+  // Creation spells (Ice Shield, ...) fade when the caster stops sustaining
+  // them — whether that's a deliberate stop, running out of resources, or
+  // going unconscious, all of which already funnel through this same
+  // function (see atNext's maintained-spell drain loop).
+  if (info.spell.spellType === 'Creation') {
+    const before = mapWalls.length;
+    mapWalls = mapWalls.filter(w => w.maintainedBy !== casterRef);
+    if (mapWalls.length !== before) { await saveMapWalls(); drawWalls(); }
+  }
   if (!(opts && opts.silent)) {
     const casterEnt = getEntity(casterRef);
     logCombat(`${casterEnt?.name || 'Someone'} stops maintaining ${info.spell.name}.`, 'roll');
@@ -7869,7 +7925,16 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
       const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
 
       if (success) {
-        if (spell.targetType === 'Area') {
+        if (spell.spellType === 'Creation' && spell.targetType === 'Area') {
+          // Creation spells place a real obstacle on the map (a wall,
+          // reusing the same geometry/rendering the GM's own wall-drawing
+          // tool uses) instead of resolving saves against anyone caught in
+          // the area — there's no one to save against, it's terrain.
+          showToast(`${spell.name} takes shape!${costNote}`, 'good');
+          logCombat(`${casterEnt.name} casts ${spell.name}${costNote}.`, 'good');
+          if (spell.maintained) await _startMaintaining(casterEnt, spell, null);
+          await _resolveSpellObstacle(casterEnt, spell, aoePoint);
+        } else if (spell.targetType === 'Area') {
           // Area spells resolve as a burst: everyone caught at the moment
           // of casting saves; nothing further re-checks the area later
           // (see the spell descriptions). Still starts the maintain-drain
@@ -12043,9 +12108,31 @@ async function toggleWallFlag(wallId, flag) {
   drawWalls();
 }
 
-// Draws every committed wall plus whatever's currently mid-draw. GM-only —
-// walls aren't meant to be their own visible layer for players, just
-// geometry the map art already implies (and later, what fog/movement read).
+// Manual damage entry for obstacle walls (Ice Shield, ...) — there's no
+// "attack the wall" targeting flow, matching how the spell's own "GM's
+// discretion" framing already treats this kind of thing; the GM just types
+// in what a hit did. Breaks (removed entirely) at 0 HP.
+async function applyWallDamage(wallId, amount) {
+  const w = mapWalls.find(w => w.id === wallId);
+  if (!w || !w.maxHp || !amount) return;
+  w.hp = Math.max(0, (w.hp ?? w.maxHp) - amount);
+  if (w.hp <= 0) {
+    mapWalls = mapWalls.filter(x => x.id !== wallId);
+    logCombat(`${w.spellName || 'The obstacle'} breaks apart.`, 'kill');
+  }
+  await saveMapWalls();
+  drawWalls();
+  _openManageWallsModal(); // refresh the list in place
+}
+
+// Draws every committed wall plus whatever's currently mid-draw. Two very
+// different visibility rules share this one function:
+// - Obstacles (spell-created, have maxHp — e.g. Ice Shield) are a real,
+//   visible-in-fiction thing everyone watched appear, so they're drawn for
+//   EVERYONE, all the time, regardless of GM/wall-mode state.
+// - Plain GM-drawn walls (no maxHp) are just authoring geometry standing in
+//   for what the map art already implies — shown only to the GM, and only
+//   while actively in wall-draw mode, same as before obstacles existed.
 // mouseX/mouseY (viewport px, optional) extend the in-progress shape to the
 // current cursor position — passed through from wallMouseMove. Every commit,
 // mode change, or map pan/zoom just calls drawWalls() with no args, which
@@ -12054,11 +12141,18 @@ async function toggleWallFlag(wallId, flag) {
 function drawWalls(mouseX, mouseY) {
   const svg = document.getElementById('wall-svg');
   if (!svg) return;
-  if (!isGM() || !wallMode) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  const showAuthoring = isGM() && wallMode;
+  const obstacles = mapWalls.filter(w => w.maxHp);
+  if (!showAuthoring && !obstacles.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
   svg.style.display = 'block';
   svg.innerHTML = '';
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
-  mapWalls.forEach(w => _wallDrawShape(svg, w, color, fill, false));
+  const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
+  mapWalls.forEach(w => {
+    if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
+    else if (showAuthoring) _wallDrawShape(svg, w, color, fill, false);
+  });
+  if (!showAuthoring) return; // nothing further to preview if not actively drawing
 
   const previewColor = '#4de0c0';
   if (_wallShape() === 'line' && wallDrawPoints.length) {
@@ -12081,7 +12175,7 @@ function drawWalls(mouseX, mouseY) {
   }
 }
 
-function _wallDrawShape(svg, w, color, fill, dashed) {
+function _wallDrawShape(svg, w, color, fill, dashed, isObstacle) {
   const pts = (w.points || []).map(_wallPctToVp);
   if (w.type === 'line' && pts.length >= 2) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -12110,13 +12204,18 @@ function _wallDrawShape(svg, w, color, fill, dashed) {
     if (dashed) el.setAttribute('stroke-dasharray', '8,4');
     svg.appendChild(el);
   }
-  // Small icons showing what this wall blocks, at its first point.
+  // Obstacles show their HP (the thing players actually care about);
+  // plain authoring walls show the vision/movement icons instead (only the
+  // GM ever sees those, mid-draw).
   if (pts.length && !dashed) {
-    const flags = (w.blocksVision ? '👁' : '') + (w.blocksMovement ? '🚶' : '');
+    const flags = isObstacle
+      ? `❄ ${w.hp}/${w.maxHp} HP`
+      : (w.blocksVision ? '👁' : '') + (w.blocksMovement ? '🚶' : '');
     if (flags) {
       const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tx.setAttribute('x', pts[0].x); tx.setAttribute('y', pts[0].y - 8);
       tx.setAttribute('font-size', '11'); tx.setAttribute('text-anchor', 'middle');
+      tx.setAttribute('fill', color); // was unset — rendered invisible (black text, black outline)
       tx.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
       tx.textContent = flags;
       svg.appendChild(tx);
@@ -12153,16 +12252,25 @@ async function _openManageWallsModal() {
 
   mapWalls.forEach((w, i) => {
     const row = document.createElement('div');
-    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:10px;
+    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
       padding:7px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);font-size:0.82rem;`;
     const safeId = w.id.replace(/'/g, "\\'");
+    const label = w.maxHp
+      ? `#${i + 1} ${_paEsc(w.spellName || 'obstacle')} <span style="color:var(--text-dim);font-size:0.74rem;">❄ ${w.hp}/${w.maxHp} HP</span>`
+      : `#${i + 1} ${_paEsc(w.type)}`;
+    // Obstacles get a damage-entry control instead of the vision/movement
+    // toggles — those are fixed (blocks both) for a spell-created barrier;
+    // GM-drawn walls keep the toggles since those are the whole point there.
+    const controls = w.maxHp
+      ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:Georgia,serif;font-size:0.78rem;">
+         <button onclick="applyWallDamage('${safeId}', parseFloat(document.getElementById('wall-dmg-${safeId}').value) || 0)" style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;">Apply</button>
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;" title="Remove immediately">✕</button>`
+      : `<label style="cursor:pointer;"><input type="checkbox" ${w.blocksVision ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksVision')"> 👁</label>
+         <label style="cursor:pointer;"><input type="checkbox" ${w.blocksMovement ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksMovement')"> 🚶</label>
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`;
     row.innerHTML = `
-      <span>#${i + 1} ${_paEsc(w.type)}</span>
-      <span style="display:flex;gap:10px;align-items:center;">
-        <label style="cursor:pointer;"><input type="checkbox" ${w.blocksVision ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksVision')"> 👁</label>
-        <label style="cursor:pointer;"><input type="checkbox" ${w.blocksMovement ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksMovement')"> 🚶</label>
-        <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>
-      </span>`;
+      <span>${label}</span>
+      <span style="display:flex;gap:8px;align-items:center;">${controls}</span>`;
     card.appendChild(row);
   });
 
