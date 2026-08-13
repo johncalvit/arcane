@@ -4655,7 +4655,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260813b';
+const VERSION = 'v0.1.20260813c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9972,6 +9972,7 @@ function applyMapTransform() {
   if (label) label.textContent = Math.round(mapScale * 100) + '%';
   refreshStrayRay();
   drawSentinelRanges();
+  if (typeof drawWalls === 'function') drawWalls();
 }
 
 function mapZoom(factor, cx, cy) {
@@ -11338,6 +11339,7 @@ document.addEventListener('keydown', e => {
       exitAoeCastMode(); e.stopPropagation();
       if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
     }
+    else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
   }
 });
@@ -11356,6 +11358,7 @@ exitPlayMode = function() {
   _origExitPlayMode();
   if (attackMode) exitAttackMode();
   if (aoeMode)    exitAoeCastMode();
+  if (wallMode)   exitWallMode();
   if (pathMode)   exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
@@ -11370,6 +11373,7 @@ loadActiveMap = async function(mapId) {
   await _origLoadActiveMap(mapId);
   await loadMapTokens(mapId);
   await loadMapScale(mapId);
+  await loadMapWalls(mapId);
   await atAutoAddMapTokens();
   renderPlayCharacter();
 };
@@ -11393,6 +11397,28 @@ enterPlayMode = function() {
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="cal-btn" onclick="toggleCalibrationMode()">📏 Calibrate</button>`);
+  }
+};
+
+// ── GM toolbar: add wall/obstacle drawing tools ──────────────────────────────
+const _origEnterPlayModeWalls = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModeWalls();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-gm');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" id="wall-btn" onclick="toggleWallMode()">🧱 Walls</button>
+       <select id="wall-shape-sel" class="btn-sm" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
+         <option value="line">Line</option>
+         <option value="rect">Rect</option>
+         <option value="circle">Circle</option>
+       </select>
+       <label class="btn-sm" style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--text-dim);cursor:pointer;" title="This wall blocks line of sight">
+         <input type="checkbox" id="wall-blocks-vision" checked>👁</label>
+       <label class="btn-sm" style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--text-dim);cursor:pointer;" title="This wall blocks movement">
+         <input type="checkbox" id="wall-blocks-movement" checked>🚶</label>
+       <button class="btn-sm btn-text" onclick="_openManageWallsModal()">📋 Manage</button>`);
   }
 };
 
@@ -11829,6 +11855,312 @@ async function pathCommit() {
   if (combId) atOpenSlotModal(combId, 'right');
 }
 
+// ─── Walls / obstacles ────────────────────────────────────────────────────────
+// Lightweight, GM-authored geometry for the active map: line (polyline —
+// click a chain of points, double-click/right-click/Enter to finish, same
+// interaction as the Path tool above, just for permanent geometry instead of
+// a one-off move), rect, and circle. Each wall stores blocksVision/
+// blocksMovement flags for future features (fog of war's occlusion, movement
+// collision) to consume — this pass only draws, saves, and displays them;
+// neither flag is enforced yet. Points are stored as {x_pct,y_pct} (percent
+// of the map image), same convention as token positions, so they scale with
+// the image regardless of its native resolution. Kept structurally close to
+// Universal VTT's line_of_sight polygons (an array of point arrays) in case
+// importing a Dungeondraft-authored map's walls is ever worth adding later.
+let mapWalls        = []; // [{id, type:'line'|'rect'|'circle', points:[{x_pct,y_pct},...], blocksVision, blocksMovement}]
+let wallMode         = false;
+let wallDrawPoints   = []; // viewport-px points, in-progress Line polyline
+let wallDragStart    = null; // viewport-px {x,y}, in-progress Rect/Circle drag
+let wallDragging     = false;
+
+function toggleWallMode() {
+  wallMode ? exitWallMode() : enterWallMode();
+}
+
+function enterWallMode() {
+  wallMode = true;
+  wallDrawPoints = [];
+  wallDragStart = null;
+  wallDragging = false;
+  if (calMode)     exitCalibrationMode();
+  if (measureMode) exitMeasureMode();
+  if (pathMode)    exitPathMode();
+  document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
+  const btn = document.getElementById('wall-btn');
+  if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
+  const svg = document.getElementById('wall-svg');
+  if (svg) svg.style.display = 'block';
+  drawWalls();
+}
+
+function exitWallMode() {
+  wallMode = false;
+  wallDrawPoints = [];
+  wallDragStart = null;
+  wallDragging = false;
+  document.getElementById('map-viewport').classList.remove('cal-mode');
+  const btn = document.getElementById('wall-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+  drawWalls(); // clear the in-progress preview, keep committed walls visible
+}
+
+function _wallShape() { return document.getElementById('wall-shape-sel')?.value || 'line'; }
+function _wallBlocksVision()   { return document.getElementById('wall-blocks-vision')?.checked   ?? true; }
+function _wallBlocksMovement() { return document.getElementById('wall-blocks-movement')?.checked ?? true; }
+
+function _wallVpToPct(vpX, vpY) {
+  const imgX = (vpX - mapOffsetX) / mapScale;
+  const imgY = (vpY - mapOffsetY) / mapScale;
+  return { x_pct: Math.min(100, Math.max(0, (imgX / mapImgW) * 100)),
+           y_pct: Math.min(100, Math.max(0, (imgY / mapImgH) * 100)) };
+}
+function _wallPctToVp(pt) {
+  return { x: (pt.x_pct / 100) * mapImgW * mapScale + mapOffsetX,
+           y: (pt.y_pct / 100) * mapImgH * mapScale + mapOffsetY };
+}
+
+function wallMouseDown(e) {
+  if (!wallMode) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x    = e.clientX - rect.left;
+  const y    = e.clientY - rect.top;
+  const shape = _wallShape();
+
+  if (shape === 'line') {
+    if (e.button === 2) { _wallCommitLine(); return true; }
+    if (e.detail === 2 && wallDrawPoints.length >= 1) { _wallCommitLine(); return true; }
+    wallDrawPoints.push({ x, y });
+    drawWalls(null, null);
+    return true;
+  }
+  // rect/circle: a single drag from start to end
+  wallDragStart = { x, y };
+  wallDragging = true;
+  drawWalls(x, y);
+  return true;
+}
+
+function wallMouseMove(e) {
+  if (!wallMode) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  if (_wallShape() === 'line') {
+    if (wallDrawPoints.length === 0) return;
+    drawWalls(x, y);
+  } else if (wallDragging && wallDragStart) {
+    drawWalls(x, y);
+  }
+}
+
+function wallMouseUp(e) {
+  if (!wallMode || _wallShape() === 'line') return;
+  if (!wallDragging || !wallDragStart) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const shape = _wallShape();
+  const dist = Math.hypot(x - wallDragStart.x, y - wallDragStart.y);
+  wallDragging = false;
+  if (dist < 4) { wallDragStart = null; drawWalls(null, null); return; } // too small — treat as a misclick, not a shape
+  const p1 = _wallVpToPct(wallDragStart.x, wallDragStart.y);
+  const p2 = _wallVpToPct(x, y);
+  _wallCommit(shape, [p1, p2]);
+  wallDragStart = null;
+}
+
+function wallEscape() {
+  if (!wallMode) return false;
+  if (wallDrawPoints.length || wallDragStart) {
+    wallDrawPoints = []; wallDragStart = null; wallDragging = false;
+    drawWalls(null, null);
+    return true; // cancel the in-progress shape, stay in wall mode
+  }
+  exitWallMode();
+  return true;
+}
+
+function _wallCommitLine() {
+  if (wallDrawPoints.length < 2) { wallDrawPoints = []; drawWalls(null, null); return; }
+  const points = wallDrawPoints.map(p => _wallVpToPct(p.x, p.y));
+  _wallCommit('line', points);
+}
+
+function _wallCommit(type, points) {
+  mapWalls.push({
+    id: 'wall-' + Date.now() + '-' + Math.round(Math.random() * 9999),
+    type, points,
+    blocksVision: _wallBlocksVision(),
+    blocksMovement: _wallBlocksMovement(),
+  });
+  wallDrawPoints = [];
+  saveMapWalls();
+  drawWalls();
+}
+
+async function saveMapWalls() {
+  if (!activeMapId) return;
+  await sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId);
+}
+
+async function loadMapWalls(mapId) {
+  mapWalls = [];
+  if (!mapId) { drawWalls(); return; }
+  const { data } = await sb.from('maps').select('walls').eq('id', mapId).single();
+  mapWalls = Array.isArray(data?.walls) ? data.walls : [];
+  drawWalls();
+}
+
+async function deleteWall(wallId) {
+  mapWalls = mapWalls.filter(w => w.id !== wallId);
+  await saveMapWalls();
+  drawWalls();
+  _openManageWallsModal(); // refresh the list in place
+}
+
+async function toggleWallFlag(wallId, flag) {
+  const w = mapWalls.find(w => w.id === wallId);
+  if (!w) return;
+  w[flag] = !w[flag];
+  await saveMapWalls();
+  drawWalls();
+}
+
+// Draws every committed wall plus whatever's currently mid-draw. GM-only —
+// walls aren't meant to be their own visible layer for players, just
+// geometry the map art already implies (and later, what fog/movement read).
+// mouseX/mouseY (viewport px, optional) extend the in-progress shape to the
+// current cursor position — passed through from wallMouseMove. Every commit,
+// mode change, or map pan/zoom just calls drawWalls() with no args, which
+// redraws the in-progress shape frozen at its last committed point (no
+// dangling rubber-band to a stale cursor position).
+function drawWalls(mouseX, mouseY) {
+  const svg = document.getElementById('wall-svg');
+  if (!svg) return;
+  if (!isGM() || !wallMode) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  svg.style.display = 'block';
+  svg.innerHTML = '';
+  const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
+  mapWalls.forEach(w => _wallDrawShape(svg, w, color, fill, false));
+
+  const previewColor = '#4de0c0';
+  if (_wallShape() === 'line' && wallDrawPoints.length) {
+    const pts = mouseX != null ? [...wallDrawPoints, { x: mouseX, y: mouseY }] : wallDrawPoints;
+    if (pts.length >= 2) {
+      const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+      el.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
+      el.setAttribute('fill', 'none'); el.setAttribute('stroke', previewColor);
+      el.setAttribute('stroke-width', '2'); el.setAttribute('stroke-dasharray', '6,4');
+      svg.appendChild(el);
+    }
+    wallDrawPoints.forEach((p, i) => {
+      const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      c.setAttribute('cx', p.x); c.setAttribute('cy', p.y); c.setAttribute('r', i === 0 ? 6 : 4);
+      c.setAttribute('fill', previewColor); c.setAttribute('stroke', '#000'); c.setAttribute('stroke-width', '1');
+      svg.appendChild(c);
+    });
+  } else if (wallDragging && wallDragStart && mouseX != null) {
+    _wallDrawShape(svg, { type: _wallShape(), points: [_wallVpToPct(wallDragStart.x, wallDragStart.y), _wallVpToPct(mouseX, mouseY)] }, previewColor, 'rgba(77,224,192,0.15)', true);
+  }
+}
+
+function _wallDrawShape(svg, w, color, fill, dashed) {
+  const pts = (w.points || []).map(_wallPctToVp);
+  if (w.type === 'line' && pts.length >= 2) {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    el.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', color);
+    el.setAttribute('stroke-width', '3');
+    if (dashed) el.setAttribute('stroke-dasharray', '8,4');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('stroke-linecap', 'round');
+    svg.appendChild(el);
+  } else if (w.type === 'rect' && pts.length >= 2) {
+    const x = Math.min(pts[0].x, pts[1].x), y = Math.min(pts[0].y, pts[1].y);
+    const width = Math.abs(pts[1].x - pts[0].x), height = Math.abs(pts[1].y - pts[0].y);
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    el.setAttribute('x', x); el.setAttribute('y', y);
+    el.setAttribute('width', width); el.setAttribute('height', height);
+    el.setAttribute('fill', fill); el.setAttribute('stroke', color); el.setAttribute('stroke-width', '2');
+    if (dashed) el.setAttribute('stroke-dasharray', '8,4');
+    svg.appendChild(el);
+  } else if (w.type === 'circle' && pts.length >= 2) {
+    const r = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    el.setAttribute('cx', pts[0].x); el.setAttribute('cy', pts[0].y); el.setAttribute('r', Math.max(1, r));
+    el.setAttribute('fill', fill); el.setAttribute('stroke', color); el.setAttribute('stroke-width', '2');
+    if (dashed) el.setAttribute('stroke-dasharray', '8,4');
+    svg.appendChild(el);
+  }
+  // Small icons showing what this wall blocks, at its first point.
+  if (pts.length && !dashed) {
+    const flags = (w.blocksVision ? '👁' : '') + (w.blocksMovement ? '🚶' : '');
+    if (flags) {
+      const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      tx.setAttribute('x', pts[0].x); tx.setAttribute('y', pts[0].y - 8);
+      tx.setAttribute('font-size', '11'); tx.setAttribute('text-anchor', 'middle');
+      tx.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+      tx.textContent = flags;
+      svg.appendChild(tx);
+    }
+  }
+}
+
+async function _openManageWallsModal() {
+  const existing = document.getElementById('manage-walls-modal');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'manage-walls-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
+  title.textContent = `Walls & Obstacles (${mapWalls.length})`;
+  card.appendChild(title);
+
+  if (!mapWalls.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'font-size:0.8rem;color:var(--text-dim);text-align:center;';
+    empty.textContent = 'None drawn on this map yet.';
+    card.appendChild(empty);
+  }
+
+  mapWalls.forEach((w, i) => {
+    const row = document.createElement('div');
+    row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:10px;
+      padding:7px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);font-size:0.82rem;`;
+    const safeId = w.id.replace(/'/g, "\\'");
+    row.innerHTML = `
+      <span>#${i + 1} ${_paEsc(w.type)}</span>
+      <span style="display:flex;gap:10px;align-items:center;">
+        <label style="cursor:pointer;"><input type="checkbox" ${w.blocksVision ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksVision')"> 👁</label>
+        <label style="cursor:pointer;"><input type="checkbox" ${w.blocksMovement ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksMovement')"> 🚶</label>
+        <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>
+      </span>`;
+    card.appendChild(row);
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = 'Close';
+  closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
+    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+  closeBtn.onclick = () => overlay.remove();
+  card.appendChild(closeBtn);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+}
+
 // Hook calibration into the existing mouse event listeners in initMapInteraction
 // by patching the viewport's mousedown. We do it after init runs.
 const _origInitMapInteraction = initMapInteraction;
@@ -11842,15 +12174,17 @@ initMapInteraction = function() {
     if (calMouseDown(e))     { e.stopImmediatePropagation(); return; }
     if (measureMouseDown(e)) { e.stopImmediatePropagation(); return; }
     if (aoeMouseDown(e))     { e.stopImmediatePropagation(); return; }
+    if (wallMouseDown(e))    { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))    { e.stopImmediatePropagation(); }
   }, true);
 
   vp.addEventListener('contextmenu', e => {
     if (pathMode) { e.preventDefault(); pathCommit(); }
+    if (wallMode && _wallShape() === 'line') { e.preventDefault(); _wallCommitLine(); }
   });
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); pathMouseMove(e); });
-  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e); });
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
+  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   wallMouseUp(e); });
 };
 
 // ── Save + load scale ─────────────────────────────────────────────────────────
@@ -12369,6 +12703,9 @@ switchGmTab = function(tab) {
         <!-- path drawing SVG overlay -->
         <svg id="path-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:25;overflow:visible;"></svg>
+        <!-- wall/obstacle drawing + display overlay (GM-only) -->
+        <svg id="wall-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;display:none;z-index:23;overflow:visible;"></svg>
         <!-- attack range SVG overlay -->
         <svg id="attack-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:26;overflow:visible;"></svg>
