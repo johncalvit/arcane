@@ -427,6 +427,17 @@
     border-color: #fff;
     box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 12px rgba(255,255,255,0.4);
   }
+  /* A token caught in an AOE spell, awaiting its individual save resolution
+     — see _resolveAoeFlagged. Visible to every client, not just the GM, so
+     everyone can see who's still pending. */
+  @keyframes aoe-flag-pulse {
+    0%, 100% { box-shadow: 0 0 0 2px rgba(192,96,224,0.9), 0 0 14px rgba(192,96,224,0.7); }
+    50%      { box-shadow: 0 0 0 4px rgba(192,96,224,0.5), 0 0 22px rgba(192,96,224,0.9); }
+  }
+  .aoe-flagged .token-ring {
+    border-color: #c060e0;
+    animation: aoe-flag-pulse 1.1s ease-in-out infinite;
+  }
   .token-ring img { width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block; }
   .token-icon { font-size: 1.2rem; }
   .token-cond-overlay {
@@ -4667,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814b';
+const VERSION = 'v0.1.20260814c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5791,6 +5802,7 @@ function _condOverlaySvg(kind, sizePx) {
 function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
+  el.classList.toggle('aoe-flagged', typeof aoeFlaggedIds !== 'undefined' && aoeFlaggedIds.has(tokenId));
   el.querySelectorAll('.token-cond-overlay, .token-cond-strip').forEach(b => b.remove());
   const conds = getConditions(tokenId);
   if (!conds.size) return;
@@ -7230,6 +7242,20 @@ function _parseAoeGeometry(spell) {
 // the MAP itself, not on a token.
 let aoeMode = false, aoeCasterCid = null, aoeSpell = null, aoeRangeFt = 0;
 
+// Targets currently caught in a resolved AOE, awaiting their individual save
+// (see _resolveAoeFlagged) — a token id set, broadcast to every client so the
+// pulsing highlight (see .aoe-flagged CSS, _refreshTokenBadges) shows up for
+// everyone, not just the GM driving the resolution.
+let aoeFlaggedIds = new Set();
+let aoeResolveState = null; // { casterEnt, spell, remaining: [tokens], resolve } while a GM is clicking through
+
+// A remote spectator's copy of whatever AOE another client is currently
+// aiming — see aoeMouseMove/enterAoeCastMode's broadcasts and
+// subscribeMapRealtime's aoe-preview-* handlers. Mirrors the caster's own
+// live footprint so "where is the spell about to land" isn't a surprise only
+// the caster can see.
+let _remoteAoePreview = null; // { casterCid, spell: {name, aoeShape, aoeSize}, rangeFt }
+
 function enterAoeCastMode(casterCid, spell) {
   if (attackMode) exitAttackMode();
   if (pathMode)   exitPathMode();
@@ -7241,6 +7267,10 @@ function enterAoeCastMode(casterCid, spell) {
   document.getElementById('map-viewport').classList.add('attack-mode'); // reuse the same crosshair cursor
   document.getElementById('aoe-svg').style.display = 'block';
   _aoeRedraw(null, null);
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-preview-start', payload: {
+    casterCid, rangeFt: aoeRangeFt,
+    spell: { name: spell.name, aoeShape: spell.aoeShape, aoeSize: spell.aoeSize },
+  }});
 }
 
 function exitAoeCastMode() {
@@ -7251,12 +7281,14 @@ function exitAoeCastMode() {
   const svg = document.getElementById('aoe-svg');
   svg.style.display = 'none';
   svg.innerHTML = '';
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-preview-end', payload: {} });
 }
 
-// Straight-line distance in feet from the caster to a map point (xPct/yPct),
-// used both to color-code the live preview and to gate an actual click.
-function _aoeDistFt(xPct, yPct) {
-  const token = _pathFindToken(aoeCasterCid);
+// Straight-line distance in feet from a caster token to a map point
+// (xPct/yPct), used both to color-code the live preview and to gate an
+// actual click.
+function _aoeDistFt(casterCid, xPct, yPct) {
+  const token = _pathFindToken(casterCid);
   if (!token || mapScalePPF <= 0) return 0;
   const aX = (token.x_pct / 100) * mapImgW, aY = (token.y_pct / 100) * mapImgH;
   const tX = (xPct / 100) * mapImgW,        tY = (yPct / 100) * mapImgH;
@@ -7271,25 +7303,34 @@ function _aoeShapeAimsOnly(shape) {
   return shape === 'Sector' || shape === 'Line';
 }
 
-// Redraws the whole AOE overlay for the current cursor position (null before
-// the first mousemove, i.e. right after entering the mode). Circle spells
-// show a dashed ring for the caster's max range plus a SOLID circle sized to
-// the spell's actual footprint, centered on the cursor, so it can be placed
-// precisely before clicking — colored red when the cursor is out of range.
-// Sector/Line spells have no separate range ring (their own reach IS the
-// shape's length/radius); instead the wedge/beam itself pivots live to face
-// the cursor.
-function _aoeRedraw(cursorXPct, cursorYPct) {
+// Redraws the whole AOE overlay for a given caster/spell/range at the
+// current cursor position (null before the first mousemove, i.e. right after
+// entering the mode, or for a remote spectator who hasn't gotten a move
+// event yet). Circle spells show a dashed ring for the caster's max range
+// plus a SOLID circle sized to the spell's actual footprint, centered on the
+// cursor, so it can be placed precisely before clicking — colored red when
+// the cursor is out of range. Sector/Line spells have no separate range ring
+// (their own reach IS the shape's length/radius); instead the wedge/beam
+// itself pivots live to face the cursor.
+//
+// Parameterized (rather than reading the aoeMode globals directly) so the
+// exact same drawing code serves two callers: the local caster aiming
+// (_aoeRedraw) and a remote spectator mirroring someone ELSE's aim
+// (_aoeRedrawRemote) — see aoe-preview-start/-move broadcasts below.
+// readOnly swaps the "click to aim" prompt for a passive one, since a
+// spectator can't click to resolve someone else's cast.
+function _aoeDrawShape(casterCid, spell, rangeFt, cursorXPct, cursorYPct, readOnly) {
   const svg = document.getElementById('aoe-svg');
   svg.innerHTML = '';
-  if (!aoeCasterCid || !aoeSpell || mapScalePPF <= 0) return;
-  const token = _pathFindToken(aoeCasterCid);
+  if (!casterCid || !spell || mapScalePPF <= 0) return;
+  const token = _pathFindToken(casterCid);
   if (!token) return;
+  svg.style.display = 'block';
   const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
   const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
   const pxPerFt = mapScalePPF * mapScale;
-  const { radius, angle, length, width } = _parseAoeGeometry(aoeSpell);
-  const shape = aoeSpell.aoeShape;
+  const { radius, angle, length, width } = _parseAoeGeometry(spell);
+  const shape = spell.aoeShape;
   const color = '#c060e0', outColor = '#e05050';
   let promptY = vpY + (getTokenSize(token) / 2) * mapScale + 16;
 
@@ -7334,7 +7375,7 @@ function _aoeRedraw(cursorXPct, cursorYPct) {
     svg.appendChild(poly);
     promptY = Math.max(promptY, Math.max(vpY, farY) + halfWPx + 16);
   } else {
-    const rangeRadiusPx = (getTokenSize(token) / 2) * mapScale + aoeRangeFt * pxPerFt;
+    const rangeRadiusPx = (getTokenSize(token) / 2) * mapScale + rangeFt * pxPerFt;
     const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
     ring.setAttribute('cx', vpX); ring.setAttribute('cy', vpY);
     ring.setAttribute('r', Math.max(1, rangeRadiusPx));
@@ -7348,7 +7389,7 @@ function _aoeRedraw(cursorXPct, cursorYPct) {
     if (cursorXPct != null) {
       const cX = (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX;
       const cY = (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY;
-      const inRange   = _aoeDistFt(cursorXPct, cursorYPct) <= aoeRangeFt;
+      const inRange   = _aoeDistFt(casterCid, cursorXPct, cursorYPct) <= rangeFt;
       const fpColor   = inRange ? color : outColor;
       const footprint = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
       footprint.setAttribute('cx', cX); footprint.setAttribute('cy', cY);
@@ -7368,19 +7409,36 @@ function _aoeRedraw(cursorXPct, cursorYPct) {
   prompt.setAttribute('font-size', '11');
   prompt.setAttribute('font-family', 'Georgia,serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
-  prompt.textContent = `${aoeSpell.name} — click where to aim it · Esc to cancel`;
+  prompt.textContent = readOnly
+    ? `${spell.name} — aiming…`
+    : `${spell.name} — click where to aim it · Esc to cancel`;
   svg.appendChild(prompt);
 }
 
+// The local caster's own live preview, driven by the aoeMode globals.
+function _aoeRedraw(cursorXPct, cursorYPct) {
+  _aoeDrawShape(aoeCasterCid, aoeSpell, aoeRangeFt, cursorXPct, cursorYPct, false);
+}
+
+// A spectator's mirror of another client's in-progress aim — see
+// aoe-preview-start/-move/-end in subscribeMapRealtime.
+function _aoeRedrawRemote(cursorXPct, cursorYPct) {
+  if (!_remoteAoePreview) return;
+  _aoeDrawShape(_remoteAoePreview.casterCid, _remoteAoePreview.spell, _remoteAoePreview.rangeFt, cursorXPct, cursorYPct, true);
+}
+
 // Hooked into the map's mousemove chain (see the initMapInteraction patch) —
-// redraws the live footprint preview as the caster's player aims.
+// redraws the live footprint preview as the caster's player aims, and
+// broadcasts the cursor position so every other client can mirror it.
 function aoeMouseMove(e) {
   if (!aoeMode) return;
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
   const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
-  _aoeRedraw((imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
+  const xPct = (imgX / mapImgW) * 100, yPct = (imgY / mapImgH) * 100;
+  _aoeRedraw(xPct, yPct);
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-preview-move', payload: { xPct, yPct } });
 }
 
 // Hooked into the map's mousedown chain (see the initMapInteraction patch),
@@ -7456,16 +7514,14 @@ async function _resolveSpellObstacle(casterEnt, spell, aoePoint) {
 // caught in the shape (Circle centered on the click, Sector emanating from
 // the caster toward the click, or Line — a fixed-length/width beam from the
 // caster toward the click, hitting everyone along it, not just the first
-// target). Creature/monster targets go through _resolveAoeBundle — a single
-// summary screen with one "Roll All" instead of a full spin-and-reveal
-// roller per monster, since playtesters found a long chain of those
-// confusing to sit through with no real payoff (no player is watching a
-// monster's own save with any stake in it). Player characters still get the
-// individual roller via _resolveAoeQueue, since THEIR save is the moment
-// that matters — there's no per-player remote save-prompt yet (that would
-// need the same broadcast plumbing the defense-option flow has), so the GM
-// is still the one rolling it for now, but it keeps the one-at-a-time
-// ceremony a personal save deserves.
+// target), then hand the whole mixed creature+character list to
+// _resolveAoeFlagged. Used to split creatures into a bundled "Roll All"
+// screen and characters into an auto-sequential queue — playtesters found
+// THAT confusing when a spell caught a mix of both (two separate cycling UIs
+// with no shared order), so both paths were replaced with one GM-driven
+// queue: every target gets flagged (a highlight visible to the whole table,
+// not just the GM), and the GM clicks through them in whatever order makes
+// sense for the narration, character and creature saves interleaved.
 async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
   const { radius, angle, length, width } = _parseAoeGeometry(spell);
   const shape = spell.aoeShape;
@@ -7505,129 +7561,91 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
   if (!targets.length) { showToast(`${spell.name} catches no one.`, 'warn'); return; }
   logCombat(`${spell.name} catches ${targets.length} in the area.`, 'roll');
 
-  const creatureTargets  = targets.filter(t => t.entity_type === 'creature');
-  const characterTargets = targets.filter(t => t.entity_type === 'character');
-  if (creatureTargets.length)  await _resolveAoeBundle(casterEnt, spell, creatureTargets);
-  if (characterTargets.length) await _resolveAoeQueue(casterEnt, spell, characterTargets, 0);
+  await _resolveAoeFlagged(casterEnt, spell, targets);
 }
 
-// One summary screen listing every caught creature with its save% up front,
-// and a single "Roll All Saves" button — rather than N separate full-screen
-// rollers the GM has to click through one at a time. Each row reveals its
-// own roll/outcome with a short stagger (still feels like real dice, not an
-// instant dump) but needs no per-target interaction. Resolves the returned
-// promise once the GM closes the results, so a caller can await it before
-// moving on to anything that should happen after (e.g. character saves).
-async function _resolveAoeBundle(casterEnt, spell, targets) {
-  const rows = targets.map(token => {
-    const ent = getEntity(_tokenCid(token));
-    if (!ent) return null;
-    const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
-    const target = saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
-    return { token, ent, target };
-  }).filter(Boolean);
-  if (!rows.length) return;
-
+// Unified GM-driven resolution for a successful Area spell cast: every
+// caught token (creature and character alike) gets a pulsing highlight —
+// broadcast via aoe-flags so the whole table sees it, not just the GM — and
+// the GM clicks through them one at a time in whatever order suits the
+// narration (see startTokenDrag's aoeResolveState check, which routes a
+// click on a flagged token into _aoeResolveClick instead of a normal drag).
+// Each click opens that target's own save roller, which already
+// broadcasts/mirrors to every client via openRoller — so "the save roller
+// box is displayed to everyone" falls out of plumbing that already existed,
+// it just wasn't being used for AOE saves before. Resolves the returned
+// promise once every flagged target has been handled, one at a time or via
+// "Resolve Remaining" (see _aoeResolveRemainingFast, the escape hatch for a
+// spell that catches a lot of targets).
+async function _resolveAoeFlagged(casterEnt, spell, targets) {
+  aoeFlaggedIds = new Set(targets.map(t => t.id));
+  _aoeBroadcastFlags();
   return new Promise(resolve => {
-    const overlay = document.createElement('div');
-    overlay.id = 'aoe-bundle-modal';
-    overlay.style.cssText = `position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);
-      display:flex;align-items:center;justify-content:center;`;
-
-    const card = document.createElement('div');
-    card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
-      padding:22px 26px;min-width:340px;max-width:94vw;max-height:80vh;overflow-y:auto;
-      display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
-
-    const title = document.createElement('div');
-    title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
-    title.textContent = `${spell.name} — Monster Saves`;
-    card.appendChild(title);
-
-    const sub = document.createElement('div');
-    sub.style.cssText = 'font-size:0.76rem;color:var(--text-dim);text-align:center;margin-bottom:4px;';
-    sub.textContent = `${rows.length} caught in the area`;
-    card.appendChild(sub);
-
-    const list = document.createElement('div');
-    list.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-    rows.forEach((r, i) => {
-      const row = document.createElement('div');
-      row.id = `aoe-bundle-row-${i}`;
-      row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:10px;
-        padding:7px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);font-size:0.82rem;`;
-      row.innerHTML = `<span>${_paEsc(r.ent.name)}</span><span style="color:var(--text-dim);font-size:0.74rem;">save ${r.target}%</span>`;
-      list.appendChild(row);
-    });
-    card.appendChild(list);
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;justify-content:center;margin-top:6px;';
-    const rollBtn = document.createElement('button');
-    rollBtn.textContent = '🎲 Roll All Saves';
-    rollBtn.style.cssText = `padding:8px 20px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
-      font-size:0.85rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--gold2);`;
-    btnRow.appendChild(rollBtn);
-    card.appendChild(btnRow);
-
-    rollBtn.onclick = async () => {
-      rollBtn.disabled = true;
-      rollBtn.textContent = 'Rolling…';
-      for (let i = 0; i < rows.length; i++) {
-        const r = rows[i];
-        const n = Math.floor(Math.random() * 100) + 1;
-        const saved = n <= 5 || (n < 96 && n <= r.target); // mirror the roller's crit rules
-        const effectText = saved ? '' : await _applyAoeFailure(casterEnt, spell, r.ent, r.token);
-        const rowEl = document.getElementById(`aoe-bundle-row-${i}`);
-        if (rowEl) {
-          rowEl.style.borderColor = saved ? 'var(--border)' : '#e05555';
-          const outcome = saved ? 'SAVE' : `FAIL${effectText ? ' — ' + _paEsc(effectText) : ''}`;
-          rowEl.innerHTML = `<span>${_paEsc(r.ent.name)}</span>
-            <span style="color:${saved ? 'var(--text-dim)' : '#e05555'};font-size:0.74rem;">rolled ${n} → ${outcome}</span>`;
-        }
-        await new Promise(res => setTimeout(res, 220)); // light stagger — still reads as dice, not a dump
-      }
-      refreshUI();
-      btnRow.innerHTML = '';
-      const closeBtn = document.createElement('button');
-      closeBtn.textContent = 'Close';
-      closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
-        font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
-      closeBtn.onclick = () => { overlay.remove(); resolve(); };
-      btnRow.appendChild(closeBtn);
-    };
-
-    overlay.appendChild(card);
-    document.body.appendChild(overlay);
+    aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve };
+    _renderAoeResolvePanel();
   });
 }
 
-// Only ever called with player-character targets now (see _resolveSpellAoe)
-// — creatures go through the bundled _resolveAoeBundle instead. Kept as a
-// one-at-a-time roller since each of THESE saves is a personal moment for
-// whoever's playing that character, worth its own spin.
-async function _resolveAoeQueue(casterEnt, spell, targets, i) {
-  if (i >= targets.length) { refreshUI(); return; }
-  const token = targets[i];
-  const ref   = _tokenCid(token);
-  if (token.entity_type === 'character') await ensureEntityLoaded(ref);
-  const ent  = getEntity(ref);
-  const next = () => _resolveAoeQueue(casterEnt, spell, targets, i + 1);
-  if (!ent) { next(); return; }
+function _aoeBroadcastFlags() {
+  Object.keys(mapTokens).forEach(_refreshTokenBadges);
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-flags', payload: { ids: [...aoeFlaggedIds] } });
+}
 
+function _aoeResolveSaveTarget(spell, ent) {
   const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
-  const target  = saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
-  const progress = targets.length > 1 ? ` (${i + 1} of ${targets.length})` : '';
+  return saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
+}
 
+// GM-only floating panel while an AOE resolution is in progress: names still
+// awaiting a save, plus the "Resolve Remaining" escape hatch. Players don't
+// get this panel — they just watch the highlighted tokens and whichever
+// roller the GM opens, same as they'd watch any other roll.
+function _renderAoeResolvePanel() {
+  let el = document.getElementById('aoe-resolve-panel');
+  const st = aoeResolveState;
+  if (!st || !isGM()) { el?.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'aoe-resolve-panel';
+    el.style.cssText = `position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2200;
+      background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:10px 18px;
+      font-family:Georgia,serif;font-size:0.8rem;color:var(--text);text-align:center;
+      box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
+    document.body.appendChild(el);
+  }
+  const names = st.remaining.map(t => _paEsc(getEntity(_tokenCid(t))?.name || t.label || '?')).join(', ');
+  el.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:4px;">${_paEsc(st.spell.name)} — click a highlighted target to resolve its save</div>
+    <div style="color:var(--text-dim);margin-bottom:6px;">${st.remaining.length} remaining: ${names || '—'}</div>
+    <button onclick="_aoeResolveRemainingFast()" style="padding:5px 14px;border-radius:5px;cursor:pointer;
+      font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">
+      Resolve Remaining Automatically</button>`;
+}
+
+// Called when the GM clicks a still-flagged token on the map. Opens its save
+// roller (broadcast/mirrored to everyone, same as any roll) and moves on to
+// the next once it resolves.
+async function _aoeResolveClick(tokenId) {
+  const st = aoeResolveState;
+  if (!st) return;
+  const idx = st.remaining.findIndex(t => t.id === tokenId);
+  if (idx === -1) return;
+  const [token] = st.remaining.splice(idx, 1);
+  aoeFlaggedIds.delete(tokenId);
+  _aoeBroadcastFlags();
+  _renderAoeResolvePanel();
+
+  const ref = _tokenCid(token);
+  if (token.entity_type === 'character') await ensureEntityLoaded(ref);
+  const ent = getEntity(ref);
+  if (!ent) { if (!st.remaining.length) _aoeResolveFinish(); return; }
+
+  const target = _aoeResolveSaveTarget(st.spell, ent);
   openRoller({
-    label: `${spell.name} — ${ent.name} saves${progress}`,
+    label: `${st.spell.name} — ${ent.name} saves`,
     target, targetLabel: 'roll under to resist',
     onComplete: async (n) => {
       const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
-      const effectText = saved ? '' : await _applyAoeFailure(casterEnt, spell, ent, token);
-      // Same effect summary the monster bundle shows on its rows, just in
-      // the individual roller's own damage-display slot — openRoller resets
-      // this on every open, so it's already clean for this target.
+      const effectText = saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token);
       const dmgEl = document.getElementById('roller-damage-display');
       if (dmgEl) {
         dmgEl.style.display = 'block';
@@ -7635,9 +7653,45 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
           ? `<div style="font-size:0.9rem;color:var(--gold2);">Resisted — no effect.</div>`
           : `<div style="font-size:0.9rem;color:#e05555;">${_paEsc(effectText || 'Failed the save.')}</div>`;
       }
-      next();
+      if (!st.remaining.length) _aoeResolveFinish();
     },
   });
+}
+
+// Escape hatch for a spell that catches a lot of targets — fast, lightly
+// staggered auto-rolls for whoever's still flagged, same feel as the old
+// monster-bundle screen, rather than forcing every single one through the
+// click-a-token flow.
+async function _aoeResolveRemainingFast() {
+  const st = aoeResolveState;
+  if (!st || !st.remaining.length) return;
+  const toResolve = [...st.remaining];
+  st.remaining = [];
+  aoeFlaggedIds.clear();
+  _aoeBroadcastFlags();
+  _renderAoeResolvePanel();
+  for (const token of toResolve) {
+    const ref = _tokenCid(token);
+    if (token.entity_type === 'character') await ensureEntityLoaded(ref);
+    const ent = getEntity(ref);
+    if (!ent) continue;
+    const target = _aoeResolveSaveTarget(st.spell, ent);
+    const n = Math.floor(Math.random() * 100) + 1;
+    const saved = n <= 5 || (n < 96 && n <= target);
+    const effectText = saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token);
+    logCombat(`${ent.name} rolls ${n} vs ${target}% — ${saved ? 'saves' : `fails${effectText ? ' (' + effectText + ')' : ''}`}.`, saved ? 'roll' : 'hit');
+    await new Promise(res => setTimeout(res, 180));
+  }
+  _aoeResolveFinish();
+}
+
+function _aoeResolveFinish() {
+  const st = aoeResolveState;
+  if (!st) return;
+  aoeResolveState = null;
+  document.getElementById('aoe-resolve-panel')?.remove();
+  refreshUI();
+  st.resolve();
 }
 
 // A spell's failure branch when it drains an attribute (spell.drainAttribute,
@@ -7654,9 +7708,9 @@ async function _resolveAoeQueue(casterEnt, spell, targets, i) {
 // block), just negative; cleared the same GM-judged way any other timed
 // buff is. Capped by damageMax same as a normal damage roll either way.
 // Returns a short human-readable summary of what happened ("−4 Quintessence",
-// "Power −3", "no Quintessence to drain") — surfaced in the monster-save
-// bundle screen (_resolveAoeBundle) alongside the roll itself, and folded
-// into _applyAoeFailure's own summary either way.
+// "Power −3", "no Quintessence to drain") — surfaced next to each target's
+// roller in _resolveAoeFlagged, and folded into _applyAoeFailure's own
+// summary either way.
 const _DRAIN_POOL_KEYS = { Toughness: 'toughness', Stamina: 'stamina', Quintessence: 'quintessence' };
 async function _applyAttributeDrain(spell, ent, token) {
   const attrDef = ATTRIBUTES.find(a => a.label === spell.drainAttribute || a.key === spell.drainAttribute);
@@ -7709,8 +7763,8 @@ async function _applyAttributeDrain(spell, ent, token) {
 // damage roll entirely in favor of _applyAttributeDrain.
 // Returns a short summary of everything that happened ("9 corrode dmg,
 // Corroding, unconscious") so a caller can show it next to the roll itself —
-// see _resolveAoeBundle, which prints it right on the monster's own row
-// instead of leaving the GM to go dig it out of the combat log.
+// see _resolveAoeFlagged's roller-damage-display, instead of leaving the GM
+// to go dig it out of the combat log.
 async function _applyAoeFailure(casterEnt, spell, ent, token) {
   let effectText = '';
   if (spell.drainAttribute) {
@@ -9778,6 +9832,31 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'clear-stray-ray' }, () => {
       clearStrayRay();
     })
+    // Mirrors another client's in-progress AOE aim (see aoeMouseMove/
+    // enterAoeCastMode) so everyone sees the targeted area live, not just
+    // the caster — the playtester pain point this whole feature addresses.
+    .on('broadcast', { event: 'aoe-preview-start' }, ({ payload }) => {
+      _remoteAoePreview = payload;
+      _aoeRedrawRemote(null, null);
+    })
+    .on('broadcast', { event: 'aoe-preview-move' }, ({ payload }) => {
+      if (!_remoteAoePreview) return;
+      _aoeRedrawRemote(payload.xPct, payload.yPct);
+    })
+    .on('broadcast', { event: 'aoe-preview-end' }, () => {
+      _remoteAoePreview = null;
+      if (!aoeMode) { // don't stomp a LOCAL cast in progress
+        const svg = document.getElementById('aoe-svg');
+        if (svg) { svg.style.display = 'none'; svg.innerHTML = ''; }
+      }
+    })
+    // Which tokens are still awaiting their individual AOE save (see
+    // _resolveAoeFlagged) — broadcast so the pulsing .aoe-flagged highlight
+    // shows on every client, not just the GM driving the resolution.
+    .on('broadcast', { event: 'aoe-flags' }, ({ payload }) => {
+      aoeFlaggedIds = new Set(payload.ids || []);
+      Object.keys(mapTokens).forEach(_refreshTokenBadges);
+    })
     .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); renderPlayCharacter(); }
@@ -10416,6 +10495,9 @@ function onTokenDblClick(e, tokenId) {
 
 function startTokenDrag(e, tokenId) {
   e.stopPropagation();
+  // Mid-AOE-resolution, clicking a still-flagged token resolves ITS save
+  // instead of dragging it — see _resolveAoeFlagged/_aoeResolveClick.
+  if (aoeResolveState && isGM() && aoeFlaggedIds.has(tokenId)) { e.preventDefault(); _aoeResolveClick(tokenId); return; }
   // In attack mode a token click selects the target
   if (attackMode) { e.preventDefault(); attackTokenClick(tokenId); return; }
   _tokenClickId    = tokenId;
