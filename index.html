@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814c';
+const VERSION = 'v0.1.20260814d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8147,6 +8147,19 @@ function _tokenCid(token) {
   if (!token) return null;
   return token.entity_type === 'character' ? 'char::' + token.entity_id : 'creature::' + token.id;
 }
+// Which hand (right/left) a combatant is currently holding the named weapon
+// in — null if it's not actually held (a spell, a natural attack, or a stale
+// name). Used to charge the correct Action Tracker channel for an attack or
+// a reactive Block/Parry, instead of assuming a hand.
+function _handHoldingWeapon(combatantId, weaponName) {
+  if (!weaponName) return null;
+  const ent = getEntity(combatantId);
+  const held = ent?.held || {};
+  const norm = normalizeWeaponName(weaponName);
+  if (normalizeWeaponName(held.right || '') === norm) return 'right';
+  if (normalizeWeaponName(held.left  || '') === norm) return 'left';
+  return null;
+}
 function _dependentTokensOf(bearerToken) {
   const cid = _tokenCid(bearerToken);
   if (!cid) return [];
@@ -9301,6 +9314,32 @@ function _resolveDefenseLocal(reqId, chosen) {
   cb(chosen); // null → no defense
 }
 function _skipDefenseWait() { if (_pendingDefense) _resolveDefenseLocal(_pendingDefense.reqId, null); }
+// Charges the Action Tracker for a chosen reactive defense, reconstructed
+// from just the option's label. _buildDefenseOptions' own onSelect closures
+// already do this same thing for the LOCAL picker (GM defending their own
+// creature, no remote round trip) — but a remote defense-request/response
+// (_requestRemoteDefense/_answerDefense below) only ever serializes
+// {label, reduction, prone, stamina} across the network, so the closures
+// themselves never survive the trip for a player defending their own
+// character. Re-deriving from the label here is what makes the rule apply
+// to that far more common case too: Evade spends both hands' actions (move
+// stays free); a Block/Parry spends only the hand actually holding that
+// weapon, found via _handHoldingWeapon. A no-op if the defender isn't
+// tracked in the Action Tracker at all — same "manage, don't enforce
+// outside combat" precedent atSetSlot itself already follows.
+function _applyDefenseSlotCost(target, label) {
+  const cid = _tokenCid(target);
+  if (!cid || !atCombatants.find(c => c.id === cid)) return;
+  const m = /^(Block|Parry)\s*[—–-]\s*([^(]+)/i.exec(label || '');
+  if (m) {
+    const action = m[1], weaponName = m[2].trim();
+    const side = _handHoldingWeapon(cid, weaponName) || 'right';
+    atSetSlot(cid, side, `${action} — ${weaponName}`, 1, false);
+  } else if (/^Evade/i.test(label || '')) {
+    atSetSlot(cid, 'right', 'Evade', 1, false);
+    atSetSlot(cid, 'left',  'Evade', 1, false);
+  }
+}
 // Applies a chosen defense's side effects (Go Prone / Evade's stamina cost) to
 // the target, broadcasts it so any other open picker for this request closes,
 // and — since a broadcast never echoes back to its own sender — also resolves
@@ -9310,6 +9349,7 @@ function _skipDefenseWait() { if (_pendingDefense) _resolveDefenseLocal(_pending
 async function _answerDefense(target, reqId, o) {
   if (o.prone)   await setCondition(target.id, 'prone', true);
   if (o.stamina) await _deductStamina(_tokenCid(target), o.stamina);
+  _applyDefenseSlotCost(target, o.label);
   _rollerBroadcast('defense-response', { reqId, label: o.label, reduction: o.reduction });
   if (_pendingDefense && _pendingDefense.reqId === reqId) {
     _resolveDefenseLocal(reqId, o.reduction ? { label: o.label, reduction: o.reduction } : null);
@@ -10894,12 +10934,20 @@ function attackTokenClick(tokenId) {
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
 
   // ── Log action to tracker ─────────────────────────────────────────────────
+  // Charges the hand actually holding the weapon (not always 'right' — that
+  // silently mislabeled every off-hand attack as a right-hand action, which
+  // would have made this attacker's OWN right hand look "spent" for the
+  // round while their real attacking hand stayed free). Falls back to
+  // 'right' for anything that isn't a held weapon (a spell, a natural
+  // attack) — same channel this always used before. Goes through atSetSlot
+  // (broadcasts + real duration handling) instead of hand-rolling the slot
+  // entry, so every client sees the same "this hand is spent" state — which
+  // _buildDefenseOptions now reads to decide whether a Parry/Block with this
+  // same weapon is still available if this attacker gets attacked back.
   const actionLabel = `${attackActionLabel} → ${target.label}`;
-  const c = atCombatants.find(x => x.id === attackCombatantId);
-  if (c) {
-    if (!c.slots) c.slots = _newSlots();
-    c.slots.right = { label: actionLabel, startRound: atRound, durationRounds: 1, locksAll: false };
-    renderAtList();
+  if (atCombatants.find(x => x.id === attackCombatantId)) {
+    const atkSlot = _handHoldingWeapon(attackCombatantId, attackWeaponName) || 'right';
+    atSetSlot(attackCombatantId, atkSlot, actionLabel, 1, false);
     switchGmTab('actions');
   }
 
@@ -10973,20 +11021,32 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
     const defSize = calcTargetAdjFromRow(defRow);
     const held    = defRow.held_items || {};
     const seen    = new Set();
+    const defCid  = _tokenCid(target);
+    const defC    = atCombatants.find(c => c.id === defCid);
     for (const side of ['right', 'left']) {
       const itemName = held[side];
       if (!itemName) continue;
+      // If this hand is already spent on something else this round (an
+      // attack, a different declared action), a reactive Block/Parry with
+      // it isn't available — same weapon can't both swing and parry. A hand
+      // already declared to Block/Parry with THIS weapon isn't "something
+      // else", so it stays offered (and gets pre-selected below).
+      const handEntry = defC?.slots?.[side];
       for (const r of getWeaponRows(itemName)) {
         if (r.action !== 'Block' && r.action !== 'Parry') continue;
         const key = `${r.action}::${itemName}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
         const reduction = Math.round(defVal * defSize);
         defenseOptions.push({
           label: `${r.action} — ${itemName} (−${reduction})`,
           reduction,
+          // Spends this hand's action for the round — it can't also attack
+          // (or parry again) with this weapon until it's free next round.
+          onSelect: () => atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false),
         });
       }
     }
@@ -10999,14 +11059,21 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
     const physCoord = defAttrs.PhysCoord || 0;
 
     // Evade — unavailable while prone. Buffed to the old Retreat value now that
-    // Retreat is gone; costs 1 stamina so a dodge isn't free.
+    // Retreat is gone; costs 1 stamina so a dodge isn't free. Spends BOTH
+    // hands' actions for the round (a full dodge, not a one-handed one) but
+    // deliberately leaves 'move' alone — you can still reposition after
+    // evading, just not also attack.
     if (!targetIsProne) {
       const evadeReduction = Math.round(physCoord * defSize);
       defenseOptions.push({
         label: `Evade — dodge (−${evadeReduction}, 1 stam)`,
         reduction: evadeReduction,
         stamina: 1,
-        onSelect: () => _deductStamina(_tokenCid(target), 1),
+        onSelect: () => {
+          _deductStamina(defCid, 1);
+          atSetSlot(defCid, 'right', 'Evade', 1, false);
+          atSetSlot(defCid, 'left',  'Evade', 1, false);
+        },
       });
     }
 
@@ -11029,8 +11096,6 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
       let best = defenseOptions.find(o => o.label.startsWith(keyword));
       if (!best) {
         // Synthesize from the active slot label ("Block — Shield, Small" etc.)
-        const defCombatantId = 'char::' + target.entity_id;
-        const defC = atCombatants.find(c => c.id === defCombatantId);
         if (defC?.slots) {
           for (const slotKey of ['right', 'left']) {
             const sl = defC.slots[slotKey];
@@ -11041,7 +11106,8 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
             if (wRow) {
               const defVal   = calcHitValue(wRow.hitFormula, defAttrs);
               const reduction = defVal != null ? Math.round(defVal * defSize) : 0;
-              best = { label: `${keyword} — ${weaponName} (−${reduction})`, reduction };
+              best = { label: `${keyword} — ${weaponName} (−${reduction})`, reduction,
+                        onSelect: () => atSetSlot(defCid, slotKey, `${keyword} — ${weaponName}`, 1, false) };
               defenseOptions.unshift(best);
             }
             break;
@@ -11071,26 +11137,36 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
     const defSize = Math.round((defAttrs._heightInches || 66) / 12 * ((BUILD_DATA[sc.build || 'Average'] || {}).TargetAdj || 1));
     const physCoord = defAttrs.PhysCoord || 0;
     const conds = getConditions(target.id);
+    const defCid = _tokenCid(target);
+    const defC   = atCombatants.find(c => c.id === defCid);
     // Block / Parry from a creature's ready shield/weapon (same as characters)
     const held = sc.held_items || {};
     const seen = new Set();
     for (const side of ['right', 'left']) {
       const itemName = held[side];
       if (!itemName) continue;
+      // Same "already spent this round on something else" filter as characters.
+      const handEntry = defC?.slots?.[side];
       for (const r of getWeaponRows(itemName)) {
         if (r.action !== 'Block' && r.action !== 'Parry') continue;
         const key = `${r.action}::${itemName}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
-        defenseOptions.push({ label: `${r.action} — ${itemName} (−${Math.round(defVal * defSize)})`, reduction: Math.round(defVal * defSize) });
+        defenseOptions.push({ label: `${r.action} — ${itemName} (−${Math.round(defVal * defSize)})`, reduction: Math.round(defVal * defSize),
+          onSelect: () => atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false) });
       }
     }
     if (!conds.has('prone')) {
       const evadeReduction = Math.round(physCoord * defSize);
       defenseOptions.push({ label: `Evade (−${evadeReduction}, 1 stam)`, reduction: evadeReduction,
-        stamina: 1, onSelect: () => _deductStamina(_tokenCid(target), 1) });
+        stamina: 1, onSelect: () => {
+          _deductStamina(defCid, 1);
+          atSetSlot(defCid, 'right', 'Evade', 1, false);
+          atSetSlot(defCid, 'left',  'Evade', 1, false);
+        } });
     }
     if (wasRanged && !conds.has('prone') && rawThreshold != null) {
       const proneReduction = Math.round(rawThreshold / 2);
