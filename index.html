@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814e';
+const VERSION = 'v0.1.20260814f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9536,7 +9536,13 @@ function _rollerUpdateTarget() {
 }
 
 function rollerClick() {
-  if (!_roller || _roller.mirror) return; // spectators can't stop someone else's roll
+  if (!_roller) return;
+  // Once the result is showing, the whole card dismisses it — same as
+  // clicking the Close button, just without having to aim for it. Applies
+  // to spectators watching a mirror too (they already get their own Close
+  // button once it lands; this just makes the whole card work the same way).
+  if (_roller.phase === 'done') { closeRoller(); return; }
+  if (_roller.mirror) return; // spectators can't stop someone else's roll
   if (_roller.phase === 'spinning') { _rollerBeginStop(); return; }
 }
 
