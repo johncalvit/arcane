@@ -4681,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815d';
+const VERSION = 'v0.1.20260815e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10175,6 +10175,14 @@ function subscribeMapRealtime() {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c) { c.dropped = payload.dropped; renderAtList(); renderPlayCharacter(); }
     })
+    // A wall changed on another client (drawn, edited, damaged, an obstacle
+    // spell placed/removed one) — see saveMapWalls. Redraw fog too since it
+    // depends on current wall geometry.
+    .on('broadcast', { event: 'walls-sync' }, ({ payload }) => {
+      mapWalls = Array.isArray(payload.walls) ? payload.walls : [];
+      if (typeof drawWalls === 'function') drawWalls();
+      if (typeof drawFog === 'function') drawFog();
+    })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
       if (!isGM()) { _atStateFromGM = payload; _atUpdateBlink(); renderPlayCharacter(); }
     })
@@ -10760,6 +10768,7 @@ async function loadMapTokens(mapId) {
   }
   await loadSessionCreatureCache();
   if (data) renderAllTokens();
+  if (typeof drawFog === 'function') drawFog();
 }
 
 // ── Token drag ────────────────────────────────────────────────────────────────
@@ -11608,6 +11617,7 @@ function subscribeTokenRealtime() {
         }
       }
       refreshUI(); // panel may show "no token on map" for this entity
+      if (typeof drawFog === 'function' && t.entity_type === 'character' && t.entity_id === currentCharacterId) drawFog();
     })
     // NOTE: no filter — Postgres DELETE payloads only carry the primary key,
     // so a campaign_id filter never matches and the event is never delivered.
@@ -11621,6 +11631,12 @@ function subscribeTokenRealtime() {
       if (t.id !== dragTokenId) upsertTokenElement(t);
       _refreshTokenBadges(t.id);
       if (t.id !== dragTokenId) refreshUI(); // conditions arrive via UPDATE
+      // Recompute fog whenever OUR OWN character's token settles somewhere
+      // new — drag, Path, being carried, or a GM repositioning us all land
+      // here eventually, since this fires off the committed DB row, not the
+      // live drag broadcast. Cheap to check, and this single hook covers
+      // every source of movement instead of chasing each one individually.
+      if (typeof drawFog === 'function' && t.entity_type === 'character' && t.entity_id === currentCharacterId) drawFog();
     })
     // Entity data changes (damage, stats, held items…) from other clients —
     // replace the cache row (fresh row has no _attrs, so attributes recompute)
@@ -11883,6 +11899,8 @@ exitPlayMode = function() {
   mapTokens    = {};
   dragTokenId  = null;
   document.querySelectorAll('.map-token').forEach(el => el.remove());
+  const fogEl = document.getElementById('fog-svg');
+  if (fogEl) { fogEl.style.display = 'none'; fogEl.innerHTML = ''; }
 };
 
 // ── Extend loadActiveMap realtime handler to also reload tokens + scale ───────
@@ -12524,14 +12542,20 @@ function _wallCommit(type, points) {
 async function saveMapWalls() {
   if (!activeMapId) return;
   await sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId);
+  // Walls had no live sync at all before fog of war needed one — other
+  // clients only ever saw a change on their next loadMapWalls (a fresh map
+  // load). Broadcasting the whole (small) array is simplest and safest;
+  // no diffing to get wrong.
+  mapChannel?.send({ type: 'broadcast', event: 'walls-sync', payload: { walls: mapWalls } });
 }
 
 async function loadMapWalls(mapId) {
   mapWalls = [];
-  if (!mapId) { drawWalls(); return; }
+  if (!mapId) { drawWalls(); drawFog(); return; }
   const { data } = await sb.from('maps').select('walls').eq('id', mapId).single();
   mapWalls = Array.isArray(data?.walls) ? data.walls : [];
   drawWalls();
+  drawFog();
 }
 
 async function deleteWall(wallId) {
@@ -12579,6 +12603,121 @@ async function applyWallDamage(wallId, amount) {
 // mode change, or map pan/zoom just calls drawWalls() with no args, which
 // redraws the in-progress shape frozen at its last committed point (no
 // dangling rubber-band to a stale cursor position).
+// ── Fog of war ──────────────────────────────────────────────────────────────
+// MVP scope: real-time line-of-sight only (no "explored area" memory),
+// computed from the viewing PLAYER's own character token — not shared party
+// vision. The GM always sees the full map, unaffected. Tokens are never
+// hidden by fog by design; only the map background dims outside what's
+// currently visible. Standard shadowcasting/visibility-polygon approach:
+// cast a ray at every occluding wall's endpoints (plus a hair either side,
+// so a ray grazes just past a corner instead of stopping short of it), keep
+// the closest hit (a wall, or the map edge) per ray, sort by angle around
+// the viewer — that's the visible polygon.
+
+// blocksVision walls as individual line segments in image-px — rect/circle
+// walls aren't literally line segments, so they're approximated (a rect's 4
+// edges; a circle as a many-sided polygon).
+function _fogOccluderSegments() {
+  const segs = [];
+  for (const w of mapWalls) {
+    if (!w.blocksVision) continue;
+    const pts = (w.points || []).map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH }));
+    if (w.type === 'line') {
+      for (let i = 0; i < pts.length - 1; i++) segs.push([pts[i], pts[i + 1]]);
+    } else if (w.type === 'rect' && pts.length >= 2) {
+      const x0 = Math.min(pts[0].x, pts[1].x), x1 = Math.max(pts[0].x, pts[1].x);
+      const y0 = Math.min(pts[0].y, pts[1].y), y1 = Math.max(pts[0].y, pts[1].y);
+      const c = [{ x: x0, y: y0 }, { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 }];
+      for (let i = 0; i < 4; i++) segs.push([c[i], c[(i + 1) % 4]]);
+    } else if (w.type === 'circle' && pts.length >= 2) {
+      const r = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
+      const N = 20;
+      const ring = [];
+      for (let i = 0; i < N; i++) { const a = (i / N) * 2 * Math.PI; ring.push({ x: pts[0].x + Math.cos(a) * r, y: pts[0].y + Math.sin(a) * r }); }
+      for (let i = 0; i < N; i++) segs.push([ring[i], ring[(i + 1) % N]]);
+    }
+  }
+  return segs;
+}
+
+// Ray (origin + unit direction) vs segment [a,b] — returns the distance
+// along the ray to the hit point, or null if it misses. Standard two-line
+// parametric intersection: t2 in [0,1] keeps the hit within the segment,
+// t1 >= 0 keeps it in front of the ray instead of behind the origin.
+function _fogRayHit(originX, originY, dirX, dirY, a, b) {
+  const sdx = b.x - a.x, sdy = b.y - a.y;
+  const denom = sdx * dirY - sdy * dirX;
+  if (Math.abs(denom) < 1e-10) return null; // parallel
+  const t2 = (dirX * (a.y - originY) + dirY * (originX - a.x)) / denom;
+  if (t2 < 0 || t2 > 1) return null;
+  const t1 = dirX !== 0 ? (a.x + sdx * t2 - originX) / dirX : (a.y + sdy * t2 - originY) / dirY;
+  if (t1 < 0) return null;
+  return t1;
+}
+
+// The viewer's visible-area polygon, in image-px, clipped to the map's own
+// bounds (so an unobstructed ray terminates at the map edge instead of
+// running off to infinity).
+function _fogVisibilityPolygon(originX, originY) {
+  const boundary = [
+    [{ x: 0, y: 0 }, { x: mapImgW, y: 0 }],
+    [{ x: mapImgW, y: 0 }, { x: mapImgW, y: mapImgH }],
+    [{ x: mapImgW, y: mapImgH }, { x: 0, y: mapImgH }],
+    [{ x: 0, y: mapImgH }, { x: 0, y: 0 }],
+  ];
+  const segs = _fogOccluderSegments().concat(boundary);
+
+  const angles = new Set();
+  const EPS = 0.00001;
+  for (const [a, b] of segs) {
+    for (const p of [a, b]) {
+      const ang = Math.atan2(p.y - originY, p.x - originX);
+      angles.add(ang); angles.add(ang - EPS); angles.add(ang + EPS);
+    }
+  }
+
+  const hits = [];
+  for (const ang of angles) {
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    let bestT = Infinity, bestPt = null;
+    for (const [a, b] of segs) {
+      const t = _fogRayHit(originX, originY, dx, dy, a, b);
+      if (t != null && t < bestT) { bestT = t; bestPt = { x: originX + dx * t, y: originY + dy * t }; }
+    }
+    if (bestPt) hits.push({ ang, x: bestPt.x, y: bestPt.y });
+  }
+  hits.sort((p, q) => p.ang - q.ang);
+  return hits;
+}
+
+// The viewing player's own character token on the current map — fog is
+// always computed from THEIR vision only (no shared party sight for MVP).
+function _fogViewerToken() {
+  if (isGM() || !currentCharacterId) return null;
+  return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === currentCharacterId) || null;
+}
+
+// Recomputed on: map/token/wall load, the viewer's own token moving (any
+// source — drag, Path, being carried, a GM repositioning them; see the
+// map_tokens UPDATE handler in subscribeTokenRealtime), and wall changes
+// from any client (see the walls-sync broadcast in saveMapWalls). No-ops
+// for the GM (always sees everything) or a player with no token on this map.
+function drawFog() {
+  const svg = document.getElementById('fog-svg');
+  if (!svg) return;
+  const viewer = _fogViewerToken();
+  if (!viewer || mapImgW <= 0 || mapImgH <= 0) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+
+  const originX = (viewer.x_pct / 100) * mapImgW, originY = (viewer.y_pct / 100) * mapImgH;
+  const poly = _fogVisibilityPolygon(originX, originY);
+  if (!poly.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+
+  const outer = `M0,0 H${mapImgW} V${mapImgH} H0 Z`;
+  const inner = `M${poly.map(p => `${p.x},${p.y}`).join(' L')} Z`;
+  svg.innerHTML = `<path fill-rule="evenodd" fill="rgba(5,5,8,0.86)" d="${outer} ${inner}"/>`;
+  svg.style.display = 'block';
+}
+
 function drawWalls(mouseX, mouseY) {
   const svg = document.getElementById('wall-svg');
   if (!svg) return;
@@ -13248,6 +13387,15 @@ switchGmTab = function(tab) {
       <div class="map-viewport" id="map-viewport">
         <div class="map-canvas" id="map-canvas">
           <img id="map-img" src="" alt="" style="display:none;" draggable="false">
+          <!-- Fog of war (see drawFog) — a CHILD of map-canvas, not a viewport-level
+               sibling like the other tool overlays, so it inherits the canvas's own
+               pan/zoom transform for free instead of needing a manual redraw on
+               every pan/zoom frame; its coordinates are plain image px, same units
+               as everything else drawn in map-canvas space. Placed right after the
+               map image (before tokens get appended) so it always renders below
+               tokens — the map dims, tokens stay visible either way, per design. -->
+          <svg id="fog-svg" width="100%" height="100%"
+               style="position:absolute;inset:0;pointer-events:none;display:none;z-index:5;overflow:visible;"></svg>
         </div>
         <!-- persistent reminder while a map click-capturing mode is active —
              fixed to the viewport (not map/token coordinates) so it stays
