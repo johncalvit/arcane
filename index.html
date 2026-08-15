@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815a';
+const VERSION = 'v0.1.20260815b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7196,6 +7196,7 @@ async function atCompleteCast(casterCid, spellName) {
   _dlgReopenId = casterCid;
   atCloseModal();
   if (spell.targetType === 'Area') {
+    if (spell.spellType === 'Creation') { enterObstacleCastMode(casterCid, spell); return; }
     enterAoeCastMode(casterCid, spell);
     return;
   }
@@ -7470,11 +7471,185 @@ function aoeMouseDown(e) {
   return true;
 }
 
+// Map-% <-> real-world-feet conversions, shared by anything placing an
+// obstacle wall in feet on the map.
+function _mapPctToFt(xPct, yPct) { return { x: (xPct / 100) * mapImgW / mapScalePPF, y: (yPct / 100) * mapImgH / mapScalePPF }; }
+function _mapFtToPct(ft) { return { x_pct: Math.min(100, Math.max(0, (ft.x * mapScalePPF / mapImgW) * 100)),
+                                     y_pct: Math.min(100, Math.max(0, (ft.y * mapScalePPF / mapImgH) * 100)) }; }
+
+// ── Obstacle-spell targeting (Creation + Area spells, e.g. Ice Shield) ────────
+// Unlike a damage AOE (Circle/Sector/Line, always aimed FROM the caster's
+// own position), a Creation spell's wall needs to go wherever the caster
+// wants it — between an ally and whatever's attacking them, say, not always
+// sprouting from the caster's own feet. Click-drag like the wall tool's own
+// Rect/Circle shapes (one drag = one placement): the first click sets one
+// end, dragging sets the other, released to commit. The far end is clamped
+// to the spell's configured wall length (dragging further just maxes it
+// out, doesn't lengthen the wall past what the spell allows), and BOTH ends
+// must land within the caster's casting range — a free-form placement, but
+// still bounded by how far the spell actually reaches.
+let obstacleMode = false, obstacleCasterCid = null, obstacleSpell = null;
+let obstacleRangeFt = 0, obstacleMaxLenFt = 0;
+let obstacleStartVp = null; // viewport px — set once the first end is placed
+let obstacleDragging = false;
+
+function enterObstacleCastMode(casterCid, spell) {
+  if (attackMode)   exitAttackMode();
+  if (pathMode)      exitPathMode();
+  if (aoeMode)       exitAoeCastMode();
+  if (obstacleMode)  exitObstacleCastMode();
+  obstacleMode      = true;
+  obstacleCasterCid = casterCid;
+  obstacleSpell     = spell;
+  obstacleRangeFt   = _parseSpellRangeFt(spell.range);
+  obstacleMaxLenFt  = _parseAoeGeometry(spell).length || 0;
+  obstacleStartVp   = null;
+  obstacleDragging  = false;
+  document.getElementById('map-viewport').classList.add('attack-mode'); // reuse the same crosshair cursor
+  document.getElementById('aoe-svg').style.display = 'block';
+  _obstacleRedraw(null, null);
+}
+
+function exitObstacleCastMode() {
+  obstacleMode = false;
+  obstacleCasterCid = null;
+  obstacleSpell = null;
+  obstacleStartVp = null;
+  obstacleDragging = false;
+  document.getElementById('map-viewport').classList.remove('attack-mode');
+  const svg = document.getElementById('aoe-svg');
+  svg.style.display = 'none';
+  svg.innerHTML = '';
+}
+
+function _obstacleDistFt(xPct, yPct) {
+  const token = _pathFindToken(obstacleCasterCid);
+  if (!token || mapScalePPF <= 0) return Infinity;
+  const aX = (token.x_pct / 100) * mapImgW, aY = (token.y_pct / 100) * mapImgH;
+  const tX = (xPct / 100) * mapImgW,        tY = (yPct / 100) * mapImgH;
+  return Math.hypot(tX - aX, tY - aY) / mapScalePPF;
+}
+
+// The wall's actual endpoints for a placed start + current cursor position:
+// the far end is clamped to the spell's max length from the start, and
+// inRange reports whether BOTH ends are within the caster's casting range.
+// Shared by the live preview and the commit, so what you see dragging is
+// exactly what gets placed.
+function _obstacleEndpoints(startXPct, startYPct, curXPct, curYPct) {
+  const startFt = _mapPctToFt(startXPct, startYPct);
+  const curFt   = _mapPctToFt(curXPct, curYPct);
+  const dLen = Math.hypot(curFt.x - startFt.x, curFt.y - startFt.y) || 1;
+  const len  = obstacleMaxLenFt > 0 ? Math.min(dLen, obstacleMaxLenFt) : dLen;
+  const ux = (curFt.x - startFt.x) / dLen, uy = (curFt.y - startFt.y) / dLen;
+  const endFt   = { x: startFt.x + ux * len, y: startFt.y + uy * len };
+  const startPct = _mapFtToPct(startFt), endPct = _mapFtToPct(endFt);
+  const inRange = _obstacleDistFt(startPct.x_pct, startPct.y_pct) <= obstacleRangeFt
+               && _obstacleDistFt(endPct.x_pct, endPct.y_pct) <= obstacleRangeFt;
+  return { startFt, endFt, startPct, endPct, len, inRange };
+}
+
+function _obstacleRedraw(cursorXPct, cursorYPct) {
+  const svg = document.getElementById('aoe-svg');
+  svg.innerHTML = '';
+  if (!obstacleCasterCid || !obstacleSpell || mapScalePPF <= 0) return;
+  const token = _pathFindToken(obstacleCasterCid);
+  if (!token) return;
+  const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
+  const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
+  const pxPerFt = mapScalePPF * mapScale;
+  const color = '#60c0e0', outColor = '#e05050';
+
+  if (!obstacleStartVp) {
+    // Before the first click: just a dashed range ring, same convention the
+    // damage AOE spells use for Circle — shows how far the wall can reach
+    // before anyone's picked where it starts.
+    const r = Math.max(1, (getTokenSize(token) / 2) * mapScale + obstacleRangeFt * pxPerFt);
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('cx', vpX); ring.setAttribute('cy', vpY); ring.setAttribute('r', r);
+    ring.setAttribute('fill', 'none'); ring.setAttribute('stroke', 'rgba(96,192,224,0.5)');
+    ring.setAttribute('stroke-width', '1.5'); ring.setAttribute('stroke-dasharray', '5,4');
+    svg.appendChild(ring);
+    const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    prompt.setAttribute('x', vpX); prompt.setAttribute('y', vpY + r + 16);
+    prompt.setAttribute('text-anchor', 'middle'); prompt.setAttribute('fill', 'rgba(96,192,224,0.85)');
+    prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Georgia,serif');
+    prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+    prompt.textContent = `${obstacleSpell.name} — click-drag to place the wall · Esc to cancel`;
+    svg.appendChild(prompt);
+    return;
+  }
+
+  const startPct = _wallVpToPct(obstacleStartVp.x, obstacleStartVp.y);
+  const curXPct = cursorXPct != null ? cursorXPct : startPct.x_pct;
+  const curYPct = cursorYPct != null ? cursorYPct : startPct.y_pct;
+  const { startPct: sPct, endPct: ePct, inRange } = _obstacleEndpoints(startPct.x_pct, startPct.y_pct, curXPct, curYPct);
+  const p1 = _wallPctToVp(sPct), p2 = _wallPctToVp(ePct);
+
+  const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  line.setAttribute('x1', p1.x); line.setAttribute('y1', p1.y);
+  line.setAttribute('x2', p2.x); line.setAttribute('y2', p2.y);
+  line.setAttribute('stroke', inRange ? color : outColor);
+  line.setAttribute('stroke-width', '5'); line.setAttribute('stroke-linecap', 'round');
+  svg.appendChild(line);
+
+  const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  prompt.setAttribute('x', (p1.x + p2.x) / 2); prompt.setAttribute('y', Math.min(p1.y, p2.y) - 14);
+  prompt.setAttribute('text-anchor', 'middle');
+  prompt.setAttribute('fill', inRange ? 'rgba(96,192,224,0.85)' : 'rgba(224,80,80,0.9)');
+  prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  prompt.textContent = inRange ? 'release to place the wall' : 'out of range';
+  svg.appendChild(prompt);
+}
+
+function obstacleMouseDown(e) {
+  if (!obstacleMode) return false;
+  const vp = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const pct = _wallVpToPct(vpX, vpY);
+  if (_obstacleDistFt(pct.x_pct, pct.y_pct) > obstacleRangeFt) {
+    showToast(`Out of range (max ${obstacleRangeFt} ft).`, 'warn');
+    return true;
+  }
+  obstacleStartVp  = { x: vpX, y: vpY };
+  obstacleDragging = true;
+  _obstacleRedraw(pct.x_pct, pct.y_pct);
+  return true;
+}
+
+function obstacleMouseMove(e) {
+  if (!obstacleMode || !obstacleDragging) return;
+  const vp = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  _obstacleRedraw((imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
+}
+
+function obstacleMouseUp(e) {
+  if (!obstacleMode || !obstacleDragging || !obstacleStartVp) return;
+  obstacleDragging = false;
+  const startVp = obstacleStartVp;
+  obstacleStartVp = null;
+  const vp = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  if (Math.hypot(vpX - startVp.x, vpY - startVp.y) < 4) { _obstacleRedraw(null, null); return; } // too small — a misclick, not a wall
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  const startPct = _wallVpToPct(startVp.x, startVp.y);
+  const { startPct: sPct, endPct: ePct, inRange } = _obstacleEndpoints(startPct.x_pct, startPct.y_pct, (imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
+  if (!inRange) { showToast('That end is out of range.', 'warn'); _obstacleRedraw(null, null); return; }
+  const casterCid = obstacleCasterCid, spell = obstacleSpell;
+  exitObstacleCastMode();
+  _resolveSpellCast(casterCid, spell.name, casterCid, { startPct: sPct, endPct: ePct });
+}
+
 // Creation spells (Ice Shield, ...) place a real obstacle instead of
 // resolving saves: a Line-type wall (see the map's own wall-drawing tool,
-// _wallCommit) of the spell's configured length, aimed from the caster
-// toward the click — same click-sets-facing convention every other Line/
-// Sector AOE spell already uses. Tagged with maxHp/hp (obstacleHp) and
+// _wallCommit) spanning exactly the two points the caster placed via
+// enterObstacleCastMode's click-drag — free-form within range, not anchored
+// to the caster's own position. Tagged with maxHp/hp (obstacleHp) and
 // maintainedBy so it (a) can be worn down and destroyed like real terrain,
 // and (b) disappears on its own via atStopMaintaining once the caster stops
 // sustaining it (goes unconscious, runs out of Quintessence, or stops
@@ -7483,25 +7658,13 @@ function aoeMouseDown(e) {
 // actively editing), an obstacle a PLAYER can see appear needs to actually
 // be visible on the map for everyone, all the time — see drawWalls().
 async function _resolveSpellObstacle(casterEnt, spell, aoePoint) {
-  const { length, width } = _parseAoeGeometry(spell);
-  if (length <= 0) { showToast(`${spell.name} has no configured size.`, 'error'); return; }
-  const casterToken = _pathFindToken(casterEnt.ref);
-  if (!casterToken || mapScalePPF <= 0 || !aoePoint) { showToast('No map/scale to place the obstacle.', 'error'); return; }
-
-  const toFt  = (xPct, yPct) => ({ x: (xPct / 100) * mapImgW / mapScalePPF, y: (yPct / 100) * mapImgH / mapScalePPF });
-  const toPct = (ft) => ({ x_pct: Math.min(100, Math.max(0, (ft.x * mapScalePPF / mapImgW) * 100)),
-                            y_pct: Math.min(100, Math.max(0, (ft.y * mapScalePPF / mapImgH) * 100)) });
-  const casterFt = toFt(casterToken.x_pct, casterToken.y_pct);
-  const aimFt    = toFt(aoePoint.xPct, aoePoint.yPct);
-  const dirLen   = Math.hypot(aimFt.x - casterFt.x, aimFt.y - casterFt.y) || 1;
-  const ux = (aimFt.x - casterFt.x) / dirLen, uy = (aimFt.y - casterFt.y) / dirLen;
-  const endFt = { x: casterFt.x + ux * length, y: casterFt.y + uy * length };
+  if (!aoePoint || !aoePoint.startPct || !aoePoint.endPct) { showToast('No placement for the obstacle.', 'error'); return; }
 
   const hp = spell.obstacleHp || 0;
   const wall = {
     id: 'wall-' + Date.now() + '-' + Math.round(Math.random() * 9999),
     type: 'line',
-    points: [toPct(casterFt), toPct(endFt)],
+    points: [aoePoint.startPct, aoePoint.endPct],
     blocksVision: true, blocksMovement: true,
     createdBy: casterEnt.name, spellName: spell.name,
   };
@@ -11615,6 +11778,10 @@ document.addEventListener('keydown', e => {
       exitAoeCastMode(); e.stopPropagation();
       if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
     }
+    else if (obstacleMode) {
+      exitObstacleCastMode(); e.stopPropagation();
+      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
+    }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
   }
@@ -11632,10 +11799,11 @@ enterPlayMode = function() {
 const _origExitPlayMode = exitPlayMode;
 exitPlayMode = function() {
   _origExitPlayMode();
-  if (attackMode) exitAttackMode();
-  if (aoeMode)    exitAoeCastMode();
-  if (wallMode)   exitWallMode();
-  if (pathMode)   exitPathMode();
+  if (attackMode)   exitAttackMode();
+  if (aoeMode)      exitAoeCastMode();
+  if (obstacleMode) exitObstacleCastMode();
+  if (wallMode)     exitWallMode();
+  if (pathMode)     exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
   mapTokens    = {};
@@ -12494,11 +12662,12 @@ initMapInteraction = function() {
   vp._calEventsAttached = true;
 
   vp.addEventListener('mousedown', e => {
-    if (calMouseDown(e))     { e.stopImmediatePropagation(); return; }
-    if (measureMouseDown(e)) { e.stopImmediatePropagation(); return; }
-    if (aoeMouseDown(e))     { e.stopImmediatePropagation(); return; }
-    if (wallMouseDown(e))    { e.stopImmediatePropagation(); return; }
-    if (pathMouseDown(e))    { e.stopImmediatePropagation(); }
+    if (calMouseDown(e))       { e.stopImmediatePropagation(); return; }
+    if (measureMouseDown(e))   { e.stopImmediatePropagation(); return; }
+    if (aoeMouseDown(e))       { e.stopImmediatePropagation(); return; }
+    if (obstacleMouseDown(e))  { e.stopImmediatePropagation(); return; }
+    if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
+    if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
   }, true);
 
   vp.addEventListener('contextmenu', e => {
@@ -12506,8 +12675,8 @@ initMapInteraction = function() {
     if (wallMode && _wallShape() === 'line') { e.preventDefault(); _wallCommitLine(); }
   });
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
-  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   wallMouseUp(e); });
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
+  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   obstacleMouseUp(e); wallMouseUp(e); });
 };
 
 // ── Save + load scale ─────────────────────────────────────────────────────────
