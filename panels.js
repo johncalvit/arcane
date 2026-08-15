@@ -876,7 +876,7 @@ function _dlgRender(body) {
   const recoverable = [];
   if (conds.has('stunned'))     recoverable.push({ key: 'stunned',     label: '💫 Shake Off Stun' });
   if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: '🩸 Stanch Bleeding' });
-  if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: '🦵 Shake Off Slow' });
+  if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: '🩼 Shake Off Slow' });
   if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: '🧪 Neutralize Acid' });
   if (conds.has('unconscious')) recoverable.push({ key: 'unconscious', label: '💤 Resuscitate' });
   if (recoverable.length) {

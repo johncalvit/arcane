@@ -461,17 +461,8 @@
     object-fit: contain;
     filter: drop-shadow(0 0 3px #000) drop-shadow(0 1px 2px rgba(0,0,0,0.7));
   }
-  .token-cond-strip {
-    position: absolute;
-    top: calc(100% + 2px);
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.78rem;
-    line-height: 1;
-    text-shadow: 0 0 4px #000, 0 0 8px #000;
-    white-space: nowrap;
-    pointer-events: none;
-  }
+  /* Condition icons render as a leading span INSIDE .token-label (see
+     _refreshTokenBadges) so they read before the name, not below it. */
   .token-label {
     position: absolute;
     top: 100%;
@@ -482,12 +473,24 @@
     color: #fff;
     text-shadow: 0 0 3px #000, 0 0 6px #000;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
     max-width: 72px;
     text-align: center;
     line-height: 1.2;
     pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+  }
+  .token-label-icons {
+    font-size: 0.78rem;
+    line-height: 1;
+    text-shadow: 0 0 4px #000, 0 0 8px #000;
+    flex-shrink: 0;
+  }
+  .token-label-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   /* token add list in GM panel */
@@ -4678,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815c';
+const VERSION = 'v0.1.20260815d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5618,7 +5621,7 @@ function exitPlayMode() {
 
 // ─── Conditions ───────────────────────────────────────────────────────────────
 const CONDITION_DEFS = [
-  { key:'prone',       label:'Prone',       icon:'⬇', color:'#ffdd44',
+  { key:'prone',       label:'Prone',       icon:'🧎', color:'#ffdd44',
     desc:'Halves effective size vs ranged; cannot melee attack, evade, or retreat. Stand Up to clear.' },
   { key:'blocking',    label:'Blocking',    icon:'🛡', color:'#4488ff',
     desc:'Actively blocking. Block defense is pre-applied to incoming attacks.' },
@@ -5648,7 +5651,7 @@ const CONDITION_DEFS = [
     desc:'Holding an opponent in a grab. They must win an opposed Power + Coordination roll to escape.' },
   { key:'carrying',    label:'Carrying',    icon:'🐴', color:'#7fb069',
     desc:'Willingly carrying or being ridden by one or more others. They move with this token; their weight slows it.' },
-  { key:'slowed',      label:'Slowed',      icon:'🦵', color:'#c99a40',
+  { key:'slowed',      label:'Slowed',      icon:'🩼', color:'#c99a40',
     desc:'Reduced speed — from an injured leg (clear to heal) or a spell effect (shake off with a Power-based save, escalating each round like Stun).' },
   { key:'corroding',   label:'Corroding',   icon:'🧪', color:'#7ec850',
     desc:'Acid still eating at them — 1 Corrode damage each round. Shake off with a Toughness-based save, escalating each round like Stun.' },
@@ -5803,9 +5806,9 @@ function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
   el.classList.toggle('aoe-flagged', typeof aoeFlaggedIds !== 'undefined' && aoeFlaggedIds.has(tokenId));
-  el.querySelectorAll('.token-cond-overlay, .token-cond-strip').forEach(b => b.remove());
+  el.querySelectorAll('.token-cond-overlay').forEach(b => b.remove());
   const conds = getConditions(tokenId);
-  if (!conds.size) return;
+  if (!conds.size) { el.querySelector('.token-label-icons')?.remove(); return; }
 
   // Most severe critical condition gets a large centered overlay on the token image
   const CRIT_ORDER = ['dead', 'unconscious', 'stunned', 'paralyzed'];
@@ -5841,13 +5844,20 @@ function _refreshTokenBadges(tokenId) {
     el.appendChild(overlay);
   }
 
-  // All other active conditions: icon strip below the token
+  // All other active conditions: a leading icon group INSIDE the label, so
+  // they read before the name rather than in a separate strip below it.
   const others = CONDITION_DEFS.filter(d => !CRIT_ORDER.includes(d.key) && conds.has(d.key));
+  const label = el.querySelector('.token-label');
+  let iconsEl = label?.querySelector('.token-label-icons');
   if (others.length) {
-    const strip = document.createElement('div');
-    strip.className = 'token-cond-strip';
-    strip.textContent = others.map(d => d.icon).join('');
-    el.appendChild(strip);
+    if (label && !iconsEl) {
+      iconsEl = document.createElement('span');
+      iconsEl.className = 'token-label-icons';
+      label.insertBefore(iconsEl, label.firstChild);
+    }
+    if (iconsEl) iconsEl.textContent = others.map(d => d.icon).join('');
+  } else {
+    iconsEl?.remove();
   }
 }
 
@@ -6802,7 +6812,7 @@ const HIT_EFFECTS = [
   {
     // Leg hit → chance to injure that leg; max speed drops by the proportion of
     // legs injured (see _effectiveSpeed). Persists until the injury is healed.
-    key: 'slowed', label: 'Slow', icon: '🦵',
+    key: 'slowed', label: 'Slow', icon: '🩼',
     gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'leg' && ctx.finalDamage > 0
               && _LOC_EFFECT_MODS.slowed[_damageType(ctx)] > 0
               && !ctx.conds.has('legdmg:' + ctx.hitPart),
@@ -8792,9 +8802,18 @@ function atStopCombat() {
 async function atNext() {
   const sorted = atSortedCombatants();
   if (!sorted.length) return;
+  if (sorted.every(c => c.dropped)) return; // nobody left to take a turn
+  // Dropped combatants (see atSetDropped — Dead/Unconscious, token stays on
+  // the map but skipped in the round) never become active; keep advancing
+  // past them. ranEndOfRound guards the once-per-round block below so
+  // skipping several dropped combatants in a row can't trigger it twice.
+  let ranEndOfRound = false;
+  do {
   atActiveIdx++;
   if (atActiveIdx >= sorted.length) {
     atActiveIdx = 0;
+    if (ranEndOfRound) continue;
+    ranEndOfRound = true;
     // Stamina recovery + bleed tick both write the same entity's `damage`, so
     // they MUST run sequentially (awaited) — firing them concurrently let a
     // stale-snapshot stamina write clobber the bleed's blood drain, leaving a
@@ -8874,6 +8893,7 @@ async function atNext() {
       }
     });
   }
+  } while (sorted[atActiveIdx]?.dropped);
   _atUpdateBlink();
   renderAtList();
   renderPlayCharacter();
@@ -9175,6 +9195,20 @@ function atClearSlot(combatantId, slot) {
   renderAtList();
 }
 
+// Dead/Unconscious combatants that don't get an actual turn anymore, but
+// whose token should stay on the map (as opposed to atRemoveCombatant,
+// which drops them from the tracker entirely). atNext() skips a dropped
+// combatant's turn without touching their token or slots — reversible any
+// time (e.g. a Resuscitate brings them back), so this is a toggle, not a
+// one-way action.
+function atSetDropped(combatantId, dropped) {
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c) return;
+  c.dropped = dropped;
+  if (mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-set-dropped', payload: { combatantId, dropped } });
+  renderAtList();
+}
 
 function renderAtList() {
   document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
@@ -9225,15 +9259,26 @@ function renderAtList() {
     const initBadge = c.initiative != null
       ? `<span class="at-comb-init">Init ${c.initiative}</span>`
       : `<span class="at-comb-init" style="color:var(--text-dim)">—</span>`;
-    const nameEl = `<span class="at-comb-name">${isActive ? '▶ ' : ''}${c.name}</span>`;
+    const dropped = !!c.dropped;
+    const nameEl = `<span class="at-comb-name"${dropped ? ' style="opacity:0.55;text-decoration:line-through;"' : ''}>${isActive ? '▶ ' : ''}${c.name}${dropped ? ' (dropped)' : ''}</span>`;
 
     const rollBtn  = c.initiative == null
       ? `<button class="at-btn primary" style="margin-left:auto;" onclick="atRollInitiative('${safeId}')">🎲 Roll</button>`
       : '';
+    // Dead/Unconscious combatants can be dropped from the turn order without
+    // pulling their token off the map (atRemoveCombatant does that instead).
+    // Reversible — the button always shows once dropped, in case they're
+    // healed back up, but only offers to drop while it'd actually make sense.
+    const token = _pathFindToken(c.id);
+    const conds = token ? getConditions(token.id) : new Set();
+    const dropEligible = dropped || conds.has('dead') || conds.has('unconscious');
+    const dropBtn = isGM() && dropEligible
+      ? `<button class="at-btn" onclick="atSetDropped('${safeId}', ${!dropped})" title="${dropped ? 'Return to the round' : "Skip this combatant's turns — token stays on the map"}">${dropped ? '↩' : '⬇ Drop'}</button>`
+      : '';
     const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">✕</button>` : '';
 
     div.innerHTML = `
-      <div class="at-comb-header">${nameEl}${initBadge}${rollBtn}${removeBtn}</div>`;
+      <div class="at-comb-header">${nameEl}${initBadge}${dropBtn}${rollBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -10126,6 +10171,10 @@ function subscribeMapRealtime() {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c && c.slots) { c.slots[payload.slot] = null; renderAtList(); renderPlayCharacter(); }
     })
+    .on('broadcast', { event: 'at-set-dropped' }, ({ payload }) => {
+      const c = atCombatants.find(x => x.id === payload.combatantId);
+      if (c) { c.dropped = payload.dropped; renderAtList(); renderPlayCharacter(); }
+    })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
       if (!isGM()) { _atStateFromGM = payload; _atUpdateBlink(); renderPlayCharacter(); }
     })
@@ -10144,6 +10193,7 @@ function subscribeMapRealtime() {
           combatants: atCombatants.map(c => ({
             id: c.id, name: c.name, avatar: c.avatar, type: c.type,
             initiative: c.initiative, tieBreak: c.tieBreak, slots: c.slots,
+            dropped: !!c.dropped,
           })),
         }});
       }
@@ -10646,7 +10696,7 @@ function tokenHtml(t) {
     onmousedown="startTokenDrag(event,'${t.id}')"
     ondblclick="onTokenDblClick(event,'${t.id}')">
     <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
-    <div class="token-label">${t.label}</div>
+    <div class="token-label"><span class="token-label-text">${t.label}</span></div>
   </div>`;
 }
 
@@ -13454,6 +13504,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260815a"></script>
+<script src="panels.js?v=20260815b"></script>
 </body>
 </html>
