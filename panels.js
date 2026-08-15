@@ -629,10 +629,11 @@ function _dlgRender(body) {
   const summary = picked.length
     ? `${picked.join(' · ')}${staminaCost ? ` — ${staminaCost} stamina` : ''}`
     : 'No actions chosen yet';
-  // Unconscious isn't listed here anymore — it now has its own real action
-  // (Resuscitate, in the Recover section below) instead of just being a
-  // dead end the table has to talk through.
-  const blockers = ['dead', 'stunned', 'paralyzed'].filter(k => conds.has(k));
+  // Unconscious and stunned aren't listed here anymore — they each have
+  // their own real action (Resuscitate / Shake Off Stun, in the Recover
+  // section below) instead of just being a dead end the table has to talk
+  // through.
+  const blockers = ['dead', 'paralyzed'].filter(k => conds.has(k));
   const banner = blockers.length
     ? `<div style="background:rgba(224,85,85,0.12);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.75rem;color:#e05555;margin-bottom:8px;">
         ${_paEsc(c.name)} is ${blockers.join(', ')} — actions recorded anyway; the table decides.
