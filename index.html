@@ -4681,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815e';
+const VERSION = 'v0.1.20260815f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5806,6 +5806,7 @@ function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
   el.classList.toggle('aoe-flagged', typeof aoeFlaggedIds !== 'undefined' && aoeFlaggedIds.has(tokenId));
+  if (typeof _fogApplyTokenVisibility === 'function') _fogApplyTokenVisibility(tokenId);
   el.querySelectorAll('.token-cond-overlay').forEach(b => b.remove());
   const conds = getConditions(tokenId);
   if (!conds.size) { el.querySelector('.token-label-icons')?.remove(); return; }
@@ -11597,6 +11598,11 @@ function subscribeTokenRealtime() {
         mapTokens[payload.id].x_pct = payload.x_pct;
         mapTokens[payload.id].y_pct = payload.y_pct;
       }
+      // Live-drag is a fast path that bypasses the usual per-token render
+      // (_refreshTokenBadges), so fog needs its own hook here too — a
+      // monster being dragged across a wall's shadow should pop in/out of
+      // sight as it moves, not just once the drag settles.
+      if (typeof _fogApplyTokenVisibility === 'function') _fogApplyTokenVisibility(payload.id);
     })
     // DB changes: token added or removed
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'map_tokens',
@@ -11899,8 +11905,12 @@ exitPlayMode = function() {
   mapTokens    = {};
   dragTokenId  = null;
   document.querySelectorAll('.map-token').forEach(el => el.remove());
-  const fogEl = document.getElementById('fog-svg');
-  if (fogEl) { fogEl.style.display = 'none'; fogEl.innerHTML = ''; }
+  // Deliberately NOT clearing the canvas or _fogRevealedMapId here — leaving
+  // Play Mode and coming back (same session, same map) should still show
+  // what was already explored, not force re-discovering it. drawFog() only
+  // repaints from scratch when the map itself actually changes.
+  const fogEl = document.getElementById('fog-canvas');
+  if (fogEl) fogEl.style.display = 'none';
 };
 
 // ── Extend loadActiveMap realtime handler to also reload tokens + scale ───────
@@ -12697,25 +12707,114 @@ function _fogViewerToken() {
   return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === currentCharacterId) || null;
 }
 
+// Standard point-in-polygon (ray-casting parity test) — used to decide
+// whether a given TOKEN currently falls inside the viewer's visibility
+// polygon, separately from the terrain reveal below.
+function _fogPointInPolygon(x, y, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const xi = poly[i].x, yi = poly[i].y, xj = poly[j].x, yj = poly[j].y;
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
+}
+
+// The last-computed visibility polygon, cached so a token can be re-checked
+// against it the instant IT moves, without recomputing the whole polygon
+// (which only changes when the VIEWER moves or a wall changes).
+let _fogLastPoly = [];
+
+// Drops (display:none) any token outside the viewer's current line of sight
+// — everything but the viewer's own token, which always shows. A no-op for
+// the GM (sees everyone, always) or once fog is otherwise disabled (empty
+// _fogLastPoly), so nothing stays incorrectly hidden.
+function _fogApplyTokenVisibility(tokenId) {
+  if (isGM()) return;
+  const t = mapTokens[tokenId];
+  const el = document.getElementById('token-' + tokenId);
+  if (!t || !el) return;
+  const viewer = _fogViewerToken();
+  const visible = !viewer || t.id === viewer.id || !_fogLastPoly.length
+    || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
+  el.style.display = visible ? '' : 'none';
+}
+function _fogApplyAllTokenVisibility() {
+  for (const id of Object.keys(mapTokens)) _fogApplyTokenVisibility(id);
+}
+// Fog fully off (GM, or no viewer token) — make sure nothing is left hidden
+// from a PREVIOUS state (e.g. a player just became the GM mid-session).
+function _fogShowAllTokens() {
+  for (const id of Object.keys(mapTokens)) {
+    const el = document.getElementById('token-' + id);
+    if (el) el.style.display = '';
+  }
+}
+
+// Which map's exploration the canvas currently holds — reset (repainted
+// fully dark) whenever this changes, so switching maps starts unexplored
+// again instead of carrying over a different map's revealed shape.
+let _fogRevealedMapId = null;
+
 // Recomputed on: map/token/wall load, the viewer's own token moving (any
 // source — drag, Path, being carried, a GM repositioning them; see the
 // map_tokens UPDATE handler in subscribeTokenRealtime), and wall changes
 // from any client (see the walls-sync broadcast in saveMapWalls). No-ops
 // for the GM (always sees everything) or a player with no token on this map.
+//
+// Terrain uses "explored" memory — once an area's been seen it stays fully
+// visible, even after it's out of current line of sight, so the party can
+// still read the battle space instead of losing the map every time they
+// look away. A <canvas> makes that cheap: paint it fully dark once, then on
+// every redraw punch a hole (destination-out compositing) at the CURRENT
+// visibility polygon — never repainting the dark base, so every past hole
+// stays cut. Tokens are the opposite: only what's in the CURRENT polygon
+// shows (_fogApplyAllTokenVisibility, using the same polygon) — a monster
+// that's moved out of sight should actually disappear, not leave a ghost.
 function drawFog() {
-  const svg = document.getElementById('fog-svg');
-  if (!svg) return;
+  const canvas = document.getElementById('fog-canvas');
+  if (!canvas) return;
   const viewer = _fogViewerToken();
-  if (!viewer || mapImgW <= 0 || mapImgH <= 0) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  if (!viewer || mapImgW <= 0 || mapImgH <= 0) {
+    canvas.style.display = 'none';
+    _fogLastPoly = [];
+    _fogShowAllTokens();
+    return;
+  }
+
+  if (canvas.width !== mapImgW || canvas.height !== mapImgH || _fogRevealedMapId !== activeMapId) {
+    canvas.width  = mapImgW;
+    canvas.height = mapImgH;
+    const resetCtx = canvas.getContext('2d');
+    resetCtx.globalCompositeOperation = 'source-over';
+    resetCtx.fillStyle = 'rgba(5,5,8,0.86)';
+    resetCtx.fillRect(0, 0, mapImgW, mapImgH);
+    _fogRevealedMapId = activeMapId;
+  }
 
   const originX = (viewer.x_pct / 100) * mapImgW, originY = (viewer.y_pct / 100) * mapImgH;
   const poly = _fogVisibilityPolygon(originX, originY);
-  if (!poly.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  _fogLastPoly = poly;
 
-  const outer = `M0,0 H${mapImgW} V${mapImgH} H0 Z`;
-  const inner = `M${poly.map(p => `${p.x},${p.y}`).join(' L')} Z`;
-  svg.innerHTML = `<path fill-rule="evenodd" fill="rgba(5,5,8,0.86)" d="${outer} ${inner}"/>`;
-  svg.style.display = 'block';
+  if (poly.length) {
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.globalCompositeOperation = 'destination-out';
+    // Erasure strength = this fillStyle's own alpha, NOT the covered
+    // pixel's existing alpha — fully opaque here means fully revealed in
+    // one pass. Left at the fog's own translucent fillStyle (0.86) this
+    // only ever erased 86% per pass, so a newly-explored area stayed
+    // faintly dark instead of clearing all the way.
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+  canvas.style.display = 'block';
+
+  _fogApplyAllTokenVisibility();
 }
 
 function drawWalls(mouseX, mouseY) {
@@ -13393,9 +13492,15 @@ switchGmTab = function(tab) {
                every pan/zoom frame; its coordinates are plain image px, same units
                as everything else drawn in map-canvas space. Placed right after the
                map image (before tokens get appended) so it always renders below
-               tokens — the map dims, tokens stay visible either way, per design. -->
-          <svg id="fog-svg" width="100%" height="100%"
-               style="position:absolute;inset:0;pointer-events:none;display:none;z-index:5;overflow:visible;"></svg>
+               tokens (z-index 5 vs .map-token's 20) — the map dims, tokens stay
+               visible on their own separate rule (fog hides tokens outside current
+               line of sight directly, via display:none — see _fogApplyTokenVisibility).
+               A <canvas>, not an SVG, specifically so "explored" area can be
+               revealed with destination-out compositing and STAY revealed without
+               redrawing from scratch every frame — an SVG would need real polygon
+               union math to get the same persistent effect. -->
+          <canvas id="fog-canvas"
+               style="position:absolute;inset:0;pointer-events:none;display:none;z-index:5;"></canvas>
         </div>
         <!-- persistent reminder while a map click-capturing mode is active —
              fixed to the viewport (not map/token coordinates) so it stays
