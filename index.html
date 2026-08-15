@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815b';
+const VERSION = 'v0.1.20260815c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10744,6 +10744,30 @@ function startTokenDrag(e, tokenId) {
   if (aoeResolveState && isGM() && aoeFlaggedIds.has(tokenId)) { e.preventDefault(); _aoeResolveClick(tokenId); return; }
   // In attack mode a token click selects the target
   if (attackMode) { e.preventDefault(); attackTokenClick(tokenId); return; }
+
+  // During active combat, a player can't free-drag their own character —
+  // dragging never checked pathMode at all, so it was a completely separate,
+  // untracked way to move (no distance limit, no action cost, even usable
+  // off-turn) sitting right alongside Path mode's own tracked movement.
+  // Reported live as players "cheating" movement at the start of their turn
+  // by dragging before opening Path. On their own turn, attempting to drag
+  // now drops them straight into Path mode instead — seeded at the token's
+  // current spot, same as a plain click (no drag) on their own active token
+  // already did; this just makes an actual drag gesture do the same thing
+  // rather than silently free-moving the token. Off-turn, it just shows the
+  // token info, same as clicking without dragging already did. The GM is
+  // untouched — still free to reposition anything, any time.
+  const dragT = mapTokens[tokenId];
+  if (dragT && !isGM() && dragT.entity_type === 'character' && dragT.entity_id === currentCharacterId
+      && _atIsCombatActive() && !pathMode) {
+    e.preventDefault();
+    _tokenClickId = null; // this click is fully handled here — mouseup shouldn't also act on it
+    const combatantId = 'char::' + dragT.entity_id;
+    showTokenInfo(tokenId);
+    if (_atSharedActive()?.id === combatantId) enterPathMode(combatantId);
+    return;
+  }
+
   _tokenClickId    = tokenId;
   _tokenDragMoved  = false;
   _tokenDragStartX = e.clientX;
