@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814d';
+const VERSION = 'v0.1.20260814e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6256,8 +6256,9 @@ async function _payQuintessence(ent, cost) {
     blood:        (ent.damage.blood        || 0) + paid.blood,
   }});
 
-  // Casting through Toughness/Blood can down or kill the caster.
-  if ((paid.toughness > 0 || paid.blood > 0) && ent.tokenId) {
+  // Casting through Stamina/Toughness/Blood can exhaust, down, or kill the
+  // caster — _checkDownedState covers all three (exhaustion included).
+  if ((paid.stamina > 0 || paid.toughness > 0 || paid.blood > 0) && ent.tokenId) {
     await _checkDownedState(ent.tokenId, getEntity(ent.ref));
   }
   return paid;
@@ -6290,6 +6291,9 @@ async function _deductStamina(combatantId, amount) {
   const ent = getEntity(combatantId); // combatant ids are valid entity refs
   if (!ent) return;
   await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, 0, amount);
+  // Running dry goes prone (see _checkDownedState) — every stamina cost in
+  // the game (Evade, Sprint, declared actions, ...) funnels through here.
+  if (ent.tokenId) await _checkDownedState(ent.tokenId, getEntity(ent.ref));
 }
 
 // Set current HP for an entity by writing the derived damage value to the DB.
@@ -8302,9 +8306,14 @@ async function applyToughnessDamage(ent, amount) {
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: newTough, blood: newBlood }) });
 }
 
-// Shared downed-state detection: Toughness 0 = unconscious, Blood 0 = dead.
-// Returns 'dead' | 'unconscious' | null. Used by both hit resolution and the
-// bleed tick so bleeding-to-death works identically.
+// Shared downed-state detection: Toughness 0 = unconscious, Blood 0 = dead,
+// Stamina 0 = exhausted. Returns 'dead' | 'unconscious' | 'exhausted' | null.
+// Used by hit resolution, the bleed tick, and anything that spends Stamina
+// (_deductStamina, _payQuintessence) so bleeding/exhaustion collapse work
+// identically everywhere. All three crumple the body — unconscious, out of
+// blood, or simply too spent to stand — so all three go prone, same as a
+// deliberate Go Prone; getting back up is still a real action (Stand Up),
+// this only drops them, it doesn't auto-recover them later.
 async function _checkDownedState(tokenId, ent) {
   if (!ent || !tokenId) return null;
   const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
@@ -8312,11 +8321,18 @@ async function _checkDownedState(tokenId, ent) {
   if ((ent.damage.blood || 0) >= bMax) {
     await setCondition(tokenId, 'unconscious', true);
     await setCondition(tokenId, 'dead', true);
+    await setCondition(tokenId, 'prone', true);
     return 'dead';
   }
   if ((ent.damage.toughness || 0) >= tMax) {
     await setCondition(tokenId, 'unconscious', true);
+    await setCondition(tokenId, 'prone', true);
     return 'unconscious';
+  }
+  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  if ((ent.damage.stamina || 0) >= sMax) {
+    await setCondition(tokenId, 'prone', true);
+    return 'exhausted';
   }
   return null;
 }
