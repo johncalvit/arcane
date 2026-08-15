@@ -4678,7 +4678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260814f';
+const VERSION = 'v0.1.20260815a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9318,7 +9318,7 @@ function _requestRemoteDefense(target, options, threshold, cb) {
   _rollerBroadcast('defense-request', {
     reqId, targetTokenId: target.id, targetName: target.label || '', attackerName: _rollerWho(), threshold,
     options: options.map(o => ({ label: o.label, reduction: o.reduction,
-      prone: /Go Prone/i.test(o.label), stamina: o.stamina || 0 })),
+      prone: /Go Prone/i.test(o.label), stamina: o.stamina || 0, preSelected: !!o.preSelected })),
   });
 }
 function _resolveDefenseLocal(reqId, chosen) {
@@ -9384,8 +9384,19 @@ function _showDefenseWaiting(target, options, reqId) {
   const opts = [{ label: 'No Defense', reduction: 0, prone: false }, ...(options || [])];
   const gmBtns = showGmPicker
     ? `<div style="font-size:0.68rem;color:var(--text-dim);margin:10px 0 4px;">or set it yourself:</div>
-       <div id="defense-waiting-opts">${opts.map((o, i) =>
-         `<button data-i="${i}" style="display:block;width:100%;margin-top:4px;padding:6px 10px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;font-size:0.75rem;">${_logEsc(o.label)}</button>`).join('')}</div>`
+       <div id="defense-waiting-opts">${opts.map((o, i) => {
+         // A weapon/stance the defender already had readied (Block/Parry a
+         // held weapon is set to, or an active Evade stance) is the default
+         // — highlighted the same way the roller's own inline defense
+         // buttons already highlight it, so it reads as "already chosen,
+         // click to confirm or pick something else" instead of a flat list.
+         const lit = !!o.preSelected;
+         return `<button data-i="${i}" style="display:block;width:100%;margin-top:4px;padding:6px 10px;border-radius:5px;
+           border:1px solid ${lit ? 'var(--gold)' : 'var(--border)'};
+           background:${lit ? 'rgba(201,168,76,0.15)' : 'var(--bg3)'};
+           color:${lit ? 'var(--gold2)' : 'var(--text)'};
+           cursor:pointer;font-family:Georgia,serif;font-size:0.75rem;">${_logEsc(o.label)}${lit ? ' ✓' : ''}</button>`;
+       }).join('')}</div>`
     : '';
   el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:24px 28px;text-align:center;max-width:90vw;">
     <div style="font-size:0.95rem;color:var(--gold2);margin-bottom:6px;">⏳ Waiting for ${_logEsc(name)}</div>
@@ -9409,7 +9420,15 @@ function _showDefensePicker(payload) {
   let el = document.getElementById('defense-picker');
   if (!el) { el = document.createElement('div'); el.id = 'defense-picker'; document.body.appendChild(el); }
   const opts = [{ label: 'No Defense', reduction: 0, prone: false }, ...(payload.options || [])];
-  const btns = opts.map((o, i) => `<button data-i="${i}" style="display:block;width:100%;margin-top:6px;padding:8px 12px;border-radius:5px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--text);cursor:pointer;font-family:Georgia,serif;font-size:0.82rem;">${_logEsc(o.label)}</button>`).join('');
+  // Same "already readied" highlight as the GM's fallback picker below —
+  // whatever Block/Parry/Evade the defender already had set is the default.
+  const btns = opts.map((o, i) => { const lit = !!o.preSelected;
+    return `<button data-i="${i}" style="display:block;width:100%;margin-top:6px;padding:8px 12px;border-radius:5px;
+      border:1px solid var(--gold);
+      background:${lit ? 'rgba(201,168,76,0.30)' : 'rgba(201,168,76,0.12)'};
+      color:${lit ? 'var(--gold2)' : 'var(--text)'};font-weight:${lit ? 'bold' : 'normal'};
+      cursor:pointer;font-family:Georgia,serif;font-size:0.82rem;">${_logEsc(o.label)}${lit ? ' ✓ readied' : ''}</button>`;
+  }).join('');
   el.style.cssText = 'position:fixed;inset:0;z-index:1650;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
   el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:280px;max-width:92vw;">
     <div style="font-size:0.95rem;color:var(--gold2);text-align:center;margin-bottom:4px;">⚔ ${_logEsc(payload.attackerName)} attacks ${_logEsc(payload.targetName)}!</div>
