@@ -1355,6 +1355,16 @@
             <label>Max Power Modifier</label>
             <input type="text" id="mf-maxpowermod" placeholder="0">
           </div>
+          <div class="field">
+            <label>Natural Weapon Slot</label>
+            <select id="mf-naturalslot">
+              <option value="">— Held weapon (not natural) —</option>
+              <option value="head">Head</option>
+              <option value="forelegs">Forelegs</option>
+              <option value="hindlegs">Hindlegs</option>
+              <option value="tail">Tail</option>
+            </select>
+          </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveMeleeWeapon()">Save Action</button>
@@ -1363,7 +1373,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Natural Slot</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -3441,6 +3451,7 @@ function openMeleeWeaponForm(index) {
   document.getElementById('mf-minstr').value      = row ? row.minStr : 0;
   document.getElementById('mf-damagemax').value   = row ? row.damageMax : 0;
   document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
+  document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
   document.getElementById('melee-form').style.display = 'block';
 }
 
@@ -3463,6 +3474,7 @@ function saveMeleeWeapon() {
     minStr: parseFloat(document.getElementById('mf-minstr').value) || 0,
     damageMax: parseFloat(document.getElementById('mf-damagemax').value) || 0,
     maxPowerMod: parseFloat(document.getElementById('mf-maxpowermod').value) || 0,
+    naturalSlot: document.getElementById('mf-naturalslot').value || '',
   };
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
@@ -3494,7 +3506,10 @@ function buildMeleeWeaponsManagerTable() {
   tbody.innerHTML = '';
   MELEE_WEAPONS.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
+    const slotLabel = row.naturalSlot
+      ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
+      : '—';
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -4756,7 +4771,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815m';
+const VERSION = 'v0.1.20260816a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
