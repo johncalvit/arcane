@@ -4681,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815h';
+const VERSION = 'v0.1.20260815i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10184,6 +10184,15 @@ function subscribeMapRealtime() {
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
     })
+    // GM-triggered (see resetFogOfWar) — wipes THIS client's own explored-
+    // area memory so the next drawFog() rebuilds from scratch, unexplored
+    // except for whatever's in current line of sight right now. A no-op for
+    // the GM (they have no fog state of their own to clear).
+    .on('broadcast', { event: 'fog-reset' }, () => {
+      _fogExploredCanvas = null;
+      _fogRevealedMapId  = null;
+      if (typeof drawFog === 'function') drawFog();
+    })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
       if (!isGM()) { _atStateFromGM = payload; _atUpdateBlink(); renderPlayCharacter(); }
     })
@@ -11967,6 +11976,31 @@ enterPlayMode = function() {
        <button class="btn-sm btn-text" onclick="_openManageWallsModal()">📋 Manage</button>`);
   }
 };
+
+// ── Map Setup toolbar: add Reset Fog ──────────────────────────────────────────
+// Each PLAYER's "ever explored" area (see drawFog/_fogExploredCanvas) lives
+// only in their own browser tab — there's no server-side record of it at
+// all — so a brand-new character (or a map reused for a new scene) starts
+// with a clean slate automatically on that player's next load. This button
+// is for the OTHER case: wiping a player's ALREADY-explored area on demand
+// (new chapter, they backtrack through a cleared dungeon, testing walls),
+// since the GM has no local fog state of their own to reset — it only ever
+// makes sense as something broadcast to every player's client.
+const _origEnterPlayModeFogReset = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModeFogReset();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-authoring');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" onclick="resetFogOfWar()" title="Clear every player's explored-area memory for this map">🌫 Reset Fog</button>`);
+  }
+};
+function resetFogOfWar() {
+  if (!isGM()) return;
+  mapChannel?.send({ type: 'broadcast', event: 'fog-reset', payload: {} });
+  showToast('Fog of war reset — players start unexplored again.', 'good');
+}
 
 // ── Calibration mode ─────────────────────────────────────────────────────────
 function toggleCalibrationMode() {
