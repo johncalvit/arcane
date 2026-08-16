@@ -2578,7 +2578,11 @@ let skillFilter = 'All';
 let skillMgrFilter = 'All';
 let skillInvestments = {}; // { skillName: pointsInvested }
 function buildSkillFilters() {
-  const types = ['All', ...new Set(SKILLS.map(s=>s.type))];
+  // 'Selected' isn't a skill type — it's a pseudo-filter for skills with at
+  // least one point invested, so a player building a broad character can
+  // quickly see just what they've actually chosen instead of scrolling the
+  // full list.
+  const types = ['All', 'Selected', ...new Set(SKILLS.map(s=>s.type))];
   const container = document.getElementById('skill-filters');
   container.innerHTML = '';
   for (const t of types) {
@@ -2641,7 +2645,9 @@ function buildSkillList() {
   const container = document.getElementById('skill-list');
   container.innerHTML = '';
   const attrs = calcAttributes();
-  const filtered = skillFilter === 'All' ? SKILLS : SKILLS.filter(s => s.type === skillFilter);
+  const filtered = skillFilter === 'All' ? SKILLS
+    : skillFilter === 'Selected' ? SKILLS.filter(s => (skillInvestments[s.name] || 0) > 0)
+    : SKILLS.filter(s => s.type === skillFilter);
   for (const s of filtered) {
     const pts = skillInvestments[s.name] || 0;
     const pct = calcSkillSuccess(s, attrs, pts);
@@ -4681,7 +4687,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815i';
+const VERSION = 'v0.1.20260815j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
