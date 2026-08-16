@@ -1168,6 +1168,14 @@
           </div>
         </div>
 
+        <!-- Only meaningful for a non-Humanoid Body Type — Humanoid creatures fight
+             with held weapons (Loadout), not these. A creature spawned from this
+             species starts with these equipped automatically; a GM can still swap
+             any individual creature's natural weapons later (see the action
+             dialog's per-channel selects) without touching the species itself. -->
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Natural Weapons (non-Humanoid only)</div>
+        <div class="grid-2" style="margin-bottom:12px;" id="smgr-natural"></div>
+
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Physical</div>
         <div class="grid-2" style="margin-bottom:12px;" id="smgr-physical"></div>
 
@@ -3371,6 +3379,28 @@ const DEFAULT_MELEE_WEAPONS = [
 
   { weapon:"Shield, Buckler",       action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:6,  damageMax:0,  maxPowerMod:0   },
   { weapon:"Shield, Buckler",       action:"Smash (Bash)",  minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Steel; Iron; Wood",          minStr:6,  damageMax:4,  maxPowerMod:0.5 },
+
+  // ── Natural weapons ──────────────────────────────────────────────────────
+  // Same table, same hit/damage machinery as any held weapon — the only
+  // difference is naturalSlot, which body-plan channel (see BODY_PLANS in
+  // panels.js) offers it as an "equip" option instead of a hand. minStr is 0
+  // across the board — a creature isn't wielding its own claws, there's
+  // nothing to be too weak to use. Species Manager's Natural Weapons
+  // defaults (RACE_DATA[...].NaturalHead etc.) pick which of these a given
+  // species starts equipped with; a GM can still swap it per-creature the
+  // same way a held weapon gets swapped (see getEntity/_dlgRender).
+  { weapon:"Fangs",       action:"Bite",  naturalSlot:"head",     minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.4 },
+  { weapon:"Tusks",       action:"Gore",  naturalSlot:"head",     minReach:0, reach:0.5, hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:8, maxPowerMod:0.5 },
+  { weapon:"Horns",       action:"Gore",  naturalSlot:"head",     minReach:0, reach:0.5, hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:7, maxPowerMod:0.5 },
+  { weapon:"Beak",        action:"Peck",  naturalSlot:"head",     minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:4, maxPowerMod:0.3 },
+  { weapon:"Mandibles",   action:"Bite",  naturalSlot:"head",     minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
+  { weapon:"Claws",       action:"Rake",  naturalSlot:"forelegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.4 },
+  { weapon:"Talons",      action:"Rake",  naturalSlot:"forelegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
+  { weapon:"Fore Hooves", action:"Stomp", naturalSlot:"forelegs", minReach:0, reach:0,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.4 },
+  { weapon:"Hind Hooves", action:"Kick",  naturalSlot:"hindlegs", minReach:0, reach:0,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:7, maxPowerMod:0.5 },
+  { weapon:"Rear Claws",  action:"Rake",  naturalSlot:"hindlegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
+  { weapon:"Tail Slam",   action:"Slam",  naturalSlot:"tail",     minReach:0, reach:1,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:8, maxPowerMod:0.5 },
+  { weapon:"Stinger",     action:"Sting", naturalSlot:"tail",     minReach:0, reach:0.5, hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.3 },
 ];
 let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
 let editingMeleeIndex = null;
@@ -4166,6 +4196,16 @@ let _speciesEditName = null; // null = new, string = editing existing
 
 const SPECIES_ATTR_FIELDS = ATTRIBUTES.map(a => ({ raceKey: a.raceKey, label: a.label, group: a.group, raceDefault: a.raceDefault ?? 1 }));
 
+// Slot keys/labels match NATURAL_BODY_PLAN in panels.js exactly — a
+// species' pick here just IS that slot's default `held` value (see
+// _speciesNaturalDefaults). raceKey is the RACE_DATA field it saves under.
+const NATURAL_SLOTS = [
+  { key: 'head',     raceKey: 'NaturalHead',     label: 'Head' },
+  { key: 'forelegs', raceKey: 'NaturalForelegs', label: 'Forelegs' },
+  { key: 'hindlegs', raceKey: 'NaturalHindlegs', label: 'Hindlegs' },
+  { key: 'tail',     raceKey: 'NaturalTail',     label: 'Tail' },
+];
+
 let speciesMgrShowMonsters = true;
 function setSpeciesMgrFilter(showAll) {
   speciesMgrShowMonsters = showAll;
@@ -4197,6 +4237,27 @@ function buildSpeciesManagerTable() {
   });
 }
 
+// One dropdown per natural-weapon slot, options pulled straight from
+// MELEE_WEAPONS' naturalSlot-tagged rows (so adding a new natural weapon in
+// Melee Weapons Manager automatically shows up as a species option here too
+// — no separate catalog to keep in sync).
+function _buildSpeciesNaturalInputs() {
+  const container = document.getElementById('smgr-natural');
+  if (!container) return;
+  container.innerHTML = '';
+  NATURAL_SLOTS.forEach(s => {
+    const options = [...new Set(MELEE_WEAPONS.filter(r => r.naturalSlot === s.key).map(r => r.weapon))];
+    const div = document.createElement('div');
+    div.className = 'field';
+    div.innerHTML = `<label>${s.label}</label>
+      <select id="smgr-natural-${s.key}">
+        <option value="">— None —</option>
+        ${options.map(n => `<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('')}
+      </select>`;
+    container.appendChild(div);
+  });
+}
+
 function _buildSpeciesAttrInputs() {
   ['physical','cognitive','senses'].forEach(group => {
     const container = document.getElementById('smgr-' + group);
@@ -4215,6 +4276,7 @@ function _buildSpeciesAttrInputs() {
 function openSpeciesForm(name) {
   _speciesEditName = name;
   _buildSpeciesAttrInputs();
+  _buildSpeciesNaturalInputs();
   document.getElementById('species-form-title').textContent = name ? `Edit — ${name}` : 'New Species';
 
   const d = name ? (RACE_DATA[name] || {}) : {};
@@ -4229,6 +4291,10 @@ function openSpeciesForm(name) {
   SPECIES_ATTR_FIELDS.forEach(f => {
     const el = document.getElementById('smgr-attr-' + f.raceKey);
     if (el) el.value = d[f.raceKey] ?? f.raceDefault;
+  });
+  NATURAL_SLOTS.forEach(s => {
+    const el = document.getElementById('smgr-natural-' + s.key);
+    if (el) el.value = d[s.raceKey] || '';
   });
 
   document.getElementById('species-form').style.display = 'block';
@@ -4278,6 +4344,9 @@ function saveSpecies() {
     // fly") is falsy and would silently save as the default instead.
     const v = parseFloat(el?.value);
     entry[f.raceKey] = Number.isNaN(v) ? f.raceDefault : v;
+  });
+  NATURAL_SLOTS.forEach(s => {
+    entry[s.raceKey] = document.getElementById('smgr-natural-' + s.key)?.value || '';
   });
 
   RACE_DATA[nameInput] = entry;
@@ -4687,7 +4756,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815l';
+const VERSION = 'v0.1.20260815m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5940,6 +6009,25 @@ function _entityToken(ref) {
   return Object.values(mapTokens).find(t => t.entity_type === 'creature' && t.entity_id === rawId) || null;
 }
 
+// A species' default natural weapons (Species Manager's Natural Weapons
+// fields — RACE_DATA[...].NaturalHead/Forelegs/Hindlegs/Tail), shaped like a
+// `held` object so it merges straight into one. Never persisted onto a
+// character/creature row itself — computed fresh from the species every
+// time, so editing a species' defaults later retroactively updates any
+// creature that hasn't had that specific slot overridden. An explicit
+// override (a GM swapping a creature's Bite for Tusks via the action
+// dialog) DOES persist onto that row's held_items and always wins — see the
+// merge order below.
+function _speciesNaturalDefaults(species) {
+  const rd = RACE_DATA[species] || {};
+  const d = {};
+  if (rd.NaturalHead)     d.head     = rd.NaturalHead;
+  if (rd.NaturalForelegs) d.forelegs = rd.NaturalForelegs;
+  if (rd.NaturalHindlegs) d.hindlegs = rd.NaturalHindlegs;
+  if (rd.NaturalTail)     d.tail     = rd.NaturalTail;
+  return d;
+}
+
 // Synchronous, DOM-free entity accessor. Returns null if not cached yet
 // (callers show a loading state and await ensureEntityLoaded).
 function getEntity(ref) {
@@ -6019,7 +6107,7 @@ function getEntity(ref) {
     // would fight its own escalation as blood loss and rounds-elapsed climb
     // together. Don't mutate this — it's the memoized row cache, shared.
     baseAttrs: row._attrs,
-    held:      row.held_items || {},
+    held:      Object.assign(_speciesNaturalDefaults(row.species), row.held_items || {}),
     armor:     row.armor || {},
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
@@ -13876,6 +13964,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260815b"></script>
+<script src="panels.js?v=20260816a"></script>
 </body>
 </html>

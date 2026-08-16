@@ -151,8 +151,11 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   if (canEdit) {
     let options = loadoutOverride || ent.loadout;
     if (ent.type !== 'char') {
+      // Natural weapons (naturalSlot tagged — Fangs, Claws, ...) aren't
+      // something a hand can pick up; they only ever show in their own
+      // body-plan channel (see _dlgRender), not this right/left catalog.
       options = [...new Set([
-        ...MELEE_WEAPONS.map(r => r.weapon),
+        ...MELEE_WEAPONS.filter(r => !r.naturalSlot).map(r => r.weapon),
         ...RANGED_WEAPONS.map(r => r.weapon),
       ])].sort();
     }
@@ -515,21 +518,40 @@ function renderPlayPanel(el) {
 // not a gate. The one deliberate exception: ≥50% movement used disables
 // Evade/Retreat, because it reflects movement already spent.
 
+// One universal natural-attack plan (Head/Forelegs/Hindlegs/Tail) shared by
+// every non-Humanoid body type, instead of a bespoke channel set per type —
+// same "reuse, don't reinvent" reasoning as weapons themselves. A species
+// that doesn't have a given part (a snake has no Forelegs) just leaves that
+// slot unequipped; nothing forces every slot to be filled. Keys match what
+// each natural weapon's own `naturalSlot` tag uses in MELEE_WEAPONS, and
+// what Species Manager's Natural Weapons defaults save under
+// (RACE_DATA[...].NaturalHead etc. — see getEntity/_speciesNaturalDefaults).
+const NATURAL_BODY_PLAN = [
+  { key: 'head',     label: 'Head',     icon: '🦷' },
+  { key: 'forelegs', label: 'Forelegs', icon: '🐾' },
+  { key: 'hindlegs', label: 'Hindlegs', icon: '🐾' },
+  { key: 'tail',     label: 'Tail',     icon: '🐉' },
+];
+// Keyed by the SAME strings Species Manager's Body Type dropdown actually
+// saves (smgr-body-type in index.html) — the old bespoke set here
+// (Quadruped/Serpentine/Avian/Insectoid/Draconic) never matched those
+// values except Quadruped/Humanoid, so anything else (a species tagged
+// Dragon, Snake, Bird, Insect, ...) was silently falling back to the
+// Humanoid arm plan the whole time. Winged Humanoid/Centaur are simplified
+// to the natural plan too for now — a real hybrid (arms AND legs/tail)
+// would need channel keys from both plans merged, not attempted here.
 const BODY_PLANS = {
-  Humanoid:   [ { key: 'right',     label: 'Right Arm', icon: '⚔' },
-                { key: 'left',      label: 'Left Arm',  icon: '🛡' } ],
-  Quadruped:  [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
-                { key: 'claws',     label: 'Claws',     icon: '🐾' } ],
-  Serpentine: [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
-                { key: 'constrict', label: 'Constrict', icon: '🐍' } ],
-  Avian:      [ { key: 'beak',      label: 'Beak',      icon: '🦅' },
-                { key: 'talons',    label: 'Talons',    icon: '🐾' } ],
-  Insectoid:  [ { key: 'mandibles', label: 'Mandibles', icon: '🪲' },
-                { key: 'forelimbs', label: 'Forelimbs', icon: '🦗' } ],
-  Draconic:   [ { key: 'bite',      label: 'Bite',      icon: '🦷' },
-                { key: 'claws',     label: 'Claws',     icon: '🐾' },
-                { key: 'breath',    label: 'Breath',    icon: '🔥' },
-                { key: 'tail',      label: 'Tail',      icon: '🐉' } ],
+  Humanoid: [ { key: 'right', label: 'Right Arm', icon: '⚔' },
+              { key: 'left',  label: 'Left Arm',  icon: '🛡' } ],
+  Quadruped: NATURAL_BODY_PLAN,
+  Dragon: NATURAL_BODY_PLAN,
+  Insect: NATURAL_BODY_PLAN,
+  Fish: NATURAL_BODY_PLAN,
+  Bird: NATURAL_BODY_PLAN,
+  Plant: NATURAL_BODY_PLAN,
+  Snake: NATURAL_BODY_PLAN,
+  'Winged Humanoid': NATURAL_BODY_PLAN,
+  Centaur: NATURAL_BODY_PLAN,
 };
 function _paBodyPlan(bodyType) { return BODY_PLANS[bodyType] || BODY_PLANS.Humanoid; }
 
@@ -693,7 +715,15 @@ function _dlgRender(body) {
     ? getLoadoutItemNames()
     : (ent?.loadout && ent.loadout.length
         ? ent.loadout
-        : [...new Set([...MELEE_WEAPONS.map(r => r.weapon), ...RANGED_WEAPONS.map(r => r.weapon)])].sort());
+        : [...new Set([...MELEE_WEAPONS.filter(r => !r.naturalSlot).map(r => r.weapon), ...RANGED_WEAPONS.map(r => r.weapon)])].sort());
+
+  // Natural weapons available for a given body-plan slot (Fangs/Claws/... —
+  // same MELEE_WEAPONS table as hand weapons, just filtered to rows tagged
+  // for this slot instead of listing everything). getWeaponRows/weaponChips
+  // below need no changes at all to work for these — a natural weapon row
+  // is structurally identical to a held one.
+  const naturalItemsFor = (slotKey) =>
+    [...new Set(MELEE_WEAPONS.filter(r => r.naturalSlot === slotKey).map(r => r.weapon))];
 
   // Renders the action chips for whatever a hand holds — empty hands fight with
   // the "Bare Handed" weapon so the row lookup is identical to any real weapon.
@@ -755,11 +785,13 @@ function _dlgRender(body) {
   // actions show once under "Both Hands" instead of duplicated per arm.
   const twoHanded = _twoHandedGrip(ent);
   const handSelStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
-  const handSelect = (side) => {
+  // options/bareLabel default to the hand catalog — natural channels pass
+  // their own slot-filtered list and a "— None —" label instead.
+  const handSelect = (side, options, bareLabel) => {
     const cur = ent?.held?.[side] || '';
-    const opts = ['', ...handItems].map(n =>
-      `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Bare Handed —'}</option>`).join('');
-    return `<select style="${handSelStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what this hand holds — costs this arm's action">${opts}</select>`;
+    const opts = ['', ...(options || handItems)].map(n =>
+      `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || (bareLabel || '— Bare Handed —')}</option>`).join('');
+    return `<select style="${handSelStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what's equipped here — costs this channel's action">${opts}</select>`;
   };
 
   const channelHtml = plan.map(ch => {
@@ -774,9 +806,8 @@ function _dlgRender(body) {
         data: { dact: 'off', slot: ch.key },
       });
     }
-    let held = '';
+    const held = ent?.held?.[ch.key] || '';
     if (isArm) {
-      held = ent?.held?.[ch.key] || '';
       if (twoHanded) {
         // Both hands on one weapon: two selectors, actions once (on the right slot)
         chips += handSelect('right') + handSelect('left');
@@ -786,15 +817,17 @@ function _dlgRender(body) {
       chips += handSelect(ch.key);
       chips += weaponChips(held || BARE_HANDED, ch.key);
     } else {
-      // Natural attack channel — generic entries until natural weapons get
-      // their own table alongside MELEE_WEAPONS
-      chips += [{ label: `${ch.label} Attack`, dur: 1 }, { label: `${ch.label} Grab`, dur: 2 }]
-        .map(a => cur?.label === a.label ? '' : _dlgChip({
-          label: a.label, sub: _dlgDurLabel(a.dur),
-          data: { dact: 'set', slot: ch.key, label: a.label, dur: a.dur, locks: 0 },
-        })).join('');
+      // Natural attack channel — a body part equipped with a natural weapon
+      // (Fangs, Claws, Tail Slam, ...) from the same MELEE_WEAPONS table
+      // arms use, filtered to rows tagged for this slot. Species defaults
+      // pre-fill `held` here (see getEntity/_speciesNaturalDefaults) until
+      // a GM picks something different for this specific creature — same
+      // override relationship a character's starting loadout has with
+      // whatever they later equip by hand.
+      chips += handSelect(ch.key, naturalItemsFor(ch.key), '— None —');
+      if (held) chips += weaponChips(held, ch.key);
     }
-    const heldNote = isArm ? ` — ${held || 'Bare Handed'}` : '';
+    const heldNote = ` — ${held || (isArm ? 'Bare Handed' : 'None')}`;
     return _dlgSection(`${ch.icon || '⚔'} ${_paEsc(ch.label)}${_paEsc(heldNote)}`, chips, fullActive);
   }).join('');
 
