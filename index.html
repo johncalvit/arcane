@@ -950,13 +950,13 @@
     <!-- CONFIG MODE NAV -->
     <div id="gm-config-nav" style="display:none;">
       <div class="nav-section">Game Configuration</div>
-      <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species Manager</button>
-      <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skill Manager</button>
-      <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor Manager</button>
-      <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons Manager</button>
-      <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons Manager</button>
-      <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables Manager</button>
-      <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spell Manager</button>
+      <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species</button>
+      <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skills</button>
+      <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor</button>
+      <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons</button>
+      <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons</button>
+      <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables</button>
+      <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spells</button>
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
       <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
@@ -1104,7 +1104,7 @@
 
     <!-- SPECIES MANAGER -->
     <div id="panel-speciesmgr" class="panel">
-      <h2>Species Manager</h2>
+      <h2>Species</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Add or edit playable species. Attribute values are multipliers (1.0 = neutral). Height is the base height in inches before age/height modifiers. Weight is a body-weight multiplier.
       </p>
@@ -1196,7 +1196,7 @@
 
     <!-- SKILL MANAGER -->
     <div id="panel-skillmgr" class="panel">
-      <h2>Skill Manager</h2>
+      <h2>Skills</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define new skills or edit/delete existing ones. Success % is the sum of the chosen attributes' values, capped at 100%.
         Set a count greater than 1 to add an attribute multiple times — e.g. Knowledge = 3 makes success = Knowledge × 3.
@@ -1249,7 +1249,7 @@
 
     <!-- ARMOR MANAGER -->
     <div id="panel-armormgr" class="panel">
-      <h2>Armor Manager</h2>
+      <h2>Armor</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define new armor materials or edit/delete existing ones. Weight per piece = area weight ratio × target size × Weight/Mod.
         Damage modifiers are typically negative (damage reduction); Quintessence can also be negative (interferes with magic).
@@ -1299,7 +1299,7 @@
 
     <!-- MELEE WEAPONS MANAGER -->
     <div id="panel-meleemgr" class="panel">
-      <h2>Melee Weapons Manager</h2>
+      <h2>Melee Weapons</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define new melee weapon actions or edit/delete existing ones. A single weapon (e.g. Battleaxe) typically has
         multiple rows here — one per action it can perform (Slash, Smash, Parry, Hook, etc.) — since each action has
@@ -1362,7 +1362,7 @@
 
     <!-- RANGED WEAPONS MANAGER -->
     <div id="panel-rangedmgr" class="panel">
-      <h2>Ranged Weapons Manager</h2>
+      <h2>Ranged Weapons</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define new ranged weapon actions or edit/delete existing ones. Range Increment is the distance unit used for
         range-based penalties; Max Range is the absolute limit (leave blank for none).
@@ -1428,7 +1428,7 @@
 
     <!-- CONSUMABLES MANAGER -->
     <div id="panel-consumablesmgr" class="panel">
-      <h2>Consumables Manager</h2>
+      <h2>Consumables</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define potions and other expendable items. Restore values heal Toughness/Stamina/Blood; Clears lists conditions
         removed (comma-separated, e.g. bleeding); the Buff applies an attribute bonus for a GM-managed duration.
@@ -1462,7 +1462,7 @@
 
     <!-- SPELL MANAGER -->
     <div id="panel-spellmgr" class="panel">
-      <h2>Spell Manager</h2>
+      <h2>Spells</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
         Define spells for casters to learn. Casting Time is whole rounds (0 = Instant). Cost is per cast, or per round
         while Maintained is checked. Difficulty is the Logic/Intuition/Knowledge value needed for a ~90% success
@@ -4687,7 +4687,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815j';
+const VERSION = 'v0.1.20260815k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13846,9 +13846,9 @@ switchGmTab = function(tab) {
           <div style="flex:1; min-width:200px;">
             <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Game Configuration</div>
             <div style="display:flex; flex-direction:column; gap:6px;">
-              <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species Manager</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skill Manager</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor Manager</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skills</button>
+              <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor</button>
               <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
               <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
               <button class="landing-config-btn" onclick="_landingOpenConfig('spellmgr')">✨ Spells</button>
