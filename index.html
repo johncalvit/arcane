@@ -4681,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815g';
+const VERSION = 'v0.1.20260815h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12766,17 +12766,21 @@ function _fogFillPolyPath(ctx, poly) {
 }
 
 // A small tileable sepia+grain pattern for "explored, but not currently in
-// sight" terrain — a stale-memory look, distinct from both full darkness
-// (never seen) and full clarity (in sight right now). Built once and
-// cached; it's just a repeating texture, nothing about it depends on the
-// map itself.
+// sight" terrain — the actual map should still read clearly through it (a
+// filter over a photo, not a block painted over it), just tinted brown and
+// a little rough, distinct from both full darkness (never seen) and full
+// clarity (in sight right now). Built once and cached; it's just a
+// repeating texture, nothing about it depends on the map itself. Kept
+// deliberately low-alpha throughout — this is layered with normal alpha
+// compositing (see drawFog), so opacity here is the only thing standing
+// between "a tint you can still see the map through" and "an opaque block."
 let _fogSepiaPattern = null;
 function _fogGetSepiaPattern(ctx) {
   if (_fogSepiaPattern) return _fogSepiaPattern;
   const tile = document.createElement('canvas');
   tile.width = 48; tile.height = 48;
   const tctx = tile.getContext('2d');
-  tctx.fillStyle = 'rgba(112,84,52,0.6)'; // sepia base tint
+  tctx.fillStyle = 'rgba(112,84,52,0.32)'; // sepia base tint — translucent, not a block
   tctx.fillRect(0, 0, 48, 48);
   for (let i = 0; i < 130; i++) { // coarse grain speckle
     tctx.fillStyle = Math.random() < 0.5 ? 'rgba(35,24,14,0.35)' : 'rgba(190,160,120,0.3)';
@@ -12800,12 +12804,17 @@ let _fogScratchCanvas  = null;
 // for the GM (always sees everything) or a player with no token on this map.
 //
 // Three zones per redraw, built in layers on #fog-canvas:
-//   1. Never explored     → opaque dark fill (the base, everywhere).
-//   2. Explored, not now  → sepia+grain texture, clipped to the persistent
-//                           "ever explored" mask (_fogExploredCanvas, which
-//                           only ever gains area via destination-in on a
-//                           scratch buffer — never shrinks) and layered
-//                           over the dark base.
+//   1. Never explored     → solid opaque black (the base, everywhere) — the
+//                           map is not visible AT ALL here, not even dimly.
+//   2. Explored, not now  → the map shows through normally, just filtered:
+//                           a low-alpha sepia+grain texture, clipped to the
+//                           persistent "ever explored" mask (_fogExploredCanvas,
+//                           which only ever gains area via destination-in on
+//                           a scratch buffer — never shrinks) and layered
+//                           over the black base with ordinary alpha
+//                           compositing. This is a TINT, not a block — the
+//                           terrain/tokens underneath stay legible, same
+//                           idea as an old photograph, not a redaction.
 //   3. In sight right now → fully cleared (destination-out) using THIS
 //                           frame's visibility polygon, overriding whatever
 //                           was underneath — full clarity, no tint at all.
@@ -12847,28 +12856,48 @@ function drawFog() {
     _fogFillPolyPath(ectx, poly);
   }
 
-  // Sepia+grain, clipped to the explored mask, built on the scratch canvas
-  // first so it can be layered onto the dark base without disturbing
-  // anything outside the explored shape.
+  // "Stale" mask for THIS frame = explored MINUS current (a frame-by-frame
+  // subtraction — can't be cached like the explored mask itself, since
+  // "current" moves every redraw). Built on the scratch canvas: start from
+  // the persistent explored shape, then punch out whatever's in sight now.
   const sctx = _fogScratchCanvas.getContext('2d');
   sctx.clearRect(0, 0, mapImgW, mapImgH);
   sctx.globalCompositeOperation = 'source-over';
+  sctx.drawImage(_fogExploredCanvas, 0, 0);
+  if (poly.length) {
+    sctx.globalCompositeOperation = 'destination-out';
+    sctx.fillStyle = '#000';
+    _fogFillPolyPath(sctx, poly);
+  }
+  // Now paint the sepia+grain texture, clipped to just that stale shape.
+  // source-in keeps the NEW draw's own color (the sepia pattern), trimmed
+  // to wherever the EXISTING stale mask already has alpha — destination-in
+  // would do the opposite (keep the mask's own white, just less of it),
+  // which is what silently produced a translucent WHITE tint instead of
+  // sepia the first time through.
+  sctx.globalCompositeOperation = 'source-in';
   sctx.fillStyle = _fogGetSepiaPattern(sctx);
   sctx.fillRect(0, 0, mapImgW, mapImgH);
-  sctx.globalCompositeOperation = 'destination-in';
-  sctx.drawImage(_fogExploredCanvas, 0, 0);
 
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, mapImgW, mapImgH);
+  // 1. Solid black everywhere, opaque — hides the map completely.
   ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = 'rgba(5,5,8,0.86)';
-  ctx.fillRect(0, 0, mapImgW, mapImgH);          // 1. never explored
-  ctx.drawImage(_fogScratchCanvas, 0, 0);        // 2. explored, stale
-  if (poly.length) {                             // 3. in sight now
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.fillStyle = '#000'; // erasure strength = this alpha, not the pixel's — must be fully opaque
-    _fogFillPolyPath(ctx, poly);
-  }
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, mapImgW, mapImgH);
+  // 2. Punch the WHOLE explored area (stale + current together) back to
+  //    fully transparent — this is what lets the actual map show through
+  //    at all in either zone; painting a translucent tint over the still-
+  //    opaque black from step 1 would just produce a dark solid block
+  //    instead of a filter you can see the map through.
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = '#000';
+  ctx.drawImage(_fogExploredCanvas, 0, 0);
+  // 3. Layer the sepia+grain (already clipped to stale-only) back on top,
+  //    at its own low alpha — the map shows through it, tinted, exactly
+  //    like the current-LOS area does at zero tint.
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.drawImage(_fogScratchCanvas, 0, 0);
   canvas.style.display = 'block';
 
   _fogApplyAllTokenVisibility();
