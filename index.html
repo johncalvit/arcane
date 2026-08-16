@@ -4687,7 +4687,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815k';
+const VERSION = 'v0.1.20260815l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13844,17 +13844,10 @@ switchGmTab = function(tab) {
       <div id="landing-gm-body" style="display:none; margin-top:14px;">
         <div style="display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start;">
           <div style="flex:1; min-width:200px;">
-            <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Game Configuration</div>
-            <div style="display:flex; flex-direction:column; gap:6px;">
-              <button class="landing-config-btn" onclick="_landingOpenConfig('speciesmgr')">🧬 Species</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('skillmgr')">🛠 Skills</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('armormgr')">🛡 Armor</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('meleemgr')">⚔ Melee Weapons</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('rangedmgr')">🏹 Ranged Weapons</button>
-              <button class="landing-config-btn" onclick="_landingOpenConfig('spellmgr')">✨ Spells</button>
-              <button class="landing-config-btn" onclick="exportConfig()">💾 Export Config</button>
-              <button class="landing-config-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Config</button>
-            </div>
+            <!-- Everything under Species/Skills/Armor/Weapons/Spells/Export/Import
+                 lives in GM Config Mode's own nav already — this shortcut list was
+                 a partial, unmaintained duplicate of it. One link in instead. -->
+            <button class="landing-config-btn" onclick="_landingOpenConfig()">⚙ GM Config Mode</button>
           </div>
           <div id="landing-invite-section" style="flex:1; min-width:200px; display:none;">
             <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Invite Players</div>
