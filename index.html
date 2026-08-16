@@ -4681,7 +4681,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260815f';
+const VERSION = 'v0.1.20260815g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12755,21 +12755,63 @@ function _fogShowAllTokens() {
 // again instead of carrying over a different map's revealed shape.
 let _fogRevealedMapId = null;
 
+// Fills the current canvas 2D path with a visibility polygon (shared by the
+// explored-mask union and the current-LOS clear-out below).
+function _fogFillPolyPath(ctx, poly) {
+  ctx.beginPath();
+  ctx.moveTo(poly[0].x, poly[0].y);
+  for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// A small tileable sepia+grain pattern for "explored, but not currently in
+// sight" terrain — a stale-memory look, distinct from both full darkness
+// (never seen) and full clarity (in sight right now). Built once and
+// cached; it's just a repeating texture, nothing about it depends on the
+// map itself.
+let _fogSepiaPattern = null;
+function _fogGetSepiaPattern(ctx) {
+  if (_fogSepiaPattern) return _fogSepiaPattern;
+  const tile = document.createElement('canvas');
+  tile.width = 48; tile.height = 48;
+  const tctx = tile.getContext('2d');
+  tctx.fillStyle = 'rgba(112,84,52,0.6)'; // sepia base tint
+  tctx.fillRect(0, 0, 48, 48);
+  for (let i = 0; i < 130; i++) { // coarse grain speckle
+    tctx.fillStyle = Math.random() < 0.5 ? 'rgba(35,24,14,0.35)' : 'rgba(190,160,120,0.3)';
+    tctx.fillRect(Math.random() * 48, Math.random() * 48, 1.6, 1.6);
+  }
+  _fogSepiaPattern = ctx.createPattern(tile, 'repeat');
+  return _fogSepiaPattern;
+}
+
+// The persistent "ever explored" mask for the current map (an offscreen
+// canvas — white where explored, transparent elsewhere) and a reusable
+// scratch buffer for compositing the sepia layer each redraw. Both reset
+// together with _fogRevealedMapId, only when the map itself changes.
+let _fogExploredCanvas = null;
+let _fogScratchCanvas  = null;
+
 // Recomputed on: map/token/wall load, the viewer's own token moving (any
 // source — drag, Path, being carried, a GM repositioning them; see the
 // map_tokens UPDATE handler in subscribeTokenRealtime), and wall changes
 // from any client (see the walls-sync broadcast in saveMapWalls). No-ops
 // for the GM (always sees everything) or a player with no token on this map.
 //
-// Terrain uses "explored" memory — once an area's been seen it stays fully
-// visible, even after it's out of current line of sight, so the party can
-// still read the battle space instead of losing the map every time they
-// look away. A <canvas> makes that cheap: paint it fully dark once, then on
-// every redraw punch a hole (destination-out compositing) at the CURRENT
-// visibility polygon — never repainting the dark base, so every past hole
-// stays cut. Tokens are the opposite: only what's in the CURRENT polygon
-// shows (_fogApplyAllTokenVisibility, using the same polygon) — a monster
-// that's moved out of sight should actually disappear, not leave a ghost.
+// Three zones per redraw, built in layers on #fog-canvas:
+//   1. Never explored     → opaque dark fill (the base, everywhere).
+//   2. Explored, not now  → sepia+grain texture, clipped to the persistent
+//                           "ever explored" mask (_fogExploredCanvas, which
+//                           only ever gains area via destination-in on a
+//                           scratch buffer — never shrinks) and layered
+//                           over the dark base.
+//   3. In sight right now → fully cleared (destination-out) using THIS
+//                           frame's visibility polygon, overriding whatever
+//                           was underneath — full clarity, no tint at all.
+// Tokens are the opposite of terrain: only zone 3 (current polygon) shows
+// them at all (_fogApplyAllTokenVisibility) — a monster that's moved out of
+// sight disappears, it doesn't linger as a stale memory the way terrain does.
 function drawFog() {
   const canvas = document.getElementById('fog-canvas');
   if (!canvas) return;
@@ -12784,10 +12826,12 @@ function drawFog() {
   if (canvas.width !== mapImgW || canvas.height !== mapImgH || _fogRevealedMapId !== activeMapId) {
     canvas.width  = mapImgW;
     canvas.height = mapImgH;
-    const resetCtx = canvas.getContext('2d');
-    resetCtx.globalCompositeOperation = 'source-over';
-    resetCtx.fillStyle = 'rgba(5,5,8,0.86)';
-    resetCtx.fillRect(0, 0, mapImgW, mapImgH);
+    _fogExploredCanvas = document.createElement('canvas');
+    _fogExploredCanvas.width  = mapImgW;
+    _fogExploredCanvas.height = mapImgH;
+    _fogScratchCanvas = document.createElement('canvas');
+    _fogScratchCanvas.width  = mapImgW;
+    _fogScratchCanvas.height = mapImgH;
     _fogRevealedMapId = activeMapId;
   }
 
@@ -12795,22 +12839,35 @@ function drawFog() {
   const poly = _fogVisibilityPolygon(originX, originY);
   _fogLastPoly = poly;
 
+  // Union this frame's visible area into the persistent explored mask.
   if (poly.length) {
-    const ctx = canvas.getContext('2d');
-    ctx.save();
+    const ectx = _fogExploredCanvas.getContext('2d');
+    ectx.globalCompositeOperation = 'source-over';
+    ectx.fillStyle = '#fff';
+    _fogFillPolyPath(ectx, poly);
+  }
+
+  // Sepia+grain, clipped to the explored mask, built on the scratch canvas
+  // first so it can be layered onto the dark base without disturbing
+  // anything outside the explored shape.
+  const sctx = _fogScratchCanvas.getContext('2d');
+  sctx.clearRect(0, 0, mapImgW, mapImgH);
+  sctx.globalCompositeOperation = 'source-over';
+  sctx.fillStyle = _fogGetSepiaPattern(sctx);
+  sctx.fillRect(0, 0, mapImgW, mapImgH);
+  sctx.globalCompositeOperation = 'destination-in';
+  sctx.drawImage(_fogExploredCanvas, 0, 0);
+
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, mapImgW, mapImgH);
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = 'rgba(5,5,8,0.86)';
+  ctx.fillRect(0, 0, mapImgW, mapImgH);          // 1. never explored
+  ctx.drawImage(_fogScratchCanvas, 0, 0);        // 2. explored, stale
+  if (poly.length) {                             // 3. in sight now
     ctx.globalCompositeOperation = 'destination-out';
-    // Erasure strength = this fillStyle's own alpha, NOT the covered
-    // pixel's existing alpha — fully opaque here means fully revealed in
-    // one pass. Left at the fog's own translucent fillStyle (0.86) this
-    // only ever erased 86% per pass, so a newly-explored area stayed
-    // faintly dark instead of clearing all the way.
-    ctx.fillStyle = '#000';
-    ctx.beginPath();
-    ctx.moveTo(poly[0].x, poly[0].y);
-    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-    ctx.closePath();
-    ctx.fill();
-    ctx.restore();
+    ctx.fillStyle = '#000'; // erasure strength = this alpha, not the pixel's — must be fully opaque
+    _fogFillPolyPath(ctx, poly);
   }
   canvas.style.display = 'block';
 
