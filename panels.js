@@ -206,10 +206,15 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
 }
 
 function _paSecArmor(ent) {
-  const labels = { head: 'Head', torso: 'Torso', rarm: 'R.Arm', larm: 'L.Arm', rleg: 'R.Leg', lleg: 'L.Leg' };
+  // Body-type-aware (see ARMOR_SLOTS, index.html) — a Quadruped shows
+  // Head/Torso/Forelegs/Hindlegs/Tail here, not the Humanoid Arms/Legs it
+  // doesn't have and that damage resolution never reads for it anyway.
+  const slots = typeof _armorSlotsFor === 'function' ? _armorSlotsFor(ent.bodyType) :
+    [{ key:'head', label:'Head' }, { key:'torso', label:'Torso' }, { key:'rarm', label:'R.Arm' },
+     { key:'larm', label:'L.Arm' }, { key:'rleg', label:'R.Leg' }, { key:'lleg', label:'L.Leg' }];
   const armor = ent.armor || {};
-  const rows = Object.keys(labels).map(s =>
-    `<div class="ps-stat-row"><span class="ps-stat-label">${labels[s]}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(armor[s] || 'None')}</span></div>`).join('');
+  const rows = slots.map(s =>
+    `<div class="ps-stat-row"><span class="ps-stat-label">${_paEsc(s.label)}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(armor[s.key] || 'None')}</span></div>`).join('');
   return _paSection('Armor', rows);
 }
 

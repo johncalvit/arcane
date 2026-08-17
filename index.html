@@ -2107,7 +2107,7 @@ function updatePlaysheet(attrs) {
   // Armor
   const armor = getArmorSelections();
   const armorWeights = calcArmorWeight(attrs);
-  const armorRows = ARMOR_AREAS.map(area => `
+  const armorRows = _builderArmorSlots().map(area => `
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
       <span>${area.label} <span style="color:var(--text-dim);">(${Math.round(armorWeights.breakdown[area.key]||0)} lbs)</span></span>
       <span style="color:${armor[area.key]==='None' ? 'var(--text-dim)' : 'var(--gold2)'};">${armor[area.key]||'None'}</span>
@@ -2402,6 +2402,10 @@ function applySpeciesDefaultAvatar() {
   const btDisplay = document.getElementById('sel-bodytype-display');
   if (btInput)   btInput.value       = bt;
   if (btDisplay) btDisplay.textContent = bt;
+  // Body type just changed — rebuild the Armor panel for its real slots
+  // (Quadruped gets Forelegs/Hindlegs/Tail, not Arms/Legs) instead of
+  // leaving whatever slots the PREVIOUS body type had on screen.
+  if (typeof buildArmorFields === 'function') buildArmorFields();
   // Apply species default avatar only if no custom avatar set
   if (!avatarUrl) {
     const speciesAvatar = rd.avatarUrl || '';
@@ -3053,6 +3057,9 @@ function addEquip() {
 // both Arm/Hand pairs, both Leg/Foot pairs). Each area's weight ratio and each
 // armor material's protection/weight-per-modifier values are config-driven
 // (see CONFIG PERSISTENCE below) so they can be tuned without editing code.
+// The Humanoid slot set — kept as the fallback/default shape (see
+// _armorSlotsFor in ARMOR_SLOTS below, which every non-Humanoid body type
+// gets its OWN slot list from instead of always these six).
 const ARMOR_AREAS = [
   { key:'head',  label:'Head/Neck' },
   { key:'torso', label:'Torso' },
@@ -3063,7 +3070,14 @@ const ARMOR_AREAS = [
 ];
 // Built-in fallback so the dropdowns are never blank, even if a linked/imported
 // config file predates the armor feature and doesn't define these tables.
-const DEFAULT_ARMOR_AREA_WEIGHTS = { head:1, torso:3, rarm:1, larm:1, rleg:2, lleg:2 };
+// Covers every slot key any body type's ARMOR_SLOTS can produce, not just
+// the Humanoid six — a Quadruped's "forelegs" needs a ratio just as much.
+const DEFAULT_ARMOR_AREA_WEIGHTS = {
+  head:1, torso:3, rarm:1, larm:1, rleg:2, lleg:2,
+  forelegs:2, hindlegs:2, tail:1, wings:1.5, body:3,
+  talons:0.5, fins:0.5, thorax:1.5, abdomen:1.5, legs:1,
+  branches:1, trunk:3, root:1,
+};
 // gap: below this, a hit's TO-HIT roll (not the damage roll) is precise
 // enough to find a weak point in the armor and skips its DR entirely for
 // that hit — see _applyDamageAfterHit. Average 5; heavier/better-fitted
@@ -3086,11 +3100,21 @@ const DEFAULT_ARMOR_TYPE_DATA = {
 let ARMOR_AREA_WEIGHTS = { ...DEFAULT_ARMOR_AREA_WEIGHTS };
 let ARMOR_TYPE_DATA = { ...DEFAULT_ARMOR_TYPE_DATA };
 
+// The armor slots for whichever body type is CURRENTLY selected in the
+// builder form — every armor function below operates on this instead of
+// the fixed Humanoid six, so a Quadruped/Dragon/etc. template gets its own
+// real slots (Forelegs, Wings, Tail, ...) instead of Arms/Legs that no
+// quadruped hit location ever maps to.
+function _builderArmorSlots() {
+  return _armorSlotsFor(document.getElementById('sel-bodytype')?.value || 'Humanoid');
+}
+
 function buildArmorFields() {
   const prevSelections = getArmorSelections();
   const types = Object.keys(ARMOR_TYPE_DATA).length ? Object.keys(ARMOR_TYPE_DATA) : Object.keys(DEFAULT_ARMOR_TYPE_DATA);
   const container = document.getElementById('armor-fields');
-  container.innerHTML = ARMOR_AREAS.map(area => `
+  const areas = _builderArmorSlots();
+  container.innerHTML = areas.map(area => `
     <div class="field">
       <label>${area.label}</label>
       <select id="armor-${area.key}" onchange="recalc()" style="width:100%;">
@@ -3098,7 +3122,7 @@ function buildArmorFields() {
       </select>
       <div id="armor-wt-${area.key}" style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">0 lbs</div>
     </div>`).join('');
-  for (const area of ARMOR_AREAS) {
+  for (const area of areas) {
     const el = document.getElementById('armor-'+area.key);
     const prev = prevSelections[area.key];
     if (prev && types.includes(prev)) el.value = prev;
@@ -3107,7 +3131,7 @@ function buildArmorFields() {
 
 function updateArmorWeightDisplay(attrs) {
   const { breakdown } = calcArmorWeight(attrs);
-  for (const area of ARMOR_AREAS) {
+  for (const area of _builderArmorSlots()) {
     const el = document.getElementById('armor-wt-'+area.key);
     if (el) el.textContent = Math.round(breakdown[area.key]||0) + ' lbs';
   }
@@ -3115,7 +3139,7 @@ function updateArmorWeightDisplay(attrs) {
 
 function getArmorSelections() {
   const result = {};
-  for (const area of ARMOR_AREAS) {
+  for (const area of _builderArmorSlots()) {
     const el = document.getElementById('armor-'+area.key);
     if (el) result[area.key] = el.value;
   }
@@ -3132,7 +3156,7 @@ function calcArmorWeight(attrs) {
   const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
   const typeData     = Object.keys(ARMOR_TYPE_DATA).length    ? ARMOR_TYPE_DATA    : DEFAULT_ARMOR_TYPE_DATA;
   const armor = getArmorSelections();
-  for (const area of ARMOR_AREAS) {
+  for (const area of _builderArmorSlots()) {
     const material = armor[area.key];
     const matData = typeData[material];
     const areaWeight = areaWeights[area.key] || 0;
@@ -3865,6 +3889,110 @@ const HIT_LOCATION_DATA = {
 
 function getHitLocData(bodyType) {
   return HIT_LOCATION_DATA[bodyType] || HIT_LOCATION_DATA.Humanoid;
+}
+
+// Which armor slot each body type actually HAS, and which of that type's
+// HIT_LOCATION_DATA part keys fall under each one (paired left/right parts —
+// forelegs, wings, ... — share one slot, same "don't split what plays as
+// one unit" call the natural-weapon body plan already makes). Built by
+// hand per body type, same as HIT_LOCATION_DATA itself, rather than derived
+// by guessing at key names — a few types (Centaur's 'l_torso' meaning
+// "lower body", not "left torso") don't follow a clean left/right pattern.
+//
+// This replaces the OLD assumption (baked into the Character Builder's
+// Armor panel, the Play Mode display, and hit resolution) that every
+// creature has exactly Head/Torso/R.Arm/L.Arm/R.Leg/L.Leg — the humanoid
+// shape. A Quadruped has no arms at all; its Head/Torso/Forelegs/Hindlegs/
+// Tail are the real slots. Before this, a Quadruped's Armor form still
+// showed the humanoid six, and — worse — damage resolution's flat
+// PART_TO_ARMOR_SLOT table had no entries for foreleg/hindleg/tail hits at
+// all, so they silently fell back to the Torso slot; whatever a GM entered
+// for "R.Arm"/"L.Leg" on a Quadruped template did nothing, ever.
+const ARMOR_SLOTS = {
+  Humanoid: [
+    { key:'head',  label:'Head/Neck',      parts:['head','neck'] },
+    { key:'torso', label:'Torso',          parts:['torso','chest','abdomen'] },
+    { key:'rarm',  label:'Right Arm/Hand', parts:['rarm','rhand','rshoulder'] },
+    { key:'larm',  label:'Left Arm/Hand',  parts:['larm','lhand','lshoulder'] },
+    { key:'rleg',  label:'Right Leg/Foot', parts:['rleg','rfoot','rthigh'] },
+    { key:'lleg',  label:'Left Leg/Foot',  parts:['lleg','lfoot','lthigh'] },
+  ],
+  Quadruped: [
+    { key:'head',     label:'Head',     parts:['head','neck'] },
+    { key:'torso',    label:'Torso',    parts:['torso'] },
+    { key:'forelegs', label:'Forelegs', parts:['l_fore','r_fore'] },
+    { key:'hindlegs', label:'Hindlegs', parts:['l_hind','r_hind'] },
+    { key:'tail',     label:'Tail',     parts:['tail'] },
+  ],
+  Dragon: [
+    { key:'head',     label:'Head',     parts:['head','neck'] },
+    { key:'torso',    label:'Torso',    parts:['torso'] },
+    { key:'wings',    label:'Wings',    parts:['l_wing','r_wing'] },
+    { key:'forelegs', label:'Forelegs', parts:['l_fore','r_fore'] },
+    { key:'hindlegs', label:'Hindlegs', parts:['l_hind','r_hind'] },
+    { key:'tail',     label:'Tail',     parts:['tail'] },
+  ],
+  'Winged Humanoid': [
+    { key:'head',  label:'Head',      parts:['head'] },
+    { key:'torso', label:'Torso',     parts:['torso'] },
+    { key:'rarm',  label:'Right Arm', parts:['r_arm'] },
+    { key:'larm',  label:'Left Arm',  parts:['l_arm'] },
+    { key:'rleg',  label:'Right Leg', parts:['r_leg'] },
+    { key:'lleg',  label:'Left Leg',  parts:['l_leg'] },
+    { key:'wings', label:'Wings',     parts:['l_wing','r_wing'] },
+  ],
+  Centaur: [
+    { key:'head',     label:'Head',        parts:['head'] },
+    { key:'torso',    label:'Upper Torso', parts:['torso'] },
+    { key:'rarm',     label:'Right Arm',   parts:['r_arm'] },
+    { key:'larm',     label:'Left Arm',    parts:['l_arm'] },
+    { key:'body',     label:'Lower Body',  parts:['l_torso'] },
+    { key:'forelegs', label:'Forelegs',    parts:['l_fore','r_fore'] },
+    { key:'hindlegs', label:'Hindlegs',    parts:['l_hind','r_hind'] },
+    { key:'tail',     label:'Tail',        parts:['tail'] },
+  ],
+  Snake: [
+    { key:'head', label:'Head', parts:['head','neck'] },
+    { key:'body', label:'Body', parts:['body'] },
+    { key:'tail', label:'Tail', parts:['tail'] },
+  ],
+  Bird: [
+    { key:'head',   label:'Head',   parts:['head'] },
+    { key:'body',   label:'Body',   parts:['body'] },
+    { key:'wings',  label:'Wings',  parts:['l_wing','r_wing'] },
+    { key:'talons', label:'Talons', parts:['l_tal','r_tal'] },
+  ],
+  Fish: [
+    { key:'head', label:'Head', parts:['head'] },
+    { key:'body', label:'Body', parts:['body'] },
+    { key:'fins', label:'Fins', parts:['l_fin','r_fin'] },
+    { key:'tail', label:'Tail', parts:['tail'] },
+  ],
+  Insect: [
+    { key:'head',    label:'Head',    parts:['head'] },
+    { key:'thorax',  label:'Thorax',  parts:['thorax'] },
+    { key:'abdomen', label:'Abdomen', parts:['abdomen'] },
+    { key:'legs',    label:'Legs',    parts:['legs'] },
+  ],
+  Plant: [
+    { key:'branches', label:'Branches', parts:['l_branch','r_branch'] },
+    { key:'trunk',    label:'Trunk',    parts:['trunk'] },
+    { key:'root',     label:'Root',     parts:['root'] },
+  ],
+};
+function _armorSlotsFor(bodyType) { return ARMOR_SLOTS[bodyType] || ARMOR_SLOTS.Humanoid; }
+// Which armor slot a specific hit-location part key falls under, for a given
+// body type. Falls back to that body type's own "main body" slot (its
+// HIT_LOCATION_DATA defaultPart, run through the same lookup) for a part
+// key that isn't in any slot's list, or if the part key was never given —
+// e.g. an AOE spell with no called shot, see _applyAoeFailure.
+function _armorSlotForPart(bodyType, hitPart) {
+  const slots = _armorSlotsFor(bodyType);
+  const found = hitPart && slots.find(s => s.parts.includes(hitPart));
+  if (found) return found.key;
+  const defaultPart = getHitLocData(bodyType).defaultPart;
+  const defaultSlot = slots.find(s => s.parts.includes(defaultPart));
+  return defaultSlot ? defaultSlot.key : slots[0]?.key;
 }
 
 function rollHitLocation(bodyType, calledPartKey) {
@@ -4771,7 +4899,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260816a';
+const VERSION = 'v0.1.20260816b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5535,9 +5663,13 @@ function applyCharacterData(data) {
     });
   }
 
-  // Armor
+  // Armor — rebuild the fields for THIS character's body type first (sel-bodytype
+  // was just set above); loading a Quadruped after editing a Humanoid, say,
+  // would otherwise still be showing the previous character's Arm/Leg fields
+  // when these values try to restore into them.
   if (data.armor) {
-    for (const area of ARMOR_AREAS) {
+    buildArmorFields();
+    for (const area of _builderArmorSlots()) {
       const el = document.getElementById('armor-'+area.key);
       if (el && data.armor[area.key]) el.value = data.armor[area.key];
     }
@@ -6262,15 +6394,6 @@ function _entityRef(entityType, entityId) {
 }
 // ═══ END ENTITY DATA LAYER ═════════════════════════════════════════════════════
 
-// Hit location part key → armor slot on the character
-const PART_TO_ARMOR_SLOT = {
-  head:'head', neck:'head',
-  torso:'torso', chest:'torso', abdomen:'torso',
-  rarm:'rarm', rhand:'rarm', rshoulder:'rarm',
-  larm:'larm', lhand:'larm', lshoulder:'larm',
-  rleg:'rleg', rfoot:'rleg', rthigh:'rleg',
-  lleg:'lleg', lfoot:'lleg', lthigh:'lleg',
-};
 
 // Write damage to cache + DB, refresh UI
 // Blood pool: equals max Toughness. Damage past a depleted Toughness spills
@@ -8059,7 +8182,11 @@ async function _applyAoeFailure(casterEnt, spell, ent, token) {
   } else {
     const dmgCap = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 0);
     if (dmgCap > 0) {
-      const armorType = (ent.armor && ent.armor.torso) || 'None';
+      // No called shot for an area effect — falls back to this body type's
+      // own "main body" slot (Torso for most, Body/Trunk/Abdomen for types
+      // that don't have one) instead of always assuming Torso specifically.
+      const armorSlot = _armorSlotForPart(ent.bodyType, null);
+      const armorType = (ent.armor && ent.armor[armorSlot]) || 'None';
       const dr  = getArmorDR(armorType, spell.damageCategory || '');
       const raw = Math.random() * (dmgCap - 1) + 1;
       const dmg = Math.max(0, Math.round(Math.max(0, raw - dr)));
@@ -8683,14 +8810,21 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
           atkPower, weaponRow, actionLabel } = ctx;
   if (!weaponRow) return;
 
-  // Armor on the hit location
+  // Armor on the hit location — body-type-aware (see ARMOR_SLOTS): a
+  // Quadruped's foreleg/hindleg/tail hits map to ITS OWN slots, not a
+  // Humanoid's Arms/Legs (which don't exist for it and would never match).
   let targetArmor = {};
+  let targetBodyType = 'Humanoid';
   if (targetEntityType === 'character') {
-    targetArmor = playCharCache[targetEntityId]?.armor || {};
+    const row = playCharCache[targetEntityId];
+    targetArmor = row?.armor || {};
+    targetBodyType = row?.body_type || 'Humanoid';
   } else {
-    targetArmor = sessionCreatureCache[targetEntityId]?.armor || {};
+    const row = sessionCreatureCache[targetEntityId];
+    targetArmor = row?.armor || {};
+    targetBodyType = row?.body_type || 'Humanoid';
   }
-  const armorSlot = PART_TO_ARMOR_SLOT[hitPart] || 'torso';
+  const armorSlot = _armorSlotForPart(targetBodyType, hitPart);
   const armorType = targetArmor[armorSlot] || 'None';
   // Spell attacks (ctx.damageCategory set) supply their own elemental
   // category directly instead of it being parsed from the action label —
@@ -13979,6 +14113,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260816a"></script>
+<script src="panels.js?v=20260816b"></script>
 </body>
 </html>
