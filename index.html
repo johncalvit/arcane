@@ -1466,6 +1466,10 @@
           <div class="field"><label>Buff Amount</label><input type="text" id="cf-buffamount" placeholder="0"></div>
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="cf-buffminutes" placeholder="e.g. 10-100"></div>
         </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Description <span style="color:var(--text-dim);font-weight:normal;">(shown to players so they know what it does)</span></label>
+          <textarea id="cf-description" rows="2" style="width:100%;" placeholder="e.g. A ruby-red draft that knits flesh back together."></textarea>
+        </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveConsumable()">Save Consumable</button>
           <button class="btn danger" onclick="closeConsumableForm()">Cancel</button>
@@ -2094,11 +2098,21 @@ function updatePlaysheet(attrs) {
       <span>${tr.cells[0].textContent} <span style="color:var(--text-dim);">(${tr.cells[1].textContent}, ${tr.cells[3].textContent})</span></span>
       <span style="color:var(--gold2);">${tr.cells[2].textContent} lbs</span>
     </div>`);
-  const equipRows = [...document.querySelectorAll('#equip-list tr')].map(tr =>
-    `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-      <span>${tr.cells[0].textContent} <span style="color:var(--text-dim);">×${tr.cells[1].textContent}</span></span>
+  // A consumable's description shows as a hover tooltip on its name, right
+  // where a player is actually looking at what they're carrying — so they
+  // can tell a Healing Potion from a Night Vision Potion without having to
+  // ask the GM or dig through the Consumables Manager themselves.
+  const equipRows = [...document.querySelectorAll('#equip-list tr')].map(tr => {
+    const itemName = tr.cells[0].textContent;
+    const consumable = CONSUMABLES.find(c => c.name === itemName);
+    const nameSpan = consumable && consumable.description
+      ? `<span title="${consumable.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${itemName}</span>`
+      : `<span>${itemName}</span>`;
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+      <span>${nameSpan} <span style="color:var(--text-dim);">×${tr.cells[1].textContent}</span></span>
       <span style="color:var(--gold2);">${tr.cells[3].textContent} lbs</span>
-    </div>`);
+    </div>`;
+  });
   const loadoutRows = [...weaponRows, ...equipRows];
   document.getElementById('ps-loadout').innerHTML = loadoutRows.length
     ? loadoutRows.join('')
@@ -3570,9 +3584,12 @@ let editingRangedIndex = null;
 // clear conditions (comma-separated keys, e.g. "bleeding"), and one timed buff
 // (attribute + amount + duration text — GM-managed, no auto-expiry yet).
 const DEFAULT_CONSUMABLES = [
-  { name:"Water",              wt:1,   restoreToughness:0, restoreStamina:2, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"" },
-  { name:"Healing Potion",     wt:0.5, restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"bleeding", buffAttr:"",             buffAmount:0,  buffMinutes:"" },
-  { name:"Night Vision Potion",wt:0.5, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100" },
+  { name:"Water",              wt:1,   restoreToughness:0, restoreStamina:2, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    description:"A skin of clean drinking water. Refreshes a tired body — restores 2 Stamina." },
+  { name:"Healing Potion",     wt:0.5, restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"bleeding", buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    description:"A ruby-red draft that knits flesh back together. Restores 5 Toughness and stanches any active bleeding." },
+  { name:"Night Vision Potion",wt:0.5, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100",
+    description:"A murky brew that makes the drinker's eyes glint faintly in the dark. Grants a temporary +10 Night Vision for 10-100 minutes (GM tracks when it fades)." },
 ];
 let CONSUMABLES = [...DEFAULT_CONSUMABLES];
 let editingConsumableIndex = null;
@@ -4110,6 +4127,7 @@ function openConsumableForm(index) {
   document.getElementById('cf-buffattr').value    = row ? (row.buffAttr || '') : '';
   document.getElementById('cf-buffamount').value  = row ? row.buffAmount : '';
   document.getElementById('cf-buffminutes').value = row ? (row.buffMinutes || '') : '';
+  document.getElementById('cf-description').value = row ? (row.description || '') : '';
   document.getElementById('consumable-form').style.display = 'block';
 }
 
@@ -4131,6 +4149,7 @@ function saveConsumable() {
     buffAttr: document.getElementById('cf-buffattr').value.trim(),
     buffAmount: parseFloat(document.getElementById('cf-buffamount').value) || 0,
     buffMinutes: document.getElementById('cf-buffminutes').value.trim(),
+    description: document.getElementById('cf-description').value.trim(),
   };
   if (editingConsumableIndex !== null) {
     CONSUMABLES[editingConsumableIndex] = row;
@@ -4162,7 +4181,10 @@ function buildConsumablesManagerTable() {
     if (row.restoreToughness) restores.push(row.restoreToughness);
     const buff = row.buffAttr ? `${row.buffAttr} +${row.buffAmount}${row.buffMinutes ? ' ('+row.buffMinutes+'m)' : ''}` : '—';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${row.restoreToughness || '—'}</td><td>${row.restoreStamina || '—'}</td><td>${row.restoreBlood || '—'}</td><td>${row.clears || '—'}</td><td>${buff}</td>
+    const nameCell = row.description
+      ? `<td title="${row.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${row.name}</td>`
+      : `<td>${row.name}</td>`;
+    tr.innerHTML = `${nameCell}<td>${row.wt}</td><td>${row.restoreToughness || '—'}</td><td>${row.restoreStamina || '—'}</td><td>${row.restoreBlood || '—'}</td><td>${row.clears || '—'}</td><td>${buff}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openConsumableForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteConsumable(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -4899,7 +4921,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260816b';
+const VERSION = 'v0.1.20260816c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14113,6 +14135,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260816b"></script>
+<script src="panels.js?v=20260816c"></script>
 </body>
 </html>

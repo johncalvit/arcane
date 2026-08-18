@@ -741,9 +741,10 @@ function _dlgRender(body) {
       const cur = c.slots[chKey];
       const lbl = `Consume — ${itemName}`;
       if (cur?.label === lbl) return '';
+      const desc = consumable.description ? ` — ${consumable.description}` : '';
       return _dlgChip({
         label: '🧪 Consume', sub: '1r',
-        title: `Administer ${itemName} to a target (yourself or another nearby character)`,
+        title: `Administer ${itemName} to a target (yourself or another nearby character)${desc}`,
         data: { dact: 'attack', slot: chKey, label: lbl, dur: 3,
                 item: itemName, action: 'Consume', ranged: 0, range: 5 },
       });
