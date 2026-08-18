@@ -23,6 +23,19 @@ function _paEsc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Any item with a CONSUMABLES description gets that as a hover tooltip
+// wherever its plain name is rendered to a player — same convention as the
+// Manager table/Playsheet loadout tooltips in index.html, just for the
+// held-hand display here. Falls through to a bare name for weapons/etc,
+// which don't carry a description field (yet).
+function _itemNameSpan(name) {
+  const label = name || 'Bare Hand';
+  const item = (typeof CONSUMABLES !== 'undefined') ? CONSUMABLES.find(c => c.name === name) : null;
+  return item?.description
+    ? `<span title="${_paEsc(item.description)}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${_paEsc(label)}</span>`
+    : _paEsc(label);
+}
+
 // Collapsible section. Header toggles the body via delegation (data-pa).
 function _paSection(title, content) {
   return `
@@ -175,11 +188,11 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
       </div>`;
     }).join('');
   } else if (twoHanded) {
-    html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Both hands: <span style="color:var(--text);">${_paEsc(held.right)} <span style="color:var(--text-dim);">(Two-Handed)</span></span></div>`;
+    html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Both hands: <span style="color:var(--text);">${_itemNameSpan(held.right)} <span style="color:var(--text-dim);">(Two-Handed)</span></span></div>`;
   } else {
     html += `
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${_paEsc(held.right || 'Bare Hand')}</span></div>
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Left: <span style="color:var(--text);">${_paEsc(held.left || 'Bare Hand')}</span></div>`;
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${_itemNameSpan(held.right)}</span></div>
+      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Left: <span style="color:var(--text);">${_itemNameSpan(held.left)}</span></div>`;
   }
   // Hit/damage rows for held weapons — same math for every entity. A two-handed
   // grip is one weapon, so only walk the right hand (skip the mirrored left).

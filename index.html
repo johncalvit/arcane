@@ -925,7 +925,8 @@
     <div id="char-nav">
       <div class="nav-section">Design</div>
       <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
-      <button class="nav-btn" onclick="showPanel('features')">✦ Features</button>
+      <!-- Hidden for now, revisit in v2/v3 — panel/data/logic left intact, just not linked to -->
+      <button class="nav-btn" onclick="showPanel('features')" style="display:none;">✦ Features</button>
       <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
       <div class="nav-section">Equipment</div>
       <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
@@ -4921,7 +4922,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817a';
+const VERSION = 'v0.1.20260817b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14206,6 +14207,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260816c"></script>
+<script src="panels.js?v=20260817b"></script>
 </body>
 </html>
