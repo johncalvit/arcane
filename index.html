@@ -4921,7 +4921,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260816c';
+const VERSION = 'v0.1.20260817a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8009,14 +8009,42 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
 // promise once every flagged target has been handled, one at a time or via
 // "Resolve Remaining" (see _aoeResolveRemainingFast, the escape hatch for a
 // spell that catches a lot of targets).
+//
+// This runs on whichever browser cast the spell — which is the CASTER's own
+// client, not necessarily the GM's. A monster's turn is GM-driven, so that
+// case just works. But a PLAYER casting an area spell (their own turn) casts
+// it from their OWN browser, and aoeResolveState/the resolve panel used to
+// only ever get set up locally there — _renderAoeResolvePanel no-ops for
+// anyone but the GM, and startTokenDrag's click-to-resolve gate requires
+// isGM() too, so a player-cast AOE left every flagged token stuck with no
+// panel anywhere and no way to click through it, on ANY client, forever.
+// Reported live as "tokens left with purple circles, nothing happens."
+// Fixed by branching: if THIS client is the GM (the common "monster's AOE"
+// case), resolve locally exactly as before. Otherwise, broadcast just the
+// essentials (spell name, caster ref, target token ids — all any client can
+// already reconstruct on their own from SPELLS/mapTokens) so whichever
+// client actually IS the GM can pick it up and drive the resolution, and
+// this client just waits for that GM's "done" signal instead of trying to
+// resolve saves itself.
 async function _resolveAoeFlagged(casterEnt, spell, targets) {
   aoeFlaggedIds = new Set(targets.map(t => t.id));
   _aoeBroadcastFlags();
-  return new Promise(resolve => {
-    aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve };
-    _renderAoeResolvePanel();
-  });
+
+  if (isGM()) {
+    return new Promise(resolve => {
+      aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve };
+      _renderAoeResolvePanel();
+    });
+  }
+
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-resolve-start', payload: {
+    spellName: spell.name, casterCid: casterEnt.ref, targetIds: targets.map(t => t.id),
+  }});
+  return new Promise(resolve => { _aoePendingCastResolve = resolve; });
 }
+// Resolved by the GM's "done" broadcast when a PLAYER cast the spell (see
+// above) — this client has nothing further to do but isn't left hanging.
+let _aoePendingCastResolve = null;
 
 function _aoeBroadcastFlags() {
   Object.keys(mapTokens).forEach(_refreshTokenBadges);
@@ -8123,7 +8151,35 @@ function _aoeResolveFinish() {
   aoeResolveState = null;
   document.getElementById('aoe-resolve-panel')?.remove();
   refreshUI();
+  if (st.remoteCasterCid) mapChannel?.send({ type: 'broadcast', event: 'aoe-resolve-done', payload: { casterCid: st.remoteCasterCid } });
   st.resolve();
+}
+
+// GM-side receiver for a player-cast AOE spell (see _resolveAoeFlagged) —
+// reconstructs just enough from the broadcast payload (spell by name,
+// caster by ref, targets by token id) to drive the same resolve panel/
+// click-through flow as a locally-cast one, then signals the casting
+// player's client to stop waiting once every target's save is resolved.
+function _aoeReceiveResolveStart(payload) {
+  if (!isGM()) return;
+  const spell = SPELLS.find(s => s.name === payload.spellName);
+  const casterEnt = getEntity(payload.casterCid);
+  const targets = (payload.targetIds || []).map(id => mapTokens[id]).filter(Boolean);
+  if (!spell || !casterEnt || !targets.length) return;
+  aoeResolveState = { casterEnt, spell, remaining: targets, remoteCasterCid: payload.casterCid, resolve: () => {} };
+  _renderAoeResolvePanel();
+}
+
+// Immediate recovery for tokens stuck flagged with no working way to
+// resolve them (e.g. from before this fix, or any other desync) —
+// modeled on atClearStuckGrapples()'s "safe to run any time" pattern.
+function atClearStuckAoe() {
+  if (aoeResolveState) { aoeResolveState.resolve?.(); aoeResolveState = null; }
+  aoeFlaggedIds = new Set();
+  document.getElementById('aoe-resolve-panel')?.remove();
+  _aoeBroadcastFlags();
+  refreshUI();
+  showToast('Cleared stuck AOE highlights.', 'info');
 }
 
 // A spell's failure branch when it drains an attribute (spell.drainAttribute,
@@ -10411,6 +10467,20 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'aoe-flags' }, ({ payload }) => {
       aoeFlaggedIds = new Set(payload.ids || []);
       Object.keys(mapTokens).forEach(_refreshTokenBadges);
+    })
+    // A player (not the GM) cast an area spell — see _resolveAoeFlagged's
+    // remote branch. Only the GM's own client acts on this.
+    .on('broadcast', { event: 'aoe-resolve-start' }, ({ payload }) => {
+      _aoeReceiveResolveStart(payload);
+    })
+    // The GM finished resolving an AOE this client cast remotely — let the
+    // original await in _resolveAoeFlagged/_resolveSpellAoe complete.
+    .on('broadcast', { event: 'aoe-resolve-done' }, ({ payload }) => {
+      if (_aoePendingCastResolve && payload.casterCid) {
+        const resolve = _aoePendingCastResolve;
+        _aoePendingCastResolve = null;
+        resolve();
+      }
     })
     .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
@@ -13996,6 +14066,7 @@ switchGmTab = function(tab) {
             <button class="at-btn" onclick="atReset()" title="Reset to Round 1, keep initiative">↺ Round</button>
             <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative">↺ All</button>
             <button class="at-btn" onclick="atClearStuckGrapples()" title="Release any grab/carry relationships left dangling from before Held/Carrying could be cleared properly — safe to run any time">🧹 Fix Holds</button>
+            <button class="at-btn" onclick="atClearStuckAoe()" title="Clear any tokens left stuck with a pulsing AOE-save highlight and no working resolve panel — safe to run any time">🧹 Fix AOE</button>
             <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="display:none;">🎲 Monsters</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
           </div>
