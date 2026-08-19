@@ -4943,7 +4943,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817d';
+const VERSION = 'v0.1.20260817e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11044,6 +11044,11 @@ let tokenChannel     = null; // Realtime broadcast channel
 let dragTokenId      = null;
 let dragOffsetX      = 0;
 let dragOffsetY      = 0;
+// Where a drag started, in image-percent — captured at mousedown before any
+// live position updates, so a completed drag's straight-line distance can
+// still be measured afterward (see onTokenMouseUp's budgeted-move check).
+let _dragStartXPct   = null;
+let _dragStartYPct   = null;
 
 const TOKEN_SIZE = 44; // canvas-pixel diameter
 const ITEM_TOKEN_ICON = 'map_items_token.png'; // shared art for dropped ground items (falls back to 📦 if missing)
@@ -11232,27 +11237,35 @@ function startTokenDrag(e, tokenId) {
   // In attack mode a token click selects the target
   if (attackMode) { e.preventDefault(); attackTokenClick(tokenId); return; }
 
-  // During active combat, a player can't free-drag their own character —
-  // dragging never checked pathMode at all, so it was a completely separate,
-  // untracked way to move (no distance limit, no action cost, even usable
-  // off-turn) sitting right alongside Path mode's own tracked movement.
-  // Reported live as players "cheating" movement at the start of their turn
-  // by dragging before opening Path. On their own turn, attempting to drag
-  // now drops them straight into Path mode instead — seeded at the token's
-  // current spot, same as a plain click (no drag) on their own active token
-  // already did; this just makes an actual drag gesture do the same thing
-  // rather than silently free-moving the token. Off-turn, it just shows the
-  // token info, same as clicking without dragging already did. The GM is
-  // untouched — still free to reposition anything, any time.
+  // During active combat, a player's own token only ever moves on their own
+  // turn — off-turn, dragging is blocked outright (just shows info), same
+  // as a plain click already did. Reported live as players "cheating"
+  // movement at the start of their turn by free-dragging before opening
+  // Path — dragging never checked pathMode or turn order at all, so it was
+  // a completely separate, untracked way to move (no distance limit, no
+  // action cost, even usable off-turn).
+  //
+  // On their own turn, though, a drag is now the intuitive way to move: it
+  // proceeds through the SAME live-drag flow as everyone else below, and
+  // gets tracked as a budgeted Move action at drop time (see
+  // onTokenMouseUp) — same feet/time bookkeeping a Path-mode waypoint route
+  // produces, just for the one straight segment actually dragged. A plain
+  // click (no drag) still falls into Path mode instead, via
+  // onTokenMouseUp's own not-a-drag branch below — Path stays available for
+  // anyone who wants to route around something with more than one waypoint.
+  // The GM is untouched — still free to reposition anything, any time.
   const dragT = mapTokens[tokenId];
   if (dragT && !isGM() && dragT.entity_type === 'character' && dragT.entity_id === currentCharacterId
       && _atIsCombatActive() && !pathMode) {
-    e.preventDefault();
-    _tokenClickId = null; // this click is fully handled here — mouseup shouldn't also act on it
     const combatantId = 'char::' + dragT.entity_id;
-    showTokenInfo(tokenId);
-    if (_atSharedActive()?.id === combatantId) enterPathMode(combatantId);
-    return;
+    if (_atSharedActive()?.id !== combatantId) {
+      e.preventDefault();
+      _tokenClickId = null; // this click is fully handled here — mouseup shouldn't also act on it
+      showTokenInfo(tokenId);
+      return;
+    }
+    // else: it's their own active turn — fall through to the normal drag
+    // flow below, same as any other draggable token.
   }
 
   _tokenClickId    = tokenId;
@@ -11265,6 +11278,8 @@ function startTokenDrag(e, tokenId) {
   e.preventDefault();
 
   dragTokenId = tokenId;
+  _dragStartXPct = t.x_pct;
+  _dragStartYPct = t.y_pct;
   const el = document.getElementById('token-' + tokenId);
   if (el) el.classList.add('dragging', 'selected');
 
@@ -11382,6 +11397,24 @@ async function onTokenMouseUp(e) {
     mapTokens[movedId].x_pct = x_pct;
     mapTokens[movedId].y_pct = y_pct;
   }
+
+  // A player dragging their OWN token on their OWN active-combat turn (the
+  // only case startTokenDrag lets reach a real drag at all during combat —
+  // see its comment) is a tracked Move, not a free reposition: same
+  // feet/time bookkeeping a Path-mode waypoint route gives, just for the
+  // single straight segment actually dragged.
+  const draggedTok = mapTokens[movedId];
+  if (draggedTok && !isGM() && draggedTok.entity_type === 'character'
+      && draggedTok.entity_id === currentCharacterId && _atIsCombatActive() && _dragStartXPct != null) {
+    const combatantId = 'char::' + draggedTok.entity_id;
+    if (_atSharedActive()?.id === combatantId) {
+      const feet = _pctDistFt(_dragStartXPct, _dragStartYPct, x_pct, y_pct);
+      _commitMoveSlot(combatantId, feet);
+      atOpenSlotModal(combatantId, 'right');
+    }
+  }
+  _dragStartXPct = null;
+  _dragStartYPct = null;
 }
 
 // ── Campaign character cache ──────────────────────────────────────────────────
@@ -12672,19 +12705,61 @@ function exitPathMode() {
   if (svg) { svg.style.display = 'none'; svg.innerHTML = ''; }
 }
 
-function pathGetSpeed() {
+// combId defaults to pathCharId (Path mode's own module state) so every
+// existing call site keeps working unchanged; a direct token drag (see
+// onTokenMouseUp) passes its own combatant id instead, since pathCharId
+// was never set for that flow.
+function pathGetSpeed(combId) {
   // Speed belongs to the entity being MOVED, not whatever sheet is loaded — a
   // horse must use the horse's Speed, not the rider's. Own character prefers the
   // live sheet (reflects unsaved edits); everyone else uses their cached attrs.
+  const cid = combId !== undefined ? combId : pathCharId;
   try {
-    const ent   = pathCharId ? getEntity(pathCharId) : null;
+    const ent   = cid ? getEntity(cid) : null;
     const isOwn = ent && ent.type === 'char' && ent.id === currentCharacterId;
     const attrs = isOwn ? calcAttributes() : (ent?.attrs || calcAttributes());
     if (!attrs || !attrs.Speed) return 5;
     const carried = _entityCarried(ent, attrs);
-    const tok = pathCharId ? _pathFindToken(pathCharId) : null;
+    const tok = cid ? _pathFindToken(cid) : null;
     return Math.max(1, _effectiveSpeed(attrs, carried, tok) ?? 5);
   } catch(e) { return 5; }
+}
+
+// Straight-line feet between two image-percent points — the same distance
+// math pathTotalFeet does for a multi-point route, just for exactly two
+// points (a single dragged segment; see onTokenMouseUp).
+function _pctDistFt(x1Pct, y1Pct, x2Pct, y2Pct) {
+  if (mapScalePPF <= 0) return null;
+  const dx = ((x2Pct - x1Pct) / 100) * mapImgW;
+  const dy = ((y2Pct - y1Pct) / 100) * mapImgH;
+  return Math.hypot(dx, dy) / mapScalePPF;
+}
+
+// Sets/broadcasts a combatant's Move action-tracker slot for `feet` of
+// movement — shared by pathCommit (a waypoint route's total) and a direct
+// on-turn token drag (a single dragged segment), so both report movement
+// the same way: a time cost (feet / this combatant's own Speed, rounded up
+// to whole rounds) and a ⚠ warning past a single action's worth, but never
+// a hard block — same "advisory, not enforced" budget movement tracking
+// has always used.
+function _commitMoveSlot(combId, feet) {
+  if (!combId) return;
+  const c = atCombatants.find(x => x.id === combId);
+  if (!c) return;
+  const spd  = pathGetSpeed(combId);
+  const secs = feet != null ? Math.max(1, Math.round(feet / spd)) : 2;
+  if (!c.slots) c.slots = _newSlots();
+  const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
+  const warned = feet != null && secs > 3;
+  const durationRounds = Math.max(1, Math.ceil(secs / 3));
+  c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds,
+                   locksAll: false, feet: feet != null ? Math.round(feet) : 0 };
+  if (mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
+      payload: { combatantId: combId, slot: 'move', label: c.slots.move.label,
+                 startRound: atRound, durationRounds, locksAll: false, feet: c.slots.move.feet } });
+  renderAtList();
+  switchGmTab('actions');
 }
 
 function pathTotalFeet() {
@@ -12807,8 +12882,6 @@ function pathMouseMove(e) {
 
 async function pathCommit() {
   const feet   = pathTotalFeet();
-  const spd    = pathGetSpeed();
-  const secs   = feet != null ? Math.max(1, Math.round(feet / spd)) : 2;
   const combId = pathCharId;
 
   // Move token to last waypoint
@@ -12833,24 +12906,10 @@ async function pathCommit() {
   exitPathMode();
   if (!combId) return;
 
-  const c = atCombatants.find(x => x.id === combId);
-  if (c) {
-    if (!c.slots) c.slots = _newSlots();
-    const label = feet != null ? `Move (${Math.round(feet)} ft)` : 'Move';
-    const warned = feet != null && secs > 3;
-    const durationRounds = Math.max(1, Math.ceil(secs / 3));
-    c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds,
-                     locksAll: false, feet: feet != null ? Math.round(feet) : 0 };
-    if (mapChannel)
-      mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
-        payload: { combatantId: combId, slot: 'move', label: c.slots.move.label,
-                   startRound: atRound, durationRounds, locksAll: false, feet: c.slots.move.feet } });
-    renderAtList();
-    switchGmTab('actions');
-  }
+  _commitMoveSlot(combId, feet);
 
   // Open action dialog after movement
-  if (combId) atOpenSlotModal(combId, 'right');
+  atOpenSlotModal(combId, 'right');
 }
 
 // ─── Walls / obstacles ────────────────────────────────────────────────────────
