@@ -13,7 +13,7 @@
 // atAcceptAction, openRoller, isGM, currentCharacterId, playCharCache,
 // sessionCreatureCache, mapTokens, resolveAvatarUrl, backToMyCharacter,
 // _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
-// SPELLS, hasMagicClass, _spellSuccessPct, atCastSpell, atCompleteCast,
+// SPELLS, hasMagicClass, _spellSuccessRoll, atCastSpell, atCompleteCast, atRound,
 // _openSpellPickerModal, _maintainedSpellInfo, atStopMaintaining,
 // _slotRemaining, _slotCountdownLabel, _openPlaySpellBookModal.
 
@@ -872,19 +872,28 @@ function _dlgRender(body) {
           data: { dact: 'stopmaintain' },
         });
       } else if (inWindup) {
+        // No fixed casting-time timer any more (see _spellPerRoundBonus,
+        // index.html) — Release is live from the round casting starts, and
+        // success% just keeps climbing by the same flat amount each round
+        // the caster keeps waiting instead. The chip previews both the
+        // current round's odds and next round's, so "wait 1 more round" is
+        // a number the player can weigh against staying exposed in combat.
         const spellName = cur.label.slice('Casting: '.length);
-        const remaining = typeof _slotRemaining === 'function' ? _slotRemaining(cur) : 0;
-        spellChip = remaining > 0
-          ? _dlgChip({
-              label: `🔮 ${spellName}`, sub: _slotCountdownLabel(cur), lit: true,
-              title: 'Forming the pattern — click to cancel',
-              data: { dact: 'off', slot: 'full' },
-            })
-          : _dlgChip({
-              label: `✨ Complete: ${spellName}`, sub: 'ready',
-              title: 'The pattern is ready — cast it now',
-              data: { dact: 'completecast', spellName },
-            });
+        const spell = typeof SPELLS !== 'undefined' ? SPELLS.find(s => s.name === spellName) : null;
+        const roundsWaited = Math.max(1, (typeof atRound !== 'undefined' ? atRound : 0) - (cur.startRound != null ? cur.startRound : 0) + 1);
+        const curPct  = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, roundsWaited) : null;
+        const nextPct = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, roundsWaited + 1) : null;
+        spellChip = _dlgChip({
+            label: `✨ Release: ${spellName}`, sub: curPct != null ? `${curPct}%` : 'forming', lit: true,
+            title: curPct != null
+              ? `Cast now at ${curPct}% · wait 1 more round: ${nextPct}% — click to release and roll`
+              : 'Click to release and roll',
+            data: { dact: 'completecast', spellName },
+          }) + _dlgChip({
+            label: '✕ Cancel', sub: 'abort',
+            title: 'Abandon the casting attempt — no roll, no cost',
+            data: { dact: 'off', slot: 'full' },
+          });
       } else {
         spellChip = _dlgChip({
           label: '🔮 Cast a Spell', title: 'Choose from spells you know',

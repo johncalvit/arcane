@@ -1017,6 +1017,10 @@
           <input type="hidden" id="sel-bodytype" value="Humanoid">
         </div>
         <div class="field field-inline">
+          <label>Level</label>
+          <input type="number" id="char-level" min="1" step="1" value="1" onchange="setCharacterLevel(this.value)">
+        </div>
+        <div class="field field-inline">
           <label>Sex</label>
           <select id="sel-gender" onchange="recalc()"></select>
         </div>
@@ -1487,10 +1491,11 @@
     <div id="panel-spellmgr" class="panel">
       <h2>Spells</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
-        Define spells for casters to learn. Casting Time is whole rounds (0 = Instant). Cost is per cast, or per round
-        while Maintained is checked. Difficulty is the Logic/Intuition/Knowledge value needed for a ~90% success
-        chance — falling short escalates failure risk. Area/AOE targeting, Attack damage, and Creation-type spells
-        (a persistent object) are captured here but not all mechanically active yet — see the spell's own notes.
+        Define spells for casters to learn. Cost is per cast, or per round while Maintained is checked. Difficulty is
+        the Logic/Intuition/Knowledge value a caster's own stat is measured against — casting builds success% each
+        round the caster concentrates instead of releasing, so there's no fixed casting time to set. Area/AOE
+        targeting, Attack damage, and Creation-type spells (a persistent object) are captured here but not all
+        mechanically active yet — see the spell's own notes.
       </p>
       <button class="btn" onclick="openSpellForm(null)" style="margin-bottom:16px;">+ Add Spell</button>
 
@@ -1499,7 +1504,10 @@
         <div class="grid-3">
           <div class="field"><label>Name</label><input type="text" id="spf-name" placeholder="e.g. Fire Rose"></div>
           <div class="field"><label>Range</label><input type="text" id="spf-range" placeholder="e.g. 15 feet, Touch"></div>
-          <div class="field"><label>Casting Time (rounds)</label><input type="text" id="spf-castingtime" placeholder="0 = Instant"></div>
+          <!-- Casting Time is retired — casting now builds success% per round the
+               caster concentrates (see _spellPerRoundBonus) instead of a fixed
+               timer. Field/column hidden rather than deleted, same as Features. -->
+          <div class="field" style="display:none;"><label>Casting Time (rounds)</label><input type="text" id="spf-castingtime" placeholder="0 = Instant"></div>
           <div class="field"><label>Cost</label><input type="text" id="spf-cost" placeholder="0"></div>
           <div class="field"><label>Maintained (cost is per round)</label>
             <select id="spf-maintained"><option value="0">No — one-time cost</option><option value="1">Yes — per round while sustained</option></select>
@@ -1557,7 +1565,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th>Cast</th><th>Cost</th><th>Difficulty</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th style="display:none;">Cast</th><th>Cost</th><th>Difficulty</th><th></th></tr></thead>
         <tbody id="spellmgr-list"></tbody>
       </table>
     </div>
@@ -1839,6 +1847,15 @@ const RAW_STATS = [
 
 const TOTAL_POINTS = 80;
 let statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+// Character level — not a raw stat (doesn't cost build points, doesn't feed
+// the point-buy/RAW_STATS system at all), just a plain counter the GM/player
+// bumps by hand as the character advances. Piggybacks on the existing
+// `stats` JSONB column at the save/load boundary (see saveCharacter/
+// applyCharacterData) as stats.Level, rather than a new DB column.
+let characterLevel = 1;
+function setCharacterLevel(v) {
+  characterLevel = Math.max(1, parseInt(v, 10) || 1);
+}
 
 // Attribute definitions: { key, label, rawStat, raceKey, desc, group, cssClass }
 const ATTRIBUTES = [
@@ -2726,7 +2743,6 @@ function _builderKnownMagicClasses() {
 // One spell's full reference card — shared by the dedicated Spell Book panel
 // and the Playsheet's own Spell Book section, so the two can't drift apart.
 function _spellDetailCardHTML(spell) {
-  const castingTimeLabel = spell.castingTime === 0 ? 'Instant' : `${spell.castingTime} rd`;
   const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''} Quintessence`;
   const difficultyLabel = spell.difficultyStat ? `${spell.difficultyStat} ${spell.difficultyValue}` : '—';
   const isArea = spell.targetType === 'Area';
@@ -2744,7 +2760,6 @@ function _spellDetailCardHTML(spell) {
       </h4>
       ${spell.description ? `<div style="font-size:0.82rem;color:var(--text-dim);font-style:italic;margin:4px 0 8px;">${_paEsc(spell.description)}</div>` : ''}
       <div class="ps-row"><span class="ps-label">Range</span><span class="ps-val">${_paEsc(spell.range || '—')}</span></div>
-      <div class="ps-row"><span class="ps-label">Casting Time</span><span class="ps-val">${castingTimeLabel}</span></div>
       <div class="ps-row"><span class="ps-label">Cost</span><span class="ps-val">${costLabel}</span></div>
       <div class="ps-row"><span class="ps-label">Class</span><span class="ps-val">${_paEsc(spell.magicClass)}</span></div>
       <div class="ps-row"><span class="ps-label">Difficulty</span><span class="ps-val">${difficultyLabel}</span></div>
@@ -3596,13 +3611,15 @@ let CONSUMABLES = [...DEFAULT_CONSUMABLES];
 let editingConsumableIndex = null;
 
 // ── Spells ───────────────────────────────────────────────────────────────────
-// castingTime is already in whole ROUNDS (per the spell template), unlike
-// weapon/ranged actions whose dur is in 3-second units — don't run it through
-// the usual /3 conversion. cost is per-cast for a one-shot spell, or per-round
-// while `maintained` is true (Cost/Duration on the template). difficultyStat
-// is which of Logic/Intuition/Knowledge the casting check rolls against;
-// difficultyValue is the stat value needed for a ~90% (10% base failure)
-// chance — see _spellFailurePct. aoeShape/aoeSize are captured now (Phase 2
+// castingTime is retired data — kept on each row (harmless, unused) rather
+// than stripped, same as the hidden Manager field/column, but nothing reads
+// it any more. Casting is now round-accumulated instead of timed: see
+// _spellPerRoundBonus/atCastSpell. cost is per-cast for a one-shot spell, or
+// per-round while `maintained` is true (Cost/Duration on the template).
+// difficultyStat is which of Logic/Intuition/Knowledge the casting check
+// rolls against; difficultyValue is the stat value a caster's own stat is
+// measured against each round — see _spellStatTerm. aoeShape/aoeSize are
+// captured now (Phase 2
 // will act on them) as free-form text since the exact shape math isn't built
 // yet. Effect fields mirror the consumable shape (restore/clears/buff) for
 // the same reason: apply-to-target logic can be shared rather than
@@ -4294,7 +4311,7 @@ function buildSpellManagerTable() {
   SPELLS.forEach((row, i) => {
     const cost = row.maintained ? `${row.cost}/round` : `${row.cost}`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td>${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
+    tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td style="display:none;">${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSpellForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteSpell(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -4555,6 +4572,7 @@ function gatherCharacterData() {
     build:   document.getElementById('sel-build').value,
     social:  document.getElementById('sel-social').value,
     mental:  document.getElementById('sel-mental').value,
+    level:   characterLevel,
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
     skills:   { ...skillInvestments },
@@ -4606,7 +4624,7 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       data.stats,
+    stats:       { ...data.stats, Level: data.level },
     features:    data.features,
     skills:      data.skills,
     weapons:     data.weapons,
@@ -4833,6 +4851,9 @@ function _doNewCharacter() {
   applySpeciesDefaultAvatar();
   document.getElementById('char-name').value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
+  characterLevel = 1;
+  const newLevelInput = document.getElementById('char-level');
+  if (newLevelInput) newLevelInput.value = 1;
   buildStatRows();
   document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => cb.checked = false);
   skillInvestments = {};
@@ -4922,7 +4943,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817b';
+const VERSION = 'v0.1.20260817c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5643,6 +5664,12 @@ function applyCharacterData(data) {
     buildStatRows();
   }
 
+  // Level — piggybacks on the stats JSONB blob (stats.Level), not a raw
+  // stat itself, so it's restored separately rather than via RAW_STATS.
+  characterLevel = Math.max(1, parseInt(data.stats?.Level, 10) || 1);
+  const levelInput = document.getElementById('char-level');
+  if (levelInput) levelInput.value = characterLevel;
+
   // Features
   if (data.features) {
     document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => {
@@ -6282,6 +6309,10 @@ function getEntity(ref) {
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
+    // Piggybacks on the same stats JSONB blob as everything else here (see
+    // saveCharacter/applyCharacterData) — works for creatures too since
+    // session_creatures carries the template's stats column across on spawn.
+    level:     Math.max(1, parseInt(row.stats?.Level, 10) || 1),
     loadout,
     conditions: token ? getConditions(token.id) : new Set(),
   };
@@ -7187,21 +7218,62 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
   });
 }
 
-// Spell casting-check failure %. Baseline is 10% (a caster at or above the
-// spell's Difficulty has a flat 90% success chance). For each point the
-// caster's relevant stat (Logic/Intuition/Knowledge) falls short of
-// Difficulty, add the next Fibonacci number to a running total on top of
-// that baseline — an accelerating curve, so being a little short is a minor
-// risk but being badly short is nearly hopeless. Deficit 0→10%, 1→11%,
-// 2→12%, 3→14%, 4→17%, 5→22%, 6→30%, 7→43%, 8→64%, 9+→effectively certain.
-function _spellFailurePct(statVal, difficultyValue) {
-  const deficit = Math.max(0, Math.round(difficultyValue || 0) - Math.round(statVal || 0));
-  let a = 1, b = 1, sum = 0;
-  for (let i = 0; i < deficit; i++) { sum += a; [a, b] = [b, a + b]; }
-  return Math.min(100, 10 + sum);
+// ═══ SPELL CASTING: round-by-round success ═══════════════════════════════
+// A caster commits to a spell (locks their action — see atCastSpell) and
+// then, every round they keep concentrating instead of releasing it, their
+// odds climb by the same flat amount: perRoundBonus. There's no fixed
+// casting-time timer any more — the player decides each round whether to
+// release now (atCompleteCast) or wait for next round's better odds, and
+// the "Cast Now: X% / wait 1 more round: Y%" preview is exactly
+// perRoundBonus apart, which is what makes it easy to read at the table.
+
+// How much of a gap there is between the caster's relevant stat (whichever
+// of Logic/Intuition/Knowledge the spell calls for) and the spell's
+// Difficulty, turned into points: 3 per point of gap, capped at a gap of 4
+// (±12 total) either direction. Linear on purpose — the old Fibonacci curve
+// used here previously escalated too unpredictably round-to-round once this
+// number is something the player is watching live.
+function _spellStatTerm(statVal, difficultyValue) {
+  const gap = Math.round(statVal || 0) - Math.round(difficultyValue || 0);
+  return Math.max(-4, Math.min(4, gap)) * 3;
 }
-function _spellSuccessPct(statVal, difficultyValue) {
-  return Math.max(0, 100 - _spellFailurePct(statVal, difficultyValue));
+
+// Flat +5 per magic-type skill the caster actually knows that matches this
+// spell's class (Arcane/Deific/Demonic/Nature) — knowing more than one
+// relevant skill (e.g. both Enchanting and Magic: Elemental for an Arcane
+// spell) stacks.
+function _spellSkillBonus(ent, spell) {
+  const known = Object.keys(ent?.skills || {});
+  const matches = known.filter(k => (SKILLS.find(s => s.name === k) || {}).type === spell.magicClass).length;
+  return matches * 5;
+}
+
+// The constant per-round rate for this caster/spell pairing — nothing about
+// the caster changes mid-cast, so this is the same number every round.
+// Knowledge and Level are general spellcasting progression (education +
+// experience); the stat-vs-Difficulty term is specific to whether THIS
+// spell is a good match for THIS caster right now.
+function _spellPerRoundBonus(ent, spell) {
+  const statVal = ent?.attrs?.[spell.difficultyStat] || 0;
+  const knowledgeLevelTerm = (ent?.attrs?.Knowledge || 0) * 0.5 + (ent?.level || 1) * 3;
+  return _spellSkillBonus(ent, spell) + _spellStatTerm(statVal, spell.difficultyValue) + knowledgeLevelTerm;
+}
+
+// Unclamped total — a badly-mismatched caster just keeps sliding further
+// negative the longer they sit there concentrating (waiting doesn't
+// self-correct incompetence). This is the number a future miscast-severity
+// system should read; see _spellSuccessRoll for the clamped version that's
+// actually rolled against.
+function _spellRawAccum(ent, spell, roundsWaited) {
+  return _spellPerRoundBonus(ent, spell) * Math.max(1, roundsWaited || 1);
+}
+
+// What's actually rolled against: capped at 95 (always some chance of a
+// slip) and floored at 1 (a caster who knows the spell always has a
+// puncher's chance, however remote) regardless of how negative the raw
+// accumulation has gotten.
+function _spellSuccessRoll(ent, spell, roundsWaited) {
+  return Math.max(1, Math.min(95, Math.round(_spellRawAccum(ent, spell, roundsWaited))));
 }
 
 // Shared target-% calc for a recovery save — used both to actually open the
@@ -7326,7 +7398,7 @@ function _openSpellPickerModal(combatantId) {
 
   known.forEach(spell => {
     const notBuilt = spell.targetType === 'Item' || (spell.targetType === 'Area' && !_BUILT_AOE_SHAPES.includes(spell.aoeShape));
-    const successPct = _spellSuccessPct(ent.attrs[spell.difficultyStat] || 0, spell.difficultyValue);
+    const round1Pct = _spellSuccessRoll(ent, spell, 1);
     const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
     const row = document.createElement('button');
     row.disabled = notBuilt;
@@ -7337,9 +7409,9 @@ function _openSpellPickerModal(combatantId) {
       color:${notBuilt ? 'var(--text-dim)' : 'var(--text)'};
       cursor:${notBuilt ? 'not-allowed' : 'pointer'};opacity:${notBuilt ? '0.5' : '1'};`;
     row.title = notBuilt ? `${spell.targetType}-target spells aren't built yet`
-                          : `${spell.range} · ${spell.castingTime === 0 ? 'Instant' : spell.castingTime + ' rd cast'} · ${spell.difficultyStat} ${spell.difficultyValue}`;
+                          : `${spell.range} · ${spell.difficultyStat} ${spell.difficultyValue} · builds ~${Math.round(_spellPerRoundBonus(ent, spell))}%/round the longer you concentrate`;
     row.innerHTML = `<span>${_paEsc(spell.name)} <span style="font-size:0.68rem;color:var(--text-dim);">(${spell.magicClass} · ${spell.targetType})</span></span>
-      <span style="font-size:0.72rem;white-space:nowrap;">${successPct}% · ${costLabel}</span>`;
+      <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}% rd1 · ${costLabel}</span>`;
     row.onclick = async () => {
       if (notBuilt) return;
       overlay.remove();
@@ -7415,12 +7487,16 @@ function _openPlaySpellBookModal(combatantId) {
   document.body.appendChild(overlay);
 }
 
-// Begin casting a spell. Instant spells (castingTime 0) skip straight to
-// Complete. Otherwise occupies the caster's full-body slot as a windup for
-// the spell's casting time (already whole rounds, unlike other actions' 3-
-// second dur units) — mirrors the ranged-weapon Load/Fire two-step. Target
-// selection happens at Complete, not here: "on touching the individual with
-// the finished pattern" implies you reach for the target once it's ready.
+// Begin casting a spell — locks the caster's full-body slot with an
+// open-ended windup (no fixed casting-time timer any more; see
+// _spellPerRoundBonus). Every round the caster stays locked into this
+// instead of releasing, their success% climbs by a flat amount; they can
+// release as early as the same round they start (see the panels.js windup
+// chip, which always offers Release alongside Cancel) for something that
+// plays like the old Instant spells, or keep waiting for better odds.
+// Target selection happens at Complete, not here: "on touching the
+// individual with the finished pattern" implies you reach for the target
+// once you actually release it.
 async function atCastSpell(casterCid, spellName) {
   const spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
@@ -7434,24 +7510,32 @@ async function atCastSpell(casterCid, spellName) {
     showToast(`Not enough Quintessence (or Stamina/Toughness/Blood to draw on) to cast ${spell.name}.`, 'error');
     return;
   }
-  const rounds = Math.max(0, Math.round(spell.castingTime || 0));
-  if (rounds <= 0) { await atCompleteCast(casterCid, spellName); return; }
 
   const c = atCombatants.find(x => x.id === casterCid);
   if (!c) return;
   if (!c.slots) c.slots = _newSlots();
   for (const k of Object.keys(c.slots)) c.slots[k] = null;
-  c.slots.full = { label: `Casting: ${spell.name}`, startRound: atRound, durationRounds: rounds, locksAll: true };
+  c.slots.full = { label: `Casting: ${spell.name}`, startRound: atRound, durationRounds: 9999, locksAll: true };
   if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
-    payload: { combatantId: casterCid, slot: 'full', label: c.slots.full.label, startRound: atRound, durationRounds: rounds, locksAll: true } });
+    payload: { combatantId: casterCid, slot: 'full', label: c.slots.full.label, startRound: atRound, durationRounds: 9999, locksAll: true } });
   renderAtList(); renderPlayCharacter();
 }
 
-// Complete a cast whose windup has finished (or resolve an Instant cast).
-// Self spells resolve immediately; Individual spells enter grab-style map
-// targeting (mirrors Consume) so the caster picks who receives it.
+// How many rounds the caster waited before releasing — captured by
+// atCompleteCast (before it clears the windup slot) and read once by
+// _resolveSpellCast. Module-level single-flight state, same pattern as
+// attackWeaponName/attackCombatantId below: only the acting combatant is
+// ever mid-target-selection for their own cast at a time.
+let _castPendingRounds = 1;
+
+// Complete a cast — releases the windup (whatever round it's on) and moves
+// to target selection/resolution. Self spells resolve immediately;
+// Individual spells enter grab-style map targeting (mirrors Consume) so the
+// caster picks who receives it.
 async function atCompleteCast(casterCid, spellName) {
   const c = atCombatants.find(x => x.id === casterCid);
+  const startRound = c?.slots?.full?.startRound;
+  _castPendingRounds = Math.max(1, atRound - (startRound != null ? startRound : atRound) + 1);
   if (c?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
   const spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
@@ -8443,9 +8527,10 @@ async function atStopMaintaining(casterRef, opts) {
 }
 
 // Resolves a completed cast: opens the shared roller for the casting check
-// (Fibonacci failure curve against the caster's Difficulty stat), pays the
-// Quintessence cascade regardless of outcome (the energy is spent whether or
-// not the pattern holds — a real failure-consequence table is future work),
+// (round-accumulated success% — see _spellSuccessRoll/_castPendingRounds),
+// pays the Quintessence cascade regardless of outcome (the energy is spent
+// whether or not the pattern holds — a real failure-consequence table is
+// future work, but see _spellRawAccum for the unclamped number it'll read),
 // and on success applies the spell's effect to the target.
 // `aoePoint` ({xPct,yPct}) is set instead of a real targetRef for Area
 // spells — see enterAoeCastMode/aoeMouseDown.
@@ -8455,12 +8540,12 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   const casterEnt = getEntity(casterCid);
   if (!casterEnt) { showToast('Could not load caster.', 'error'); return; }
 
-  const statVal = casterEnt.attrs[spell.difficultyStat] || 0;
-  const target = _spellSuccessPct(statVal, spell.difficultyValue);
+  const roundsWaited = _castPendingRounds;
+  const target = _spellSuccessRoll(casterEnt, spell, roundsWaited);
 
   openRoller({
     label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target, targetLabel: `${spell.difficultyStat} check`,
+    target, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= target);
       const paid = await _payQuintessence(casterEnt, spell.cost || 0);
@@ -9202,13 +9287,10 @@ async function atNext() {
       for (const s of Object.keys(c.slots)) {
         const sl = c.slots[s];
         if (sl && sl.durationRounds < 9999 && sl.startRound + sl.durationRounds <= atRound) {
-          // A finished spell windup is NOT auto-cleared like every other
-          // timed action — unlike Reload (which just reverts to normal once
-          // expired, nothing further to do), a finished cast needs the
-          // player to actually click Complete to trigger the roll/cost/
-          // target. Auto-clearing here would silently discard the cast with
-          // no roll, no cost, and no visible outcome the moment its rounds
-          // ran out — which is exactly what was happening.
+          // Casting windups use durationRounds:9999 (see atCastSpell) so
+          // they never hit this branch at all in normal play — release is
+          // always a manual Complete click, never a timer. This guard stays
+          // only as a safety net for any cast slot saved before that change.
           if (sl.label && sl.label.startsWith('Casting: ')) continue;
           if (token && _defCondFromLabel(sl.label)) _clearDefConds(token);
           c.slots[s] = null;
@@ -14207,6 +14289,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260817b"></script>
+<script src="panels.js?v=20260817c"></script>
 </body>
 </html>
