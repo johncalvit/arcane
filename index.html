@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817f';
+const VERSION = 'v0.1.20260817g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5941,6 +5941,8 @@ const CONDITION_DEFS = [
     desc:'Actively evading. Evade defense is pre-applied to incoming attacks.' },
   { key:'sentinel',    label:'Sentinel',    icon:'👁', color:'#ff8c00',
     desc:'Ready to attack any enemy that enters melee range.' },
+  { key:'target',      label:'Target',      icon:'🎯', color:'#40c0ff',
+    desc:'Ready to shoot any enemy that enters the guarded sector with a ranged weapon.' },
   { key:'stunned',     label:'Stunned',     icon:'💫', color:'#ff5555',
     desc:'Disoriented; cannot take actions.' },
   { key:'paralyzed',   label:'Paralyzed',   icon:'⛓', color:'#ff5555',
@@ -5983,6 +5985,7 @@ function _defCondFromLabel(label) {
   if (label.startsWith('Parry')) return 'parrying';
   if (label === 'Evade') return 'evading';
   if (label === 'Sentinel') return 'sentinel';
+  if (label === 'Target')   return 'target';
   return null;
 }
 
@@ -5990,7 +5993,7 @@ function _defCondFromLabel(label) {
 function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
-  for (const c of ['blocking', 'parrying', 'evading', 'sentinel']) {
+  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target']) {
     if (conds.has(c)) setCondition(token.id, c, false);
   }
 }
@@ -6017,7 +6020,7 @@ async function setCondition(tokenId, condition, active, opts) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -7650,8 +7653,9 @@ let aoeResolveState = null; // { casterEnt, spell, remaining: [tokens], resolve 
 let _remoteAoePreview = null; // { casterCid, spell: {name, aoeShape, aoeSize}, rangeFt }
 
 function enterAoeCastMode(casterCid, spell) {
-  if (attackMode) exitAttackMode();
-  if (pathMode)   exitPathMode();
+  if (attackMode)    exitAttackMode();
+  if (pathMode)      exitPathMode();
+  if (targetAimMode) exitTargetAimMode();
   if (aoeMode)    exitAoeCastMode();
   aoeMode      = true;
   aoeCasterCid = casterCid;
@@ -7884,6 +7888,7 @@ let obstacleDragging = false;
 function enterObstacleCastMode(casterCid, spell) {
   if (attackMode)   exitAttackMode();
   if (pathMode)      exitPathMode();
+  if (targetAimMode) exitTargetAimMode();
   if (aoeMode)       exitAoeCastMode();
   if (obstacleMode)  exitObstacleCastMode();
   obstacleMode      = true;
@@ -9146,6 +9151,7 @@ const AT_MOVE = [
 const AT_FULLBODY = [
   { label: 'Evade',          dur: 99 }, // lock-on stance — persists until cleared
   { label: 'Sentinel',       dur: 99 },
+  { label: 'Target',         dur: 99 }, // ranged cousin of Sentinel — see enterTargetAimMode
   { label: 'Go Prone',       dur: 1 },
   { label: 'Charge',         dur: 3 },
   { label: 'Use Item',       dur: 2 },
@@ -10603,6 +10609,19 @@ function subscribeMapRealtime() {
         resolve();
       }
     })
+    // A move (on another client) crossed into a Sentinel/Target zone — show
+    // the Yes/No prompt here if THIS client controls the watching token
+    // (the real owning player, or the GM). See _resolveSentinelCheck.
+    .on('broadcast', { event: 'sentinel-check-start' }, ({ payload }) => {
+      _maybeShowSentinelPrompt(payload);
+    })
+    // Someone answered a check — resolves it here if THIS client is the
+    // mover awaiting it, and closes the prompt here if it's still showing
+    // (whoever else was also allowed to answer, e.g. the GM if the actual
+    // owning player answered first).
+    .on('broadcast', { event: 'sentinel-check-answer' }, ({ payload }) => {
+      _applySentinelAnswer(payload.checkId, payload.attack);
+    })
     .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); renderPlayCharacter(); }
@@ -11415,40 +11434,39 @@ async function onTokenMouseUp(e) {
 
   const x_pct = parseFloat(el.style.left);
   const y_pct = parseFloat(el.style.top);
-
-  if (mapTokens[dragTokenId]) {
-    mapTokens[dragTokenId].x_pct = x_pct;
-    mapTokens[dragTokenId].y_pct = y_pct;
-  }
-
-  await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', dragTokenId);
-
-  // persist the borne-group at their followed positions (already moved live)
-  _moveGroupWith(dragTokenId, 0, 0, true);
-
-  // keep path-tool seed position current if this token is a combatant
   const movedId = dragTokenId;
   dragTokenId = null;
-
-  // update token position in mapTokens so next Path draw starts at the new spot
-  if (mapTokens[movedId]) {
-    mapTokens[movedId].x_pct = x_pct;
-    mapTokens[movedId].y_pct = y_pct;
-  }
 
   // A player dragging their OWN token on their OWN active-combat turn (the
   // only case startTokenDrag lets reach a real drag at all during combat —
   // see its comment) is a tracked Move, not a free reposition: same
-  // feet/time bookkeeping a Path-mode waypoint route gives, just for the
+  // feet/time bookkeeping a Path-mode waypoint route gives (including any
+  // Sentinel/Target crossing along the dragged segment), just for the
   // single straight segment actually dragged.
   const draggedTok = mapTokens[movedId];
-  if (draggedTok && !isGM() && draggedTok.entity_type === 'character'
-      && draggedTok.entity_id === currentCharacterId && _atIsCombatActive() && _dragStartXPct != null) {
+  const isBudgetedMove = draggedTok && !isGM() && draggedTok.entity_type === 'character'
+      && draggedTok.entity_id === currentCharacterId && _atIsCombatActive() && _dragStartXPct != null
+      && _atSharedActive()?.id === ('char::' + draggedTok.entity_id);
+
+  if (isBudgetedMove) {
     const combatantId = 'char::' + draggedTok.entity_id;
-    if (_atSharedActive()?.id === combatantId) {
-      const feet = _pctDistFt(_dragStartXPct, _dragStartYPct, x_pct, y_pct);
-      _commitMoveSlot(combatantId, feet);
-      atOpenSlotModal(combatantId, 'right');
+    const from = { x_pct: _dragStartXPct, y_pct: _dragStartYPct };
+    const to   = { x_pct, y_pct };
+    await _executeMoveWithSentinelChecks(combatantId, [from, to]);
+    _commitMoveSlot(combatantId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
+    atOpenSlotModal(combatantId, 'right');
+  } else {
+    if (mapTokens[movedId]) {
+      mapTokens[movedId].x_pct = x_pct;
+      mapTokens[movedId].y_pct = y_pct;
+    }
+    await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', movedId);
+    // persist the borne-group at their followed positions (already moved live)
+    _moveGroupWith(movedId, 0, 0, true);
+    // update token position in mapTokens so next Path draw starts at the new spot
+    if (mapTokens[movedId]) {
+      mapTokens[movedId].x_pct = x_pct;
+      mapTokens[movedId].y_pct = y_pct;
     }
   }
   _dragStartXPct = null;
@@ -11500,6 +11518,7 @@ let attackRangeFt     = 0;
 function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt) {
   if (attackMode) exitAttackMode();
   if (pathMode)   exitPathMode();
+  if (targetAimMode) exitTargetAimMode();
   attackMode        = true;
   attackCombatantId = combatantId;
   attackWeaponName  = weaponName;
@@ -11966,6 +11985,76 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
 // Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
 function refreshAttackCircle() { if (attackMode) drawRangeCircle(); }
 
+// Max melee reach from held weapons (character or creature) — shared by the
+// Sentinel range-circle display and the actual threat-zone trigger check
+// (_sentinelZoneCheck), so the drawn circle and the enforced one can't drift
+// apart.
+function _sentinelMeleeReachFt(t) {
+  let maxReach = 1; // default 1ft reach (unarmed)
+  if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
+    const held = playCharCache[t.entity_id].held_items || {};
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      const norm = normalizeWeaponName(itemName);
+      const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
+      if (rows.length) maxReach = Math.max(maxReach, ...rows.map(r => r.reach));
+    }
+  } else if (t.entity_type === 'creature') {
+    const race = RACE_DATA[t.species] || {};
+    maxReach = Math.max(1, Math.round((race.Height || 60) / 24));
+  }
+  return maxReach;
+}
+
+// Held ranged weapon's guarded distance for Target — there's no hard max
+// range anywhere else in this game (ranged attacks just take an escalating
+// per-increment penalty with no cutoff, see attackTokenClick/drawRangeCircle
+// skipping ranged weapons entirely), so this is a practical visual/trigger
+// boundary: 6 range increments out, past which a shot's penalty is steep
+// enough it's not really a meaningful threat zone any more.
+const TARGET_RANGE_INCREMENTS = 6;
+function _targetWeaponRangeFt(t) {
+  let bestIncrement = 0;
+  if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
+    const held = playCharCache[t.entity_id].held_items || {};
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      const norm = normalizeWeaponName(itemName);
+      const rows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
+      for (const r of rows) bestIncrement = Math.max(bestIncrement, r.rangeIncrement || 0);
+    }
+  }
+  return bestIncrement > 0 ? bestIncrement * TARGET_RANGE_INCREMENTS : 30;
+}
+
+const TARGET_CONE_DEG = 15;
+
+// Facing (degrees, atan2 convention) a Target token committed to when it
+// aimed — see enterTargetAimMode/targetAimMouseDown. Stored as a hidden
+// `facing:<deg>` marker on the token's own conditions, same convention as
+// the buff:/heldby: markers elsewhere, so it broadcasts/persists for free
+// through the existing conditions sync.
+function _tokenFacingDeg(t) {
+  const conds = Array.isArray(t?.conditions) ? t.conditions : [];
+  const m = conds.find(c => c.startsWith('facing:'));
+  return m ? parseFloat(m.slice('facing:'.length)) || 0 : 0;
+}
+
+async function _setTokenFacing(tokenId, deg) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+  for (const c of [...current]) if (c.startsWith('facing:')) current.delete(c);
+  current.add('facing:' + Math.round(deg));
+  const newConds = [...current];
+  t.conditions = newConds;
+  drawSentinelRanges();
+  const { error } = await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
+  if (error) _writeErrorToast(error, 'map_tokens (facing)');
+}
+
 function drawSentinelRanges() {
   const svg = document.getElementById('sentinel-svg');
   if (!svg) return;
@@ -11973,49 +12062,413 @@ function drawSentinelRanges() {
   if (!mapScalePPF) return;
 
   for (const t of Object.values(mapTokens)) {
-    if (!getConditions(t.id).has('sentinel')) continue;
-
-    // Determine max melee reach from held weapons
-    let maxReach = 1; // default 1ft reach (unarmed)
-    if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
-      const held = playCharCache[t.entity_id].held_items || {};
-      for (const side of ['right', 'left']) {
-        const itemName = held[side];
-        if (!itemName) continue;
-        const norm = normalizeWeaponName(itemName);
-        const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
-        if (rows.length) maxReach = Math.max(maxReach, ...rows.map(r => r.reach));
-      }
-    } else if (t.entity_type === 'creature') {
-      const race = RACE_DATA[t.species] || {};
-      maxReach = Math.max(1, Math.round((race.Height || 60) / 24));
-    }
+    const conds = getConditions(t.id);
+    const isSentinel = conds.has('sentinel');
+    const isTarget   = conds.has('target');
+    if (!isSentinel && !isTarget) continue;
 
     const vpX = (t.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
     const vpY = (t.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
     const tokenHalfVp = (getTokenSize(t) / 2) * mapScale;
-    const radiusPx = tokenHalfVp + maxReach * mapScalePPF * mapScale;
+    const pxPerFt = mapScalePPF * mapScale;
 
-    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-    circle.setAttribute('cx', vpX);
-    circle.setAttribute('cy', vpY);
-    circle.setAttribute('r',  Math.max(1, radiusPx));
-    circle.setAttribute('fill', 'rgba(255,140,0,0.06)');
-    circle.setAttribute('stroke', '#ff8c00');
-    circle.setAttribute('stroke-width', '2');
-    circle.setAttribute('stroke-dasharray', '8,4');
-    svg.appendChild(circle);
+    if (isSentinel) {
+      const maxReach = _sentinelMeleeReachFt(t);
+      const radiusPx = tokenHalfVp + maxReach * pxPerFt;
 
-    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    label.setAttribute('x', vpX);
-    label.setAttribute('y', vpY - radiusPx - 6);
-    label.setAttribute('text-anchor', 'middle');
-    label.setAttribute('fill', '#ff8c00');
-    label.setAttribute('font-size', '11');
-    label.setAttribute('font-family', 'Georgia,serif');
-    label.textContent = `👁 ${t.label} · ${maxReach}ft`;
-    svg.appendChild(label);
+      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      circle.setAttribute('cx', vpX);
+      circle.setAttribute('cy', vpY);
+      circle.setAttribute('r',  Math.max(1, radiusPx));
+      circle.setAttribute('fill', 'rgba(255,140,0,0.06)');
+      circle.setAttribute('stroke', '#ff8c00');
+      circle.setAttribute('stroke-width', '2');
+      circle.setAttribute('stroke-dasharray', '8,4');
+      svg.appendChild(circle);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', vpX);
+      label.setAttribute('y', vpY - radiusPx - 6);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', '#ff8c00');
+      label.setAttribute('font-size', '11');
+      label.setAttribute('font-family', 'Georgia,serif');
+      label.textContent = `👁 ${t.label} · ${maxReach}ft`;
+      svg.appendChild(label);
+    }
+
+    if (isTarget) {
+      const rangeFt   = _targetWeaponRangeFt(t);
+      const facingDeg = _tokenFacingDeg(t);
+      const facingRad = facingDeg * Math.PI / 180;
+      const halfRad   = (TARGET_CONE_DEG / 2) * Math.PI / 180;
+      const r = Math.max(1, rangeFt * pxPerFt);
+      const x1 = vpX + Math.cos(facingRad - halfRad) * r, y1 = vpY + Math.sin(facingRad - halfRad) * r;
+      const x2 = vpX + Math.cos(facingRad + halfRad) * r, y2 = vpY + Math.sin(facingRad + halfRad) * r;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${vpX} ${vpY} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`);
+      path.setAttribute('fill', 'rgba(64,192,255,0.08)');
+      path.setAttribute('stroke', '#40c0ff');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('stroke-dasharray', '8,4');
+      svg.appendChild(path);
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', vpX + Math.cos(facingRad) * r * 0.6);
+      label.setAttribute('y', vpY + Math.sin(facingRad) * r * 0.6 - 6);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', '#40c0ff');
+      label.setAttribute('font-size', '11');
+      label.setAttribute('font-family', 'Georgia,serif');
+      label.textContent = `🎯 ${t.label} · ${rangeFt}ft`;
+      svg.appendChild(label);
+    }
   }
+}
+
+// ── Target action (ranged Sentinel) — aim step ────────────────────────────
+// Declaring Target needs a facing before it locks in (a 15° cone, unlike
+// Sentinel's all-around circle) — same click-to-aim interaction Fire Rose's
+// Sector spell already uses, just simpler: no cast, no distance gating on
+// the click, only a direction. Reuses the aoe-svg overlay (never active at
+// the same time as this) rather than adding a new DOM element.
+let targetAimMode = false, targetAimCasterCid = null;
+
+function enterTargetAimMode(combatantId) {
+  if (attackMode)    exitAttackMode();
+  if (pathMode)      exitPathMode();
+  if (aoeMode)       exitAoeCastMode();
+  if (obstacleMode)  exitObstacleCastMode();
+  if (targetAimMode) exitTargetAimMode();
+  targetAimMode      = true;
+  targetAimCasterCid = combatantId;
+  document.getElementById('map-viewport').classList.add('attack-mode');
+  document.getElementById('aoe-svg').style.display = 'block';
+  _targetAimRedraw(null, null);
+}
+
+function exitTargetAimMode() {
+  targetAimMode      = false;
+  targetAimCasterCid = null;
+  document.getElementById('map-viewport').classList.remove('attack-mode');
+  const svg = document.getElementById('aoe-svg');
+  svg.style.display = 'none';
+  svg.innerHTML = '';
+}
+
+function _targetAimRedraw(cursorXPct, cursorYPct) {
+  const svg = document.getElementById('aoe-svg');
+  svg.innerHTML = '';
+  if (!targetAimCasterCid || mapScalePPF <= 0) return;
+  const token = _pathFindToken(targetAimCasterCid);
+  if (!token) return;
+
+  const rangeFt = _targetWeaponRangeFt(token);
+  const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
+  const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
+  const pxPerFt = mapScalePPF * mapScale;
+  const dirVpX = cursorXPct != null ? (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX : vpX + 1;
+  const dirVpY = cursorYPct != null ? (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY : vpY;
+  const dirAngle = Math.atan2(dirVpY - vpY, dirVpX - vpX);
+  const halfRad  = (TARGET_CONE_DEG / 2) * Math.PI / 180;
+  const r = Math.max(1, rangeFt * pxPerFt);
+  const x1 = vpX + Math.cos(dirAngle - halfRad) * r, y1 = vpY + Math.sin(dirAngle - halfRad) * r;
+  const x2 = vpX + Math.cos(dirAngle + halfRad) * r, y2 = vpY + Math.sin(dirAngle + halfRad) * r;
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute('d', `M ${vpX} ${vpY} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`);
+  path.setAttribute('fill', 'rgba(64,192,255,0.22)');
+  path.setAttribute('stroke', '#40c0ff');
+  path.setAttribute('stroke-width', '2');
+  svg.appendChild(path);
+
+  const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  prompt.setAttribute('x', vpX);
+  prompt.setAttribute('y', vpY - 12);
+  prompt.setAttribute('text-anchor', 'middle');
+  prompt.setAttribute('fill', 'rgba(64,192,255,0.9)');
+  prompt.setAttribute('font-size', '11');
+  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  prompt.textContent = 'Target — click to set facing · Esc to cancel';
+  svg.appendChild(prompt);
+}
+
+function targetAimMouseMove(e) {
+  if (!targetAimMode) return;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  _targetAimRedraw((imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
+}
+
+function targetAimMouseDown(e) {
+  if (!targetAimMode) return false;
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
+  const imgX = (vpX - mapOffsetX) / mapScale, imgY = (vpY - mapOffsetY) / mapScale;
+  const xPct = (imgX / mapImgW) * 100, yPct = (imgY / mapImgH) * 100;
+
+  const combatantId = targetAimCasterCid;
+  const token = _pathFindToken(combatantId);
+  let facingDeg = 0;
+  if (token) facingDeg = Math.atan2(yPct - token.y_pct, xPct - token.x_pct) * 180 / Math.PI;
+  exitTargetAimMode();
+  atSetSlot(combatantId, 'full', 'Target', 99, true).then(() => {
+    if (token) _setTokenFacing(token.id, facingDeg);
+  });
+  return true;
+}
+
+// ── Sentinel / Target interrupt engine ────────────────────────────────────
+// An enemy's move that crosses into a Sentinel's melee circle or a Target's
+// guarded cone pauses that move, asks whoever controls the watching token
+// whether to react, and — if yes — resolves a real attack (through the
+// exact same hit/defense/damage pipeline any other attack uses) before the
+// move continues on to wherever it was actually headed. Movement itself is
+// never altered by a Sentinel/Target reaction, win or lose — only whether
+// there's a pause and a swing along the way.
+//
+// Is xPct/yPct inside this watcher's threat zone right now? Shared by the
+// range-circle/cone display (drawSentinelRanges) and the actual trigger
+// check, so the drawn zone and the enforced one can't drift apart.
+function _sentinelZoneCheck(watcherTok, xPct, yPct) {
+  if (mapScalePPF <= 0) return false;
+  const conds = getConditions(watcherTok.id);
+  const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
+  const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
+  const distFt = Math.hypot(dx, dy) / mapScalePPF;
+  if (conds.has('sentinel') && distFt <= _sentinelMeleeReachFt(watcherTok)) return true;
+  if (conds.has('target')) {
+    const rangeFt = _targetWeaponRangeFt(watcherTok);
+    if (distFt <= rangeFt) {
+      const facingDeg = _tokenFacingDeg(watcherTok);
+      const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
+      let diff = Math.abs(pointDeg - facingDeg);
+      if (diff > 180) diff = 360 - diff;
+      if (diff <= TARGET_CONE_DEG / 2) return true;
+    }
+  }
+  return false;
+}
+
+// character vs creature only — no formal faction system exists elsewhere in
+// this game (AOE spells already hit everyone regardless of side), so this
+// is the same simple heuristic: characters watch for creatures and vice
+// versa, same-category tokens never trigger each other.
+function _isEnemyOf(moverTok, watcherTok) {
+  return moverTok.entity_type !== watcherTok.entity_type;
+}
+
+function _sentinelCanReact(watcherTok) {
+  const c = getConditions(watcherTok.id);
+  return !c.has('dead') && !c.has('unconscious') && !c.has('stunned') && !c.has('paralyzed');
+}
+
+// Finds every enemy Sentinel/Target zone a straight segment (image-percent
+// points) freshly enters — "freshly" meaning the mover wasn't already
+// standing in that zone before this segment started, so walking around
+// inside a watched area you already occupy doesn't re-trigger every step.
+// Sampled rather than solved analytically (fine at a VTT's distance scale,
+// and one code path covers both the circle and cone shapes identically) —
+// checked once at commit time, not live during the drag/drag-equivalent, so
+// this only ever runs against the already-recorded route.
+const _SENTINEL_CHECK_SAMPLES = 40;
+function _findSentinelCrossings(moverCombId, fromPct, toPct) {
+  const moverTok = _pathFindToken(moverCombId);
+  if (!moverTok) return [];
+  const found = new Map(); // sentinelCid -> {sentinelCid, x_pct, y_pct, frac}
+  for (const t of Object.values(mapTokens)) {
+    if (t.id === moverTok.id) continue;
+    const conds = getConditions(t.id);
+    if (!conds.has('sentinel') && !conds.has('target')) continue;
+    if (!_isEnemyOf(moverTok, t)) continue;
+    if (!_sentinelCanReact(t)) continue;
+    if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct)) continue; // already inside — not a fresh entry
+    for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
+      const frac = i / _SENTINEL_CHECK_SAMPLES;
+      const xPct = fromPct.x_pct + (toPct.x_pct - fromPct.x_pct) * frac;
+      const yPct = fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac;
+      if (_sentinelZoneCheck(t, xPct, yPct)) {
+        const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+        found.set(sentinelCid, { sentinelCid, x_pct: xPct, y_pct: yPct, frac });
+        break;
+      }
+    }
+  }
+  return [...found.values()].sort((a, b) => a.frac - b.frac);
+}
+
+// Shared position-commit — extracted so a normal drag/Path drop and a
+// Sentinel-interrupted step-by-step move land the same way (DOM + local
+// state + broadcast + DB write + borne-group follow).
+async function _moveTokenTo(token, x_pct, y_pct) {
+  if (!token) return;
+  const oldX = token.x_pct, oldY = token.y_pct;
+  const el = document.getElementById('token-' + token.id);
+  if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
+  token.x_pct = x_pct; token.y_pct = y_pct;
+  tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: token.id, x_pct, y_pct } });
+  await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', token.id);
+  _moveGroupWith(token.id, x_pct - oldX, y_pct - oldY, true);
+}
+
+// Whichever client controls a token gets to answer a check involving it —
+// the GM always can (same "GM can act for anyone" precedent as
+// canMoveToken), and additionally whoever's actually logged in as that
+// character can. Both may see the prompt; first answer wins (see
+// _answerSentinelCheck) — a natural escape hatch if the owning player is
+// slow to respond, without needing a separate timeout system.
+function _controlsToken(t) {
+  if (isGM()) return true;
+  return t.entity_type === 'character' && t.entity_id === currentCharacterId;
+}
+
+// One pending check on THIS client, if this client is the mover awaiting an
+// answer. Module-level single-flight state, same pattern as
+// _castPendingRounds/attackWeaponName elsewhere — only the acting
+// combatant's own move is ever mid-check at a time.
+let _sentinelCheckPending = null;
+
+function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
+  const checkId = 'sc' + Date.now() + Math.random().toString(36).slice(2);
+  return new Promise(resolve => {
+    _sentinelCheckPending = { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, resolve };
+    mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-start',
+      payload: { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct } });
+    // Also try to show it locally — covers the GM moving one monster past
+    // another monster's watch, or solo testing, with no network round trip.
+    _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct });
+  });
+}
+
+// Called both by the realtime 'sentinel-check-start' handler (for a remote
+// mover) and directly by _resolveSentinelCheck (for a local one) — only
+// actually renders if this client controls the watching token.
+function _maybeShowSentinelPrompt(payload) {
+  const watcherTok = _pathFindToken(payload.sentinelCid);
+  if (!watcherTok || !_controlsToken(watcherTok)) return;
+  if (document.getElementById('sentinel-check-modal-' + payload.checkId)) return; // already showing
+  const moverTok  = _pathFindToken(payload.moverCid);
+  const moverName = moverTok?.label || 'An enemy';
+  const isTargetAction = getConditions(watcherTok.id).has('target');
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sentinel-check-modal-' + payload.checkId;
+  overlay.style.cssText = `position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:3200;
+    background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:14px 20px;
+    font-family:Georgia,serif;font-size:0.85rem;color:var(--text);text-align:center;
+    box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
+  overlay.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">
+      ${isTargetAction ? '🎯' : '👁'} ${_paEsc(watcherTok.label)} — ${_paEsc(moverName)} entered ${isTargetAction ? 'the guarded sector' : 'melee range'}. Attack?</div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button data-ans="1" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+        font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--text);">Attack</button>
+      <button data-ans="0" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+        font-size:0.8rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">Let it pass</button>
+    </div>`;
+  overlay.querySelectorAll('button').forEach(btn => {
+    btn.onclick = () => _answerSentinelCheck(payload.checkId, btn.dataset.ans === '1');
+  });
+  document.body.appendChild(overlay);
+}
+
+function _closeSentinelPrompt(checkId) {
+  document.getElementById('sentinel-check-modal-' + checkId)?.remove();
+}
+
+function _answerSentinelCheck(checkId, attack) {
+  _closeSentinelPrompt(checkId);
+  mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-answer', payload: { checkId, attack } });
+  _applySentinelAnswer(checkId, attack); // resolve locally too, if this client is also the mover
+}
+
+// Applies an answer for checkId — a no-op unless THIS client is the one
+// actually awaiting it (the mover). Also closes the prompt here in case a
+// DIFFERENT client (e.g. the GM, answering on the real owner's behalf, or
+// vice versa) answered first — whichever responds first wins, the other
+// prompt just closes.
+async function _applySentinelAnswer(checkId, attack) {
+  _closeSentinelPrompt(checkId);
+  if (!_sentinelCheckPending || _sentinelCheckPending.checkId !== checkId) return;
+  const pending = _sentinelCheckPending;
+  _sentinelCheckPending = null;
+  if (attack) await _resolveSentinelAttack(pending);
+  pending.resolve();
+}
+
+// Reuses the exact same hit/defense/damage pipeline any other attack goes
+// through (enterAttackMode + attackTokenClick), rather than re-deriving hit
+// value/range penalty/target size/defense options — the sentinel's client
+// just "clicks" the mover token programmatically instead of a real map
+// click. Breaks the watching stance first (clears the full slot, which
+// auto-clears the sentinel/target condition via atClearSlot's existing
+// _defCondFromLabel handling), then lets attackTokenClick's own atSetSlot
+// spend only the attacking hand — the move slot is never touched, so they
+// can still move this round, per spec.
+async function _resolveSentinelAttack(pending) {
+  const { sentinelCid, moverCid } = pending;
+  const sentinelEnt = getEntity(sentinelCid);
+  const sentinelTok = _pathFindToken(sentinelCid);
+  const moverTok    = _pathFindToken(moverCid);
+  if (!sentinelEnt || !sentinelTok || !moverTok) return;
+
+  const isTargetAction = getConditions(sentinelTok.id).has('target');
+  const held = sentinelEnt.held || {};
+  let weaponName = null, actionLabel = null, rangeFt = 0;
+
+  if (isTargetAction) {
+    let bestIncrement = -1;
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      for (const r of RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalizeWeaponName(itemName))) {
+        if ((r.rangeIncrement || 0) > bestIncrement) {
+          bestIncrement = r.rangeIncrement || 0; weaponName = itemName; actionLabel = r.action; rangeFt = r.rangeIncrement || 5;
+        }
+      }
+    }
+  } else {
+    let bestReach = -1;
+    for (const side of ['right', 'left']) {
+      const itemName = held[side];
+      if (!itemName) continue;
+      for (const r of MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalizeWeaponName(itemName) && r.damageMax > 0)) {
+        if (r.reach > bestReach) { bestReach = r.reach; weaponName = itemName; actionLabel = r.action; rangeFt = r.reach; }
+      }
+    }
+    if (!weaponName) {
+      const row = MELEE_WEAPONS.find(r => r.weapon === BARE_HANDED && r.damageMax > 0);
+      weaponName = BARE_HANDED; actionLabel = row?.action || 'Punch'; rangeFt = row?.reach || 1;
+    }
+  }
+  if (!weaponName || !actionLabel) return;
+
+  atClearSlot(sentinelCid, 'full'); // no longer holding — auto-clears sentinel/target
+  logCombat(`${sentinelTok.label} reacts to ${moverTok.label} entering ${isTargetAction ? 'their guarded sector' : 'melee range'}!`, 'roll');
+  enterAttackMode(sentinelCid, weaponName, actionLabel, isTargetAction, rangeFt);
+  attackTokenClick(moverTok.id);
+}
+
+// Walks a recorded route (image-percent waypoints) leg by leg, pausing at
+// each fresh Sentinel/Target crossing to ask before continuing — movement
+// always finishes at the true final waypoint regardless of any reaction's
+// outcome, per spec ("after the attack, the enemy continues their action").
+async function _executeMoveWithSentinelChecks(combId, waypoints) {
+  const moverTok = _pathFindToken(combId);
+  if (!moverTok || !waypoints.length) return;
+  if (waypoints.length < 2) { await _moveTokenTo(moverTok, waypoints[0].x_pct, waypoints[0].y_pct); return; }
+
+  for (let i = 1; i < waypoints.length; i++) {
+    const from = waypoints[i - 1], to = waypoints[i];
+    for (const cross of _findSentinelCrossings(combId, from, to)) {
+      await _moveTokenTo(moverTok, cross.x_pct, cross.y_pct);
+      await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct);
+    }
+  }
+  const last = waypoints[waypoints.length - 1];
+  await _moveTokenTo(moverTok, last.x_pct, last.y_pct);
 }
 
 // ── Token info panel ─────────────────────────────────────────────────────────
@@ -12378,6 +12831,7 @@ document.addEventListener('keydown', e => {
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
+    else if (targetAimMode) { exitTargetAimMode(); e.stopPropagation(); }
   }
 });
 
@@ -12694,6 +13148,7 @@ let pathCharId  = null; // combatant id this path is for
 
 function enterPathMode(combatantId) {
   if (pathMode) exitPathMode();
+  if (targetAimMode) exitTargetAimMode();
   pathMode   = true;
   pathPoints = [];
   pathCharId = combatantId;
@@ -12922,26 +13377,20 @@ async function pathCommit() {
   const feet   = pathTotalFeet();
   const combId = pathCharId;
 
-  // Move token to last waypoint
-  if (pathPoints.length >= 2) {
-    const last  = pathPoints[pathPoints.length - 1];
-    const imgX  = (last.x - mapOffsetX) / mapScale;
-    const imgY  = (last.y - mapOffsetY) / mapScale;
-    const x_pct = Math.min(100, Math.max(0, (imgX / mapImgW) * 100));
-    const y_pct = Math.min(100, Math.max(0, (imgY / mapImgH) * 100));
-    const token = combId ? _pathFindToken(combId) : null;
-    if (token) {
-      const oldX = token.x_pct, oldY = token.y_pct; // for the group delta
-      const el = document.getElementById('token-' + token.id);
-      if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
-      token.x_pct = x_pct; token.y_pct = y_pct;
-      tokenChannel?.send({ type:'broadcast', event:'token-move', payload:{ id:token.id, x_pct, y_pct } });
-      await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', token.id);
-      _moveGroupWith(token.id, x_pct - oldX, y_pct - oldY, true); // group follows by delta
-    }
+  // Move token along the recorded route, pausing at any fresh Sentinel/
+  // Target crossing along the way — see _executeMoveWithSentinelChecks.
+  if (pathPoints.length >= 2 && combId) {
+    const waypoints = pathPoints.map(p => {
+      const imgX = (p.x - mapOffsetX) / mapScale, imgY = (p.y - mapOffsetY) / mapScale;
+      return { x_pct: Math.min(100, Math.max(0, (imgX / mapImgW) * 100)),
+               y_pct: Math.min(100, Math.max(0, (imgY / mapImgH) * 100)) };
+    });
+    exitPathMode();
+    await _executeMoveWithSentinelChecks(combId, waypoints);
+  } else {
+    exitPathMode();
   }
 
-  exitPathMode();
   if (!combId) return;
 
   _commitMoveSlot(combId, feet);
@@ -13612,6 +14061,7 @@ initMapInteraction = function() {
     if (calMouseDown(e))       { e.stopImmediatePropagation(); return; }
     if (measureMouseDown(e))   { e.stopImmediatePropagation(); return; }
     if (aoeMouseDown(e))       { e.stopImmediatePropagation(); return; }
+    if (targetAimMouseDown(e)) { e.stopImmediatePropagation(); return; }
     if (obstacleMouseDown(e))  { e.stopImmediatePropagation(); return; }
     if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
@@ -13622,7 +14072,7 @@ initMapInteraction = function() {
     if (wallMode && _wallShape() === 'line') { e.preventDefault(); _wallCommitLine(); }
   });
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); targetAimMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
   window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   obstacleMouseUp(e); wallMouseUp(e); });
 };
 
@@ -14386,6 +14836,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260817c"></script>
+<script src="panels.js?v=20260817g"></script>
 </body>
 </html>

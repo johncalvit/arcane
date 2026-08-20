@@ -15,7 +15,8 @@
 // _playSetHand, _acSetHand, _pathFindToken, getLoadoutItemNames, _recoverTarget,
 // SPELLS, hasMagicClass, _spellSuccessRoll, atCastSpell, atCompleteCast, atRound,
 // _openSpellPickerModal, _maintainedSpellInfo, atStopMaintaining,
-// _slotRemaining, _slotCountdownLabel, _openPlaySpellBookModal.
+// _slotRemaining, _slotCountdownLabel, _openPlaySpellBookModal,
+// enterTargetAimMode, atCloseModal.
 
 function _paEsc(s) {
   return String(s == null ? '' : s)
@@ -714,12 +715,17 @@ function _dlgRender(body) {
   fullChips += AT_FULLBODY.map(a => {
     const lit = c.slots.full?.label === a.label;
     const disabled = halfUsed && a.label === 'Evade';
+    // Target needs a facing picked on the map before it locks in (a cone,
+    // unlike Sentinel's all-around circle) — see enterTargetAimMode.
+    // Everything else sets the slot immediately, same as always.
+    const setData = a.label === 'Target'
+      ? { dact: 'aimtarget', combatantId: id }
+      : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 };
     return _dlgChip({
       // When active, show the countdown; otherwise the action's total duration.
       label: a.label, sub: lit ? _slotCountdownLabel(c.slots.full) : _dlgDurLabel(a.dur), lit, disabled,
       title: disabled ? 'Over half movement used this round' : '',
-      data: lit ? { dact: 'off', slot: 'full' }
-                : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 },
+      data: lit ? { dact: 'off', slot: 'full' } : setData,
     });
   }).join('');
 
@@ -1087,6 +1093,10 @@ async function _dlgAct(d, id, body) {
     case 'castspell':
       await atCastSpell(id, d.spellname);
       _dlgRender(body);
+      break;
+    case 'aimtarget':
+      atCloseModal();
+      enterTargetAimMode(id);
       break;
     case 'openspellpicker':
       _openSpellPickerModal(id); // opens on top of the still-open dialog; re-renders on pick
