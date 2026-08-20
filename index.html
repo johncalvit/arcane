@@ -4464,7 +4464,6 @@ function openSpeciesForm(name) {
 
   const d = name ? (RACE_DATA[name] || {}) : {};
   document.getElementById('smgr-name').value        = name || '';
-  document.getElementById('smgr-name').disabled      = !!name;
   document.getElementById('smgr-height').value       = d.Height ?? 66;
   document.getElementById('smgr-weight').value       = d.Weight ?? 1;
   document.getElementById('smgr-body-type').value    = d.BodyType ?? 'Humanoid';
@@ -4513,6 +4512,23 @@ function saveSpecies() {
   const nameInput = document.getElementById('smgr-name').value.trim();
   if (!nameInput) { alert('Species name is required.'); return; }
 
+  // Renaming an existing species is more than an in-memory key swap — every
+  // character/creature currently set to the old name references it as a
+  // plain string (characters.species / session_creatures.species), so a
+  // rename that only touched RACE_DATA would silently orphan them (their
+  // species dropdown would show a stale value, and every RACE_DATA[species]
+  // lookup used for attribute multipliers/natural weapons/body type would
+  // stop matching). See _renameSpeciesEverywhere for the DB-side half.
+  const oldName  = _speciesEditName;
+  const isRename = oldName && oldName !== nameInput;
+  if (isRename && RACE_DATA[nameInput]) {
+    alert(`A species named "${nameInput}" already exists — pick a different name, or delete that one first.`);
+    return;
+  }
+  if (isRename && !confirm(`Rename "${oldName}" to "${nameInput}"? This updates every character and creature in this campaign currently set to "${oldName}".`)) {
+    return;
+  }
+
   const entry = {
     Height: parseFloat(document.getElementById('smgr-height').value) || 66,
     Weight: parseFloat(document.getElementById('smgr-weight').value) || 1,
@@ -4532,11 +4548,33 @@ function saveSpecies() {
     entry[s.raceKey] = document.getElementById('smgr-natural-' + s.key)?.value || '';
   });
 
+  if (isRename) delete RACE_DATA[oldName];
   RACE_DATA[nameInput] = entry;
   buildCharSelects();
   buildSpeciesManagerTable();
   closeSpeciesForm();
   writeConfigToSupabase();
+  if (isRename) _renameSpeciesEverywhere(oldName, nameInput);
+}
+
+// Propagates a species rename to every character/creature that referenced
+// the old name — see saveSpecies. Characters join a campaign via
+// campaign_characters (Phase 3: user-owned, not campaign-scoped rows), so
+// their update has to go through that link table rather than a direct
+// campaign_id filter; session_creatures already carries campaign_id
+// directly. Best-effort: a failure here surfaces as a toast but doesn't
+// undo the already-saved RACE_DATA rename, same as any other partial-write
+// risk in this app — rare, and re-running Save Species again is harmless.
+async function _renameSpeciesEverywhere(oldName, newName) {
+  if (!currentCampaignId) return;
+  const { data: links } = await sb.from('campaign_characters').select('character_id').eq('campaign_id', currentCampaignId);
+  const charIds = (links || []).map(l => l.character_id);
+  if (charIds.length) {
+    const { error } = await sb.from('characters').update({ species: newName }).eq('species', oldName).in('id', charIds);
+    if (error) _writeErrorToast(error, 'characters (species rename)');
+  }
+  const { error: scErr } = await sb.from('session_creatures').update({ species: newName }).eq('species', oldName).eq('campaign_id', currentCampaignId);
+  if (scErr) _writeErrorToast(scErr, 'session_creatures (species rename)');
 }
 
 function deleteSpecies(name) {
@@ -4943,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817e';
+const VERSION = 'v0.1.20260817f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
