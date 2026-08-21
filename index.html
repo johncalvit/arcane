@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818f';
+const VERSION = 'v0.1.20260818g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12269,15 +12269,25 @@ function targetAimMouseDown(e) {
 // never altered by a Sentinel/Target reaction, win or lose — only whether
 // there's a pause and a swing along the way.
 //
-// Is xPct/yPct inside this watcher's threat zone right now? Shared by the
-// range-circle/cone display (drawSentinelRanges) and the actual trigger
-// check, so the drawn zone and the enforced one can't drift apart.
-function _sentinelZoneCheck(watcherTok, xPct, yPct) {
+// Is xPct/yPct (the mover's CENTER) inside this watcher's threat zone right
+// now? Live report: a large token could visibly overlap the drawn circle
+// (which already includes the watcher's own radius, same as
+// drawSentinelRanges) well before its bare center point crossed the
+// boundary, so a big monster reaching toward a Sentinel never registered
+// as "entered" even when it clearly had, on screen. Reach is measured
+// edge-to-edge — both tokens' own radii come off the raw center distance
+// before comparing to reach, not just the watcher's (moverTok is optional
+// so this can still be called with just a point, e.g. from drawing code,
+// with the mover-radius term simply omitted).
+function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
   if (mapScalePPF <= 0) return false;
   const conds = getConditions(watcherTok.id);
   const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
   const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
-  const distFt = Math.hypot(dx, dy) / mapScalePPF;
+  const rawDistFt = Math.hypot(dx, dy) / mapScalePPF;
+  const watcherRadiusFt = (getTokenSize(watcherTok) / 2) / mapScalePPF;
+  const moverRadiusFt   = moverTok ? (getTokenSize(moverTok) / 2) / mapScalePPF : 0;
+  const distFt = Math.max(0, rawDistFt - watcherRadiusFt - moverRadiusFt);
   if (conds.has('sentinel') && distFt <= _sentinelMeleeReachFt(watcherTok)) return true;
   if (conds.has('target')) {
     const rangeFt = _targetWeaponRangeFt(watcherTok);
@@ -12370,14 +12380,14 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the ⚔ Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
-    else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct)) why = 'mover already inside this zone before the move started — not a fresh entry';
+    else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target').join('/')}): SKIPPED — ${why}`); continue; }
     let hit = false;
     for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
       const frac = i / _SENTINEL_CHECK_SAMPLES;
       const xPct = fromPct.x_pct + (toPct.x_pct - fromPct.x_pct) * frac;
       const yPct = fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac;
-      if (_sentinelZoneCheck(t, xPct, yPct)) {
+      if (_sentinelZoneCheck(t, xPct, yPct, moverTok)) {
         const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
         found.set(sentinelCid, { sentinelCid, x_pct: xPct, y_pct: yPct, frac });
         notes.push(`${t.label}: CROSSED at ${Math.round(frac*100)}% along the segment`);
