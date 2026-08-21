@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818e';
+const VERSION = 'v0.1.20260818f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12292,12 +12292,50 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct) {
   return false;
 }
 
-// character vs creature only — no formal faction system exists elsewhere in
-// this game (AOE spells already hit everyone regardless of side), so this
-// is the same simple heuristic: characters watch for creatures and vice
-// versa, same-category tokens never trigger each other.
+// Live-tested findings, in order: entity_type alone ('character' vs
+// 'creature') isn't reliable — a GM can (and does) build monsters as plain
+// characters instead of going through the separate creature-spawn flow.
+// Falling back to species (RACE_DATA[species].monsterOnly, the Species
+// Manager's own "Monster" checkbox) isn't reliable either — a friendly orc
+// companion or a hostile human bandit both break that assumption just as
+// easily. Neither signal is ever going to be right 100% of the time because
+// neither one is actually what "enemy" means — that's a per-token, GM-
+// decided fact this game has no other record of. So: an explicit `foe` /
+// `friendly` marker on the token's own conditions (toggled via the ⚔ button
+// in the Tokens tab's on-map list, see toggleTokenFoe) is now the real
+// source of truth, auto-defaulting from the old monster heuristic only
+// until the GM actually sets it for that token. No formal faction system
+// exists elsewhere in this game (AOE spells already hit everyone regardless
+// of side) — this is still a simple binary (foe vs not), not real teams.
+function _isTokenMonster(t) {
+  if (t.entity_type === 'creature') return true;
+  let species = t.species || '';
+  if (!species && t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
+    species = playCharCache[t.entity_id].species || playCharCache[t.entity_id].race || '';
+  }
+  return !!(RACE_DATA[species] || {}).monsterOnly;
+}
+function _isTokenFoe(t) {
+  const conds = Array.isArray(t?.conditions) ? t.conditions : [];
+  if (conds.includes('foe')) return true;
+  if (conds.includes('friendly')) return false;
+  return _isTokenMonster(t); // no explicit call yet — best-effort default
+}
+async function toggleTokenFoe(tokenId) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const makeFoe = !_isTokenFoe(t); // flip whatever it currently resolves to
+  const conds = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+  conds.delete('foe'); conds.delete('friendly');
+  conds.add(makeFoe ? 'foe' : 'friendly');
+  t.conditions = [...conds];
+  renderOnMapTokens();
+  drawSentinelRanges();
+  const { error } = await sb.from('map_tokens').update({ conditions: t.conditions }).eq('id', tokenId);
+  if (error) _writeErrorToast(error, 'map_tokens (foe flag)');
+}
 function _isEnemyOf(moverTok, watcherTok) {
-  return moverTok.entity_type !== watcherTok.entity_type;
+  return _isTokenFoe(moverTok) !== _isTokenFoe(watcherTok);
 }
 
 function _sentinelCanReact(watcherTok) {
@@ -12330,7 +12368,7 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     const conds = getConditions(t.id);
     if (!conds.has('sentinel') && !conds.has('target')) continue;
     let why = null;
-    if (!_isEnemyOf(moverTok, t)) why = `same entity_type (${t.entity_type}) as mover — not an enemy`;
+    if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the ⚔ Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
     else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target').join('/')}): SKIPPED — ${why}`); continue; }
@@ -12773,10 +12811,20 @@ function renderOnMapTokens() {
     const combatBtn = (t.entity_type !== 'item')
       ? `<button class="btn-sm" onclick="atAddTokenToCombat('${t.id}')" title="${inCombat ? 'In combat' : 'Add to combat'}" style="padding:2px 6px;${inCombat ? 'color:var(--gold2);' : ''}">${inCombat ? '⚔' : '+'}</button>`
       : '';
+    // Explicit GM-set Foe flag — see _isTokenFoe. Not shown to players
+    // (unlike the visible CONDITION_DEFS badges), this is table bookkeeping
+    // only: which side a token is on, for Sentinel/Target's enemy check and
+    // anything else that needs it later. Auto-defaults from species/type
+    // until touched, but a click here always makes it explicit either way.
+    const isFoe = (t.entity_type !== 'item') && _isTokenFoe(t);
+    const foeBtn = (t.entity_type !== 'item')
+      ? `<button class="btn-sm" onclick="toggleTokenFoe('${t.id}')" title="${isFoe ? 'Foe — hostile to the party. Click to mark as not a foe.' : 'Not currently a foe. Click to mark hostile to the party.'}" style="padding:2px 6px;${isFoe ? 'color:#e05050;border-color:#e05050;' : 'opacity:0.4;'}">⚔</button>`
+      : '';
     return `<div class="token-on-map-row">
       <span class="t-dot" style="background:${dot};"></span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.label}</span>
       ${combatBtn}
+      ${foeBtn}
       <button class="btn-sm" onclick="toggleTokenVisibility('${t.id}')" title="${t.visible ? 'Hide from players' : 'Show to players'}" style="padding:2px 6px;">${eye}</button>
       <button class="token-remove-btn" onclick="removeToken('${t.id}')">✕</button>
     </div>`;
