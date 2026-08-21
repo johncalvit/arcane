@@ -719,7 +719,7 @@ function _dlgRender(body) {
     // unlike Sentinel's all-around circle) — see enterTargetAimMode.
     // Everything else sets the slot immediately, same as always.
     const setData = a.label === 'Target'
-      ? { dact: 'aimtarget', combatantId: id }
+      ? { dact: 'aimtarget' } // combatantId comes from _dlgAct's own `id` param, not this data blob
       : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 };
     return _dlgChip({
       // When active, show the countdown; otherwise the action's total duration.
