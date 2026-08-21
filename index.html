@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818b';
+const VERSION = 'v0.1.20260818c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11437,24 +11437,38 @@ async function onTokenMouseUp(e) {
   const movedId = dragTokenId;
   dragTokenId = null;
 
+  const draggedTok = mapTokens[movedId];
+  const draggedCombId = draggedTok
+    ? (draggedTok.entity_type === 'character' ? 'char::' + draggedTok.entity_id : 'creature::' + draggedTok.id)
+    : null;
+
   // A player dragging their OWN token on their OWN active-combat turn (the
   // only case startTokenDrag lets reach a real drag at all during combat —
   // see its comment) is a tracked Move, not a free reposition: same
-  // feet/time bookkeeping a Path-mode waypoint route gives (including any
-  // Sentinel/Target crossing along the dragged segment), just for the
+  // feet/time bookkeeping a Path-mode waypoint route gives, just for the
   // single straight segment actually dragged.
-  const draggedTok = mapTokens[movedId];
   const isBudgetedMove = draggedTok && !isGM() && draggedTok.entity_type === 'character'
       && draggedTok.entity_id === currentCharacterId && _atIsCombatActive() && _dragStartXPct != null
-      && _atSharedActive()?.id === ('char::' + draggedTok.entity_id);
+      && _atSharedActive()?.id === draggedCombId;
 
-  if (isBudgetedMove) {
-    const combatantId = 'char::' + draggedTok.entity_id;
+  // ANY drag of a token that's actually in the tracker, during active
+  // combat, can trip a Sentinel/Target watch — not just a player's own
+  // budgeted move above. A GM free-dragging a monster toward a player's
+  // readied watch is the single most common way this comes up in play, and
+  // it was falling straight into the untracked "else" branch below with no
+  // check at all. Budget tracking still only applies to the narrower
+  // isBudgetedMove case; this only gates whether the interrupt fires.
+  const isTrackedCombatant = draggedCombId && _dragStartXPct != null && _atIsCombatActive()
+      && atCombatants.some(c => c.id === draggedCombId);
+
+  if (isTrackedCombatant) {
     const from = { x_pct: _dragStartXPct, y_pct: _dragStartYPct };
     const to   = { x_pct, y_pct };
-    await _executeMoveWithSentinelChecks(combatantId, [from, to]);
-    _commitMoveSlot(combatantId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
-    atOpenSlotModal(combatantId, 'right');
+    await _executeMoveWithSentinelChecks(draggedCombId, [from, to]);
+    if (isBudgetedMove) {
+      _commitMoveSlot(draggedCombId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
+      atOpenSlotModal(draggedCombId, 'right');
+    }
   } else {
     if (mapTokens[movedId]) {
       mapTokens[movedId].x_pct = x_pct;
