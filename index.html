@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260817g';
+const VERSION = 'v0.1.20260818a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13732,19 +13732,33 @@ function _fogApplyTokenVisibility(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!t || !el) return;
   const viewer = _fogViewerToken();
-  const visible = !viewer || t.id === viewer.id || !_fogLastPoly.length
+  // No viewer token yet — nothing visible at all (see drawFog), not
+  // everything. Previously defaulted to visible=true here, the same leak:
+  // a player added mid-session could see every monster's position before
+  // the GM had even placed their own token.
+  if (!viewer) { el.style.display = 'none'; return; }
+  const visible = t.id === viewer.id || !_fogLastPoly.length
     || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
   el.style.display = visible ? '' : 'none';
 }
 function _fogApplyAllTokenVisibility() {
   for (const id of Object.keys(mapTokens)) _fogApplyTokenVisibility(id);
 }
-// Fog fully off (GM, or no viewer token) — make sure nothing is left hidden
-// from a PREVIOUS state (e.g. a player just became the GM mid-session).
+// Fog fully off (GM) — make sure nothing is left hidden from a PREVIOUS
+// state (e.g. a player just became the GM mid-session).
 function _fogShowAllTokens() {
   for (const id of Object.keys(mapTokens)) {
     const el = document.getElementById('token-' + id);
     if (el) el.style.display = '';
+  }
+}
+// Fog fully blocked (a player with no viewer token yet) — the opposite of
+// _fogShowAllTokens: hide every token, nothing to see until there's an
+// actual viewpoint to see it from.
+function _fogHideAllTokens() {
+  for (const id of Object.keys(mapTokens)) {
+    const el = document.getElementById('token-' + id);
+    if (el) el.style.display = 'none';
   }
 }
 
@@ -13822,11 +13836,38 @@ let _fogScratchCanvas  = null;
 function drawFog() {
   const canvas = document.getElementById('fog-canvas');
   if (!canvas) return;
-  const viewer = _fogViewerToken();
-  if (!viewer || mapImgW <= 0 || mapImgH <= 0) {
+
+  // The GM always sees everything — no fog to compute, same as before.
+  if (isGM()) {
     canvas.style.display = 'none';
     _fogLastPoly = [];
     _fogShowAllTokens();
+    return;
+  }
+
+  const viewer = _fogViewerToken();
+  if (!viewer || mapImgW <= 0 || mapImgH <= 0) {
+    // A player with no token on this map yet (not placed, mid-join, or on
+    // a different map) must NOT get a free look at it — block everything
+    // instead of showing everything. This used to fall through to the same
+    // "fog off" branch the GM gets, which meant a player added mid-session
+    // could see the whole map, unexplored areas and monster positions
+    // included, for however long it took the GM to actually place their
+    // token. Opposite of _fogShowAllTokens below: solid black, nothing
+    // visible, until there's an actual viewpoint to see from.
+    _fogLastPoly = [];
+    if (mapImgW > 0 && mapImgH > 0) {
+      canvas.width  = mapImgW;
+      canvas.height = mapImgH;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, mapImgW, mapImgH);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, mapImgW, mapImgH);
+      canvas.style.display = 'block';
+    } else {
+      canvas.style.display = 'none';
+    }
+    _fogHideAllTokens();
     return;
   }
 
