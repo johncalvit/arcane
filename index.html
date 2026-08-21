@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818h';
+const VERSION = 'v0.1.20260819a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7359,6 +7359,16 @@ async function atResolveRecovery(combatantId, effectKey) {
   const { pct: target, rounds } = _recoverTarget(ent, token.id, effectKey);
 
   if (effectKey === 'unconscious') {
+    // Resuscitate only ever meant "downed by 0 Toughness, stabilize at 1" —
+    // _checkDownedState sets unconscious AND dead together once Blood also
+    // maxes out (that's the actual death trigger, separate from Toughness),
+    // but this action only ever touched Toughness. A dead character offered
+    // (and able to succeed at) Resuscitate ended up in a broken half-state:
+    // Toughness reset to 1, still flagged dead, Blood never addressed —
+    // reported live as a character showing both "revived" stats and ☠ Dead
+    // at once. Blood loss is meant to be the harder, more final threshold;
+    // this isn't the tool to walk it back.
+    if (ent?.conditions?.has('dead')) { showToast('Already dead — Resuscitate only works on someone knocked out, not blood loss.', 'warn'); return; }
     openRoller({
       label: `Resuscitate — ${ent?.name || 'Target'}`,
       target, targetLabel: 'roll under to stabilize',
@@ -13678,7 +13688,16 @@ async function loadMapWalls(mapId) {
   mapWalls = [];
   if (!mapId) { drawWalls(); drawFog(); return; }
   const { data } = await sb.from('maps').select('walls').eq('id', mapId).single();
-  mapWalls = Array.isArray(data?.walls) ? data.walls : [];
+  // Backfill blocksVision:true for any wall saved before that flag actually
+  // meant anything (fog-of-war vision-blocking shipped after the wall
+  // drawing tool did) — a wall with no explicit flag stored is undefined,
+  // not false, but _fogOccluderSegments' `if (!w.blocksVision) continue`
+  // treats the two identically, silently excluding it from occlusion. A
+  // drawn wall is meant to be a real barrier by default (matches the "👁
+  // Blocks Vision" checkbox's own default of checked for new ones), so an
+  // old wall missing the field should behave the same way, not the opposite.
+  mapWalls = (Array.isArray(data?.walls) ? data.walls : [])
+    .map(w => w.blocksVision === undefined ? { ...w, blocksVision: true } : w);
   drawWalls();
   drawFog();
 }
@@ -13696,6 +13715,11 @@ async function toggleWallFlag(wallId, flag) {
   w[flag] = !w[flag];
   await saveMapWalls();
   drawWalls();
+  // Flipping blocksVision needs the fog to actually recompute — previously
+  // only drawWalls() ran here, so toggling this from the Manage Walls list
+  // had no visible effect on vision until something ELSE happened to
+  // trigger a redraw (a token moving, a map reload).
+  if (flag === 'blocksVision') drawFog();
 }
 
 // Manual damage entry for obstacle walls (Ice Shield, ...) — there's no
@@ -14994,6 +15018,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260818b"></script>
+<script src="panels.js?v=20260819a"></script>
 </body>
 </html>

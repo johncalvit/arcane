@@ -945,7 +945,12 @@ function _dlgRender(body) {
   if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: '🩸 Stanch Bleeding' });
   if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: '🩼 Shake Off Slow' });
   if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: '🧪 Neutralize Acid' });
-  if (conds.has('unconscious')) recoverable.push({ key: 'unconscious', label: '💤 Resuscitate' });
+  // Resuscitate is only for a Toughness knockout — _checkDownedState (index.html)
+  // sets unconscious AND dead together once Blood also maxes out (the real
+  // death trigger, separate from Toughness), and this action only ever fixed
+  // Toughness. Offering it on an already-dead token let a successful roll
+  // produce a broken half-revived state: Toughness reset, still flagged dead.
+  if (conds.has('unconscious') && !conds.has('dead')) recoverable.push({ key: 'unconscious', label: '💤 Resuscitate' });
   if (recoverable.length) {
     recoverHtml = _dlgSection('🎲 Recover', recoverable.map(r => {
       const t = (typeof _recoverTarget === 'function' && ent && ent.tokenId) ? _recoverTarget(ent, ent.tokenId, r.key) : null;
