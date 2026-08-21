@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818g';
+const VERSION = 'v0.1.20260818h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9462,8 +9462,14 @@ async function atRollInitiative(combatantId) {
   }
 }
 
-async function atRollAllMonsters() {
-  for (const c of atCombatants.filter(x => x.type === 'creature')) {
+// Auto-rolls initiative for every combatant who hasn't rolled yet —
+// characters and creatures alike, not just monsters. Same auto-roll (no
+// interactive roller popup) atRollAllMonsters already used for creatures;
+// applying that to characters too here is a deliberate GM-convenience
+// bulk action (e.g. an AFK player, or just wanting to get combat moving),
+// distinct from atRollInitiative's own per-character interactive roll.
+async function atRollAllRemaining() {
+  for (const c of atCombatants.filter(x => x.initiative == null)) {
     const base = Math.max(1, await _atInitBase(c.id));
     c.initiative = Math.floor(Math.random() * base) + 1;
     c.tieBreak   = Math.floor(Math.random() * base) + 1;
@@ -9677,8 +9683,8 @@ function atSetDropped(combatantId, dropped) {
 function renderAtList() {
   document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
-  const monstersBtn = document.getElementById('at-roll-monsters-btn');
-  if (monstersBtn) monstersBtn.style.display = (isGM() && atCombatants.some(c => c.type === 'creature')) ? '' : 'none';
+  const rollRemainingBtn = document.getElementById('at-roll-remaining-btn');
+  if (rollRemainingBtn) rollRemainingBtn.style.display = (isGM() && atCombatants.some(c => c.initiative == null)) ? '' : 'none';
   const startBtn = document.getElementById('at-start-combat-btn');
   if (startBtn) {
     startBtn.style.display = (isGM() && atCombatants.length > 0) ? '' : 'none';
@@ -14849,7 +14855,7 @@ switchGmTab = function(tab) {
             <button class="at-btn danger" onclick="atResetFull()" title="Reset everything including initiative">↺ All</button>
             <button class="at-btn" onclick="atClearStuckGrapples()" title="Release any grab/carry relationships left dangling from before Held/Carrying could be cleared properly — safe to run any time">🧹 Fix Holds</button>
             <button class="at-btn" onclick="atClearStuckAoe()" title="Clear any tokens left stuck with a pulsing AOE-save highlight and no working resolve panel — safe to run any time">🧹 Fix AOE</button>
-            <button id="at-roll-monsters-btn" class="at-btn primary" onclick="atRollAllMonsters()" title="Roll initiative for all monsters" style="display:none;">🎲 Monsters</button>
+            <button id="at-roll-remaining-btn" class="at-btn primary" onclick="atRollAllRemaining()" title="Roll initiative for every combatant who hasn't rolled yet" style="display:none;">🎲 Roll Remaining</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
           </div>
         </div>
