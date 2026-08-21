@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260818d';
+const VERSION = 'v0.1.20260818e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12314,17 +12314,27 @@ function _sentinelCanReact(watcherTok) {
 // checked once at commit time, not live during the drag/drag-equivalent, so
 // this only ever runs against the already-recorded route.
 const _SENTINEL_CHECK_SAMPLES = 40;
-function _findSentinelCrossings(moverCombId, fromPct, toPct) {
+// _debug: when true, logs exactly what this pass saw — every token carrying
+// a sentinel/target condition, and why each one was or wasn't counted —
+// straight to the combat log (visible in the Journal panel) rather than
+// requiring devtools. Temporary diagnostic for the "still not triggering"
+// live report; safe to leave in (one line per segment, only when something
+// with the condition actually exists on the map) or strip out later.
+function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   const moverTok = _pathFindToken(moverCombId);
-  if (!moverTok) return [];
+  if (!moverTok) { if (_debug) logCombat(`[sentinel debug] no mover token for ${moverCombId}`, 'roll'); return []; }
   const found = new Map(); // sentinelCid -> {sentinelCid, x_pct, y_pct, frac}
+  const notes = [];
   for (const t of Object.values(mapTokens)) {
     if (t.id === moverTok.id) continue;
     const conds = getConditions(t.id);
     if (!conds.has('sentinel') && !conds.has('target')) continue;
-    if (!_isEnemyOf(moverTok, t)) continue;
-    if (!_sentinelCanReact(t)) continue;
-    if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct)) continue; // already inside — not a fresh entry
+    let why = null;
+    if (!_isEnemyOf(moverTok, t)) why = `same entity_type (${t.entity_type}) as mover — not an enemy`;
+    else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
+    else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct)) why = 'mover already inside this zone before the move started — not a fresh entry';
+    if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target').join('/')}): SKIPPED — ${why}`); continue; }
+    let hit = false;
     for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
       const frac = i / _SENTINEL_CHECK_SAMPLES;
       const xPct = fromPct.x_pct + (toPct.x_pct - fromPct.x_pct) * frac;
@@ -12332,10 +12342,14 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct) {
       if (_sentinelZoneCheck(t, xPct, yPct)) {
         const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
         found.set(sentinelCid, { sentinelCid, x_pct: xPct, y_pct: yPct, frac });
+        notes.push(`${t.label}: CROSSED at ${Math.round(frac*100)}% along the segment`);
+        hit = true;
         break;
       }
     }
+    if (!hit) notes.push(`${t.label}: eligible, but the segment never entered its zone`);
   }
+  if (_debug && notes.length) logCombat(`[sentinel debug] ${moverTok.label}'s move — ${notes.join(' · ')}`, 'roll');
   return [...found.values()].sort((a, b) => a.frac - b.frac);
 }
 
@@ -12501,7 +12515,7 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
 
   for (let i = 1; i < waypoints.length; i++) {
     const from = waypoints[i - 1], to = waypoints[i];
-    for (const cross of _findSentinelCrossings(combId, from, to)) {
+    for (const cross of _findSentinelCrossings(combId, from, to, true)) {
       await _moveTokenTo(moverTok, cross.x_pct, cross.y_pct);
       await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct);
     }
