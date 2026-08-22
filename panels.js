@@ -714,7 +714,13 @@ function _dlgRender(body) {
   }
   fullChips += AT_FULLBODY.map(a => {
     const lit = c.slots.full?.label === a.label;
-    const disabled = halfUsed && a.label === 'Evade';
+    // Target needs a ranged weapon actually in hand (can't guard a sector
+    // with fists); Sentinel needs some melee option — a real melee weapon,
+    // or just a free hand for a bare-handed swing — see
+    // _hasRangedWeaponEquipped/_hasMeleeCapability.
+    const noWeapon = (a.label === 'Target'   && !_hasRangedWeaponEquipped(ent))
+                   || (a.label === 'Sentinel' && !_hasMeleeCapability(ent));
+    const disabled = (halfUsed && a.label === 'Evade') || noWeapon;
     // Target needs a facing picked on the map before it locks in (a cone,
     // unlike Sentinel's all-around circle) — see enterTargetAimMode.
     // Everything else sets the slot immediately, same as always.
@@ -724,7 +730,9 @@ function _dlgRender(body) {
     return _dlgChip({
       // When active, show the countdown; otherwise the action's total duration.
       label: a.label, sub: lit ? _slotCountdownLabel(c.slots.full) : _dlgDurLabel(a.dur), lit, disabled,
-      title: disabled ? 'Over half movement used this round' : '',
+      title: noWeapon
+        ? (a.label === 'Target' ? 'Needs a ranged weapon in hand' : 'Needs a melee weapon or a free hand')
+        : disabled ? 'Over half movement used this round' : '',
       data: lit ? { dact: 'off', slot: 'full' } : setData,
     });
   }).join('');

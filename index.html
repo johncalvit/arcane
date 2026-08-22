@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260819b';
+const VERSION = 'v0.1.20260819c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12030,6 +12030,30 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
 // Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
 function refreshAttackCircle() { if (attackMode) drawRangeCircle(); }
 
+// Gates for offering Sentinel/Target at all, from getEntity()'s normalized
+// `held` (works for characters and creatures alike, natural weapons
+// included). Mirrors what the actual attack resolution already does — see
+// _resolveSentinelAttack — Sentinel swings with whatever melee weapon (or
+// natural weapon) is held, falling back to bare hands if a hand is simply
+// empty; Target shoots with whatever ranged weapon is held. A caster with
+// both hands full of ranged weapons has no melee option, not even
+// bare-handed (hands are occupied), so Sentinel isn't offered then either.
+function _hasRangedWeaponEquipped(ent) {
+  const held = ent?.held || {};
+  return ['right', 'left'].some(side => {
+    const itemName = held[side];
+    return itemName && RANGED_WEAPONS.some(r => normalizeWeaponName(r.weapon) === normalizeWeaponName(itemName));
+  });
+}
+function _hasMeleeCapability(ent) {
+  const held = ent?.held || {};
+  return ['right', 'left'].some(side => {
+    const itemName = held[side];
+    if (!itemName) return true; // an empty hand can still throw a bare-handed punch
+    return MELEE_WEAPONS.some(r => normalizeWeaponName(r.weapon) === normalizeWeaponName(itemName) && r.damageMax > 0);
+  });
+}
+
 // Max melee reach from held weapons (character or creature) — shared by the
 // Sentinel range-circle display and the actual threat-zone trigger check
 // (_sentinelZoneCheck), so the drawn circle and the enforced one can't drift
@@ -15102,6 +15126,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260819a"></script>
+<script src="panels.js?v=20260819c"></script>
 </body>
 </html>
