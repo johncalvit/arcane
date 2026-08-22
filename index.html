@@ -4981,7 +4981,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260819a';
+const VERSION = 'v0.1.20260819b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12076,6 +12076,81 @@ function _targetWeaponRangeFt(t) {
 
 const TARGET_CONE_DEG = 15;
 
+// ── Wall-aware trimming for Sentinel/Target zones ─────────────────────────
+// Reuses the exact same raycasting primitives _fogVisibilityPolygon already
+// uses for a player's own sight (_fogOccluderSegments/_fogRayHit, both
+// defined further down but hoisted like any function declaration) — a
+// Sentinel or Target watching past an open doorway shouldn't threaten
+// whatever's on the far side of the wall next to it. All raycasting here
+// happens in image-px (same space _fogOccluderSegments already uses), not
+// viewport-px — drawing code converts the results afterward.
+
+// Nearest hit distance along a ray from (originX,originY) in direction
+// (dx,dy) against the given segments, capped at maxDist — either the first
+// wall it hits, or maxDist itself if nothing's in the way before then.
+function _rayCastDist(originX, originY, dx, dy, maxDist, segs) {
+  let best = maxDist;
+  for (const [a, b] of segs) {
+    const t = _fogRayHit(originX, originY, dx, dy, a, b);
+    if (t != null && t < best) best = t;
+  }
+  return best;
+}
+
+// Is the straight line from one image-percent point to another clear of
+// every vision-blocking wall? Used by _sentinelZoneCheck so the actual
+// trigger respects the same walls the drawn shape is trimmed to.
+function _sentinelLineOfSight(originXPct, originYPct, targetXPct, targetYPct) {
+  const segs = _fogOccluderSegments();
+  if (!segs.length) return true;
+  const ox = (originXPct / 100) * mapImgW, oy = (originYPct / 100) * mapImgH;
+  const tx = (targetXPct / 100) * mapImgW, ty = (targetYPct / 100) * mapImgH;
+  const dist = Math.hypot(tx - ox, ty - oy);
+  if (dist < 1e-6) return true;
+  const hitDist = _rayCastDist(ox, oy, (tx - ox) / dist, (ty - oy) / dist, dist - 1, segs);
+  return hitDist >= dist - 1; // nothing closer than the target itself — clear
+}
+
+// True if angle `ang` (radians) falls within the arc sweeping counter-
+// clockwise from `start` to `end` — handles wraparound past ±π.
+function _angleWithinArc(ang, start, end) {
+  const norm = a => ((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const a = norm(ang), s = norm(start), e = norm(end);
+  return s <= e ? (a >= s && a <= e) : (a >= s || a <= e);
+}
+
+// Builds a wall-trimmed fan of points (image-px) from originX/Y out to
+// radiusPx, across the angular arc [startRad, endRad] — pass an arc spanning
+// a full 2π for a circle (Sentinel), or a narrow wedge for Target's cone.
+// Same shadow-casting idea _fogVisibilityPolygon uses for a player's own
+// sight: sample angles evenly across the arc, plus every wall corner's own
+// angle (for crisp edges rather than a rounded-off approximation), and cast
+// a ray at each — a wall closer than radiusPx clips the shape there instead
+// of it reaching its full circle/cone extent.
+function _wallTrimmedFan(originX, originY, radiusPx, startRad, endRad, segs) {
+  const fullCircle = Math.abs((endRad - startRad) - 2 * Math.PI) < 1e-6;
+  const N = fullCircle ? 72 : 24;
+  const angleSet = new Set();
+  for (let i = 0; i <= N; i++) angleSet.add(startRad + (endRad - startRad) * (i / N));
+  const EPS = 0.00001;
+  for (const [a, b] of segs) {
+    for (const p of [a, b]) {
+      const ang = Math.atan2(p.y - originY, p.x - originX);
+      if (fullCircle || _angleWithinArc(ang, startRad, endRad)) {
+        angleSet.add(ang); angleSet.add(ang - EPS); angleSet.add(ang + EPS);
+      }
+    }
+  }
+  const sorted = [...angleSet]
+    .filter(a => fullCircle || _angleWithinArc(a, startRad, endRad))
+    .sort((x, y) => x - y);
+  return sorted.map(ang => {
+    const dx = Math.cos(ang), dy = Math.sin(ang);
+    const dist = _rayCastDist(originX, originY, dx, dy, radiusPx, segs);
+    return { x: originX + dx * dist, y: originY + dy * dist };
+  });
+}
+
 // Facing (degrees, atan2 convention) a Target token committed to when it
 // aimed — see enterTargetAimMode/targetAimMouseDown. Stored as a hidden
 // `facing:<deg>` marker on the token's own conditions, same convention as
@@ -12106,6 +12181,9 @@ function drawSentinelRanges() {
   svg.innerHTML = '';
   if (!mapScalePPF) return;
 
+  const segs = _fogOccluderSegments();
+  const toVp = p => ({ x: p.x * mapScale + mapOffsetX, y: p.y * mapScale + mapOffsetY });
+
   for (const t of Object.values(mapTokens)) {
     const conds = getConditions(t.id);
     const isSentinel = conds.has('sentinel');
@@ -12114,22 +12192,21 @@ function drawSentinelRanges() {
 
     const vpX = (t.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
     const vpY = (t.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
-    const tokenHalfVp = (getTokenSize(t) / 2) * mapScale;
-    const pxPerFt = mapScalePPF * mapScale;
+    const originImgX = (t.x_pct / 100) * mapImgW, originImgY = (t.y_pct / 100) * mapImgH;
 
     if (isSentinel) {
-      const maxReach = _sentinelMeleeReachFt(t);
-      const radiusPx = tokenHalfVp + maxReach * pxPerFt;
+      const maxReach   = _sentinelMeleeReachFt(t);
+      const radiusImgPx = getTokenSize(t) / 2 + maxReach * mapScalePPF;
+      const fan = _wallTrimmedFan(originImgX, originImgY, radiusImgPx, 0, 2 * Math.PI, segs).map(toVp);
+      const radiusPx = radiusImgPx * mapScale; // for the label's placement only
 
-      const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      circle.setAttribute('cx', vpX);
-      circle.setAttribute('cy', vpY);
-      circle.setAttribute('r',  Math.max(1, radiusPx));
-      circle.setAttribute('fill', 'rgba(255,140,0,0.06)');
-      circle.setAttribute('stroke', '#ff8c00');
-      circle.setAttribute('stroke-width', '2');
-      circle.setAttribute('stroke-dasharray', '8,4');
-      svg.appendChild(circle);
+      const shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      shape.setAttribute('d', fan.length ? `M ${fan.map(p => `${p.x} ${p.y}`).join(' L ')} Z` : '');
+      shape.setAttribute('fill', 'rgba(255,140,0,0.06)');
+      shape.setAttribute('stroke', '#ff8c00');
+      shape.setAttribute('stroke-width', '2');
+      shape.setAttribute('stroke-dasharray', '8,4');
+      svg.appendChild(shape);
 
       const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       label.setAttribute('x', vpX);
@@ -12143,15 +12220,17 @@ function drawSentinelRanges() {
     }
 
     if (isTarget) {
-      const rangeFt   = _targetWeaponRangeFt(t);
-      const facingDeg = _tokenFacingDeg(t);
-      const facingRad = facingDeg * Math.PI / 180;
-      const halfRad   = (TARGET_CONE_DEG / 2) * Math.PI / 180;
-      const r = Math.max(1, rangeFt * pxPerFt);
-      const x1 = vpX + Math.cos(facingRad - halfRad) * r, y1 = vpY + Math.sin(facingRad - halfRad) * r;
-      const x2 = vpX + Math.cos(facingRad + halfRad) * r, y2 = vpY + Math.sin(facingRad + halfRad) * r;
+      const rangeFt    = _targetWeaponRangeFt(t);
+      const facingDeg  = _tokenFacingDeg(t);
+      const facingRad  = facingDeg * Math.PI / 180;
+      const halfRad    = (TARGET_CONE_DEG / 2) * Math.PI / 180;
+      const radiusImgPx = rangeFt * mapScalePPF;
+      const arc = _wallTrimmedFan(originImgX, originImgY, radiusImgPx, facingRad - halfRad, facingRad + halfRad, segs).map(toVp);
+      const r = Math.max(1, radiusImgPx * mapScale); // for the label's placement only
+
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${vpX} ${vpY} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`);
+      const wedge = [{ x: vpX, y: vpY }, ...arc];
+      path.setAttribute('d', `M ${wedge.map(p => `${p.x} ${p.y}`).join(' L ')} Z`);
       path.setAttribute('fill', 'rgba(64,192,255,0.08)');
       path.setAttribute('stroke', '#40c0ff');
       path.setAttribute('stroke-width', '2');
@@ -12211,16 +12290,17 @@ function _targetAimRedraw(cursorXPct, cursorYPct) {
   const rangeFt = _targetWeaponRangeFt(token);
   const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
   const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
-  const pxPerFt = mapScalePPF * mapScale;
+  const originImgX = (token.x_pct / 100) * mapImgW, originImgY = (token.y_pct / 100) * mapImgH;
   const dirVpX = cursorXPct != null ? (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX : vpX + 1;
   const dirVpY = cursorYPct != null ? (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY : vpY;
   const dirAngle = Math.atan2(dirVpY - vpY, dirVpX - vpX);
   const halfRad  = (TARGET_CONE_DEG / 2) * Math.PI / 180;
-  const r = Math.max(1, rangeFt * pxPerFt);
-  const x1 = vpX + Math.cos(dirAngle - halfRad) * r, y1 = vpY + Math.sin(dirAngle - halfRad) * r;
-  const x2 = vpX + Math.cos(dirAngle + halfRad) * r, y2 = vpY + Math.sin(dirAngle + halfRad) * r;
+  const radiusImgPx = rangeFt * mapScalePPF;
+  const toVp = p => ({ x: p.x * mapScale + mapOffsetX, y: p.y * mapScale + mapOffsetY });
+  const arc = _wallTrimmedFan(originImgX, originImgY, radiusImgPx, dirAngle - halfRad, dirAngle + halfRad, _fogOccluderSegments()).map(toVp);
+  const wedge = [{ x: vpX, y: vpY }, ...arc];
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', `M ${vpX} ${vpY} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`);
+  path.setAttribute('d', `M ${wedge.map(p => `${p.x} ${p.y}`).join(' L ')} Z`);
   path.setAttribute('fill', 'rgba(64,192,255,0.22)');
   path.setAttribute('stroke', '#40c0ff');
   path.setAttribute('stroke-width', '2');
@@ -12304,7 +12384,9 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
   const watcherRadiusFt = (getTokenSize(watcherTok) / 2) / mapScalePPF;
   const moverRadiusFt   = moverTok ? (getTokenSize(moverTok) / 2) / mapScalePPF : 0;
   const distFt = Math.max(0, rawDistFt - watcherRadiusFt - moverRadiusFt);
-  if (conds.has('sentinel') && distFt <= _sentinelMeleeReachFt(watcherTok)) return true;
+  if (conds.has('sentinel') && distFt <= _sentinelMeleeReachFt(watcherTok)) {
+    return _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct);
+  }
   if (conds.has('target')) {
     const rangeFt = _targetWeaponRangeFt(watcherTok);
     if (distFt <= rangeFt) {
@@ -12312,7 +12394,9 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
       const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
       let diff = Math.abs(pointDeg - facingDeg);
       if (diff > 180) diff = 360 - diff;
-      if (diff <= TARGET_CONE_DEG / 2) return true;
+      if (diff <= TARGET_CONE_DEG / 2) {
+        return _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct);
+      }
     }
   }
   return false;
