@@ -1021,6 +1021,10 @@
           <input type="number" id="char-level" min="1" step="1" value="1" onchange="setCharacterLevel(this.value)">
         </div>
         <div class="field field-inline">
+          <label>XP</label>
+          <div id="char-xp-display" style="font-size:0.85rem;color:var(--text-bright);padding:4px 0;" title="Awarded by the GM after combat — see the Finish Combat button">0</div>
+        </div>
+        <div class="field field-inline">
           <label>Sex</label>
           <select id="sel-gender" onchange="recalc()"></select>
         </div>
@@ -4981,7 +4985,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260819c';
+const VERSION = 'v0.1.20260819d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5707,6 +5711,12 @@ function applyCharacterData(data) {
   characterLevel = Math.max(1, parseInt(data.stats?.Level, 10) || 1);
   const levelInput = document.getElementById('char-level');
   if (levelInput) levelInput.value = characterLevel;
+
+  // XP — read-only display of whatever the GM's Finish Combat flow has
+  // awarded so far (see _awardXpToCharacter); same stats.XP piggyback, no
+  // input here since it's only ever meant to change via that flow.
+  const xpDisplay = document.getElementById('char-xp-display');
+  if (xpDisplay) xpDisplay.textContent = Math.round(data.stats?.XP || 0);
 
   // Features
   if (data.features) {
@@ -9486,6 +9496,174 @@ async function atRollAllRemaining() {
     _atBroadcastInit(c);
   }
   renderAtList();
+}
+
+// ═══ XP AWARD ═══════════════════════════════════════════════════════════════
+// Design discussion: reward = how hard a foe hits × how hard it is to kill,
+// multiplied together rather than summed — an additive formula (top
+// attributes + armor + weapon, as originally proposed) can never produce
+// the kind of spread wanted (a dragon worth 50-250x a goblin) since every
+// term grows only linearly with a monster's actual power tier. Multiplying
+// offense by effective survivability compounds the same way tougher
+// monsters actually feel tougher: a monster that's both harder to kill AND
+// hits harder is disproportionately more dangerous than either alone.
+// Calibrated against two GM-supplied benchmarks (8 goblins should level a
+// fresh 4-person party; one dragon should net the party ~10,000 XP) and
+// landed within a few percent of both with no extra tuning constant needed.
+function _xpRewardFor(combatantId) {
+  const ent = getEntity(combatantId);
+  if (!ent) return 0;
+  const tMax = Math.max(1, Math.round(ent.attrs?.Toughness ?? 10));
+
+  // Average armor DR across every body-type-appropriate slot, itself
+  // averaged across the three physical damage categories (a foe's armor
+  // doesn't uniformly protect against slash/pierce/crush, so this is a
+  // representative middle-of-the-road figure, not a worst/best case).
+  const slots = _armorSlotsFor(ent.bodyType);
+  let drSum = 0;
+  for (const slot of slots) {
+    const armorType = ent.armor?.[slot.key] || 'None';
+    drSum += (getArmorDR(armorType, 'slash') + getArmorDR(armorType, 'pierce') + getArmorDR(armorType, 'crush')) / 3;
+  }
+  const avgArmorDR = slots.length ? drSum / slots.length : 0;
+  const effToughness = tMax * (1 + avgArmorDR / 10);
+
+  // Best SINGLE attack option, not a sum across every held/natural weapon —
+  // summing would over-reward a multi-limbed monster (bite+claw+claw+tail)
+  // relative to an equally dangerous single-weapon humanoid, purely for
+  // having more attack slots rather than being more dangerous.
+  const held = ent.held || {};
+  let bestDmg = 0;
+  for (const side of ['right', 'left']) {
+    const itemName = held[side];
+    if (!itemName) continue;
+    const norm = normalizeWeaponName(itemName);
+    for (const r of MELEE_WEAPONS)  if (normalizeWeaponName(r.weapon) === norm) bestDmg = Math.max(bestDmg, r.damageMax || 0);
+    for (const r of RANGED_WEAPONS) if (normalizeWeaponName(r.weapon) === norm) bestDmg = Math.max(bestDmg, r.damageMax || 0);
+  }
+  if (bestDmg <= 0) bestDmg = 1; // unarmed floor — never reward a defeated foe as worth 0
+
+  return Math.max(1, Math.round(bestDmg * effToughness));
+}
+
+// One row per foe (any token with the ⚔ Foe flag set — see _isTokenFoe,
+// same bookkeeping Sentinel/Target's enemy check already uses) and one row
+// per party member (character-type, non-Foe combatants — only PCs track
+// XP/levels here). "Defeated" defaults to whatever's actually true (the
+// dead condition) but the GM can override either direction — a foe that
+// fled alive shouldn't count, and one the GM wants to credit anyway
+// (a scripted retreat, a mercy kill offscreen) can be checked by hand.
+let _axpFoeRows = [], _axpPartyRows = [];
+
+function atOpenAwardXpModal() {
+  if (!isGM()) return;
+  document.getElementById('award-xp-modal')?.remove();
+
+  _axpFoeRows = [];
+  _axpPartyRows = [];
+  for (const c of atCombatants) {
+    const tok = _pathFindToken(c.id);
+    if (!tok) continue;
+    const ent = getEntity(c.id);
+    const name = ent?.name || tok.label || c.id;
+    if (_isTokenFoe(tok)) {
+      _axpFoeRows.push({ id: c.id, name, defeated: getConditions(tok.id).has('dead'), reward: _xpRewardFor(c.id) });
+    } else if (tok.entity_type === 'character') {
+      _axpPartyRows.push({ id: c.id, name });
+    }
+  }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'award-xp-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:22px 26px;min-width:380px;max-width:94vw;max-height:86vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:14px;font-family:Georgia,serif;`;
+
+  const rowStyle = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem;';
+  const numStyle = 'width:80px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:Georgia,serif;';
+
+  card.innerHTML = `
+    <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">🏆 Finish Combat — Award XP</div>
+    <div>
+      <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Foes — check who was actually defeated; reward is editable</div>
+      ${_axpFoeRows.map((r, i) => `
+        <div style="${rowStyle}">
+          <input type="checkbox" id="axp-foe-${i}" ${r.defeated ? 'checked' : ''} onchange="_axpRecalc()">
+          <label for="axp-foe-${i}" style="flex:1;">${_paEsc(r.name)}</label>
+          <input type="number" id="axp-foe-reward-${i}" value="${r.reward}" min="0" style="${numStyle}" oninput="_axpRecalc()">
+        </div>`).join('') || '<div style="font-size:0.78rem;color:var(--text-dim);font-style:italic;">No foes in this encounter.</div>'}
+    </div>
+    <div>
+      <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Party — check who shares the reward</div>
+      ${_axpPartyRows.map((r, i) => `
+        <div style="${rowStyle}">
+          <input type="checkbox" id="axp-party-${i}" checked onchange="_axpRecalc()">
+          <label for="axp-party-${i}" style="flex:1;">${_paEsc(r.name)}</label>
+        </div>`).join('') || '<div style="font-size:0.78rem;color:var(--text-dim);font-style:italic;">No party members in this encounter.</div>'}
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;font-size:0.85rem;">
+      <div>Total party XP: <span id="axp-total" style="color:var(--gold2);font-weight:bold;">0</span></div>
+      <div>Per player: <span id="axp-share" style="color:var(--gold2);font-weight:bold;">0</span></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn" onclick="_axpConfirmAward()">Award XP</button>
+      <button class="btn danger" onclick="document.getElementById('award-xp-modal').remove()">Cancel</button>
+    </div>`;
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  _axpRecalc();
+}
+
+function _axpTotals() {
+  let total = 0;
+  _axpFoeRows.forEach((r, i) => {
+    const checked = document.getElementById(`axp-foe-${i}`)?.checked;
+    const reward  = parseInt(document.getElementById(`axp-foe-reward-${i}`)?.value, 10) || 0;
+    if (checked) total += reward;
+  });
+  const includedIdxs = _axpPartyRows.map((r, i) => i).filter(i => document.getElementById(`axp-party-${i}`)?.checked);
+  const share = includedIdxs.length ? Math.round(total / includedIdxs.length) : 0;
+  return { total, includedIdxs, share };
+}
+
+function _axpRecalc() {
+  const { total, includedIdxs, share } = _axpTotals();
+  const totalEl = document.getElementById('axp-total');
+  const shareEl = document.getElementById('axp-share');
+  if (totalEl) totalEl.textContent = total;
+  if (shareEl) shareEl.textContent = includedIdxs.length ? `${share} (÷${includedIdxs.length})` : '0';
+}
+
+async function _axpConfirmAward() {
+  const { total, includedIdxs, share } = _axpTotals();
+  if (!includedIdxs.length || share <= 0) { document.getElementById('award-xp-modal')?.remove(); return; }
+
+  for (const i of includedIdxs) {
+    const charId = _axpPartyRows[i].id.split('::')[1];
+    await _awardXpToCharacter(charId, share);
+  }
+  logCombat(`Combat finished — ${total} XP awarded (${share} each to ${includedIdxs.length} ${includedIdxs.length === 1 ? 'character' : 'characters'}).`, 'good');
+  document.getElementById('award-xp-modal')?.remove();
+  showToast(`Awarded ${share} XP to ${includedIdxs.length} character(s).`, 'good');
+}
+
+// Piggybacks on the same stats JSONB blob as Level (see saveCharacter/
+// applyCharacterData) — stats.XP, no schema change needed. Updates the
+// cached row too so the Character Builder/Tokens panel reflect the new
+// total without waiting for a fresh page load.
+async function _awardXpToCharacter(characterId, amount) {
+  const row = playCharCache[characterId];
+  const currentXp = Math.round(row?.stats?.XP || 0);
+  const newStats = { ...(row?.stats || {}), XP: currentXp + amount };
+  const { error } = await sb.from('characters').update({ stats: newStats }).eq('id', characterId);
+  if (error) { _writeErrorToast(error, 'characters (award XP)'); return; }
+  if (row) row.stats = newStats;
 }
 
 function atAcceptAction(combatantId) {
@@ -14989,6 +15167,7 @@ switchGmTab = function(tab) {
             <button class="at-btn" onclick="atClearStuckAoe()" title="Clear any tokens left stuck with a pulsing AOE-save highlight and no working resolve panel — safe to run any time">🧹 Fix AOE</button>
             <button id="at-roll-remaining-btn" class="at-btn primary" onclick="atRollAllRemaining()" title="Roll initiative for every combatant who hasn't rolled yet" style="display:none;">🎲 Roll Remaining</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
+            <button class="at-btn primary" onclick="atOpenAwardXpModal()" title="Mark which foes were actually defeated and award XP to the party">🏆 Finish Combat</button>
           </div>
         </div>
         <!-- combatant list -->
