@@ -333,6 +333,15 @@ function renderEntityPanel(ref, opts = {}) {
   const speedStr = speed != null ? Math.round(speed) + ' ft/s' + (_proneNow ? ' (crawl)' : '') : '—';
   const sizeStr = attrs._targetAdj != null ? attrs._targetAdj : '—';
   const sub = [ent.species, ent.bodyType].filter(Boolean).join(' · ');
+  // Level/XP only for characters — creatures don't track either (see
+  // _xpRewardFor/atOpenAwardXpModal, XP is a party-of-PCs concept here).
+  // This is the ONLY place either was visible outside the Character
+  // Builder's own Traits panel — an award landing in the DB with nothing
+  // showing it anywhere in Play Mode read as "the XP wasn't added."
+  const levelXpHtml = ent.type === 'char'
+    ? `<div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Level</div><div style="font-size:0.82rem;color:var(--text);">${ent.level ?? 1}</div></div>
+       <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">XP</div><div style="font-size:0.82rem;color:var(--text);">${Math.round(ent.stats?.XP || 0)}</div></div>`
+    : '';
 
   let headerHtml = '';
   if (opts.header === 'back' || opts.header === 'self') {
@@ -353,6 +362,7 @@ function renderEntityPanel(ref, opts = {}) {
           <div style="display:flex;gap:12px;margin-top:5px;">
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${speedStr}</div></div>
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">${sizeStr}</div></div>
+            ${levelXpHtml}
           </div>
         </div>
       </div>`;
@@ -362,6 +372,7 @@ function renderEntityPanel(ref, opts = {}) {
       <div style="display:flex;gap:12px;margin-bottom:10px;">
         <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${speedStr}</div></div>
         <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${sizeStr}</div></div>
+        ${levelXpHtml}
       </div>`;
   }
 
