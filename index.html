@@ -1027,7 +1027,7 @@
         </div>
         <div class="field field-inline">
           <label>Level</label>
-          <input type="number" id="char-level" min="1" step="1" value="1" onchange="setCharacterLevel(this.value)">
+          <div id="char-level" style="font-size:0.85rem;color:var(--text-bright);padding:4px 0;" title="Derived from XP — see the leveling curve in _levelFromXp">1</div>
         </div>
         <div class="field field-inline">
           <label>XP</label>
@@ -1861,13 +1861,29 @@ const RAW_STATS = [
 const TOTAL_POINTS = 80;
 let statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
 // Character level — not a raw stat (doesn't cost build points, doesn't feed
-// the point-buy/RAW_STATS system at all), just a plain counter the GM/player
-// bumps by hand as the character advances. Piggybacks on the existing
-// `stats` JSONB column at the save/load boundary (see saveCharacter/
-// applyCharacterData) as stats.Level, rather than a new DB column.
+// the point-buy/RAW_STATS system at all). No longer typed in by hand: it's
+// purely derived from XP (see _levelFromXp), so it can't drift out of sync
+// with what the GM's Finish Combat awards have actually earned. Piggybacks
+// on the existing `stats` JSONB column at the save boundary (see
+// saveCharacter) as stats.Level, purely for record-keeping — nothing reads
+// it back as authoritative any more, characterXP is.
 let characterLevel = 1;
-function setCharacterLevel(v) {
-  characterLevel = Math.max(1, parseInt(v, 10) || 1);
+// XP required to REACH level n (n≥2) is 3×(n+1)³ — the curve agreed on
+// this session (81/192/375/648/... for levels 2/3/4/5/...). Level 1 is
+// the free starting point, no XP needed. Returns the highest level whose
+// threshold `xp` has cleared.
+function _levelFromXp(xp) {
+  let lvl = 1;
+  while (3 * Math.pow(lvl + 2, 3) <= xp) lvl++;
+  return lvl;
+}
+// Recomputes characterLevel from characterXP and refreshes everything that
+// depends on it (the Level display, the Raw Stats bonus, Final Attributes).
+// Called wherever characterXP changes — load, reset, or a live XP award.
+function _refreshLevelFromXp() {
+  characterLevel = _levelFromXp(characterXP);
+  const levelDisplay = document.getElementById('char-level');
+  if (levelDisplay) levelDisplay.textContent = characterLevel;
   buildStatRows();
   recalc();
 }
@@ -4921,13 +4937,10 @@ function _doNewCharacter() {
   applySpeciesDefaultAvatar();
   document.getElementById('char-name').value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
-  characterLevel = 1;
   characterXP = 0;
-  const newLevelInput = document.getElementById('char-level');
-  if (newLevelInput) newLevelInput.value = 1;
   const newXpDisplay = document.getElementById('char-xp-display');
   if (newXpDisplay) newXpDisplay.textContent = '0';
-  buildStatRows();
+  _refreshLevelFromXp(); // also sets characterLevel, the Level display, and rebuilds stat rows
   document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => cb.checked = false);
   skillInvestments = {};
   buildSkillFilters();
@@ -5016,7 +5029,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260823b';
+const VERSION = 'v0.1.20260823c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5731,20 +5744,17 @@ function applyCharacterData(data) {
   if (data.social) document.getElementById('sel-social').value = data.social;
   if (data.mental) document.getElementById('sel-mental').value = data.mental;
 
-  // Level — piggybacks on the stats JSONB blob (stats.Level), not a raw
-  // stat itself, so it's restored separately rather than via RAW_STATS.
-  // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
-  // to compute the +1/level stat bonus, so it has to already be current.
-  characterLevel = Math.max(1, parseInt(data.stats?.Level, 10) || 1);
-  const levelInput = document.getElementById('char-level');
-  if (levelInput) levelInput.value = characterLevel;
-
   // XP — read-only display of whatever the GM's Finish Combat flow has
   // awarded so far (see _awardXpToCharacter); same stats.XP piggyback, no
-  // input here since it's only ever meant to change via that flow.
+  // input here since it's only ever meant to change via that flow. Level is
+  // purely derived from this, not read from stats.Level (that key is only
+  // ever written for record-keeping now — see saveCharacter).
   characterXP = Math.round(data.stats?.XP || 0);
   const xpDisplay = document.getElementById('char-xp-display');
   if (xpDisplay) xpDisplay.textContent = characterXP;
+  // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
+  // to compute the +1/level stat bonus, so it has to already be current.
+  _refreshLevelFromXp();
 
   // Stats — only the actual raw-stat keys. data.stats is the same JSONB blob
   // Level and XP piggyback on (see saveCharacter/_awardXpToCharacter), so a
@@ -6401,10 +6411,13 @@ function getEntity(ref) {
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
-    // Piggybacks on the same stats JSONB blob as everything else here (see
-    // saveCharacter/applyCharacterData) — works for creatures too since
-    // session_creatures carries the template's stats column across on spawn.
-    level:     Math.max(1, parseInt(row.stats?.Level, 10) || 1),
+    // Characters: Level is purely derived from stats.XP (see _levelFromXp) —
+    // no manual entry any more, so this can't drift from what's actually
+    // been earned. Creatures don't accrue XP (see panels.js's Level/XP
+    // display gate) — a monster template's stats.Level, if set at all, is a
+    // GM-authored challenge rating, not something to recompute from a
+    // nonexistent XP total, so that piggyback stays as-is for them.
+    level:     isChar ? _levelFromXp(Math.round(row.stats?.XP || 0)) : Math.max(1, parseInt(row.stats?.Level, 10) || 1),
     loadout,
     conditions: token ? getConditions(token.id) : new Set(),
   };
