@@ -637,7 +637,7 @@
   /* Stat row */
   .stat-row {
     display: grid;
-    grid-template-columns: 1fr 36px auto;
+    grid-template-columns: 1fr auto 36px;
     align-items: center;
     gap: 10px;
     margin-bottom: 4px;
@@ -2530,13 +2530,13 @@ function buildStatRows() {
     row.className = 'stat-row';
     row.innerHTML = `
       <div class="stat-name" title="${stat.desc}">${stat.label}</div>
-      <div class="stat-value-display" id="sv-${stat.key}" title="${bonus ? `Base ${statValues[stat.key]} + ${bonus} level bonus` : ''}">${statValues[stat.key] + bonus}</div>
       <div class="stat-controls">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',-1)">−</button>
         <input type="number" class="stat-input" id="si-${stat.key}" value="${statValues[stat.key]}" min="${stat.min}" onchange="setStat('${stat.key}',this.value)">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',1)">+</button>
         ${bonus ? `<span class="stat-level-bonus" id="sb-${stat.key}" title="+1 per level above 1">+${bonus} lvl</span>` : ''}
-      </div>`;
+      </div>
+      <div class="stat-value-display" id="sv-${stat.key}" title="${bonus ? `Base ${statValues[stat.key]} + ${bonus} level bonus` : ''}">${statValues[stat.key] + bonus}</div>`;
     container.appendChild(row);
   }
 }
@@ -5029,7 +5029,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260823c';
+const VERSION = 'v0.1.20260823d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
