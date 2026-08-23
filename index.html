@@ -1860,6 +1860,12 @@ let characterLevel = 1;
 function setCharacterLevel(v) {
   characterLevel = Math.max(1, parseInt(v, 10) || 1);
 }
+// Same piggyback as Level (stats.XP), tracked as its own variable rather than
+// left to round-trip through statValues — read-only here, only ever changed
+// by the GM's Finish Combat flow (_awardXpToCharacter), but still needs to
+// survive every ordinary Character Builder save, so gatherCharacterData/
+// saveCharacter carry it explicitly.
+let characterXP = 0;
 
 // Attribute definitions: { key, label, rawStat, raceKey, desc, group, cssClass }
 const ATTRIBUTES = [
@@ -4615,6 +4621,7 @@ function gatherCharacterData() {
     social:  document.getElementById('sel-social').value,
     mental:  document.getElementById('sel-mental').value,
     level:   characterLevel,
+    xp:      characterXP,
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
     skills:   { ...skillInvestments },
@@ -4666,7 +4673,7 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       { ...data.stats, Level: data.level },
+    stats:       { ...data.stats, Level: data.level, XP: data.xp },
     features:    data.features,
     skills:      data.skills,
     weapons:     data.weapons,
@@ -4894,8 +4901,11 @@ function _doNewCharacter() {
   document.getElementById('char-name').value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   characterLevel = 1;
+  characterXP = 0;
   const newLevelInput = document.getElementById('char-level');
   if (newLevelInput) newLevelInput.value = 1;
+  const newXpDisplay = document.getElementById('char-xp-display');
+  if (newXpDisplay) newXpDisplay.textContent = '0';
   buildStatRows();
   document.querySelectorAll('#feature-list input[type="checkbox"]').forEach(cb => cb.checked = false);
   skillInvestments = {};
@@ -4985,7 +4995,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260822b';
+const VERSION = 'v0.1.20260823a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5700,9 +5710,16 @@ function applyCharacterData(data) {
   if (data.social) document.getElementById('sel-social').value = data.social;
   if (data.mental) document.getElementById('sel-mental').value = data.mental;
 
-  // Stats
+  // Stats — only the actual raw-stat keys. data.stats is the same JSONB blob
+  // Level and XP piggyback on (see saveCharacter/_awardXpToCharacter), so a
+  // blind Object.assign here was pulling Level/XP into statValues right
+  // alongside Strength/Endurance/etc, inflating Points Used by however much
+  // XP a character had been awarded. Level and XP are restored separately
+  // below instead.
   if (data.stats) {
-    Object.assign(statValues, data.stats);
+    RAW_STATS.forEach(s => {
+      if (data.stats[s.key] != null) statValues[s.key] = data.stats[s.key];
+    });
     buildStatRows();
   }
 
@@ -5715,8 +5732,9 @@ function applyCharacterData(data) {
   // XP — read-only display of whatever the GM's Finish Combat flow has
   // awarded so far (see _awardXpToCharacter); same stats.XP piggyback, no
   // input here since it's only ever meant to change via that flow.
+  characterXP = Math.round(data.stats?.XP || 0);
   const xpDisplay = document.getElementById('char-xp-display');
-  if (xpDisplay) xpDisplay.textContent = Math.round(data.stats?.XP || 0);
+  if (xpDisplay) xpDisplay.textContent = characterXP;
 
   // Features
   if (data.features) {
