@@ -160,9 +160,33 @@ function _twoHandedGrip(ent) {
 
 function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   const held = ent.held || {};
-  const twoHanded = _twoHandedGrip(ent);
+  // Non-Humanoid body plans (Quadruped, Dragon, Snake, ...) fight with body
+  // parts, not hands — same NATURAL_BODY_PLAN/naturalSlot split _dlgRender's
+  // channel sections already use. This section used to hardcode Right/Left
+  // Hand regardless of body type, which for a natural-plan creature meant
+  // showing two always-empty hand slots while its real Fangs/Claws/Tail Slam
+  // (stored under held.head/held.forelegs/... ) were invisible here and its
+  // hit/damage rows never appeared at all.
+  const plan = _paBodyPlan(ent.bodyType);
+  const isNatural = plan !== BODY_PLANS.Humanoid;
+  const twoHanded = !isNatural && _twoHandedGrip(ent);
+  const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
   let html = '';
-  if (canEdit) {
+  if (isNatural) {
+    html += plan.map(slot => {
+      const cur = held[slot.key] || '';
+      if (canEdit) {
+        const options = [...new Set(MELEE_WEAPONS.filter(r => r.naturalSlot === slot.key).map(r => r.weapon))];
+        const opts = ['', ...options].map(n =>
+          `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— None —'}</option>`).join('');
+        return `<div style="margin-bottom:6px;">
+          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${slot.icon || ''} ${_paEsc(slot.label)}</div>
+          <select style="${selStyle}" data-pa="set-hand" data-side="${slot.key}">${opts}</select>
+        </div>`;
+      }
+      return `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">${_paEsc(slot.label)}: <span style="color:var(--text);">${cur ? _itemNameSpan(cur) : '<span style="color:var(--text-dim);">None</span>'}</span></div>`;
+    }).join('');
+  } else if (canEdit) {
     let options = loadoutOverride || ent.loadout;
     if (ent.type !== 'char') {
       // Natural weapons (naturalSlot tagged — Fangs, Claws, ...) aren't
@@ -173,7 +197,6 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
         ...RANGED_WEAPONS.map(r => r.weapon),
       ])].sort();
     }
-    const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
     html += ['right', 'left'].map(side => {
       const cur = held[side] || '';
       const opts = ['', ...options].map(n =>
@@ -197,8 +220,9 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   }
   // Hit/damage rows for held weapons — same math for every entity. A two-handed
   // grip is one weapon, so only walk the right hand (skip the mirrored left).
+  // A natural-plan creature walks every body-plan slot instead of right/left.
   const sizeAdj = attrs._targetAdj ?? 1;
-  const sides = twoHanded ? ['right'] : ['right', 'left'];
+  const sides = isNatural ? plan.map(s => s.key) : (twoHanded ? ['right'] : ['right', 'left']);
   let rows = '';
   for (const side of sides) {
     const itemName = held[side];
