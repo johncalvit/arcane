@@ -682,6 +682,15 @@
     border-radius: 4px;
     outline: none;
   }
+  .stat-level-bonus {
+    font-size: 0.66rem;
+    color: var(--gold2);
+    background: rgba(201,168,76,0.14);
+    border: 1px solid var(--gold);
+    border-radius: 3px;
+    padding: 2px 5px;
+    white-space: nowrap;
+  }
   .points-bar {
     background: var(--bg3);
     border: 1px solid var(--border);
@@ -1859,6 +1868,16 @@ let statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:1
 let characterLevel = 1;
 function setCharacterLevel(v) {
   characterLevel = Math.max(1, parseInt(v, 10) || 1);
+  buildStatRows();
+  recalc();
+}
+// First leveling feature: +1 to every Raw Stat per level above 1 — free,
+// doesn't cost build points, doesn't count against Points Used (that stays
+// a pure read of the point-buy base in statValues). Applied on top of the
+// point-buy base wherever a raw stat feeds Final Attributes; the base
+// itself is what buildStatRows' inputs/+-buttons edit.
+function _levelStatBonus() {
+  return Math.max(0, characterLevel - 1);
 }
 // Same piggyback as Level (stats.XP), tracked as its own variable rather than
 // left to round-trip through statValues — read-only here, only ever changed
@@ -1917,7 +1936,7 @@ function calcAttributes() {
 
   const results = {};
   for (const attr of ATTRIBUTES) {
-    const rawVal = statValues[attr.rawStat] || 0;
+    const rawVal = (statValues[attr.rawStat] || 0) + _levelStatBonus();
     // ?? not || — a species with an explicit 0 (or, for Fly/Swim, no entry
     // at all — see raceDefault) must compute to 0, not silently fall back to
     // a 1× "same as everyone else" modifier. Most attributes have no
@@ -2489,16 +2508,18 @@ function getHeldItems() {
 function buildStatRows() {
   const container = document.getElementById('stat-rows');
   container.innerHTML = '';
+  const bonus = _levelStatBonus();
   for (const stat of RAW_STATS) {
     const row = document.createElement('div');
     row.className = 'stat-row';
     row.innerHTML = `
       <div class="stat-name" title="${stat.desc}">${stat.label}</div>
-      <div class="stat-value-display" id="sv-${stat.key}">${statValues[stat.key]}</div>
+      <div class="stat-value-display" id="sv-${stat.key}" title="${bonus ? `Base ${statValues[stat.key]} + ${bonus} level bonus` : ''}">${statValues[stat.key] + bonus}</div>
       <div class="stat-controls">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',-1)">−</button>
         <input type="number" class="stat-input" id="si-${stat.key}" value="${statValues[stat.key]}" min="${stat.min}" onchange="setStat('${stat.key}',this.value)">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',1)">+</button>
+        ${bonus ? `<span class="stat-level-bonus" id="sb-${stat.key}" title="+1 per level above 1">+${bonus} lvl</span>` : ''}
       </div>`;
     container.appendChild(row);
   }
@@ -2509,7 +2530,7 @@ function adjustStat(key, delta) {
   const newVal = (statValues[key]||0) + delta;
   if (newVal < (stat ? stat.min : 0)) return;
   statValues[key] = newVal;
-  document.getElementById('sv-'+key).textContent = newVal;
+  document.getElementById('sv-'+key).textContent = newVal + _levelStatBonus();
   document.getElementById('si-'+key).value = newVal;
   recalc();
 }
@@ -2518,7 +2539,7 @@ function setStat(key, val) {
   const stat = RAW_STATS.find(s=>s.key===key);
   const n = Math.max(parseInt(val)||0, stat ? stat.min : 0);
   statValues[key] = n;
-  document.getElementById('sv-'+key).textContent = n;
+  document.getElementById('sv-'+key).textContent = n + _levelStatBonus();
   recalc();
 }
 
@@ -4995,7 +5016,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260823a';
+const VERSION = 'v0.1.20260823b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5710,21 +5731,10 @@ function applyCharacterData(data) {
   if (data.social) document.getElementById('sel-social').value = data.social;
   if (data.mental) document.getElementById('sel-mental').value = data.mental;
 
-  // Stats — only the actual raw-stat keys. data.stats is the same JSONB blob
-  // Level and XP piggyback on (see saveCharacter/_awardXpToCharacter), so a
-  // blind Object.assign here was pulling Level/XP into statValues right
-  // alongside Strength/Endurance/etc, inflating Points Used by however much
-  // XP a character had been awarded. Level and XP are restored separately
-  // below instead.
-  if (data.stats) {
-    RAW_STATS.forEach(s => {
-      if (data.stats[s.key] != null) statValues[s.key] = data.stats[s.key];
-    });
-    buildStatRows();
-  }
-
   // Level — piggybacks on the stats JSONB blob (stats.Level), not a raw
   // stat itself, so it's restored separately rather than via RAW_STATS.
+  // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
+  // to compute the +1/level stat bonus, so it has to already be current.
   characterLevel = Math.max(1, parseInt(data.stats?.Level, 10) || 1);
   const levelInput = document.getElementById('char-level');
   if (levelInput) levelInput.value = characterLevel;
@@ -5735,6 +5745,19 @@ function applyCharacterData(data) {
   characterXP = Math.round(data.stats?.XP || 0);
   const xpDisplay = document.getElementById('char-xp-display');
   if (xpDisplay) xpDisplay.textContent = characterXP;
+
+  // Stats — only the actual raw-stat keys. data.stats is the same JSONB blob
+  // Level and XP piggyback on (see saveCharacter/_awardXpToCharacter), so a
+  // blind Object.assign here was pulling Level/XP into statValues right
+  // alongside Strength/Endurance/etc, inflating Points Used by however much
+  // XP a character had been awarded. Level and XP are restored separately
+  // above instead.
+  if (data.stats) {
+    RAW_STATS.forEach(s => {
+      if (data.stats[s.key] != null) statValues[s.key] = data.stats[s.key];
+    });
+    buildStatRows();
+  }
 
   // Features
   if (data.features) {
