@@ -5029,7 +5029,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260823d';
+const VERSION = 'v0.1.20260823e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9125,9 +9125,16 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   const dmgCap      = weaponRow.damageMax  ?? 10;
   const powerMod    = weaponRow.maxPowerMod ?? 0.5;
   const maxRoll     = Math.max(1, (atkPower || 1) * powerMod);
-  const rawRoll     = Math.random() * (maxRoll - 1) + 1;
+  // A precise hit — the attack's own to-hit roll came in at 3 or below —
+  // always lands at the weapon's max damage, PLUS a second ordinary damage
+  // roll stacked on top. Unlike a normal hit, this one isn't capped at the
+  // weapon's usual maximum: that cap exists to bound an ordinary swing, not
+  // a called-shot-precise one.
+  const isPreciseHit = hitRoll != null && hitRoll <= 3 && dmgCap > 0;
+  const bonusRoll   = Math.random() * (maxRoll - 1) + 1;
+  const rawRoll     = isPreciseHit ? dmgCap + bonusRoll : bonusRoll;
   const afterArmor  = Math.max(0, rawRoll - dr);
-  let   finalDamage = dmgCap <= 0 ? 0 : Math.round(Math.min(afterArmor, dmgCap));
+  let   finalDamage = dmgCap <= 0 ? 0 : Math.round(isPreciseHit ? afterArmor : Math.min(afterArmor, dmgCap));
   // Head hits double — applied AFTER armor and the weapon cap, so a solid
   // headshot punches past the normal max (a lethal called shot).
   const _tgtBody  = getEntity(_entityRef(targetEntityType, targetEntityId))?.bodyType || 'Humanoid';
@@ -9139,20 +9146,24 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   if (dmgEl) {
     dmgEl.style.display = 'block';
     const rawDisplay  = Math.round(rawRoll);
-    const capNote     = dmgCap > 0 && afterArmor > dmgCap ? ` (capped at ${dmgCap})` : '';
+    // Precise hits deliberately exceed dmgCap — that's not a "cap" note,
+    // it's the whole point, so only ordinary hits get the capped-at note.
+    const capNote     = !isPreciseHit && dmgCap > 0 && afterArmor > dmgCap ? ` (capped at ${dmgCap})` : '';
     if (dmgCap <= 0) {
       // Non-damaging control action (e.g. Grab) — no damage line, just the hit.
       dmgEl.innerHTML = `
         <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${actionLabel}</div>
         <div style="font-size:1.1rem;font-weight:bold;color:var(--text);">Connects — no damage</div>`;
     } else {
-      const rollLine  = gapHit
-        ? `Roll ${rawDisplay} — found a gap in the armor!${capNote}`
-        : dr > 0
-          ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
-          : `Roll ${rawDisplay}${capNote}`;
+      const rollLine  = isPreciseHit
+        ? `Precise hit! Max ${dmgCap} + roll ${Math.round(bonusRoll)} = ${rawDisplay}${dr > 0 ? ` − ${dr} armor = ${Math.round(afterArmor)}` : ''}`
+        : gapHit
+          ? `Roll ${rawDisplay} — found a gap in the armor!${capNote}`
+          : dr > 0
+            ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
+            : `Roll ${rawDisplay}${capNote}`;
       dmgEl.innerHTML = `
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}</div>
         <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
@@ -12019,7 +12030,13 @@ function attackTokenClick(tokenId) {
   // the called-shot part-size multiplier, so it holds regardless of which
   // body part gets targeted.
   const targetObscured = getConditions(target.id).has('obscured');
-  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) : null;
+  // A prone target is an easy mark for anyone standing over them, but no
+  // easier to hit at range than lying flat already makes them (that's what
+  // the Go-Prone ranged defense option's size reduction already covers) —
+  // so this doubling only applies to melee attacks.
+  const targetIsProne  = getConditions(target.id).has('prone');
+  const proneMeleeMult = (targetIsProne && !attackIsRanged) ? 2 : 1;
+  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) * proneMeleeMult : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
 
   // ── Log action to tracker ─────────────────────────────────────────────────
@@ -12074,12 +12091,13 @@ function attackTokenClick(tokenId) {
 
   // ── Open called-shot picker, then hit roller ─────────────────────────────
   const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
+  const proneNote     = proneMeleeMult > 1 ? ' × 2 (prone target)' : '';
   let subtitle = '';
   if (hitValue != null) {
     if (attackIsRanged && rangeIncrements > 0) {
-      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
+      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}${proneNote}`;
     } else {
-      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`;
+      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}${proneNote}`;
     }
   }
   _openCalledShotModal({
