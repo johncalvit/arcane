@@ -3650,6 +3650,10 @@ function saveMeleeWeapon() {
   writeConfigToDisk();
   closeMeleeWeaponForm();
   buildMeleeWeaponsManagerTable();
+  // Loadout's weapon-select is a snapshot (_weaponLoadoutCatalog), not a live
+  // read of MELEE_WEAPONS — without this, a newly added/edited weapon stayed
+  // invisible there until the next full page load.
+  if (document.getElementById('weapon-select')) buildLoadoutSelects();
   recalc();
 }
 
@@ -3660,6 +3664,7 @@ function deleteMeleeWeapon(index) {
   MELEE_WEAPONS.splice(index, 1);
   writeConfigToDisk();
   buildMeleeWeaponsManagerTable();
+  if (document.getElementById('weapon-select')) buildLoadoutSelects();
   recalc();
 }
 
@@ -4251,6 +4256,7 @@ function saveRangedWeapon() {
   writeConfigToDisk();
   closeRangedWeaponForm();
   buildRangedWeaponsManagerTable();
+  if (document.getElementById('weapon-select')) buildLoadoutSelects();
   recalc();
 }
 
@@ -4261,6 +4267,7 @@ function deleteRangedWeapon(index) {
   RANGED_WEAPONS.splice(index, 1);
   writeConfigToDisk();
   buildRangedWeaponsManagerTable();
+  if (document.getElementById('weapon-select')) buildLoadoutSelects();
   recalc();
 }
 
@@ -5116,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260824b';
+const VERSION = 'v0.1.20260824c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
