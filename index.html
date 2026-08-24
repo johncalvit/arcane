@@ -3538,11 +3538,11 @@ function positionMeleeWeaponForm(index) {
   }
 }
 
-function openMeleeWeaponForm(index) {
-  editingMeleeIndex = index;
-  positionMeleeWeaponForm(index);
-  const row = index !== null ? MELEE_WEAPONS[index] : null;
-  document.getElementById('melee-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+// Shared by Add/Edit (openMeleeWeaponForm) and Copy (copyMeleeWeapon) — both
+// just fill the same fields from a row (or blanks); the only difference is
+// whether editingMeleeIndex ends up set, which decides if Save overwrites
+// that row or pushes a new one.
+function _fillMeleeForm(row) {
   document.getElementById('mf-weapon').value      = row ? row.weapon : '';
   document.getElementById('mf-action').value      = row ? row.action : '';
   document.getElementById('mf-material').value    = row ? row.material : '';
@@ -3553,7 +3553,30 @@ function openMeleeWeaponForm(index) {
   document.getElementById('mf-damagemax').value   = row ? row.damageMax : 0;
   document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
+}
+
+function openMeleeWeaponForm(index) {
+  editingMeleeIndex = index;
+  positionMeleeWeaponForm(index);
+  const row = index !== null ? MELEE_WEAPONS[index] : null;
+  document.getElementById('melee-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+  _fillMeleeForm(row);
   document.getElementById('melee-form').style.display = 'block';
+}
+
+// Duplicate a row into the form as a brand-new entry (editingMeleeIndex stays
+// null, so Save pushes rather than overwrites) — for the common case of a
+// weapon needing a near-identical second action (Slash + Smash on the same
+// axe) or a reskinned copy of an existing one, without retyping every field.
+function copyMeleeWeapon(index) {
+  const src = MELEE_WEAPONS[index];
+  if (!src) return;
+  editingMeleeIndex = null;
+  positionMeleeWeaponForm(index);
+  document.getElementById('melee-form-title').textContent = 'Copy Weapon Action';
+  _fillMeleeForm(src);
+  document.getElementById('melee-form').style.display = 'block';
+  document.getElementById('mf-weapon').focus();
 }
 
 function closeMeleeWeaponForm() {
@@ -3612,6 +3635,7 @@ function buildMeleeWeaponsManagerTable() {
       : '—';
     tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
@@ -4115,11 +4139,9 @@ function positionRangedWeaponForm(index) {
   }
 }
 
-function openRangedWeaponForm(index) {
-  editingRangedIndex = index;
-  positionRangedWeaponForm(index);
-  const row = index !== null ? RANGED_WEAPONS[index] : null;
-  document.getElementById('ranged-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+// Shared by Add/Edit (openRangedWeaponForm) and Copy (copyRangedWeapon) —
+// see _fillMeleeForm for why this is split out.
+function _fillRangedForm(row) {
   document.getElementById('rf-weapon').value         = row ? row.weapon : '';
   document.getElementById('rf-action').value         = row ? row.action : '';
   document.getElementById('rf-material').value       = row ? row.material : '';
@@ -4130,7 +4152,27 @@ function openRangedWeaponForm(index) {
   document.getElementById('rf-minstr').value         = row ? row.minStr : 0;
   document.getElementById('rf-damagemax').value      = row ? row.damageMax : 0;
   document.getElementById('rf-maxpowermod').value    = row ? row.maxPowerMod : 0;
+}
+
+function openRangedWeaponForm(index) {
+  editingRangedIndex = index;
+  positionRangedWeaponForm(index);
+  const row = index !== null ? RANGED_WEAPONS[index] : null;
+  document.getElementById('ranged-form-title').textContent = row ? 'Edit Weapon Action' : 'New Weapon Action';
+  _fillRangedForm(row);
   document.getElementById('ranged-form').style.display = 'block';
+}
+
+// Duplicate a row into the form as a brand-new entry — see copyMeleeWeapon.
+function copyRangedWeapon(index) {
+  const src = RANGED_WEAPONS[index];
+  if (!src) return;
+  editingRangedIndex = null;
+  positionRangedWeaponForm(index);
+  document.getElementById('ranged-form-title').textContent = 'Copy Weapon Action';
+  _fillRangedForm(src);
+  document.getElementById('ranged-form').style.display = 'block';
+  document.getElementById('rf-weapon').focus();
 }
 
 function closeRangedWeaponForm() {
@@ -4374,6 +4416,7 @@ function buildRangedWeaponsManagerTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyRangedWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
@@ -5029,7 +5072,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260823e';
+const VERSION = 'v0.1.20260824a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
