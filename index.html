@@ -1374,6 +1374,10 @@
             <input type="text" id="mf-maxpowermod" placeholder="0">
           </div>
           <div class="field">
+            <label>Weight (lbs)</label>
+            <input type="text" id="mf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
+          </div>
+          <div class="field">
             <label>Natural Weapon Slot</label>
             <select id="mf-naturalslot">
               <option value="">— Held weapon (not natural) —</option>
@@ -1391,7 +1395,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Natural Slot</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Natural Slot</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -1449,6 +1453,10 @@
             <label>Max Power Modifier</label>
             <input type="text" id="rf-maxpowermod" placeholder="0">
           </div>
+          <div class="field">
+            <label>Weight (lbs)</label>
+            <input type="text" id="rf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
+          </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveRangedWeapon()">Save Action</button>
@@ -1457,7 +1465,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th></th></tr></thead>
         <tbody id="rangedmgr-list"></tbody>
       </table>
     </div>
@@ -2994,6 +3002,13 @@ function updateSkillPoints(attrs) {
 
 // ─── WEAPONS ────────────────────────────────────────────────────────────────
 // WEAPONS and EQUIPMENT now loaded entirely from the config file (see CONFIG PERSISTENCE below).
+// WEAPONS is legacy — it predates the Melee/Ranged Weapons Managers and has
+// no GM editor at all, so anything added there was invisible in the Loadout
+// panel. The Loadout weapon-select (buildLoadoutSelects/addWeapon) now reads
+// from _weaponLoadoutCatalog() (MELEE_WEAPONS + RANGED_WEAPONS) instead.
+// WEAPONS/DEFAULT_WEAPONS are kept only because they're still part of the
+// persisted shared config shape (writeConfigToSupabase/loadConfigFromSupabase)
+// — not worth a migration for a value nothing reads any more.
 const DEFAULT_WEAPONS = [
   { name:"Knife",               wt:0.5,  damage:"1d4",    reach:0.5 },
   { name:"Sword, Short",        wt:2,    damage:"1d6",    reach:2   },
@@ -3061,12 +3076,36 @@ const DEFAULT_EQUIPMENT = [
 let WEAPONS   = [...DEFAULT_WEAPONS];
 let EQUIPMENT = [...DEFAULT_EQUIPMENT];
 
+// One dropdown entry per unique weapon NAME across the Melee/Ranged Weapons
+// Managers (MELEE_WEAPONS/RANGED_WEAPONS) — a weapon usually has several
+// action rows there (Slash/Smash/Parry/Hook for one axe), but the Loadout
+// list only needs to carry the physical weapon once. Picks the first
+// matching row for display (weight/reach/damage), since those describe the
+// same physical object regardless of which action is being performed with
+// it. Replaces the old WEAPONS catalog, which had no GM editor at all —
+// anything added via the Weapons Managers now shows up here automatically.
+function _weaponLoadoutCatalog() {
+  const seen = new Set();
+  const out = [];
+  for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
+    if (seen.has(r.weapon) || r.naturalSlot) continue; // natural weapons aren't carried
+    seen.add(r.weapon);
+    out.push({
+      name: r.weapon,
+      wt: r.wt || 0,
+      damage: r.damageMax ? `max ${r.damageMax} dmg` : '',
+      reach: r.reach ?? r.rangeIncrement ?? 0,
+    });
+  }
+  return out;
+}
+
 function buildLoadoutSelects() {
   const ws = document.getElementById('weapon-select');
   ws.innerHTML = '';
-  WEAPONS.forEach(w => {
+  _weaponLoadoutCatalog().forEach(w => {
     const o = document.createElement('option');
-    o.value = w.name; o.textContent = `${w.name} (${w.wt} lbs, ${w.damage})`;
+    o.value = w.name; o.textContent = `${w.name} (${w.wt} lbs${w.damage ? ', ' + w.damage : ''})`;
     ws.appendChild(o);
   });
   const es = document.getElementById('equip-select');
@@ -3098,8 +3137,9 @@ function addWeapon() {
   const selected = [...select.selectedOptions].map(o => o.value);
   if (!selected.length) return;
   const tbody = document.getElementById('weapon-list');
+  const catalog = _weaponLoadoutCatalog();
   for (const name of selected) {
-    const w = WEAPONS.find(x=>x.name===name);
+    const w = catalog.find(x=>x.name===name);
     if (!w) continue;
     const tr = document.createElement('tr');
     tr.dataset.wt = w.wt;
@@ -3552,6 +3592,7 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-minstr').value      = row ? row.minStr : 0;
   document.getElementById('mf-damagemax').value   = row ? row.damageMax : 0;
   document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
+  document.getElementById('mf-wt').value          = row ? (row.wt || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
 }
 
@@ -3598,6 +3639,7 @@ function saveMeleeWeapon() {
     minStr: parseFloat(document.getElementById('mf-minstr').value) || 0,
     damageMax: parseFloat(document.getElementById('mf-damagemax').value) || 0,
     maxPowerMod: parseFloat(document.getElementById('mf-maxpowermod').value) || 0,
+    wt: parseFloat(document.getElementById('mf-wt').value) || 0,
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
   };
   if (editingMeleeIndex !== null) {
@@ -3633,7 +3675,7 @@ function buildMeleeWeaponsManagerTable() {
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
       : '—';
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${slotLabel}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
@@ -4152,6 +4194,7 @@ function _fillRangedForm(row) {
   document.getElementById('rf-minstr').value         = row ? row.minStr : 0;
   document.getElementById('rf-damagemax').value      = row ? row.damageMax : 0;
   document.getElementById('rf-maxpowermod').value    = row ? row.maxPowerMod : 0;
+  document.getElementById('rf-wt').value             = row ? (row.wt || 0) : 0;
 }
 
 function openRangedWeaponForm(index) {
@@ -4198,6 +4241,7 @@ function saveRangedWeapon() {
     minStr: parseFloat(document.getElementById('rf-minstr').value) || 0,
     damageMax: parseFloat(document.getElementById('rf-damagemax').value) || 0,
     maxPowerMod: parseFloat(document.getElementById('rf-maxpowermod').value) || 0,
+    wt: parseFloat(document.getElementById('rf-wt').value) || 0,
   };
   if (editingRangedIndex !== null) {
     RANGED_WEAPONS[editingRangedIndex] = row;
@@ -4414,7 +4458,7 @@ function buildRangedWeaponsManagerTable() {
   tbody.innerHTML = '';
   RANGED_WEAPONS.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyRangedWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
@@ -5072,7 +5116,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260824a';
+const VERSION = 'v0.1.20260824b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
