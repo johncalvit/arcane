@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260825b';
+const VERSION = 'v0.1.20260825c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12990,6 +12990,18 @@ let _sentinelCheckPending = null;
 
 function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
   const checkId = 'sc' + Date.now() + Math.random().toString(36).slice(2);
+  // Close the mover's own action dialog first, if it happens to be open —
+  // e.g. the GM had it up while drawing this very move with the Path tool.
+  // The Attack?/Let it pass banner below is a small floating notification,
+  // not a real modal, so it never covered that dialog: dismissing it used
+  // to just reveal the mover's still-open, still-fully-clickable dialog for
+  // a moment before the reaction's own Called Shot modal took over — a
+  // narrow but real window for a stray click to interfere with a reaction
+  // still resolving underneath. Reopened below once the reaction is done,
+  // same "only if it's still actually their turn" guard _dlgMaybeReopen uses.
+  const modal = document.getElementById('at-action-modal');
+  const wasOpen = !!modal && modal.style.display !== 'none';
+  if (wasOpen) atCloseModal();
   return new Promise(resolve => {
     _sentinelCheckPending = { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, resolve };
     mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-start',
@@ -12997,6 +13009,8 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
     // Also try to show it locally — covers the GM moving one monster past
     // another monster's watch, or solo testing, with no network round trip.
     _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct });
+  }).then(() => {
+    if (wasOpen && _atIsCombatActive() && _atSharedActive()?.id === moverCid) atOpenActionDialog(moverCid);
   });
 }
 
