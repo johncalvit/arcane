@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260825c';
+const VERSION = 'v0.1.20260825d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10272,9 +10272,10 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     padding:24px 28px;min-width:320px;max-width:94vw;display:flex;flex-direction:column;gap:14px;
     font-family:Georgia,serif;`;
 
+  const titleTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
   const title = document.createElement('div');
   title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
-  title.textContent = 'Called Shot — Choose Target';
+  title.textContent = titleTok ? `Called Shot — Choose Target on ${titleTok.label}` : 'Called Shot — Choose Target';
   card.appendChild(title);
 
   const sub = document.createElement('div');
