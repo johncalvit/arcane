@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260824c';
+const VERSION = 'v0.1.20260824d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6666,7 +6666,15 @@ async function applyDamage(entityType, entityId, toughnessDmg, staminaDmg) {
   const ref = _entityRef(entityType, entityId);
   const ent = getEntity(ref);
   if (!ent) return;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  // baseAttrs, not attrs — attrs is live and already scaled down by however
+  // much Blood has been lost so far (see getEntity). Using it here would let
+  // the Toughness ceiling shrink as Blood loss climbs, which in turn shrinks
+  // _bloodMax(tMax) below and makes the SAME overflow amount look larger and
+  // larger relative to an ever-smaller death threshold — a snowball where a
+  // bleeding-out character becomes disproportionately easier to kill outright
+  // for reasons that have nothing to do with the hit landing. baseAttrs is
+  // the stable, pre-blood-loss Toughness this ceiling is supposed to measure.
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   let newTough = Math.max(0, (ent.damage.toughness || 0) + toughnessDmg);
   let newBlood = ent.damage.blood || 0;
   if (newTough > tMax) {           // overflow past depleted Toughness drains Blood
@@ -6726,20 +6734,27 @@ async function _payQuintessence(ent, cost) {
   paid.quint = Math.min(remaining, qCur);
   remaining -= paid.quint;
 
+  // baseAttrs throughout — see applyDamage's comment. These are pool SIZES
+  // (how much Stamina/Toughness/Blood a caster fundamentally has to draw
+  // on), not current capability — using the live blood-loss-reduced attrs
+  // here would shrink a caster's own pools as they bleed, letting the same
+  // spell cost eat further into Toughness/Blood than it should and reach
+  // _checkDownedState's (now also fixed) death threshold faster than the
+  // caster's actual constitution warrants.
   if (remaining > 0) {
-    const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+    const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
     const sCur = Math.max(0, sMax - (ent.damage.stamina || 0));
     paid.stamina = Math.min(remaining, sCur);
     remaining -= paid.stamina;
   }
   if (remaining > 0) {
-    const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+    const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
     const tCur = Math.max(0, tMax - (ent.damage.toughness || 0));
     paid.toughness = Math.min(remaining, tCur);
     remaining -= paid.toughness;
   }
   if (remaining > 0) {
-    const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
+    const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
     const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
     paid.blood = Math.min(remaining, bCur);
     remaining -= paid.blood;
@@ -6765,11 +6780,13 @@ async function _payQuintessence(ent, cost) {
 function _totalCastableResource(ent) {
   const qMax = _quintMax(ent.attrs.Quintessence);
   const qCur = Math.max(0, qMax - (ent.damage.quintessence || 0));
-  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  // baseAttrs for the rest — see _payQuintessence's comment; must use the
+  // same stable pool sizes _payQuintessence will actually draw against.
+  const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
   const sCur = Math.max(0, sMax - (ent.damage.stamina || 0));
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const tCur = Math.max(0, tMax - (ent.damage.toughness || 0));
-  const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
+  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
   const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
   return qCur + sCur + tCur + bCur;
 }
@@ -7100,8 +7117,12 @@ async function applyConsumable(consumable, targetToken, itemName, holderRef) {
   const ent = getEntity(targetRef);
   if (!ent) { showToast('Could not load target.', 'error'); return; }
 
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
-  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  // baseAttrs — see applyDamage's comment. These are the pools a restore
+  // effect tops up TOWARD; using the live blood-loss-reduced attrs would
+  // clamp recovery to an already-shrunken ceiling instead of the target's
+  // real Toughness/Stamina/Blood capacity.
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
+  const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
   const bMax = _bloodMax(tMax);
   const wasUnconscious = ent.conditions.has('unconscious');
   const wasDead = ent.conditions.has('dead');
@@ -7533,7 +7554,9 @@ async function atResolveRecovery(combatantId, effectKey) {
       onComplete: async (n) => {
         const success = n <= 5 || (n < 96 && n <= target);
         if (!success) return;
-        const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+        // baseAttrs — see applyDamage's comment; stabilizing should restore
+        // toward the target's real Toughness ceiling, not a live-reduced one.
+        const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
         await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: Math.max(0, tMax - 1) }) });
         await setCondition(token.id, 'unconscious', false);
       },
@@ -8623,8 +8646,12 @@ async function _applySpellEffectToTarget(spell, targetRef, opts = {}) {
   if (targetRef.startsWith('char::')) await ensureEntityLoaded(targetRef);
   const ent = getEntity(targetRef);
   if (!ent) return;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
-  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  // baseAttrs — see applyDamage's comment. These are the pools a restore
+  // effect tops up TOWARD; using the live blood-loss-reduced attrs would
+  // clamp recovery to an already-shrunken ceiling instead of the target's
+  // real Toughness/Stamina/Blood capacity.
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
+  const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
   const bMax = _bloodMax(tMax);
   const wasUnconscious = ent.conditions.has('unconscious');
   const wasDead = ent.conditions.has('dead');
@@ -9074,7 +9101,13 @@ async function atReleaseCarrying(bearerTokenId) {
 // Drain Blood directly (bleeding, unlike a hit, doesn't route through Toughness).
 async function applyBloodLoss(ent, amount) {
   if (!ent) return;
-  const bMax = _bloodMax(Math.round(ent.attrs.Toughness ?? 10));
+  // baseAttrs — see applyDamage's comment. This runs every round a bleed
+  // condition ticks, so it's the single biggest driver of the snowball that
+  // comment describes: each tick's blood loss shrinks live Toughness, which
+  // shrinks THIS bMax for the very next tick, making an already-bleeding
+  // target die faster and faster for reasons unrelated to how much blood
+  // they've actually lost relative to their real capacity.
+  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
   const newBlood = Math.min(bMax, (ent.damage.blood || 0) + amount);
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { blood: newBlood }) });
 }
@@ -9084,7 +9117,8 @@ async function applyBloodLoss(ent, amount) {
 // applyDamage, just keyed off an already-loaded entity like applyBloodLoss.
 async function applyToughnessDamage(ent, amount) {
   if (!ent) return;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  // baseAttrs — see applyDamage's comment.
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   let newTough = Math.max(0, (ent.damage.toughness || 0) + amount);
   let newBlood = ent.damage.blood || 0;
   if (newTough > tMax) { newBlood += newTough - tMax; newTough = tMax; }
@@ -9101,7 +9135,11 @@ async function applyToughnessDamage(ent, amount) {
 // this only drops them, it doesn't auto-recover them later.
 async function _checkDownedState(tokenId, ent) {
   if (!ent || !tokenId) return null;
-  const tMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+  // baseAttrs — see applyDamage's comment. Same snowball risk here: this runs
+  // right after damage lands, reading a freshly-live-reduced attrs would
+  // judge "did this hit kill them" against a Toughness/Stamina ceiling that's
+  // already shrunk from the very blood loss the hit just caused.
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const bMax = _bloodMax(tMax);
   if ((ent.damage.blood || 0) >= bMax) {
     await setCondition(tokenId, 'unconscious', true);
@@ -9114,7 +9152,7 @@ async function _checkDownedState(tokenId, ent) {
     await setCondition(tokenId, 'prone', true);
     return 'unconscious';
   }
-  const sMax = Math.max(1, Math.round(ent.attrs.Stamina ?? 10));
+  const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
   if ((ent.damage.stamina || 0) >= sMax) {
     await setCondition(tokenId, 'prone', true);
     return 'exhausted';
@@ -9271,7 +9309,11 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
     const ref = _entityRef(targetEntityType, targetEntityId);
     const ent = getEntity(ref);
     if (ent) {
-      const toughnessMax = Math.max(1, Math.round(ent.attrs.Toughness ?? 10));
+      // baseAttrs — see applyDamage's comment. Bleed chance is damage÷max;
+      // reading the live (already blood-loss-reduced) Toughness here would
+      // make an already-bleeding target's wounds look proportionally worse
+      // than they are, inflating the chance of a fresh bleed on top.
+      const toughnessMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
       // Damage-triggered effects (bleeding, grab-hold now; stun/disarm later).
       // Runs even at 0 damage so a Grab (no damage) can still take hold; each
       // effect's own gate decides whether it applies.
