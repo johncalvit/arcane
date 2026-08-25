@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260824e';
+const VERSION = 'v0.1.20260825a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12754,8 +12754,38 @@ function targetAimMouseMove(e) {
   _targetAimRedraw((imgX / mapImgW) * 100, (imgY / mapImgH) * 100);
 }
 
+// Tracks the press so targetAimMouseUp can tell a deliberate aim-click apart
+// from the start of a map-pan drag — see targetAimMouseDown's comment.
+let _targetAimDownPos = null;
+
 function targetAimMouseDown(e) {
   if (!targetAimMode) return false;
+  // Used to unconditionally commit the facing right here on mousedown, and
+  // swallow the event (stopImmediatePropagation via the caller) so nothing
+  // else saw it. That meant a player trying to pan the map WHILE still
+  // lining up their aim — a natural thing to do before making the real,
+  // deliberate click — had their very first press toward wherever they
+  // grabbed the map immediately locked in as the facing, with no pan
+  // actually happening for that gesture (propagation never reached the
+  // pan-drag handler either). Recording the press and deferring the actual
+  // commit to targetAimMouseUp — only when the mouse never moved far enough
+  // to count as a drag — lets a real pan happen normally (this returns
+  // false, so the ordinary map-drag mousedown handler still runs too) while
+  // a genuine stationary click still commits exactly as before.
+  _targetAimDownPos = { x: e.clientX, y: e.clientY };
+  return false;
+}
+
+// Drag-vs-click threshold, screen px — anything under this still counts as
+// "clicked to aim" even with the small jitter a real mouse click has.
+const _TARGET_AIM_CLICK_SLOP = 6;
+
+function targetAimMouseUp(e) {
+  if (!targetAimMode || !_targetAimDownPos) { _targetAimDownPos = null; return; }
+  const moved = Math.hypot(e.clientX - _targetAimDownPos.x, e.clientY - _targetAimDownPos.y);
+  _targetAimDownPos = null;
+  if (moved > _TARGET_AIM_CLICK_SLOP) return; // was a pan drag, not an aim click — stay in aim mode
+
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const vpX  = e.clientX - rect.left, vpY = e.clientY - rect.top;
@@ -12780,7 +12810,6 @@ function targetAimMouseDown(e) {
   atSetSlot(combatantId, 'full', 'Target', 99, true).then(() => {
     if (token) _setTokenFacing(token.id, facingDeg);
   });
-  return true;
 }
 
 // ── Sentinel / Target interrupt engine ────────────────────────────────────
@@ -14754,7 +14783,11 @@ initMapInteraction = function() {
     if (calMouseDown(e))       { e.stopImmediatePropagation(); return; }
     if (measureMouseDown(e))   { e.stopImmediatePropagation(); return; }
     if (aoeMouseDown(e))       { e.stopImmediatePropagation(); return; }
-    if (targetAimMouseDown(e)) { e.stopImmediatePropagation(); return; }
+    // Always returns false now — it only records the press so
+    // targetAimMouseUp can tell a click from the start of a map-pan drag;
+    // deliberately NOT stopping propagation lets the ordinary pan-drag
+    // mousedown handler still run for this same press. See its comment.
+    targetAimMouseDown(e);
     if (obstacleMouseDown(e))  { e.stopImmediatePropagation(); return; }
     if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
@@ -14766,7 +14799,7 @@ initMapInteraction = function() {
   });
 
   window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); targetAimMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
-  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   obstacleMouseUp(e); wallMouseUp(e); });
+  window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   targetAimMouseUp(e); obstacleMouseUp(e); wallMouseUp(e); });
 };
 
 // ── Save + load scale ─────────────────────────────────────────────────────────
