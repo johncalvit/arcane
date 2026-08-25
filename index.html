@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260825a';
+const VERSION = 'v0.1.20260825b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14339,7 +14339,25 @@ function _fogRayHit(originX, originY, dirX, dirY, a, b) {
   if (Math.abs(denom) < 1e-10) return null; // parallel
   const t2 = (dirX * (a.y - originY) + dirY * (originX - a.x)) / denom;
   if (t2 < 0 || t2 > 1) return null;
-  const t1 = dirX !== 0 ? (a.x + sdx * t2 - originX) / dirX : (a.y + sdy * t2 - originY) / dirY;
+  // Distance along the ray to the intersection point, via a dot product onto
+  // (dirX, dirY) rather than dividing by whichever of dirX/dirY is nonzero.
+  // (dirX, dirY) is always a unit vector here (Math.cos/sin of some angle —
+  // see _wallTrimmedFan), so this dot product IS the exact signed distance,
+  // with no division at all. The old `dirX !== 0 ? .../dirX : .../dirY`
+  // looked safe but wasn't: at exactly 90°/270° (or any angle near a
+  // cardinal direction), Math.cos/sin returns a tiny nonzero float like
+  // 6e-17 rather than a true 0 — "!== 0" is true, so it divides by that
+  // near-zero float anyway, blowing up any tiny floating-point error in the
+  // numerator into a wildly wrong distance. In a map with a couple hundred
+  // wall segments, some wall is essentially always misjudged at one of the
+  // four cardinal angles every full-circle Sentinel/Target shape always
+  // samples — producing a hit around distance 0 that reads as a thin spike
+  // stabbing to the token's own center, i.e. exactly the "crosshair" look
+  // reported in play, and why it happened regardless of where the token
+  // stood (any sufficiently wall-dense map keeps re-triggering it with a
+  // different wall each time).
+  const ix = a.x + sdx * t2, iy = a.y + sdy * t2;
+  const t1 = (ix - originX) * dirX + (iy - originY) * dirY;
   if (t1 < 0) return null;
   return t1;
 }
