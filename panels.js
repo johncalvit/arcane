@@ -929,7 +929,12 @@ function _dlgRender(body) {
         // a number the player can weigh against staying exposed in combat.
         const spellName = cur.label.slice('Casting: '.length);
         const spell = typeof SPELLS !== 'undefined' ? SPELLS.find(s => s.name === spellName) : null;
-        const roundsWaited = Math.max(1, (typeof atRound !== 'undefined' ? atRound : 0) - (cur.startRound != null ? cur.startRound : 0) + 1);
+        // _atSharedRound(), not bare atRound — atRound only advances on the
+        // GM's own client; a player's local copy never ticks, which made
+        // this preview stick at whatever % round 1 computed to (see
+        // atCastSpell/atCompleteCast, index.html, for the matching fix).
+        const nowRound = typeof _atSharedRound === 'function' ? _atSharedRound() : (typeof atRound !== 'undefined' ? atRound : 0);
+        const roundsWaited = Math.max(1, nowRound - (cur.startRound != null ? cur.startRound : 0) + 1);
         const curPct  = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, roundsWaited) : null;
         const nextPct = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, roundsWaited + 1) : null;
         spellChip = _dlgChip({

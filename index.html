@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260824d';
+const VERSION = 'v0.1.20260824e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7747,9 +7747,15 @@ async function atCastSpell(casterCid, spellName) {
   if (!c) return;
   if (!c.slots) c.slots = _newSlots();
   for (const k of Object.keys(c.slots)) c.slots[k] = null;
-  c.slots.full = { label: `Casting: ${spell.name}`, startRound: atRound, durationRounds: 9999, locksAll: true };
+  // _atSharedRound(), not bare atRound — atRound only ever advances on the
+  // GM's own client (atNext's atRound++); a player's local atRound just sits
+  // frozen, which made every round of windup on a player-controlled caster
+  // look identical to the GM's own round-tracking (see atCompleteCast and
+  // panels.js's windup chip, which have the same fix for the same reason).
+  const startRound = _atSharedRound();
+  c.slots.full = { label: `Casting: ${spell.name}`, startRound, durationRounds: 9999, locksAll: true };
   if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
-    payload: { combatantId: casterCid, slot: 'full', label: c.slots.full.label, startRound: atRound, durationRounds: 9999, locksAll: true } });
+    payload: { combatantId: casterCid, slot: 'full', label: c.slots.full.label, startRound, durationRounds: 9999, locksAll: true } });
   renderAtList(); renderPlayCharacter();
 }
 
@@ -7767,7 +7773,8 @@ let _castPendingRounds = 1;
 async function atCompleteCast(casterCid, spellName) {
   const c = atCombatants.find(x => x.id === casterCid);
   const startRound = c?.slots?.full?.startRound;
-  _castPendingRounds = Math.max(1, atRound - (startRound != null ? startRound : atRound) + 1);
+  const nowRound = _atSharedRound();
+  _castPendingRounds = Math.max(1, nowRound - (startRound != null ? startRound : nowRound) + 1);
   if (c?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
   const spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
@@ -10000,7 +10007,10 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   // as a banner in the action dialog; the tool never refuses an assignment.
 
   const durationRounds = dur >= 99 ? 9999 : Math.max(1, Math.ceil(dur / 3));
-  const entry = { label, startRound: atRound, durationRounds, locksAll: !!locksAll };
+  // _atSharedRound(), not bare atRound — see atCastSpell's comment. This is
+  // the same slot-timing mechanism every timed action uses (Sentinel/Target
+  // duration, Evade, attacks, ...), not just spells.
+  const entry = { label, startRound: _atSharedRound(), durationRounds, locksAll: !!locksAll };
 
   if (locksAll && c._preMoveX != null) {
     atCloseModal(); // dismiss action chooser before confirm dialog appears
@@ -15520,6 +15530,6 @@ switchGmTab = function(tab) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260822b"></script>
+<script src="panels.js?v=20260824a"></script>
 </body>
 </html>
