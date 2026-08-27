@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260825d';
+const VERSION = 'v0.1.20260826a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7850,6 +7850,34 @@ let aoeResolveState = null; // { casterEnt, spell, remaining: [tokens], resolve 
 // the caster can see.
 let _remoteAoePreview = null; // { casterCid, spell: {name, aoeShape, aoeSize}, rangeFt }
 
+// Tokens currently inside the LIVE aim preview — still just being aimed,
+// nothing committed yet. Separate from aoeFlaggedIds (tokens already
+// confirmed caught, mid-save-resolution) so a preview redraw can never
+// stomp that later, real state. Reuses the exact same pulsing .aoe-flagged
+// ring (same purple as the AOE shape itself) rather than inventing a
+// second visual language — reported live as players not being able to
+// tell who'd be caught before the caster committed to a direction/spot;
+// this answers that by showing it live, on every client watching, the
+// same way "who WAS caught" already renders after the fact.
+let _aoePreviewHighlightIds = new Set();
+
+function _aoeUpdatePreviewHighlight(ids) {
+  const next = new Set(ids);
+  for (const id of _aoePreviewHighlightIds) {
+    if (!next.has(id) && !aoeFlaggedIds.has(id)) {
+      document.getElementById('token-' + id)?.classList.remove('aoe-flagged');
+    }
+  }
+  for (const id of next) {
+    document.getElementById('token-' + id)?.classList.add('aoe-flagged');
+  }
+  _aoePreviewHighlightIds = next;
+}
+
+function _aoeClearPreviewHighlight() {
+  _aoeUpdatePreviewHighlight([]);
+}
+
 function enterAoeCastMode(casterCid, spell) {
   if (attackMode)    exitAttackMode();
   if (pathMode)      exitPathMode();
@@ -7876,6 +7904,7 @@ function exitAoeCastMode() {
   const svg = document.getElementById('aoe-svg');
   svg.style.display = 'none';
   svg.innerHTML = '';
+  _aoeClearPreviewHighlight();
   mapChannel?.send({ type: 'broadcast', event: 'aoe-preview-end', payload: {} });
 }
 
@@ -7995,6 +8024,16 @@ function _aoeDrawShape(casterCid, spell, rangeFt, cursorXPct, cursorYPct, readOn
       svg.appendChild(footprint);
     }
   }
+
+  // Highlight whoever the shape currently covers — see
+  // _aoeUpdatePreviewHighlight's comment. Shares one aim point per shape with
+  // the drawing above (the cursor itself for Circle, the cursor's DIRECTION
+  // for Sector/Line — but _aoeAffectedTokens only needs a point to derive
+  // that direction from, same as the drawing code's own dirAngle calc), so
+  // what's highlighted can't disagree with what's actually drawn.
+  _aoeUpdatePreviewHighlight(
+    cursorXPct != null ? _aoeAffectedTokens(casterCid, spell, cursorXPct, cursorYPct).map(t => t.id) : []
+  );
 
   const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
   prompt.setAttribute('x', vpX);
@@ -8280,23 +8319,27 @@ async function _resolveSpellObstacle(casterEnt, spell, aoePoint) {
 // queue: every target gets flagged (a highlight visible to the whole table,
 // not just the GM), and the GM clicks through them in whatever order makes
 // sense for the narration, character and creature saves interleaved.
-async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
+// Which map tokens (excluding the caster) fall inside a spell's area when
+// aimed at (aimXPct, aimYPct) — shared by the live aim preview's highlight
+// (_aoeDrawShape) and the actual resolution (_resolveSpellAoe) below, so
+// what's drawn/highlighted while aiming and what actually gets hit on
+// release can never drift apart. Returns [] if there's nothing to compute
+// against yet (no map, no aim point).
+function _aoeAffectedTokens(casterCid, spell, aimXPct, aimYPct) {
   const { radius, angle, length, width } = _parseAoeGeometry(spell);
   const shape = spell.aoeShape;
-  if (shape === 'Line' ? (length <= 0 || width <= 0) : radius <= 0) {
-    showToast(`${spell.name} has no configured area size.`, 'error'); return;
-  }
-  const casterToken = _pathFindToken(casterEnt.ref);
-  if (!casterToken || mapScalePPF <= 0 || !aoePoint) { showToast('No map/scale to resolve the area.', 'error'); return; }
+  const casterToken = _pathFindToken(casterCid);
+  if (!casterToken || mapScalePPF <= 0 || aimXPct == null || aimYPct == null) return [];
+  if (shape === 'Line' ? (length <= 0 || width <= 0) : radius <= 0) return [];
 
   const toFt = (xPct, yPct) => ({ x: (xPct / 100) * mapImgW / mapScalePPF, y: (yPct / 100) * mapImgH / mapScalePPF });
   const casterFt = toFt(casterToken.x_pct, casterToken.y_pct);
-  const centerFt = toFt(aoePoint.xPct, aoePoint.yPct);
+  const centerFt = toFt(aimXPct, aimYPct);
   const dirLen   = Math.hypot(centerFt.x - casterFt.x, centerFt.y - casterFt.y) || 1;
   const dirAngle = Math.atan2(centerFt.y - casterFt.y, centerFt.x - casterFt.x);
   const ux = (centerFt.x - casterFt.x) / dirLen, uy = (centerFt.y - casterFt.y) / dirLen; // unit vector, Line only
 
-  const targets = Object.values(mapTokens).filter(t => {
+  return Object.values(mapTokens).filter(t => {
     if (t.id === casterToken.id) return false;
     if (!t.entity_type || !t.entity_id) return false;
     const tFt = toFt(t.x_pct, t.y_pct);
@@ -8315,6 +8358,18 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
     }
     return Math.hypot(tFt.x - centerFt.x, tFt.y - centerFt.y) <= radius;
   });
+}
+
+async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
+  const { radius, length, width } = _parseAoeGeometry(spell);
+  const shape = spell.aoeShape;
+  if (shape === 'Line' ? (length <= 0 || width <= 0) : radius <= 0) {
+    showToast(`${spell.name} has no configured area size.`, 'error'); return;
+  }
+  const casterToken = _pathFindToken(casterEnt.ref);
+  if (!casterToken || mapScalePPF <= 0 || !aoePoint) { showToast('No map/scale to resolve the area.', 'error'); return; }
+
+  const targets = _aoeAffectedTokens(casterEnt.ref, spell, aoePoint.xPct, aoePoint.yPct);
 
   if (!targets.length) { showToast(`${spell.name} catches no one.`, 'warn'); return; }
   logCombat(`${spell.name} catches ${targets.length} in the area.`, 'roll');
@@ -11014,6 +11069,7 @@ function subscribeMapRealtime() {
       if (!aoeMode) { // don't stomp a LOCAL cast in progress
         const svg = document.getElementById('aoe-svg');
         if (svg) { svg.style.display = 'none'; svg.innerHTML = ''; }
+        _aoeClearPreviewHighlight();
       }
     })
     // Which tokens are still awaiting their individual AOE save (see
