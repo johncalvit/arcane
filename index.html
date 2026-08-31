@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260826a';
+const VERSION = 'v0.1.20260826b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10982,15 +10982,35 @@ function _triggerStrayShot(roll, threshold, ctx) {
     strayThreshold = Math.round(ctx.adjustedHit * strayAdj);
   }
 
+  // Damage/location context for the stray target — same weapon/attacker as
+  // the original shot (ctx carries those through from attackTokenClick),
+  // just a different victim. Without this, a successful "Roll to Hit" below
+  // had nothing for the roller's own completion logic to apply damage
+  // through (it only ever fires _applyDamageAfterHit when both locContext
+  // AND damageContext are set) — the roll would show a hit and then just...
+  // stop, no damage, no journal entry. A regular (non-called-shot) torso-
+  // style hit, matching how undefended/no-called-shot attacks already work.
+  const strayBodyType = getEntity(_entityRef(strayTarget.entity_type, strayTarget.entity_id))?.bodyType || 'Humanoid';
+  const strayLocContext = { bodyType: strayBodyType, partKey: null };
+  const strayDamageContext = {
+    targetEntityType: strayTarget.entity_type,
+    targetEntityId:   strayTarget.entity_id,
+    targetTokenId:    strayTarget.id,
+    atkPower:    ctx.atkPower,
+    weaponRow:   ctx.weaponRow,
+    actionLabel: ctx.actionLabel,
+    attackerCombatantId: ctx.attackerCombatantId,
+  };
+
   // Close the original roller, show the ray, then prompt for stray roll
   setTimeout(() => {
     document.getElementById('roller-overlay').style.display = 'none';
     _roller = null;
-    _showStrayPrompt(strayTarget, dirStr, strayThreshold);
+    _showStrayPrompt(strayTarget, dirStr, strayThreshold, strayLocContext, strayDamageContext);
   }, 400);
 }
 
-function _showStrayPrompt(strayTarget, dirStr, strayThreshold) {
+function _showStrayPrompt(strayTarget, dirStr, strayThreshold, locContext, damageContext) {
   const existing = document.getElementById('stray-prompt');
   if (existing) existing.remove();
 
@@ -11005,27 +11025,38 @@ function _showStrayPrompt(strayTarget, dirStr, strayThreshold) {
   d.innerHTML = `
     <div style="font-size:0.95rem;color:#ff9020;font-weight:bold;margin-bottom:6px;">⚠ Stray Shot!</div>
     <div style="font-size:0.85rem;color:var(--text-muted,#aaa);margin-bottom:10px;">
-      Shot veered ${dirStr}<br>and may hit <strong style="color:var(--text-bright,#fff);">${strayTarget.label}</strong>
+      Shot veered ${dirStr}<br>and may hit <strong style="color:var(--text-bright,#fff);">${_paEsc(strayTarget.label)}</strong>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;">
-      <button onclick="
-        document.getElementById('stray-prompt').remove();
-        openRoller({
-          label: '⚠ Stray Shot → ${strayTarget.label.replace(/'/g,"\\'")}',
-          min:1, max:100,
-          target:${strayThreshold},
-          targetLabel:'Deflected ${dirStr.replace(/'/g,"\\'")} · undefended'
-        });"
+      <button id="stray-roll-btn"
         style="padding:6px 18px;background:#e08030;border:none;border-radius:5px;color:#fff;cursor:pointer;font-weight:bold;">
         Roll to Hit
       </button>
-      <button onclick="document.getElementById('stray-prompt').remove();clearStrayRay(true);"
+      <button id="stray-dismiss-btn"
         style="padding:6px 18px;background:#444;border:none;border-radius:5px;color:#ccc;cursor:pointer;">
         Dismiss
       </button>
     </div>
   `;
   document.body.appendChild(d);
+
+  // Real listeners (not inline onclick strings) so damageContext/locContext
+  // — live objects, not something safely embeddable in an HTML attribute —
+  // can actually reach openRoller.
+  document.getElementById('stray-roll-btn').onclick = () => {
+    d.remove();
+    openRoller({
+      label: `⚠ Stray Shot → ${strayTarget.label}`,
+      min: 1, max: 100,
+      target: strayThreshold,
+      targetLabel: `Deflected ${dirStr} · undefended`,
+      locContext, damageContext,
+    });
+  };
+  document.getElementById('stray-dismiss-btn').onclick = () => {
+    d.remove();
+    clearStrayRay(true);
+  };
 }
 
 // ─── Supabase Realtime ────────────────────────────────────────────────────────
@@ -12284,6 +12315,13 @@ function attackTokenClick(tokenId) {
         atkTokenId: atkToken.id,
         adjustedHit,
         rangeFt:    attackRangeFt,
+        // Carried through to _triggerStrayShot/_showStrayPrompt so a
+        // successful stray-hit roll can actually apply damage — same
+        // weapon/attacker, just a different (unlucky) victim.
+        weaponRow:   attackWeaponRow,
+        atkPower,
+        actionLabel: attackActionLabel,
+        attackerCombatantId: attackCombatantId,
       };
     }
   }
