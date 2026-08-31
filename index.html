@@ -5136,7 +5136,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260831c';
+const VERSION = 'v0.1.20260831d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6062,6 +6062,10 @@ function enterPlayMode() {
   const gmToolbar = document.getElementById('map-toolbar-gm');
   const authoringToolbar = document.getElementById('map-toolbar-authoring');
   const resizeRight = document.getElementById('resize-right');
+  // Campaign Notes: the GM authors/manages them from the Maps & Notes tab
+  // (part of gmPanel, already gated below); players get a separate read-only
+  // entry point instead, since they never see gmPanel at all.
+  const playerNotesBtn = document.getElementById('player-notes-btn');
   if (isGM()) {
     gmPanel.style.display = 'flex';
     resizeRight.style.display = '';
@@ -6071,12 +6075,14 @@ function enterPlayMode() {
       <span class="tb-label">GM:</span>
       <button class="btn-sm btn-text" onclick="triggerMapUpload()">⬆ Upload</button>`;
     if (authoringToolbar) authoringToolbar.style.display = 'flex';
+    if (playerNotesBtn) playerNotesBtn.style.display = 'none';
     loadMapLibrary();
   } else {
     gmPanel.style.display = 'none';
     resizeRight.style.display = 'none';
     gmToolbar.style.display = 'none';
     if (authoringToolbar) authoringToolbar.style.display = 'none';
+    if (playerNotesBtn) playerNotesBtn.style.display = '';
   }
 
   renderPlayCharacter();
@@ -15220,6 +15226,7 @@ switchGmTab = function(tab) {
   });
   if (tab === 'tokens')  populateCreatureSpecies();
   if (tab === 'actions') { atPopulateAddSel(); atAutoAddMapTokens(); }
+  if (tab === 'maps')    refreshCampaignNotesTab();
 };
 
 // ═══ DOCUMENTS (Stage 2: help / campaign notes / map notes) ══════════════════
@@ -15664,6 +15671,207 @@ Your character's Level is derived automatically from XP — the GM awards XP aft
 
 Play Mode is where your character actually moves around the map, fights, and casts spells alongside everyone else at the table. Your GM will walk you through the specifics that first session, but at a glance: click your token to see your action options, the map shows where everyone is, and the Journal (bottom left) logs everything that happens so you can scroll back if you missed something.
 `;
+
+// ═══ CAMPAIGN NOTES (Phase 4) ══════════════════════════════════════════════
+// GM worldbuilding docs, campaign-scoped, embedded directly in the "Maps &
+// Notes" GM tab rather than a modal (it's a standing part of the GM's own
+// panel, unlike Help which any GM opens fleetingly). Same documents table and
+// renderDocumentBody() as Help/Phase 1, filtered to scope:'campaign'. A doc
+// can be flipped visible_to_players, which is all that gates it into the
+// separate read-only viewer players get (openCampaignNotesPanel) — players
+// never see the GM tab at all, so they need their own entry point.
+let _campaignDocs = [];
+let _campaignActiveId = null;
+let _campaignEditing = false;
+
+async function refreshCampaignNotesTab() {
+  if (!currentCampaignId) { _campaignDocs = []; _campaignActiveId = null; _renderCampaignNotesTab(); return; }
+  _campaignDocs = await loadDocuments({ scope: 'campaign', campaign_id: currentCampaignId });
+  if (!_campaignDocs.some(d => d.id === _campaignActiveId)) _campaignActiveId = _campaignDocs[0]?.id || null;
+  _campaignEditing = false;
+  _renderCampaignNotesTab();
+}
+
+function _campaignSelectDoc(id) { _campaignActiveId = id; _campaignEditing = false; _renderCampaignNotesTab(); }
+
+async function _campaignNewDoc() {
+  if (!currentCampaignId) { showToast('Select a campaign first.', 'error'); return; }
+  const title = prompt('Title for the new campaign note:');
+  if (!title || !title.trim()) return;
+  const created = await saveDocument({ scope: 'campaign', campaign_id: currentCampaignId, title: title.trim(), body: '', visible_to_players: false });
+  if (!created) return;
+  _campaignDocs.push(created);
+  _campaignActiveId = created.id;
+  _campaignEditing = true;
+  _renderCampaignNotesTab();
+}
+
+function _campaignStartEdit() { _campaignEditing = true; _renderCampaignNotesTab(); }
+function _campaignCancelEdit() { _campaignEditing = false; _renderCampaignNotesTab(); }
+
+async function _campaignSaveEdit() {
+  const doc = _campaignDocs.find(d => d.id === _campaignActiveId);
+  if (!doc) return;
+  const title = document.getElementById('campaign-edit-title')?.value.trim() || doc.title;
+  const body = document.getElementById('campaign-edit-body')?.value ?? doc.body;
+  const visible = !!document.getElementById('campaign-edit-visible')?.checked;
+  const saved = await saveDocument({ id: doc.id, scope: 'campaign', campaign_id: currentCampaignId, title, body, visible_to_players: visible });
+  if (!saved) return;
+  Object.assign(doc, saved);
+  _campaignEditing = false;
+  _renderCampaignNotesTab();
+}
+
+async function _campaignDeleteDoc(id) {
+  const doc = _campaignDocs.find(d => d.id === id);
+  if (!doc || !confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+  if (!(await deleteDocument(id))) return;
+  _campaignDocs = _campaignDocs.filter(d => d.id !== id);
+  _campaignActiveId = _campaignDocs[0]?.id || null;
+  _campaignEditing = false;
+  _renderCampaignNotesTab();
+}
+
+function _renderCampaignNotesTab() {
+  const listEl = document.getElementById('campaign-notes-list');
+  const bodyEl = document.getElementById('campaign-notes-body');
+  if (!listEl || !bodyEl) return;
+
+  if (!_campaignDocs.length) {
+    listEl.innerHTML = '';
+    bodyEl.innerHTML = `<div style="color:var(--text-dim);font-size:0.78rem;font-style:italic;">No campaign notes yet — click "+ New" above to start one.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = _campaignDocs.map(d => {
+    const active = d.id === _campaignActiveId;
+    return `<div data-doc-id="${d.id}" style="padding:6px 10px;cursor:pointer;font-size:0.8rem;display:flex;justify-content:space-between;align-items:center;
+      color:${active ? 'var(--gold2)' : 'var(--text)'};background:${active ? 'rgba(201,168,76,0.15)' : 'transparent'};">
+      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${_paEsc(d.title)}</span>
+      ${d.visible_to_players ? '<span title="Visible to players" style="flex-shrink:0;margin-left:6px;">👁</span>' : ''}
+    </div>`;
+  }).join('');
+  listEl.querySelectorAll('[data-doc-id]').forEach(row => {
+    row.onclick = () => _campaignSelectDoc(row.dataset.docId);
+  });
+
+  const doc = _campaignDocs.find(d => d.id === _campaignActiveId) || _campaignDocs[0];
+
+  if (_campaignEditing) {
+    bodyEl.innerHTML = `
+      <input id="campaign-edit-title" type="text" value="${_paEsc(doc.title)}"
+        style="width:100%;font-size:0.85rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
+        border:1px solid var(--border);border-radius:4px;padding:5px 7px;margin-bottom:6px;font-family:Georgia,serif;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.74rem;color:var(--text-dim);margin-bottom:6px;cursor:pointer;">
+        <input type="checkbox" id="campaign-edit-visible" ${doc.visible_to_players ? 'checked' : ''}> Visible to players
+      </label>
+      <textarea id="campaign-edit-body" spellcheck="false"
+        style="width:100%;height:220px;background:var(--bg3);color:var(--text);border:1px solid var(--border);
+        border-radius:4px;padding:7px;font-family:'Courier New',monospace;font-size:0.78rem;resize:vertical;">${_paEsc(doc.body)}</textarea>
+      <div style="font-size:0.66rem;color:var(--text-dim);margin:5px 0;">
+        Markdown — headings become collapsible sections, **bold**, *italic*, - lists, ![alt](url) images, [[Other Doc Title]] links.
+      </div>
+      <div style="display:flex;gap:6px;">
+        <button id="campaign-save-btn" class="btn" style="font-size:0.76rem;padding:4px 10px;">Save</button>
+        <button id="campaign-cancel-btn" class="btn danger" style="font-size:0.76rem;padding:4px 10px;">Cancel</button>
+        <div style="flex:1;"></div>
+        <button id="campaign-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.72rem;">Delete</button>
+      </div>`;
+    document.getElementById('campaign-save-btn').onclick = _campaignSaveEdit;
+    document.getElementById('campaign-cancel-btn').onclick = _campaignCancelEdit;
+    document.getElementById('campaign-delete-btn').onclick = () => _campaignDeleteDoc(doc.id);
+  } else {
+    bodyEl.innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <div style="font-size:0.85rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(doc.title)}</div>
+        <span style="font-size:0.68rem;color:var(--text-dim);">${doc.visible_to_players ? '👁 visible to players' : '🔒 GM only'}</span>
+        <button id="campaign-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:3px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.7rem;">✎ Edit</button>
+      </div>
+      <div id="campaign-notes-rendered" style="font-size:0.8rem;"></div>`;
+    document.getElementById('campaign-edit-btn').onclick = _campaignStartEdit;
+    const rendered = document.getElementById('campaign-notes-rendered');
+    rendered.innerHTML = doc.body.trim() ? renderDocumentBody(doc.body, _campaignDocs) : `<p style="color:var(--text-dim);font-style:italic;">Empty.</p>`;
+    rendered.querySelectorAll('.doc-link').forEach(a => {
+      a.onclick = (e) => { e.preventDefault(); _campaignSelectDoc(a.dataset.docId); };
+    });
+  }
+}
+
+// ── Player-facing read-only viewer ─────────────────────────────────────────
+// Players never see the GM tab, so this is a separate modal (same shape as
+// the Help panel) fed only the docs the GM has flipped visible_to_players.
+async function openCampaignNotesPanel() {
+  if (!currentCampaignId) { showToast('No campaign selected.', 'error'); return; }
+  const docs = (await loadDocuments({ scope: 'campaign', campaign_id: currentCampaignId })).filter(d => d.visible_to_players);
+  _renderCampaignNotesModal(docs);
+}
+
+function closeCampaignNotesModal() { document.getElementById('campaign-notes-modal')?.remove(); }
+
+function _renderCampaignNotesModal(docs, activeId) {
+  document.getElementById('campaign-notes-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'campaign-notes-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) closeCampaignNotesModal(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
+  header.innerHTML = `<div style="font-size:1rem;font-weight:bold;color:var(--gold);flex:1;">📓 Campaign Notes</div>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;';
+  closeBtn.onclick = closeCampaignNotesModal;
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.style.cssText = 'display:flex;flex:1;min-height:0;';
+  card.appendChild(body);
+
+  if (!docs.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:30px;text-align:center;color:var(--text-dim);flex:1;';
+    empty.innerHTML = '<p>Nothing shared yet — check back once your GM has posted something.</p>';
+    body.appendChild(empty);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    return;
+  }
+
+  const active = (activeId != null && docs.find(d => d.id === activeId)) || docs[0];
+
+  const list = document.createElement('div');
+  list.style.cssText = 'width:180px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px;';
+  docs.forEach(d => {
+    const item = document.createElement('div');
+    const isActive = d.id === active.id;
+    item.textContent = d.title;
+    item.style.cssText = `padding:7px 9px;border-radius:5px;cursor:pointer;font-size:0.82rem;margin-bottom:2px;
+      color:${isActive ? 'var(--gold2)' : 'var(--text)'};background:${isActive ? 'rgba(201,168,76,0.15)' : 'transparent'};`;
+    item.onclick = () => _renderCampaignNotesModal(docs, d.id);
+    list.appendChild(item);
+  });
+  body.appendChild(list);
+
+  const content = document.createElement('div');
+  content.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;min-width:0;';
+  content.innerHTML = `<div style="font-size:0.95rem;font-weight:bold;color:var(--gold2);margin-bottom:10px;">${_paEsc(active.title)}</div>
+    <div id="campaign-notes-modal-body">${active.body.trim() ? renderDocumentBody(active.body, docs) : '<p style="color:var(--text-dim);font-style:italic;">Empty.</p>'}</div>`;
+  body.appendChild(content);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  content.querySelectorAll('.doc-link').forEach(a => {
+    a.onclick = (e) => { e.preventDefault(); _renderCampaignNotesModal(docs, a.dataset.docId); };
+  });
+}
 </script>
 
 
@@ -15861,6 +16069,7 @@ Play Mode is where your character actually moves around the map, fights, and cas
     <span id="play-title" class="mode-title">⚔ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div style="margin-left:auto;display:flex;gap:8px;">
+      <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
       <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
@@ -15991,19 +16200,33 @@ Play Mode is where your character actually moves around the map, fights, and cas
     <!-- RIGHT: GM panel (maps + tokens) -->
     <div class="play-panel play-panel-right" id="play-gm-panel" style="display:none;flex-direction:column;">
       <div class="gm-tabs">
-        <button class="gm-tab active" id="gm-tab-maps"    onclick="switchGmTab('maps')">Maps</button>
+        <button class="gm-tab active" id="gm-tab-maps"    onclick="switchGmTab('maps')">Maps &amp; Notes</button>
         <button class="gm-tab"        id="gm-tab-tokens"  onclick="switchGmTab('tokens')">Tokens</button>
         <button class="gm-tab"        id="gm-tab-actions" onclick="switchGmTab('actions')">Actions</button>
       </div>
 
-      <!-- MAPS TAB -->
+      <!-- MAPS & NOTES TAB -->
       <div id="gm-tab-content-maps" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
         <div class="map-upload-area">
           <button class="btn" style="width:100%;font-size:0.8rem;" onclick="triggerMapUpload()">⬆ Upload Map Image</button>
           <input type="file" id="map-file-input" accept="image/*" style="display:none" onchange="onMapFileSelected(this)">
           <div id="map-upload-status" style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
         </div>
-        <div id="map-list" style="overflow-y:auto;flex:1;"></div>
+        <div id="map-list" style="overflow-y:auto;max-height:32vh;flex:0 0 auto;"></div>
+
+        <!-- Campaign Notes (Phase 4 of the Documents plan) — GM worldbuilding
+             docs, optionally flipped visible to players (see the "Visible to
+             players" checkbox in the editor). Map-pin notes are a separate,
+             always-GM-only thing (Phase 5), not this list. -->
+        <div style="border-top:1px solid var(--border);display:flex;flex-direction:column;flex:1;overflow:hidden;">
+          <div style="padding:7px 10px;font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;
+            border-bottom:1px solid var(--border);background:var(--bg3);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+            <span>📓 Campaign Notes</span>
+            <button style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.7rem;" onclick="_campaignNewDoc()">+ New</button>
+          </div>
+          <div id="campaign-notes-list" style="flex-shrink:0;max-height:110px;overflow-y:auto;border-bottom:1px solid var(--border);"></div>
+          <div id="campaign-notes-body" style="flex:1;overflow-y:auto;padding:8px 10px;"></div>
+        </div>
       </div>
 
       <!-- TOKENS TAB -->
