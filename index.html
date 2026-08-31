@@ -922,6 +922,7 @@
     <h1 id="app-title" class="mode-title">✦ Arcane Character Builder</h1>
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;">
+    <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
     <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="enterPlayMode()">▶ Play Mode</button>
     <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="enterConfigMode()">⚙ GM Config Mode</button>
   </div>
@@ -5123,7 +5124,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260831a';
+const VERSION = 'v0.1.20260831b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15398,6 +15399,256 @@ function shareImageToJournal(imageUrl, caption) {
   logCombat(caption || 'Shared an image', 'good', { imageUrl });
   _openSharedImageModal(imageUrl, caption);
 }
+
+// ═══ HELP PANEL (Stage 2 continued) ═══════════════════════════════════════════
+// The "?" entry point next to the Mode buttons — everyone sees everything here
+// (no audience split, per the design discussion: "the GM role shouldn't be
+// mysterious"), and any GM can edit in place, no deploy needed, since a doc's
+// title/body are just rows in the shared 'global'-scope documents table.
+let _helpDocs = [];
+let _helpActiveId = null;
+let _helpEditing = false;
+
+async function openHelpPanel() {
+  _helpDocs = await loadDocuments({ scope: 'global' });
+  _helpActiveId = _helpDocs[0]?.id || null;
+  _helpEditing = false;
+  _renderHelpPanel();
+}
+
+function closeHelpPanel() {
+  document.getElementById('help-modal')?.remove();
+}
+
+// First-run convenience: rather than showing a GM an empty panel and making
+// them write the Quick Start Guide from scratch, offer to create a real one —
+// still just an ordinary document afterward, editable like any other.
+async function _seedDefaultQuickStart() {
+  const created = await saveDocument({ scope: 'global', title: 'Quick Start Guide', body: DEFAULT_QUICK_START_BODY });
+  if (!created) return;
+  _helpDocs = [created];
+  _helpActiveId = created.id;
+  _renderHelpPanel();
+}
+
+async function _helpNewDoc() {
+  const title = prompt('Title for the new help document:');
+  if (!title || !title.trim()) return;
+  const created = await saveDocument({ scope: 'global', title: title.trim(), body: '' });
+  if (!created) return;
+  _helpDocs.push(created);
+  _helpActiveId = created.id;
+  _helpEditing = true;
+  _renderHelpPanel();
+}
+
+async function _helpDeleteDoc(id) {
+  const doc = _helpDocs.find(d => d.id === id);
+  if (!doc || !confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+  if (!(await deleteDocument(id))) return;
+  _helpDocs = _helpDocs.filter(d => d.id !== id);
+  _helpActiveId = _helpDocs[0]?.id || null;
+  _helpEditing = false;
+  _renderHelpPanel();
+}
+
+function _helpStartEdit() { _helpEditing = true; _renderHelpPanel(); }
+function _helpCancelEdit() { _helpEditing = false; _renderHelpPanel(); }
+
+async function _helpSaveEdit() {
+  const doc = _helpDocs.find(d => d.id === _helpActiveId);
+  if (!doc) return;
+  const title = document.getElementById('help-edit-title')?.value.trim() || doc.title;
+  const body = document.getElementById('help-edit-body')?.value ?? doc.body;
+  const saved = await saveDocument({ id: doc.id, scope: 'global', title, body });
+  if (!saved) return;
+  Object.assign(doc, saved);
+  _helpEditing = false;
+  _renderHelpPanel();
+}
+
+function _renderHelpPanel() {
+  document.getElementById('help-modal')?.remove();
+  const canEdit = typeof isGM === 'function' && isGM();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'help-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) closeHelpPanel(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
+  header.innerHTML = `<div style="font-size:1rem;font-weight:bold;color:var(--gold);flex:1;">📖 Help</div>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;';
+  closeBtn.onclick = closeHelpPanel;
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const body = document.createElement('div');
+  body.style.cssText = 'display:flex;flex:1;min-height:0;';
+  card.appendChild(body);
+
+  // No docs at all yet — a first-run empty state (GM: offer to seed; player: nothing to see).
+  if (!_helpDocs.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:30px;text-align:center;color:var(--text-dim);flex:1;';
+    empty.innerHTML = canEdit
+      ? `<p>No help documents yet.</p>
+         <button id="help-seed-btn" class="btn" style="margin-top:10px;">Create the Quick Start Guide</button>`
+      : `<p>No help documents yet — check back once the GM has added some.</p>`;
+    body.appendChild(empty);
+    overlay.appendChild(card);
+    document.body.appendChild(overlay);
+    // Element lookup has to happen AFTER the overlay is actually attached to
+    // the document — getElementById can't find it in a still-detached tree.
+    if (canEdit) document.getElementById('help-seed-btn').onclick = () => { empty.replaceWith(_helpLoadingNode()); _seedDefaultQuickStart(); };
+    return;
+  }
+
+  // Doc list (left) — only meaningfully useful once there's more than one,
+  // but built to scale from the start rather than bolted on later.
+  const list = document.createElement('div');
+  list.style.cssText = 'width:180px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px;';
+  _helpDocs.forEach(d => {
+    const item = document.createElement('div');
+    const active = d.id === _helpActiveId;
+    item.textContent = d.title;
+    item.style.cssText = `padding:7px 9px;border-radius:5px;cursor:pointer;font-size:0.82rem;margin-bottom:2px;
+      color:${active ? 'var(--gold2)' : 'var(--text)'};background:${active ? 'rgba(201,168,76,0.15)' : 'transparent'};`;
+    item.onclick = () => { _helpActiveId = d.id; _helpEditing = false; _renderHelpPanel(); };
+    list.appendChild(item);
+  });
+  if (canEdit) {
+    const newBtn = document.createElement('button');
+    newBtn.textContent = '+ New Doc';
+    newBtn.style.cssText = 'width:100%;margin-top:6px;padding:6px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);';
+    newBtn.onclick = _helpNewDoc;
+    list.appendChild(newBtn);
+  }
+  body.appendChild(list);
+
+  // Content (right)
+  const content = document.createElement('div');
+  content.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;min-width:0;';
+  const doc = _helpDocs.find(d => d.id === _helpActiveId) || _helpDocs[0];
+
+  if (_helpEditing) {
+    content.innerHTML = `
+      <input id="help-edit-title" type="text" value="${_paEsc(doc.title)}"
+        style="width:100%;font-size:0.95rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
+        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:Georgia,serif;">
+      <textarea id="help-edit-body" spellcheck="false"
+        style="width:100%;height:50vh;background:var(--bg3);color:var(--text);border:1px solid var(--border);
+        border-radius:4px;padding:8px;font-family:'Courier New',monospace;font-size:0.82rem;resize:vertical;">${_paEsc(doc.body)}</textarea>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0;">
+        Markdown — #/##/### headings become collapsible sections, **bold**, *italic*, - lists, ![alt](url) images, [[Other Doc Title]] links.
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="help-save-btn" class="btn">Save</button>
+        <button id="help-cancel-btn" class="btn danger">Cancel</button>
+        <div style="flex:1;"></div>
+        <button id="help-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete this doc</button>
+      </div>`;
+  } else {
+    const titleRow = document.createElement('div');
+    titleRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;';
+    titleRow.innerHTML = `<div style="font-size:0.95rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(doc.title)}</div>`;
+    if (canEdit) {
+      const editBtn = document.createElement('button');
+      editBtn.textContent = '✎ Edit';
+      editBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;';
+      editBtn.onclick = _helpStartEdit;
+      titleRow.appendChild(editBtn);
+    }
+    content.appendChild(titleRow);
+    const rendered = document.createElement('div');
+    rendered.innerHTML = doc.body.trim() ? renderDocumentBody(doc.body, _helpDocs) : `<p style="color:var(--text-dim);font-style:italic;">Empty.</p>`;
+    content.appendChild(rendered);
+  }
+  body.appendChild(content);
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  if (_helpEditing) {
+    document.getElementById('help-save-btn').onclick = _helpSaveEdit;
+    document.getElementById('help-cancel-btn').onclick = _helpCancelEdit;
+    document.getElementById('help-delete-btn').onclick = () => _helpDeleteDoc(doc.id);
+  } else {
+    // [[Internal Doc Link]] clicks — jump to that doc within this same panel.
+    content.querySelectorAll('.doc-link').forEach(a => {
+      a.onclick = (e) => { e.preventDefault(); _helpActiveId = a.dataset.docId; _helpEditing = false; _renderHelpPanel(); };
+    });
+  }
+}
+
+function _helpLoadingNode() {
+  const d = document.createElement('div');
+  d.style.cssText = 'padding:30px;text-align:center;color:var(--text-dim);flex:1;';
+  d.textContent = 'Creating…';
+  return d;
+}
+
+// Seed content for a brand-new campaign's Quick Start Guide — real, useful
+// content written against how this app's Character Builder actually works,
+// not filler. Any GM can rewrite this afterward from the Edit button; this
+// only ever runs once, the first time someone opens Help with zero global
+// docs on record.
+const DEFAULT_QUICK_START_BODY = `Welcome! This guide walks through building your first character.
+
+# Building a Character
+
+Start in **Character Design Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically.
+
+## 1. Name, Species & Traits
+
+At the top of the Traits panel: character name, Species, Sex, Age, Height, Build, and Social/Mental Disposition. Species and Body Type drive a lot of the math later (size, speed, natural attributes), so pick those first — everything else is flavor you can freely change.
+
+## 2. Raw Stats
+
+You have **80 points** to spend across seven Raw Stats: Strength, Endurance, Agility, Memory, Intellect, Senses, and Quintessence. Use the +/- buttons or type a value directly. The "Points Used" bar at the top tracks how much of your 80 you've spent — go over and it turns red, but nothing stops you from adjusting until it's balanced.
+
+Quintessence is your magical aptitude — leave it at 0 for a non-caster, or invest in it if you plan to cast spells.
+
+## 3. Final Attributes
+
+These are computed automatically from your Raw Stats plus your Species, Age, Build, and Disposition choices — Power, Speed, Toughness, Stamina, Manual Dexterity, Physical Coordination, Knowledge, Social Skills, Logic, Intuition, and the five Senses. You don't spend points here directly; they update live as you change the raw stats above them.
+
+## 4. Skills
+
+Skills are bought with a separate Skill Points pool (shown on the Skills panel), spent per skill you want to invest in. Your success chance for each skill scales with the points invested and the Final Attribute it's tied to.
+
+## 5. Loadout — Weapons & Equipment
+
+Add weapons and general equipment from the Loadout panel — everything you carry contributes to your total carried weight. Once something's in your loadout, it becomes selectable as a held item (right hand / left hand) for combat.
+
+## 6. Armor
+
+Pick what you're wearing per body slot (Head, Torso, Arms, Legs, etc. — the exact slots depend on your Body Type). Armor reduces incoming damage by type (slash/pierce/crush) but can also carry an encumbrance cost.
+
+## 7. Spell Book (casters only)
+
+If you've invested in Quintessence and a magic-related skill, the Spell Book panel lists every spell you're eligible to know. Casting itself happens later, in Play Mode.
+
+## 8. Save
+
+**Save Character** in the left nav writes everything to your account. You can reload it any time from **Load Character**, and it'll show up for your GM to add to the map once you join their campaign.
+
+# Leveling Up
+
+Your character's Level is derived automatically from XP — the GM awards XP after combat encounters (via "Finish Combat" on their end), and your Level (and the Character Builder's XP field) update on their own once that happens. **Each level above 1 grants +1 to every Raw Stat**, shown on the Raw Stats panel as a small badge next to each stat once you've leveled up. You never spend points on this — it's automatic.
+
+# Playing in Play Mode
+
+Play Mode is where your character actually moves around the map, fights, and casts spells alongside everyone else at the table. Your GM will walk you through the specifics that first session, but at a glance: click your token to see your action options, the map shows where everyone is, and the Journal (bottom left) logs everything that happens so you can scroll back if you missed something.
+`;
 </script>
 
 
@@ -15595,6 +15846,7 @@ function shareImageToJournal(imageUrl, caption) {
     <span id="play-title" class="mode-title">⚔ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div style="margin-left:auto;display:flex;gap:8px;">
+      <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
     </div>
