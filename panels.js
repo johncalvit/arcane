@@ -243,6 +243,18 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   return _paSection('Equipment', html + rows);
 }
 
+// Free-text background/notes field — characters and creature templates
+// alike (both live in the same `characters` table, see
+// supabase-stage3-character-notes.sql). Plain text, not the Documents
+// system's Markdown — that's deliberate, per "let's just make a text
+// field." Hidden entirely when empty, same "don't show an empty section"
+// convention _paSecSpellBook already uses for non-casters.
+function _paSecNotes(ent) {
+  if (!ent.notes || !ent.notes.trim()) return '';
+  return _paSection('Background & Notes',
+    `<div style="font-size:0.8rem;line-height:1.5;white-space:pre-wrap;">${_paEsc(ent.notes)}</div>`);
+}
+
 function _paSecArmor(ent) {
   // Body-type-aware (see ARMOR_SLOTS, index.html) — a Quadruped shows
   // Head/Torso/Forelegs/Hindlegs/Tail here, not the Humanoid Arms/Legs it
@@ -410,7 +422,8 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
     ${_paSecSkills(skills, attrs)}
-    ${_paSecSpellBook(ent)}`;
+    ${_paSecSpellBook(ent)}
+    ${_paSecNotes(ent)}`;
 
   _paBind(el, { ent, isOwnSheet });
 }

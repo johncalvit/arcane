@@ -1070,6 +1070,13 @@
       </div>
       </div>
 
+      <h2 class="collapsible" onclick="toggleCollapse('notes')">Background &amp; Notes<span class="collapse-arrow" id="arrow-notes">▼</span></h2>
+      <div class="collapse-body" id="body-notes">
+        <textarea id="char-notes" placeholder="Backstory, personality, plot hooks, anything else worth remembering — visible on the play sheet during sessions."
+          style="width:100%;min-height:120px;background:var(--bg3);color:var(--text);border:1px solid var(--border);
+          border-radius:4px;padding:8px 10px;font-family:Georgia,serif;font-size:0.85rem;resize:vertical;"></textarea>
+      </div>
+
       <h2 class="collapsible" onclick="toggleCollapse('stats')">Raw Stats<span class="collapse-arrow" id="arrow-stats">▼</span></h2>
       <div class="collapse-body" id="body-stats">
       <div class="points-bar">
@@ -4754,6 +4761,7 @@ function gatherCharacterData() {
     mental:  document.getElementById('sel-mental').value,
     level:   characterLevel,
     xp:      characterXP,
+    notes:   document.getElementById('char-notes')?.value || '',
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
     skills:   { ...skillInvestments },
@@ -4806,6 +4814,7 @@ async function saveCharacter() {
     social:      data.social || '',
     mental:      data.mental || '',
     stats:       { ...data.stats, Level: data.level, XP: data.xp },
+    notes:       data.notes || '',
     features:    data.features,
     skills:      data.skills,
     weapons:     data.weapons,
@@ -4989,6 +4998,7 @@ async function loadCharacter(id) {
     social:    data.social,
     mental:    data.mental,
     stats:     data.stats,
+    notes:     data.notes,
     features:  data.features,
     skills:    data.skills,
     weapons:   data.weapons,
@@ -5031,6 +5041,8 @@ function _doNewCharacter() {
   setAvatarUrl('');
   applySpeciesDefaultAvatar();
   document.getElementById('char-name').value = '';
+  const newNotesEl = document.getElementById('char-notes');
+  if (newNotesEl) newNotesEl.value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   characterXP = 0;
   const newXpDisplay = document.getElementById('char-xp-display');
@@ -5124,7 +5136,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260831b';
+const VERSION = 'v0.1.20260831c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5825,6 +5837,8 @@ function importConfig(input) {
 function applyCharacterData(data) {
   // Basic fields
   if (data.name   !== undefined) document.getElementById('char-name').value   = data.name;
+  const notesEl = document.getElementById('char-notes');
+  if (notesEl) notesEl.value = data.notes || '';
   if (data.race)   document.getElementById('sel-race').value   = data.race;
   if (data.bodyType) {
     document.getElementById('sel-bodytype').value = data.bodyType;
@@ -6378,7 +6392,7 @@ function getArmorDR(armorType, category) {
 
 // Single source of truth for which character columns exist — used by every
 // SELECT so cache rows can never be missing a column again.
-const CHAR_COLUMNS = 'id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, features, weapons, equipment, held_items, armor, avatar_url, damage';
+const CHAR_COLUMNS = 'id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, features, weapons, equipment, held_items, armor, avatar_url, damage, notes';
 
 const _CREATURE_DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
 
@@ -6506,6 +6520,7 @@ function getEntity(ref) {
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
+    notes:     row.notes || '',
     // Characters: Level is purely derived from stats.XP (see _levelFromXp) —
     // no manual entry any more, so this can't drift from what's actually
     // been earned. Creatures don't accrue XP (see panels.js's Level/XP
@@ -16165,6 +16180,6 @@ Play Mode is where your character actually moves around the map, fights, and cas
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260824a"></script>
+<script src="panels.js?v=20260831a"></script>
 </body>
 </html>
