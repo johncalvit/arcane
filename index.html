@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260826c';
+const VERSION = 'v0.1.20260831a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6561,7 +6561,12 @@ const _LOG_COLORS = { hit:'#e05555', kill:'#cc2222', miss:'var(--text-dim)', goo
 function _logEsc(s) { return String(s == null ? '' : s).replace(/[&<>]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[c])); }
 function logCombat(text, kind, opts) {
   if (!text) return;
-  const entry = { t: Date.now(), text: String(text), kind: kind || '' };
+  // imageUrl (optional): see shareImageToJournal — a document image the GM
+  // shared to the table. Kept as its own field rather than embedded HTML in
+  // `text`, since _logEsc below deliberately escapes everything in text (no
+  // raw-HTML injection surface); the thumbnail/click-to-reopen is rendered
+  // from this field explicitly instead.
+  const entry = { t: Date.now(), text: String(text), kind: kind || '', imageUrl: opts?.imageUrl || null };
   _combatLog.push(entry);
   if (_combatLog.length > 300) _combatLog.shift();
   renderCombatLog();
@@ -6574,6 +6579,12 @@ function _logReceive(entry) {
   _combatLog.sort((a, b) => a.t - b.t);
   if (_combatLog.length > 300) _combatLog = _combatLog.slice(-300);
   renderCombatLog();
+  // A shared image is meant to land immediately for everyone at the table,
+  // not just whoever clicked "share" — reopen it here too. This runs for
+  // every OTHER client's copy of the broadcast; the sharer's own client
+  // opens it directly from shareImageToJournal instead of round-tripping
+  // through its own broadcast.
+  if (entry.imageUrl) _openSharedImageModal(entry.imageUrl, entry.text);
 }
 function renderCombatLog() {
   const el = document.getElementById('combat-log');
@@ -6585,9 +6596,21 @@ function renderCombatLog() {
   el.innerHTML = _combatLog.slice(-80).map(e => {
     const tm = new Date(e.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const col = _LOG_COLORS[e.kind] || 'var(--text)';
-    return `<div style="margin-bottom:3px;color:${col};"><span style="color:var(--text-dim);font-size:0.62rem;">${tm}</span> ${_logEsc(e.text)}</div>`;
+    const thumb = e.imageUrl
+      ? `<img src="${_paEsc(e.imageUrl)}" data-journal-img="${_paEsc(e.imageUrl)}" data-journal-caption="${_paEsc(e.text)}"
+           style="height:22px;vertical-align:middle;border-radius:3px;margin-left:5px;cursor:pointer;border:1px solid var(--border);"
+           title="Click to view full size">`
+      : '';
+    return `<div style="margin-bottom:3px;color:${col};"><span style="color:var(--text-dim);font-size:0.62rem;">${tm}</span> ${_logEsc(e.text)}${thumb}</div>`;
   }).join('');
   el.scrollTop = el.scrollHeight; // keep the latest in view
+  // Delegated (bound by assignment, so re-renders never stack listeners) —
+  // reopen a shared image's modal on click, same viewer shareImageToJournal
+  // opens immediately when the share happens.
+  el.onclick = (e) => {
+    const img = e.target.closest('[data-journal-img]');
+    if (img) _openSharedImageModal(img.dataset.journalImg, img.dataset.journalCaption);
+  };
 }
 function clearCombatLog() { _combatLog = []; renderCombatLog(); }
 // Resolve a combatant/entity ref to a display name for the log.
@@ -15182,6 +15205,199 @@ switchGmTab = function(tab) {
   if (tab === 'tokens')  populateCreatureSpecies();
   if (tab === 'actions') { atPopulateAddSel(); atAutoAddMapTokens(); }
 };
+
+// ═══ DOCUMENTS (Stage 2: help / campaign notes / map notes) ══════════════════
+// Shared plumbing for all three use cases from the planning discussion:
+// 'global' docs (app-wide help — everyone can see, any GM can edit, no
+// campaign_id), 'campaign' docs (GM worldbuilding notes, optionally flipped
+// visible to players), and 'map' docs (GM-only notes pinned to a spot on a
+// specific map). One table, one Markdown renderer, one [[link]] resolver —
+// see supabase-stage2-documents.sql for the schema/RLS this reads and writes,
+// and the 'documents' storage bucket it also creates for embedded images.
+// No UI yet (that's the next phase — a "?" help panel, the Maps & Notes tab,
+// and numbered map pins); this is the data layer and renderer those will
+// all share, built first so there's one thing to test against instead of
+// three.
+
+// ── CRUD ───────────────────────────────────────────────────────────────────
+// filter: any subset of {scope, campaign_id, map_id} — omitted keys aren't
+// filtered on. RLS (not this function) is what actually enforces who can
+// see what; this just shapes the query.
+async function loadDocuments(filter) {
+  let q = sb.from('documents').select('*');
+  if (filter?.scope) q = q.eq('scope', filter.scope);
+  if (filter && 'campaign_id' in filter) q = q.eq('campaign_id', filter.campaign_id);
+  if (filter && 'map_id' in filter) q = q.eq('map_id', filter.map_id);
+  const { data, error } = await q.order('title');
+  if (error) { _writeErrorToast(error, 'documents (load)'); return []; }
+  return data || [];
+}
+
+// doc.id present → update that row; absent → insert a new one. Returns the
+// saved row (with its real id) or null on failure, same shape saveCharacter-
+// style callers already expect from a Supabase write.
+async function saveDocument(doc) {
+  const row = {
+    scope:              doc.scope,
+    campaign_id:        doc.campaign_id ?? null,
+    map_id:             doc.map_id ?? null,
+    x_pct:              doc.x_pct ?? null,
+    y_pct:              doc.y_pct ?? null,
+    title:              doc.title,
+    body:               doc.body ?? '',
+    visible_to_players: !!doc.visible_to_players,
+  };
+  if (doc.id) {
+    const { data, error } = await sb.from('documents').update(row).eq('id', doc.id).select().single();
+    if (error) { _writeErrorToast(error, 'documents (save)'); return null; }
+    return data;
+  }
+  row.created_by = currentUser?.id || null;
+  const { data, error } = await sb.from('documents').insert(row).select().single();
+  if (error) { _writeErrorToast(error, 'documents (create)'); return null; }
+  return data;
+}
+
+async function deleteDocument(id) {
+  const { error } = await sb.from('documents').delete().eq('id', id);
+  if (error) { _writeErrorToast(error, 'documents (delete)'); return false; }
+  return true;
+}
+
+// ── Markdown → HTML, with headings as nested collapsible sections ─────────
+// Deliberately not a full CommonMark implementation — just enough for what
+// the planning discussion asked for: headings (#.....######) that nest by
+// level and render as <details> so a long document reads like a one-page
+// wiki instead of needing real pagination, plus **bold**, *italic*, - lists,
+// ![images](url), [external links](url), and [[Internal Doc Links]] that
+// resolve against whatever document set the caller passes in (any scope —
+// a map note can link to a campaign doc and vice versa, deliberately not
+// walled off by scope, since "these map notes will need to link between
+// areas" was explicitly the ask).
+
+// Splits raw Markdown into a tree by heading level — a run of body lines
+// belongs to whichever heading most recently opened at or below its level,
+// same nesting rule Markdown outlines already imply (a ## under a # nests
+// inside it; a ## after another ## is a sibling, not a child).
+function _docParseHeadingTree(body) {
+  const root = { level: 0, title: null, lines: [], children: [] };
+  const stack = [root];
+  for (const raw of String(body || '').split('\n')) {
+    const m = raw.match(/^(#{1,6})\s+(.*)$/);
+    if (m) {
+      const level = m[1].length;
+      while (stack.length > 1 && stack[stack.length - 1].level >= level) stack.pop();
+      const node = { level, title: m[2].trim(), lines: [], children: [] };
+      stack[stack.length - 1].children.push(node);
+      stack.push(node);
+    } else {
+      stack[stack.length - 1].lines.push(raw);
+    }
+  }
+  return root;
+}
+
+// Inline formatting for one block of text. `text` is escaped FIRST (so any
+// literal HTML a GM typed can't inject), then every substitution below
+// injects real tags into that already-safe string — the captured groups are
+// therefore already-escaped substrings too, so none of them get re-escaped
+// (that would double-escape "&" into "&amp;amp;" etc).
+function _docRenderInline(text, resolveLink) {
+  let html = _paEsc(text);
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (m, alt, url) =>
+    `<img src="${url}" alt="${alt}" style="max-width:100%;border-radius:4px;margin:6px 0;display:block;">`);
+  html = html.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, title, display) => {
+    const key = title.trim();
+    const target = resolveLink ? resolveLink(key) : null;
+    const label = (display || title).trim();
+    return target
+      ? `<a href="#" class="doc-link" data-doc-id="${target.id}" style="color:var(--gold2);text-decoration:underline;cursor:pointer;">${label}</a>`
+      : `<span class="doc-link-missing" title="No document titled &quot;${key}&quot;" style="color:#e05555;text-decoration:underline dotted;cursor:help;">${label}</span>`;
+  });
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, (m, label, url) =>
+    `<a href="${url}" target="_blank" rel="noopener" style="color:var(--gold2);">${label}</a>`);
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  return html;
+}
+
+// A heading node's own body lines (before its child headings) into
+// paragraphs and simple "- " lists — blank lines separate paragraphs, same
+// as everywhere else Markdown-ish.
+function _docRenderBlock(lines, resolveLink) {
+  const blocks = [];
+  let para = [], list = null;
+  const flushPara = () => { if (para.length) { blocks.push({ type: 'p', text: para.join(' ') }); para = []; } };
+  const flushList = () => { if (list) { blocks.push(list); list = null; } };
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '');
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    const li = line.match(/^\s*-\s+(.*)$/);
+    if (li) { flushPara(); if (!list) list = { type: 'ul', items: [] }; list.items.push(li[1]); continue; }
+    flushList();
+    para.push(line.trim());
+  }
+  flushPara(); flushList();
+  return blocks.map(b => b.type === 'ul'
+    ? `<ul style="margin:4px 0;padding-left:20px;">${b.items.map(i => `<li>${_docRenderInline(i, resolveLink)}</li>`).join('')}</ul>`
+    : `<p style="margin:4px 0;">${_docRenderInline(b.text, resolveLink)}</p>`
+  ).join('');
+}
+
+function _docRenderNode(node, resolveLink) {
+  const ownHtml = _docRenderBlock(node.lines, resolveLink);
+  const childHtml = node.children.map(c => _docRenderNode(c, resolveLink)).join('');
+  if (node.title == null) return ownHtml + childHtml; // root has no heading of its own
+  return `<details open class="doc-section" style="margin:4px 0;">
+    <summary style="cursor:pointer;font-weight:bold;color:var(--gold2);padding:4px 0;">${_paEsc(node.title)}</summary>
+    <div class="doc-section-body" style="padding:2px 0 4px 14px;border-left:2px solid var(--border);">${ownHtml}${childHtml}</div>
+  </details>`;
+}
+
+// Renders one document's Markdown body to HTML. `docsForLinks` is the full
+// set of documents [[links]] are allowed to resolve against — pass [] (or
+// omit) to render with every internal link showing as "missing" rather than
+// erroring, e.g. a quick preview before the rest of the doc set has loaded.
+function renderDocumentBody(body, docsForLinks) {
+  const byTitle = new Map((docsForLinks || []).map(d => [d.title.trim().toLowerCase(), d]));
+  const resolveLink = (title) => byTitle.get(title.toLowerCase()) || null;
+  return _docRenderNode(_docParseHeadingTree(body), resolveLink);
+}
+
+// ── Shared image viewer ─────────────────────────────────────────────────────
+// One simple modal, reused both by shareImageToJournal's immediate popup and
+// by clicking a thumbnail back in the Journal log later.
+function _openSharedImageModal(url, caption) {
+  document.getElementById('shared-image-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'shared-image-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.85);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;cursor:zoom-out;`;
+  overlay.onclick = () => overlay.remove();
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:90vw;max-height:80vh;border-radius:6px;box-shadow:0 8px 32px rgba(0,0,0,0.7);cursor:default;';
+  img.onclick = (e) => e.stopPropagation();
+  overlay.appendChild(img);
+  if (caption) {
+    const cap = document.createElement('div');
+    cap.style.cssText = 'color:var(--text);font-family:Georgia,serif;font-size:0.9rem;max-width:80vw;text-align:center;';
+    cap.textContent = caption;
+    overlay.appendChild(cap);
+  }
+  document.body.appendChild(overlay);
+}
+
+// Posts an image to the Journal, immediately, for the whole table — the
+// mechanism a document's "Share to Journal" button (built alongside the
+// document viewer UI, next phase) will call. Reuses the existing Journal
+// broadcast (logCombat/_logReceive) instead of a separate event: every other
+// client already gets this entry the normal way, and _logReceive's own
+// imageUrl check is what pops the modal open for them too.
+function shareImageToJournal(imageUrl, caption) {
+  logCombat(caption || 'Shared an image', 'good', { imageUrl });
+  _openSharedImageModal(imageUrl, caption);
+}
 </script>
 
 
