@@ -5123,7 +5123,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260826b';
+const VERSION = 'v0.1.20260826c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14760,9 +14760,14 @@ function drawWalls(mouseX, mouseY) {
   svg.innerHTML = '';
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
-  mapWalls.forEach(w => {
+  mapWalls.forEach((w, i) => {
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
-    else if (showAuthoring) _wallDrawShape(svg, w, color, fill, false);
+    // Index passed through so the GM can see, right on the map, which wall
+    // is which — the Manage Walls list numbers rows the same way (#1, #2,
+    // ...), but nothing on the map itself said which drawn line/shape was
+    // which, so a GM auditing walls had no way to match one to the other
+    // without deleting/toggling and watching to see what changed.
+    else if (showAuthoring) _wallDrawShape(svg, w, color, fill, false, false, i);
   });
   if (!showAuthoring) return; // nothing further to preview if not actively drawing
 
@@ -14787,7 +14792,7 @@ function drawWalls(mouseX, mouseY) {
   }
 }
 
-function _wallDrawShape(svg, w, color, fill, dashed, isObstacle) {
+function _wallDrawShape(svg, w, color, fill, dashed, isObstacle, index) {
   const pts = (w.points || []).map(_wallPctToVp);
   if (w.type === 'line' && pts.length >= 2) {
     const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -14817,12 +14822,14 @@ function _wallDrawShape(svg, w, color, fill, dashed, isObstacle) {
     svg.appendChild(el);
   }
   // Obstacles show their HP (the thing players actually care about);
-  // plain authoring walls show the vision/movement icons instead (only the
-  // GM ever sees those, mid-draw).
+  // plain authoring walls show their Manage Walls list number (so a GM can
+  // match a line on the map to the row they're editing) plus the vision/
+  // movement icons — only the GM ever sees any of this, mid-draw.
   if (pts.length && !dashed) {
+    const numLabel = index != null ? `#${index + 1} ` : '';
     const flags = isObstacle
       ? `❄ ${w.hp}/${w.maxHp} HP`
-      : (w.blocksVision ? '👁' : '') + (w.blocksMovement ? '🚶' : '');
+      : numLabel + (w.blocksVision ? '👁' : '') + (w.blocksMovement ? '🚶' : '');
     if (flags) {
       const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
       tx.setAttribute('x', pts[0].x); tx.setAttribute('y', pts[0].y - 8);
