@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arcane — Token Drag Turn-Gate Regression Tests</title>
+<style>
+  body { font-family: 'Courier New', monospace; background: #14100a; color: #ddd; padding: 24px; }
+  h1 { color: #d4af5a; font-size: 1.1rem; }
+  .pass { color: #7fd47f; }
+  .fail { color: #ff6b6b; font-weight: bold; }
+  .detail { color: #999; }
+  .summary { font-size: 1.15rem; margin-top: 18px; padding-top: 12px; border-top: 1px solid #333; }
+  .summary.ok { color: #7fd47f; }
+  .summary.bad { color: #ff6b6b; }
+  iframe { display: none; }
+</style>
+</head>
+<body>
+<h1>Token Drag Turn-Gate Regression Tests</h1>
+<p class="detail">Loads the real app in a hidden iframe and drives its actual
+startTokenDrag/_atIsCombatActive through real mousedown-shaped calls — no
+gating logic is reimplemented here. Covers the two historical fixes
+(9cc911d: block free-drag during combat; ca667e5: on-turn drag becomes a
+tracked/budgeted move) plus the 2026-09-01 finding that a player's client
+only knows combat is active via a broadcast landing — if that broadcast is
+missed (tab backgrounded, a reconnect racing the GM's first "Start"), the
+gate silently fails OPEN instead of closed, which is what "free drag
+reverted" turned out to be in practice.</p>
+<div id="results">Loading index.html&hellip;</div>
+<iframe id="app-frame" src="../index.html"></iframe>
+<script>
+const RESULTS = [];
+function assert(name, cond, detail) {
+  RESULTS.push({ name, pass: !!cond, detail: detail || '' });
+}
+function render() {
+  const el = document.getElementById('results');
+  const passed = RESULTS.filter(r => r.pass).length;
+  const allOk = passed === RESULTS.length;
+  el.innerHTML = RESULTS.map(r =>
+    `<div class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.name}${r.detail ? ` <span class="detail">&mdash; ${r.detail}</span>` : ''}</div>`
+  ).join('') + `<div class="summary ${allOk ? 'ok' : 'bad'}">${passed}/${RESULTS.length} passed</div>`;
+}
+
+document.getElementById('app-frame').addEventListener('load', () => {
+  const win = document.getElementById('app-frame').contentWindow;
+  try {
+    runTests(win);
+  } catch (e) {
+    assert('Test harness crashed', false, e.message);
+  }
+  render();
+});
+
+// index.html's state (isGM, currentCharacterId, mapTokens, atCombatants,
+// _atStateFromGM, pathMode, dragTokenId, mapChannel, ...) is almost entirely
+// top-level `let`/function-reassigned globals. Those are NOT reachable as
+// win.someName from OUTSIDE the iframe — not for reads, not for writes —
+// because a classic script's top-level `let`/`const` bindings live in the
+// realm's global LEXICAL environment, not as properties of the global
+// OBJECT (window). win.eval(code) runs the string as indirect eval, which
+// executes in that same lexical environment (the same trick the devtools
+// console uses on a page's own `let` globals) — so every read AND write of
+// this state has to go through evalIn(win, ...), never win.propName.
+function evalIn(win, code) { return win.eval(code); }
+
+function fakeEvent(x, y) {
+  return { clientX: x, clientY: y, preventDefault(){}, stopPropagation(){} };
+}
+
+function runTests(win) {
+  assert('startTokenDrag is defined', evalIn(win, `typeof startTokenDrag`) === 'function');
+  assert('_atIsCombatActive is defined', evalIn(win, `typeof _atIsCombatActive`) === 'function');
+  if (evalIn(win, `typeof startTokenDrag`) !== 'function') return;
+
+  // A real DOM token element — startTokenDrag touches its classList.
+  if (!win.document.getElementById('token-tok1')) {
+    const tokenEl = win.document.createElement('div');
+    tokenEl.id = 'token-tok1';
+    win.document.body.appendChild(tokenEl);
+  }
+
+  function baseSetup() {
+    evalIn(win, `
+      mapTokens = { tok1: { id: 'tok1', label: 'Betty', entity_type: 'character', entity_id: 'pc-1', x_pct: 40, y_pct: 40 } };
+      pathMode = false;
+      dragTokenId = null;
+      _tokenClickId = null;
+    `);
+  }
+  function drag(x, y) {
+    win.startTokenDrag(fakeEvent(x, y), 'tok1');
+    return evalIn(win, `dragTokenId`);
+  }
+
+  // ── GM: always unrestricted, any combat/turn state ─────────────────────
+  baseSetup();
+  evalIn(win, `isGM = () => true; currentCharacterId = null; atCombatants = []; _atStateFromGM = null;`);
+  assert('GM can always drag any token', drag(100, 100) === 'tok1');
+
+  // ── Player, off-turn, combat state correctly synced: must be blocked ───
+  baseSetup();
+  evalIn(win, `
+    isGM = () => false;
+    currentCharacterId = 'pc-1';
+    atCombatants = [{ id: 'char::pc-1', slots: null }, { id: 'char::other', slots: null }];
+    _atStateFromGM = { round: 1, activeId: 'char::other', active: true };
+  `);
+  const offTurnResult = drag(100, 100);
+  assert('Player off-turn drag is blocked when combat state IS synced (the core 9cc911d/ca667e5 fix)',
+    offTurnResult !== 'tok1', `dragTokenId=${offTurnResult}`);
+
+  // ── Player, ON their own turn: real (tracked) drag proceeds ─────────────
+  baseSetup();
+  evalIn(win, `
+    isGM = () => false;
+    currentCharacterId = 'pc-1';
+    atCombatants = [{ id: 'char::pc-1', slots: null }, { id: 'char::other', slots: null }];
+    _atStateFromGM = { round: 1, activeId: 'char::pc-1', active: true };
+  `);
+  assert('Player CAN drag their own token on their own confirmed active turn', drag(100, 100) === 'tok1');
+
+  // ── Known gap: combat state never synced to this client at all ─────────
+  // Documents the actual failure mode reported live, rather than silently
+  // leaving it uncovered — if this ever starts passing as "blocked", the
+  // underlying gate logic changed and this test (and its comment) need a
+  // second look; if it's still open, that confirms closing it needs a
+  // broader realtime-reliability fix, not just this gate.
+  baseSetup();
+  evalIn(win, `
+    isGM = () => false;
+    currentCharacterId = 'pc-1';
+    atCombatants = [{ id: 'char::pc-1', slots: null }, { id: 'char::other', slots: null }];
+    _atStateFromGM = null;
+  `);
+  const noSyncResult = drag(100, 100);
+  assert('KNOWN GAP: an out-of-sync player client (never got the at-state broadcast) fails OPEN, not closed',
+    noSyncResult === 'tok1',
+    'expected true today — this is the documented gap the visibility-resync mitigation targets, not a full fix');
+
+  // ── Mitigation: tab regaining visibility re-requests a fresh sync ───────
+  {
+    win.__testSentMessages = [];
+    evalIn(win, `
+      isGM = () => false;
+      mapChannel = { send: (msg) => window.__testSentMessages.push(msg) };
+    `);
+    if (evalIn(win, `typeof _armVisibilityResync`) === 'function') {
+      evalIn(win, `_armVisibilityResync(); _armVisibilityResync();`); // second call must not double-arm
+      Object.defineProperty(win.document, 'visibilityState', { value: 'visible', configurable: true });
+      win.document.dispatchEvent(new win.Event('visibilitychange'));
+    }
+    const sent = win.__testSentMessages;
+    assert('Regaining tab visibility re-requests combat-state sync exactly once',
+      sent.length === 1 && sent[0]?.event === 'at-sync-request',
+      `sent=${JSON.stringify(sent)}`);
+  }
+}
+</script>
+</body>
+</html>

@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901g';
+const VERSION = 'v0.1.20260901h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11352,6 +11352,29 @@ function subscribeMapRealtime() {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
         mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
     });
+
+  _armVisibilityResync();
+}
+
+// A player's own copy of combat state (_atStateFromGM) only ever updates via
+// a broadcast landing — there's no periodic resync, so a message dropped
+// while their tab was backgrounded/throttled (a real browser behavior, not
+// rare) leaves _atIsCombatActive() reporting stale/false indefinitely. That
+// silently reopens the exact free-drag hole 9cc911d/ca667e5 fixed: the
+// startTokenDrag turn-gate is wrapped in `&& _atIsCombatActive()`, so a
+// stale-false reading skips it entirely rather than failing safe. Re-running
+// the same late-joiner sync (at-sync-request/at-full-state) every time the
+// tab regains visibility closes most of that window without needing a
+// standing poll. Armed once per page load, not per subscribeMapRealtime()
+// call (map switches shouldn't stack up duplicate listeners).
+let _visibilityResyncArmed = false;
+function _armVisibilityResync() {
+  if (_visibilityResyncArmed) return;
+  _visibilityResyncArmed = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !isGM() && mapChannel)
+      mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
+  });
 }
 
 // ─── Map loading ──────────────────────────────────────────────────────────────
