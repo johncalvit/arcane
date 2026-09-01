@@ -3829,7 +3829,18 @@ let editingSpellIndex = null;
 
 // ─── Hit Location Data ────────────────────────────────────────────────────────
 // matrix: 8 rows × 5 cols, values are part keys or null (re-roll).
-// parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift called-shot rolls.
+// parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift
+// called-shot rolls (see rollHitLocation). Tuned 2026-09-01 so a called,
+// non-crit shot lands on the called part ~66% of the time — a 2026-08-30
+// playtest found headshots landing far less often than that (the old
+// biases only got Humanoid head to ~35%, worse than its own Torso).
+// rowBias/colBias only ever shift a roll toward a grid EDGE (clamping does
+// the biasing) — they can't concentrate probability on a CENTER cell, so a
+// part that's both small and column-centered (Dragon/Winged Humanoid/
+// Centaur head & tail, Insect thorax, Snake/Dragon neck) structurally caps
+// out well below 66% no matter the bias; those are tuned to their own best
+// achievable rate instead. See tests/hit-location.test.html for the
+// regression coverage this is checked against.
 const HIT_LOCATION_DATA = {
   Humanoid: {
     matrix: [
@@ -3843,12 +3854,12 @@ const HIT_LOCATION_DATA = {
       [null,   'r_leg', null,    'l_leg', null   ],
     ],
     parts: {
-      head:  { label:'Head',      sizeFactor:0.25, armorSlot:'head',  rowBias:-2, colBias: 0 },
+      head:  { label:'Head',      sizeFactor:0.25, armorSlot:'head',  rowBias:-5, colBias: 0 },
       torso: { label:'Torso',     sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
-      r_arm: { label:'Right Arm', sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
-      l_arm: { label:'Left Arm',  sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
-      r_leg: { label:'Right Leg', sizeFactor:0.45, armorSlot:'rleg',  rowBias: 2, colBias:-1 },
-      l_leg: { label:'Left Leg',  sizeFactor:0.45, armorSlot:'lleg',  rowBias: 2, colBias: 1 },
+      r_arm: { label:'Right Arm', sizeFactor:0.40, armorSlot:'rarm',  rowBias:-2, colBias:-3 },
+      l_arm: { label:'Left Arm',  sizeFactor:0.40, armorSlot:'larm',  rowBias:-2, colBias: 3 },
+      r_leg: { label:'Right Leg', sizeFactor:0.45, armorSlot:'rleg',  rowBias: 4, colBias:-2 },
+      l_leg: { label:'Left Leg',  sizeFactor:0.45, armorSlot:'lleg',  rowBias: 4, colBias: 2 },
     },
     defaultPart: 'torso',
   },
@@ -3864,14 +3875,14 @@ const HIT_LOCATION_DATA = {
       [null,     null,   'tail',  null,    null    ],
     ],
     parts: {
-      head:   { label:'Head',          sizeFactor:0.20, armorSlot:null,    rowBias:-3, colBias: 0 },
-      neck:   { label:'Neck',          sizeFactor:0.30, armorSlot:null,    rowBias:-1, colBias: 0 },
+      head:   { label:'Head',          sizeFactor:0.20, armorSlot:null,    rowBias:-5, colBias: 0 },
+      neck:   { label:'Neck',          sizeFactor:0.30, armorSlot:null,    rowBias:-5, colBias:-3 },
       torso:  { label:'Torso',         sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
-      l_fore: { label:'Left Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias:-1, colBias:-2 },
-      r_fore: { label:'Right Foreleg', sizeFactor:0.35, armorSlot:null,    rowBias:-1, colBias: 2 },
-      l_hind: { label:'Left Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias:-2 },
-      r_hind: { label:'Right Hindleg', sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias: 2 },
-      tail:   { label:'Tail',          sizeFactor:0.20, armorSlot:null,    rowBias: 3, colBias: 0 },
+      l_fore: { label:'Left Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias:-3, colBias:-3 },
+      r_fore: { label:'Right Foreleg', sizeFactor:0.35, armorSlot:null,    rowBias:-3, colBias: 3 },
+      l_hind: { label:'Left Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 4, colBias:-4 },
+      r_hind: { label:'Right Hindleg', sizeFactor:0.35, armorSlot:null,    rowBias: 4, colBias: 4 },
+      tail:   { label:'Tail',          sizeFactor:0.20, armorSlot:null,    rowBias: 6, colBias:-2 },
     },
     defaultPart: 'torso',
   },
@@ -3887,16 +3898,16 @@ const HIT_LOCATION_DATA = {
       [null,     'tail',  null,    'tail',  null    ],
     ],
     parts: {
-      head:   { label:'Head',           sizeFactor:0.30, armorSlot:null,    rowBias:-3, colBias: 0 },
-      neck:   { label:'Neck',           sizeFactor:0.40, armorSlot:null,    rowBias:-2, colBias: 0 },
+      head:   { label:'Head',           sizeFactor:0.30, armorSlot:null,    rowBias:-7, colBias: 0 },
+      neck:   { label:'Neck',           sizeFactor:0.40, armorSlot:null,    rowBias:-6, colBias: 0 },
       torso:  { label:'Torso',          sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
-      l_wing: { label:'Left Wing',      sizeFactor:0.50, armorSlot:null,    rowBias:-1, colBias:-2 },
-      r_wing: { label:'Right Wing',     sizeFactor:0.50, armorSlot:null,    rowBias:-1, colBias: 2 },
-      l_fore: { label:'Left Foreclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 1, colBias:-2 },
-      r_fore: { label:'Right Foreclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 1, colBias: 2 },
-      l_hind: { label:'Left Hindclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias:-2 },
-      r_hind: { label:'Right Hindclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias: 2 },
-      tail:   { label:'Tail',           sizeFactor:0.30, armorSlot:null,    rowBias: 3, colBias: 0 },
+      l_wing: { label:'Left Wing',      sizeFactor:0.50, armorSlot:null,    rowBias:-7, colBias:-1 },
+      r_wing: { label:'Right Wing',     sizeFactor:0.50, armorSlot:null,    rowBias:-7, colBias: 1 },
+      l_fore: { label:'Left Foreclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias:-4 },
+      r_fore: { label:'Right Foreclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias: 4 },
+      l_hind: { label:'Left Hindclaw',  sizeFactor:0.35, armorSlot:null,    rowBias: 4, colBias:-4 },
+      r_hind: { label:'Right Hindclaw', sizeFactor:0.35, armorSlot:null,    rowBias: 4, colBias: 4 },
+      tail:   { label:'Tail',           sizeFactor:0.30, armorSlot:null,    rowBias: 6, colBias:-3 },
     },
     defaultPart: 'torso',
   },
@@ -3912,14 +3923,14 @@ const HIT_LOCATION_DATA = {
       [null,     'r_leg', null,    'l_leg', null    ],
     ],
     parts: {
-      head:   { label:'Head',       sizeFactor:0.25, armorSlot:'head',  rowBias:-2, colBias: 0 },
+      head:   { label:'Head',       sizeFactor:0.25, armorSlot:'head',  rowBias:-6, colBias: 0 },
       torso:  { label:'Torso',      sizeFactor:1.00, armorSlot:'torso', rowBias: 0, colBias: 0 },
-      r_arm:  { label:'Right Arm',  sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
-      l_arm:  { label:'Left Arm',   sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
-      r_leg:  { label:'Right Leg',  sizeFactor:0.45, armorSlot:'rleg',  rowBias: 2, colBias:-1 },
-      l_leg:  { label:'Left Leg',   sizeFactor:0.45, armorSlot:'lleg',  rowBias: 2, colBias: 1 },
-      l_wing: { label:'Left Wing',  sizeFactor:0.45, armorSlot:null,    rowBias: 0, colBias:-2 },
-      r_wing: { label:'Right Wing', sizeFactor:0.45, armorSlot:null,    rowBias: 0, colBias: 2 },
+      r_arm:  { label:'Right Arm',  sizeFactor:0.40, armorSlot:'rarm',  rowBias: 2, colBias:-4 },
+      l_arm:  { label:'Left Arm',   sizeFactor:0.40, armorSlot:'larm',  rowBias: 2, colBias: 4 },
+      r_leg:  { label:'Right Leg',  sizeFactor:0.45, armorSlot:'rleg',  rowBias: 4, colBias:-2 },
+      l_leg:  { label:'Left Leg',   sizeFactor:0.45, armorSlot:'lleg',  rowBias: 4, colBias: 2 },
+      l_wing: { label:'Left Wing',  sizeFactor:0.45, armorSlot:null,    rowBias:-6, colBias:-1 },
+      r_wing: { label:'Right Wing', sizeFactor:0.45, armorSlot:null,    rowBias:-6, colBias: 1 },
     },
     defaultPart: 'torso',
   },
@@ -3935,16 +3946,16 @@ const HIT_LOCATION_DATA = {
       ['l_hind', null,     'tail',   null,     'r_hind'],
     ],
     parts: {
-      head:    { label:'Head',           sizeFactor:0.25, armorSlot:'head',  rowBias:-3, colBias: 0 },
-      torso:   { label:'Upper Torso',    sizeFactor:0.80, armorSlot:'torso', rowBias: 0, colBias: 0 },
-      r_arm:   { label:'Right Arm',      sizeFactor:0.40, armorSlot:'rarm',  rowBias: 0, colBias:-2 },
-      l_arm:   { label:'Left Arm',       sizeFactor:0.40, armorSlot:'larm',  rowBias: 0, colBias: 2 },
+      head:    { label:'Head',           sizeFactor:0.25, armorSlot:'head',  rowBias:-5, colBias: 0 },
+      torso:   { label:'Upper Torso',    sizeFactor:0.80, armorSlot:'torso', rowBias:-4, colBias: 0 },
+      r_arm:   { label:'Right Arm',      sizeFactor:0.40, armorSlot:'rarm',  rowBias:-3, colBias:-4 },
+      l_arm:   { label:'Left Arm',       sizeFactor:0.40, armorSlot:'larm',  rowBias:-3, colBias: 4 },
       l_torso: { label:'Lower Body',     sizeFactor:1.00, armorSlot:null,    rowBias: 2, colBias: 0 },
-      l_fore:  { label:'Left Foreleg',   sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias:-2 },
-      r_fore:  { label:'Right Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 2, colBias: 2 },
-      l_hind:  { label:'Left Hindleg',   sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias:-2 },
-      r_hind:  { label:'Right Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 3, colBias: 2 },
-      tail:    { label:'Tail',           sizeFactor:0.20, armorSlot:null,    rowBias: 3, colBias: 0 },
+      l_fore:  { label:'Left Foreleg',   sizeFactor:0.35, armorSlot:null,    rowBias:-2, colBias:-4 },
+      r_fore:  { label:'Right Foreleg',  sizeFactor:0.35, armorSlot:null,    rowBias:-2, colBias: 4 },
+      l_hind:  { label:'Left Hindleg',   sizeFactor:0.35, armorSlot:null,    rowBias: 7, colBias:-1 },
+      r_hind:  { label:'Right Hindleg',  sizeFactor:0.35, armorSlot:null,    rowBias: 7, colBias: 1 },
+      tail:    { label:'Tail',           sizeFactor:0.20, armorSlot:null,    rowBias: 7, colBias: 0 },
     },
     defaultPart: 'l_torso',
   },
@@ -3960,10 +3971,10 @@ const HIT_LOCATION_DATA = {
       [null, 'tail', 'tail', 'tail', null],
     ],
     parts: {
-      head: { label:'Head', sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
-      neck: { label:'Neck', sizeFactor:0.30, armorSlot:null, rowBias:-1, colBias: 0 },
+      head: { label:'Head', sizeFactor:0.20, armorSlot:null, rowBias:-4, colBias:-2 },
+      neck: { label:'Neck', sizeFactor:0.30, armorSlot:null, rowBias:-5, colBias:-2 },
       body: { label:'Body', sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
-      tail: { label:'Tail', sizeFactor:0.25, armorSlot:null, rowBias: 3, colBias: 0 },
+      tail: { label:'Tail', sizeFactor:0.25, armorSlot:null, rowBias: 4, colBias:-2 },
     },
     defaultPart: 'body',
   },
@@ -3979,12 +3990,12 @@ const HIT_LOCATION_DATA = {
       [null,    null,    null,    null,    null    ],
     ],
     parts: {
-      head:   { label:'Head',        sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
+      head:   { label:'Head',        sizeFactor:0.20, armorSlot:null, rowBias:-6, colBias:-2 },
       body:   { label:'Body',        sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
-      l_wing: { label:'Left Wing',   sizeFactor:0.45, armorSlot:null, rowBias:-1, colBias:-2 },
-      r_wing: { label:'Right Wing',  sizeFactor:0.45, armorSlot:null, rowBias:-1, colBias: 2 },
-      l_tal:  { label:'Left Talon',  sizeFactor:0.20, armorSlot:null, rowBias: 3, colBias:-1 },
-      r_tal:  { label:'Right Talon', sizeFactor:0.20, armorSlot:null, rowBias: 3, colBias: 1 },
+      l_wing: { label:'Left Wing',   sizeFactor:0.45, armorSlot:null, rowBias: 2, colBias:-3 },
+      r_wing: { label:'Right Wing',  sizeFactor:0.45, armorSlot:null, rowBias: 2, colBias: 3 },
+      l_tal:  { label:'Left Talon',  sizeFactor:0.20, armorSlot:null, rowBias: 5, colBias:-3 },
+      r_tal:  { label:'Right Talon', sizeFactor:0.20, armorSlot:null, rowBias: 5, colBias: 3 },
     },
     defaultPart: 'body',
   },
@@ -4000,11 +4011,11 @@ const HIT_LOCATION_DATA = {
       [null,   null,   'tail', null,   null   ],
     ],
     parts: {
-      head:  { label:'Head',      sizeFactor:0.25, armorSlot:null, rowBias:-3, colBias: 0 },
+      head:  { label:'Head',      sizeFactor:0.25, armorSlot:null, rowBias:-5, colBias: 0 },
       body:  { label:'Body',      sizeFactor:1.00, armorSlot:null, rowBias: 0, colBias: 0 },
-      l_fin: { label:'Left Fin',  sizeFactor:0.30, armorSlot:null, rowBias: 0, colBias:-2 },
-      r_fin: { label:'Right Fin', sizeFactor:0.30, armorSlot:null, rowBias: 0, colBias: 2 },
-      tail:  { label:'Tail',      sizeFactor:0.25, armorSlot:null, rowBias: 3, colBias: 0 },
+      l_fin: { label:'Left Fin',  sizeFactor:0.30, armorSlot:null, rowBias: 3, colBias:-3 },
+      r_fin: { label:'Right Fin', sizeFactor:0.30, armorSlot:null, rowBias: 3, colBias: 3 },
+      tail:  { label:'Tail',      sizeFactor:0.25, armorSlot:null, rowBias: 5, colBias: 0 },
     },
     defaultPart: 'body',
   },
@@ -4020,10 +4031,10 @@ const HIT_LOCATION_DATA = {
       [null,  null,     null,      null,     null  ],
     ],
     parts: {
-      head:    { label:'Head',    sizeFactor:0.20, armorSlot:null, rowBias:-3, colBias: 0 },
-      thorax:  { label:'Thorax',  sizeFactor:0.80, armorSlot:null, rowBias:-1, colBias: 0 },
+      head:    { label:'Head',    sizeFactor:0.20, armorSlot:null, rowBias:-5, colBias: 0 },
+      thorax:  { label:'Thorax',  sizeFactor:0.80, armorSlot:null, rowBias:-4, colBias: 0 },
       abdomen: { label:'Abdomen', sizeFactor:1.00, armorSlot:null, rowBias: 2, colBias: 0 },
-      legs:    { label:'Legs',    sizeFactor:0.25, armorSlot:null, rowBias: 0, colBias: 2 },
+      legs:    { label:'Legs',    sizeFactor:0.25, armorSlot:null, rowBias:-5, colBias:-3 },
     },
     defaultPart: 'abdomen',
   },
@@ -5156,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901b';
+const VERSION = 'v0.1.20260901c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL

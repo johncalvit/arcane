@@ -88,9 +88,10 @@ function runTests(win) {
   //    above that part's unbiased (uncalled-attack) hit rate. This is the
   //    direct regression check for "calling a shot stopped mattering" — a
   //    2026-08-30 playtest found headshots landing far less than expected
-  //    (a real, confirmed ~35% for Humanoid head, not a bug — but this
-  //    guards against the bias being silently zeroed out entirely, which
-  //    would make called shots pointless on every non-crit hit).
+  //    (a confirmed ~35% for Humanoid head at the time). Biases were
+  //    retuned 2026-09-01 to land the called part ~66% of the time
+  //    wherever the matrix geometry allows it — see the pinned Humanoid
+  //    head check further down for the exact regression guard on that.
   //
   //    Large body-mass parts (sizeFactor >= 0.7 — Torso, Body, l_torso,
   //    Thorax, ...) are exempt from the strict "must go up" check: they
@@ -137,6 +138,18 @@ function runTests(win) {
     assert(`Uncalled attacks favor the default part (${defaultPart}) most — ${bodyType}`,
       maxPart === defaultPart,
       `default ${defaultPart} @ ${(baselines[defaultPart] * 100).toFixed(1)}% vs top ${maxPart} @ ${(baselines[maxPart] * 100).toFixed(1)}%`);
+  }
+
+  // ── Pinned to the actual playtest report: a called, non-crit Humanoid
+  //    headshot should land on the head close to the ~66% design target,
+  //    not the ~35% that prompted this whole investigation. Wide band (not
+  //    an exact 66%) so legitimate future retuning doesn't false-fail this,
+  //    but tight enough to catch the bias getting quietly weakened again. ──
+  {
+    const humanoidHeadRate = rate('Humanoid', 'head', 'head');
+    assert('Called Humanoid headshots land on the head close to the ~66% target',
+      humanoidHeadRate > 0.55 && humanoidHeadRate < 0.85,
+      `${(humanoidHeadRate * 100).toFixed(1)}% (target ~66%)`);
   }
 
   // ── rollHitLocation never returns an invalid part, for any body type,
