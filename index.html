@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901d';
+const VERSION = 'v0.1.20260901e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6196,12 +6196,15 @@ function _defCondFromLabel(label) {
   return null;
 }
 
-// Clear all defensive conditions from a token (the set _defCondFromLabel maps to)
-function _clearDefConds(token) {
+// Clear all defensive conditions from a token (the set _defCondFromLabel maps to).
+// async + awaited internally (see atSetSlot) so a caller that needs the DB
+// write to actually land before doing anything else — declaring Target — can
+// wait for it instead of racing a second, unrelated write against it.
+async function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
   for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target']) {
-    if (conds.has(c)) setCondition(token.id, c, false);
+    if (conds.has(c)) await setCondition(token.id, c, false);
   }
 }
 
@@ -10172,11 +10175,19 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   if (label === 'Stand Up' && token) setCondition(token.id, 'prone', false);
   if (label === 'Go Prone'  && token) setCondition(token.id, 'prone', true); // prone locks on until Stand Up
 
-  // Set or clear defensive conditions based on what was just assigned
+  // Set or clear defensive conditions based on what was just assigned. Both
+  // awaited — targetAimMouseUp chains _setTokenFacing() onto atSetSlot's own
+  // promise specifically so that write can't start until this one (which
+  // also touches the token's conditions column) has actually landed. Firing
+  // both unawaited let two concurrent writes to the same row race, and
+  // whichever's response arrived second silently won — sometimes the
+  // OLDER snapshot from here (no facing: marker yet), reverting a freshly
+  // aimed Target cone back to a stale direction (or 0°/due-right, the
+  // no-marker default) the instant its delayed realtime echo landed.
   if (token) {
     const newCond = _defCondFromLabel(label);
-    _clearDefConds(token);
-    if (newCond) setCondition(token.id, newCond, true);
+    await _clearDefConds(token);
+    if (newCond) await setCondition(token.id, newCond, true);
   }
 
   if (mapChannel)
