@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901f';
+const VERSION = 'v0.1.20260901g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13122,7 +13122,7 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     const conds = getConditions(t.id);
     if (!conds.has('sentinel') && !conds.has('target')) continue;
     let why = null;
-    if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the ⚔ Foe flag in the Tokens tab if that's wrong)`;
+    if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the 💀 Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
     else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target').join('/')}): SKIPPED — ${why}`); continue; }
@@ -13586,7 +13586,7 @@ function renderOnMapTokens() {
     // until touched, but a click here always makes it explicit either way.
     const isFoe = (t.entity_type !== 'item') && _isTokenFoe(t);
     const foeBtn = (t.entity_type !== 'item')
-      ? `<button class="btn-sm" onclick="toggleTokenFoe('${t.id}')" title="${isFoe ? 'Foe — hostile to the party. Click to mark as not a foe.' : 'Not currently a foe. Click to mark hostile to the party.'}" style="padding:2px 6px;${isFoe ? 'color:#e05050;border-color:#e05050;' : 'opacity:0.4;'}">⚔</button>`
+      ? `<button class="btn-sm" onclick="toggleTokenFoe('${t.id}')" title="${isFoe ? 'Foe — hostile to the party. Click to mark as not a foe.' : 'Not currently a foe. Click to mark hostile to the party.'}" style="padding:2px 6px;${isFoe ? 'color:#e05050;border-color:#e05050;' : 'opacity:0.4;'}">💀</button>`
       : '';
     return `<div class="token-on-map-row">
       <span class="t-dot" style="background:${dot};"></span>
