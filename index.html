@@ -5136,7 +5136,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260831d';
+const VERSION = 'v0.1.20260901a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11476,6 +11476,7 @@ function applyMapTransform() {
   refreshStrayRay();
   drawSentinelRanges();
   if (typeof drawWalls === 'function') drawWalls();
+  if (typeof drawPins === 'function') drawPins();
 }
 
 function mapZoom(factor, cx, cy) {
@@ -13651,6 +13652,7 @@ document.addEventListener('keydown', e => {
       if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
+    else if (pinMode)  { exitPinMode(); e.stopPropagation(); }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
     else if (targetAimMode) { exitTargetAimMode(); e.stopPropagation(); }
   }
@@ -13672,6 +13674,7 @@ exitPlayMode = function() {
   if (aoeMode)      exitAoeCastMode();
   if (obstacleMode) exitObstacleCastMode();
   if (wallMode)     exitWallMode();
+  if (pinMode)      exitPinMode();
   if (pathMode)     exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
@@ -13693,6 +13696,7 @@ loadActiveMap = async function(mapId) {
   await loadMapTokens(mapId);
   await loadMapScale(mapId);
   await loadMapWalls(mapId);
+  await loadMapPins(mapId);
   await atAutoAddMapTokens();
   renderPlayCharacter();
 };
@@ -14969,6 +14973,7 @@ initMapInteraction = function() {
     targetAimMouseDown(e);
     if (obstacleMouseDown(e))  { e.stopImmediatePropagation(); return; }
     if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
+    if (pinMouseDown(e))       { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
   }, true);
 
@@ -15872,6 +15877,211 @@ function _renderCampaignNotesModal(docs, activeId) {
     a.onclick = (e) => { e.preventDefault(); _renderCampaignNotesModal(docs, a.dataset.docId); };
   });
 }
+
+// ═══ MAP PIN NOTES (Phase 5) ════════════════════════════════════════════════
+// GM-only notes pinned to a spot on the current map — numbered circles,
+// "nothing fancy" per the design discussion. Same documents table/renderer
+// as Help and Campaign Notes (scope:'map'), so pin notes get full Markdown
+// for free; RLS keeps them GM-only with no player-visible path at all (see
+// supabase-stage2-documents.sql's "GMs can manage map docs" policy — there's
+// no player-select policy for scope='map' at all), so unlike Campaign Notes
+// there's no visible_to_players toggle to build here. Coordinates reuse
+// _wallVpToPct/_wallPctToVp from the wall-drawing code above — the math is
+// generic (viewport px <-> map-image percent), not actually wall-specific.
+let mapPins = [];
+let pinMode = false;
+
+// ── Map Setup toolbar: add the Pins tool ──────────────────────────────────
+const _origEnterPlayModePins = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModePins();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-authoring');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" id="pin-btn" onclick="togglePinMode()">📍 Pins</button>`);
+  }
+};
+
+function togglePinMode() {
+  pinMode ? exitPinMode() : enterPinMode();
+}
+
+function enterPinMode() {
+  if (!isGM()) return;
+  pinMode = true;
+  if (calMode)     exitCalibrationMode();
+  if (measureMode) exitMeasureMode();
+  if (pathMode)    exitPathMode();
+  if (wallMode)    exitWallMode();
+  document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
+  const btn = document.getElementById('pin-btn');
+  if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
+  const hint = document.getElementById('pin-mode-hint');
+  if (hint) hint.style.display = 'block';
+}
+
+function exitPinMode() {
+  pinMode = false;
+  document.getElementById('map-viewport').classList.remove('cal-mode');
+  const btn = document.getElementById('pin-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+  const hint = document.getElementById('pin-mode-hint');
+  if (hint) hint.style.display = 'none';
+}
+
+// Synchronous, like the other *MouseDown dispatch handlers — the actual
+// prompt-and-save work happens in _pinPlaceAt without the dispatcher
+// awaiting it, same reason targetAim/wall clicks stay synchronous here.
+function pinMouseDown(e) {
+  if (!pinMode) return false;
+  if (!activeMapId) { showToast('Upload/select a map first.', 'error'); return true; }
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const { x_pct, y_pct } = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
+  _pinPlaceAt(x_pct, y_pct);
+  return true;
+}
+
+async function _pinPlaceAt(x_pct, y_pct) {
+  const title = prompt('Title for this map note:');
+  if (!title || !title.trim()) return;
+  const created = await saveDocument({
+    scope: 'map', campaign_id: currentCampaignId, map_id: activeMapId,
+    x_pct, y_pct, title: title.trim(), body: '',
+  });
+  if (!created) return;
+  mapPins.push(created);
+  drawPins();
+  _openMapPinModal(created.id, true);
+}
+
+async function loadMapPins(mapId) {
+  if (!mapId || !isGM()) { mapPins = []; drawPins(); return; }
+  const docs = await loadDocuments({ scope: 'map', map_id: mapId });
+  // Number pins by creation order, not loadDocuments' default alphabetical-
+  // by-title order — renaming a pin shouldn't shuffle every other pin's
+  // number on the map.
+  mapPins = docs.slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  drawPins();
+}
+
+function drawPins() {
+  const svg = document.getElementById('pin-svg');
+  if (!svg) return;
+  if (!mapPins.length) { svg.innerHTML = ''; return; }
+  svg.innerHTML = mapPins.map((p, i) => {
+    const pt = _wallPctToVp(p);
+    return `<g data-pin-id="${p.id}" style="cursor:pointer;pointer-events:auto;" transform="translate(${pt.x},${pt.y})">
+      <circle r="11" fill="rgba(200,40,40,0.92)" stroke="#fff" stroke-width="1.5"/>
+      <text x="0" y="1" text-anchor="middle" dominant-baseline="middle" fill="#fff"
+        font-size="11" font-weight="bold" font-family="Georgia,serif">${i + 1}</text>
+    </g>`;
+  }).join('');
+  svg.querySelectorAll('[data-pin-id]').forEach(g => {
+    g.onclick = (e) => { e.stopPropagation(); _openMapPinModal(g.dataset.pinId); };
+  });
+}
+
+function closeMapPinModal() { document.getElementById('map-pin-modal')?.remove(); }
+
+function _openMapPinModal(pinId, startEditing) {
+  document.getElementById('map-pin-modal')?.remove();
+  const pin = mapPins.find(p => p.id === pinId);
+  if (!pin) return;
+  const idx = mapPins.indexOf(pin);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'map-pin-modal';
+  overlay.style.cssText = `position:fixed;inset:0;z-index:3400;background:rgba(0,0,0,0.78);
+    display:flex;align-items:center;justify-content:center;`;
+  overlay.onclick = (e) => { if (e.target === overlay) closeMapPinModal(); };
+
+  const card = document.createElement('div');
+  card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    width:min(560px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
+  header.innerHTML = `<div style="font-size:1rem;font-weight:bold;color:var(--gold);flex:1;">📍 Pin #${idx + 1}</div>`;
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'border:none;background:none;color:var(--text-dim);cursor:pointer;font-size:1.1rem;';
+  closeBtn.onclick = closeMapPinModal;
+  header.appendChild(closeBtn);
+  card.appendChild(header);
+
+  const content = document.createElement('div');
+  content.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;min-width:0;';
+  card.appendChild(content);
+
+  const editing = !!startEditing;
+  if (editing) {
+    content.innerHTML = `
+      <input id="pin-edit-title" type="text" value="${_paEsc(pin.title)}"
+        style="width:100%;font-size:0.95rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
+        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:Georgia,serif;">
+      <textarea id="pin-edit-body" spellcheck="false"
+        style="width:100%;height:40vh;background:var(--bg3);color:var(--text);border:1px solid var(--border);
+        border-radius:4px;padding:8px;font-family:'Courier New',monospace;font-size:0.82rem;resize:vertical;">${_paEsc(pin.body)}</textarea>
+      <div style="font-size:0.68rem;color:var(--text-dim);margin:6px 0;">
+        Markdown — headings become collapsible sections, **bold**, *italic*, - lists, ![alt](url) images, [[Other Doc Title]] links.
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button id="pin-save-btn" class="btn">Save</button>
+        <button id="pin-cancel-btn" class="btn danger">Cancel</button>
+        <div style="flex:1;"></div>
+        <button id="pin-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete pin</button>
+      </div>`;
+  } else {
+    content.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="font-size:0.95rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(pin.title)}</div>
+        <button id="pin-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;">✎ Edit</button>
+      </div>
+      <div id="pin-rendered-body"></div>`;
+  }
+
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  if (editing) {
+    document.getElementById('pin-save-btn').onclick = () => _savePinEdit(pin.id);
+    // Cancelling a fresh (still-empty) pin just placed leaves it in place
+    // with an empty body rather than second-guessing whether the GM meant
+    // to discard it entirely — it can be deleted from view mode any time.
+    document.getElementById('pin-cancel-btn').onclick = () => { closeMapPinModal(); _openMapPinModal(pin.id); };
+    document.getElementById('pin-delete-btn').onclick = () => _deleteMapPin(pin.id);
+  } else {
+    document.getElementById('pin-edit-btn').onclick = () => { closeMapPinModal(); _openMapPinModal(pin.id, true); };
+    const rendered = document.getElementById('pin-rendered-body');
+    rendered.innerHTML = pin.body.trim() ? renderDocumentBody(pin.body, mapPins) : `<p style="color:var(--text-dim);font-style:italic;">Empty — click Edit to write something.</p>`;
+    rendered.querySelectorAll('.doc-link').forEach(a => {
+      a.onclick = (e) => { e.preventDefault(); closeMapPinModal(); _openMapPinModal(a.dataset.docId); };
+    });
+  }
+}
+
+async function _savePinEdit(pinId) {
+  const pin = mapPins.find(p => p.id === pinId);
+  if (!pin) return;
+  const title = document.getElementById('pin-edit-title')?.value.trim() || pin.title;
+  const body = document.getElementById('pin-edit-body')?.value ?? pin.body;
+  const saved = await saveDocument({ id: pin.id, scope: 'map', campaign_id: currentCampaignId, map_id: activeMapId, x_pct: pin.x_pct, y_pct: pin.y_pct, title, body });
+  if (!saved) return;
+  Object.assign(pin, saved);
+  closeMapPinModal();
+  _openMapPinModal(pin.id);
+}
+
+async function _deleteMapPin(pinId) {
+  const pin = mapPins.find(p => p.id === pinId);
+  if (!pin || !confirm(`Delete pin "${pin.title}"? This can't be undone.`)) return;
+  if (!(await deleteDocument(pinId))) return;
+  mapPins = mapPins.filter(p => p.id !== pinId);
+  closeMapPinModal();
+  drawPins();
+}
 </script>
 
 
@@ -16151,6 +16361,13 @@ function _renderCampaignNotesModal(docs, activeId) {
              white-space:nowrap;pointer-events:none;">
           🧱 Wall Mode — click to draw · double-click/right-click to finish a Line · <b>Esc</b> or the <b>Walls</b> button to exit
         </div>
+        <!-- Phase 5: map pin notes — click-to-place hint, same styling/placement as wall-mode-hint -->
+        <div id="pin-mode-hint" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+             z-index:30;background:rgba(20,15,5,0.92);border:1px solid var(--gold);border-radius:5px;
+             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:Georgia,serif;
+             white-space:nowrap;pointer-events:none;">
+          📍 Pin Mode — click the map to drop a note · <b>Esc</b> or the <b>Pins</b> button to exit
+        </div>
         <div class="map-placeholder" id="map-placeholder">
           <div class="big-icon">🗺</div>
           <div id="map-placeholder-text">No map active for this campaign.</div>
@@ -16180,6 +16397,12 @@ function _renderCampaignNotesModal(docs, activeId) {
         <!-- wall/obstacle drawing + display overlay (GM-only) -->
         <svg id="wall-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:23;overflow:visible;"></svg>
+        <!-- map pin notes overlay (GM-only, see loadMapPins/drawPins — Phase 5).
+             pointer-events:none at the container level, same as the other
+             overlays — each pin's own <g> turns pointer-events back on so
+             clicks pass through everywhere else (tokens, map pan/drag). -->
+        <svg id="pin-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;z-index:23;overflow:visible;"></svg>
         <!-- attack range SVG overlay -->
         <svg id="attack-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:26;overflow:visible;"></svg>
