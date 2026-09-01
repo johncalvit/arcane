@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901c';
+const VERSION = 'v0.1.20260901d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15323,6 +15323,61 @@ async function deleteDocument(id) {
   return true;
 }
 
+// ── Inline image upload for document bodies ───────────────────────────────
+// Shared by the Help/Campaign Notes/Map Pin editors — each just needs an
+// "📎 Image" button next to its body textarea calling
+// _triggerDocImageUpload('that-textarea-id'). Uploads into the 'documents'
+// storage bucket (created alongside the documents table in
+// supabase-stage2-documents.sql) and inserts real Markdown image syntax at
+// the cursor, same as any other ![alt](url) in a document body.
+let _docImagePendingTextareaId = null;
+
+function _triggerDocImageUpload(textareaId) {
+  _docImagePendingTextareaId = textareaId;
+  let input = document.getElementById('doc-image-file-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.id = 'doc-image-file-input';
+    input.style.display = 'none';
+    input.onchange = _onDocImageFileSelected;
+    document.body.appendChild(input);
+  }
+  input.value = ''; // clear so re-picking the same file still fires onchange
+  input.click();
+}
+
+async function _onDocImageFileSelected(e) {
+  const file = e.target.files[0];
+  const textareaId = _docImagePendingTextareaId;
+  const textarea = textareaId && document.getElementById(textareaId);
+  if (!file || !textarea) return;
+
+  // Insert a visible placeholder immediately (uploads aren't instant), then
+  // replace that exact range once the real URL comes back — so the textarea
+  // never looks unresponsive and the caret still ends up in the right spot.
+  const start = textarea.selectionStart ?? textarea.value.length;
+  const end = textarea.selectionEnd ?? textarea.value.length;
+  const placeholder = '![Uploading…]()';
+  textarea.value = textarea.value.slice(0, start) + placeholder + textarea.value.slice(end);
+  const placeholderEnd = start + placeholder.length;
+
+  const ext = file.name.split('.').pop();
+  const path = `${currentUser?.id || 'anon'}/${Date.now()}.${ext}`;
+  const { error } = await sb.storage.from('documents').upload(path, file, { contentType: file.type, upsert: false });
+  if (error) {
+    showToast('Image upload failed: ' + error.message, 'error');
+    textarea.value = textarea.value.slice(0, start) + textarea.value.slice(placeholderEnd);
+    return;
+  }
+  const { data } = sb.storage.from('documents').getPublicUrl(path);
+  const finalText = `![image](${data.publicUrl})`;
+  textarea.value = textarea.value.slice(0, start) + finalText + textarea.value.slice(placeholderEnd);
+  textarea.focus();
+  textarea.selectionStart = textarea.selectionEnd = start + finalText.length;
+}
+
 // ── Markdown → HTML, with headings as nested collapsible sections ─────────
 // Deliberately not a full CommonMark implementation — just enough for what
 // the planning discussion asked for: headings (#.....######) that nest by
@@ -15611,6 +15666,7 @@ function _renderHelpPanel() {
       <div style="display:flex;gap:8px;">
         <button id="help-save-btn" class="btn">Save</button>
         <button id="help-cancel-btn" class="btn danger">Cancel</button>
+        <button onclick="_triggerDocImageUpload('help-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="help-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete this doc</button>
       </div>`;
@@ -15810,6 +15866,7 @@ function _renderCampaignNotesTab() {
       <div style="display:flex;gap:6px;">
         <button id="campaign-save-btn" class="btn" style="font-size:0.76rem;padding:4px 10px;">Save</button>
         <button id="campaign-cancel-btn" class="btn danger" style="font-size:0.76rem;padding:4px 10px;">Cancel</button>
+        <button onclick="_triggerDocImageUpload('campaign-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="campaign-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.72rem;">Delete</button>
       </div>`;
@@ -16061,6 +16118,7 @@ function _openMapPinModal(pinId, startEditing) {
       <div style="display:flex;gap:8px;">
         <button id="pin-save-btn" class="btn">Save</button>
         <button id="pin-cancel-btn" class="btn danger">Cancel</button>
+        <button onclick="_triggerDocImageUpload('pin-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="pin-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete pin</button>
       </div>`;
