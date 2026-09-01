@@ -1,0 +1,156 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Arcane — Called Shot / Hit Location Regression Tests</title>
+<style>
+  body { font-family: 'Courier New', monospace; background: #14100a; color: #ddd; padding: 24px; }
+  h1 { color: #d4af5a; font-size: 1.1rem; }
+  .pass { color: #7fd47f; }
+  .fail { color: #ff6b6b; font-weight: bold; }
+  .detail { color: #999; }
+  .summary { font-size: 1.15rem; margin-top: 18px; padding-top: 12px; border-top: 1px solid #333; }
+  .summary.ok { color: #7fd47f; }
+  .summary.bad { color: #ff6b6b; }
+  iframe { display: none; }
+</style>
+</head>
+<body>
+<h1>Called Shot / Hit Location Regression Tests</h1>
+<p class="detail">Loads the real app in a hidden iframe and calls its actual
+rollHitLocation / _resolveCalledShotHitPart functions — no logic is
+reimplemented here, so a change to the real hit-location code is what gets
+tested, not a copy of it.</p>
+<div id="results">Loading index.html&hellip;</div>
+<iframe id="app-frame" src="../index.html"></iframe>
+<script>
+const RESULTS = [];
+function assert(name, cond, detail) {
+  RESULTS.push({ name, pass: !!cond, detail: detail || '' });
+}
+function render() {
+  const el = document.getElementById('results');
+  const passed = RESULTS.filter(r => r.pass).length;
+  const allOk = passed === RESULTS.length;
+  el.innerHTML = RESULTS.map(r =>
+    `<div class="${r.pass ? 'pass' : 'fail'}">${r.pass ? '✓' : '✗'} ${r.name}${r.detail ? ` <span class="detail">&mdash; ${r.detail}</span>` : ''}</div>`
+  ).join('') + `<div class="summary ${allOk ? 'ok' : 'bad'}">${passed}/${RESULTS.length} passed</div>`;
+}
+
+document.getElementById('app-frame').addEventListener('load', () => {
+  const win = document.getElementById('app-frame').contentWindow;
+  try {
+    runTests(win);
+  } catch (e) {
+    assert('Test harness crashed', false, e.message);
+  }
+  render();
+});
+
+function runTests(win) {
+  const { rollHitLocation, _resolveCalledShotHitPart, _hitLocationBodyTypes, getHitLocData } = win;
+
+  assert('rollHitLocation is defined', typeof rollHitLocation === 'function');
+  assert('_resolveCalledShotHitPart is defined', typeof _resolveCalledShotHitPart === 'function');
+  assert('_hitLocationBodyTypes is defined', typeof _hitLocationBodyTypes === 'function');
+  if (!rollHitLocation || !_resolveCalledShotHitPart || !_hitLocationBodyTypes) return;
+
+  const bodyTypes = _hitLocationBodyTypes();
+  assert('At least one body type is defined', bodyTypes.length > 0, `${bodyTypes.length} body types`);
+
+  // ── A natural critical always lands exactly where the shot was called —
+  //    see commit 1a17bd1. If this regresses, called shots on a crit start
+  //    drifting to random adjacent parts, same as an ordinary success.
+  for (const bodyType of bodyTypes) {
+    const { parts } = getHitLocData(bodyType);
+    for (const partKey of Object.keys(parts)) {
+      let allExact = true;
+      for (let i = 0; i < 20; i++) {
+        if (_resolveCalledShotHitPart(bodyType, partKey, true) !== partKey) { allExact = false; break; }
+      }
+      assert(`Crit called shot always hits the called part — ${bodyType}/${partKey}`, allExact);
+    }
+  }
+
+  // ── A crit with NO called part (regular attack) still resolves via the
+  //    ordinary random roll, not a leftover/undefined part. ────────────────
+  {
+    const { parts } = getHitLocData('Humanoid');
+    let allValid = true;
+    for (let i = 0; i < 50; i++) {
+      const r = _resolveCalledShotHitPart('Humanoid', null, true);
+      if (!parts[r]) { allValid = false; break; }
+    }
+    assert('Crit with no called part still resolves to a valid body part', allValid);
+  }
+
+  // ── Non-crit called shots are BIASED toward the called part, clearly
+  //    above that part's unbiased (uncalled-attack) hit rate. This is the
+  //    direct regression check for "calling a shot stopped mattering" — a
+  //    2026-08-30 playtest found headshots landing far less than expected
+  //    (a real, confirmed ~35% for Humanoid head, not a bug — but this
+  //    guards against the bias being silently zeroed out entirely, which
+  //    would make called shots pointless on every non-crit hit).
+  //
+  //    Large body-mass parts (sizeFactor >= 0.7 — Torso, Body, l_torso,
+  //    Thorax, ...) are exempt from the strict "must go up" check: they
+  //    already dominate the UNbiased roll just by covering more of the
+  //    matrix, so a rowBias/colBias shift can push some of their own mass
+  //    toward a neighboring part's cells instead of concentrating it —
+  //    verified against the real matrices, not a bug. They still get a
+  //    much weaker "didn't collapse" sanity check. ───────────────────────
+  const N = 20000;
+  function rate(bodyType, partKey, calledPartKey) {
+    let hits = 0;
+    for (let i = 0; i < N; i++) {
+      if (rollHitLocation(bodyType, calledPartKey) === partKey) hits++;
+    }
+    return hits / N;
+  }
+
+  for (const bodyType of bodyTypes) {
+    const { parts, defaultPart } = getHitLocData(bodyType);
+    const baselines = {};
+    for (const partKey of Object.keys(parts)) baselines[partKey] = rate(bodyType, partKey, null);
+
+    for (const partKey of Object.keys(parts)) {
+      const part = parts[partKey];
+      const baseline = baselines[partKey];
+      const called = rate(bodyType, partKey, partKey);
+      const pct = v => `${(v * 100).toFixed(1)}%`;
+      const isBiased = (part.rowBias || 0) !== 0 || (part.colBias || 0) !== 0;
+      const isBodyMass = (part.sizeFactor || 0) >= 0.7;
+
+      if (!isBiased || isBodyMass) {
+        assert(`Calling a body-mass/unbiased part doesn't collapse its own odds — ${bodyType}/${partKey}`,
+          called > baseline * 0.7, `baseline ${pct(baseline)} → called ${pct(called)}`);
+      } else {
+        assert(`Calling a shot raises its own hit-location odds — ${bodyType}/${partKey}`,
+          called > baseline, `baseline ${pct(baseline)} → called ${pct(called)}`);
+      }
+    }
+
+    // ── Uncalled (regular) attacks land on the default part more than any
+    //    other single part — a null partKey must never accidentally inherit
+    //    a leftover bias, or point at the wrong "main body" part. ─────────
+    const maxPart = Object.keys(baselines).reduce((a, b) => baselines[a] >= baselines[b] ? a : b);
+    assert(`Uncalled attacks favor the default part (${defaultPart}) most — ${bodyType}`,
+      maxPart === defaultPart,
+      `default ${defaultPart} @ ${(baselines[defaultPart] * 100).toFixed(1)}% vs top ${maxPart} @ ${(baselines[maxPart] * 100).toFixed(1)}%`);
+  }
+
+  // ── rollHitLocation never returns an invalid part, for any body type,
+  //    called or not. ────────────────────────────────────────────────────
+  for (const bodyType of bodyTypes) {
+    const { parts } = getHitLocData(bodyType);
+    let allValid = true;
+    for (let i = 0; i < 500; i++) {
+      const r = rollHitLocation(bodyType, null);
+      if (!parts[r]) { allValid = false; break; }
+    }
+    assert(`rollHitLocation always returns a valid part — ${bodyType}`, allValid);
+  }
+}
+</script>
+</body>
+</html>

@@ -4052,6 +4052,15 @@ function getHitLocData(bodyType) {
   return HIT_LOCATION_DATA[bodyType] || HIT_LOCATION_DATA.Humanoid;
 }
 
+// HIT_LOCATION_DATA itself is a top-level const, so unlike getHitLocData it
+// isn't reachable as window.HIT_LOCATION_DATA from outside this script (e.g.
+// the regression test harness in tests/hit-location.test.html, which reads
+// the real app through an iframe's window rather than reimplementing this
+// data) — this is the one thing worth exposing instead of the whole object.
+function _hitLocationBodyTypes() {
+  return Object.keys(HIT_LOCATION_DATA);
+}
+
 // Which armor slot each body type actually HAS, and which of that type's
 // HIT_LOCATION_DATA part keys fall under each one (paired left/right parts —
 // forelegs, wings, ... — share one slot, same "don't split what plays as
@@ -4172,6 +4181,17 @@ function rollHitLocation(bodyType, calledPartKey) {
     result = matrix[row]?.[col] ?? null;
   }
   return result || defaultPart;
+}
+
+// Which body part a called shot actually lands on, once the attack roll has
+// already succeeded. A natural critical (isCrit) always lands exactly where
+// aimed; any other success re-rolls through rollHitLocation's biased matrix,
+// so calling a shot shifts the odds toward that part without guaranteeing
+// it — see 1a17bd1 "Fix called shot: critical success always hits the aimed
+// location". Extracted out of _rollerShowResult so this rule has one place
+// to test (see the called-shot regression tests) and one place to change.
+function _resolveCalledShotHitPart(bodyType, partKey, isCrit) {
+  return (isCrit && partKey) ? partKey : rollHitLocation(bodyType, partKey);
 }
 
 function positionRangedWeaponForm(index) {
@@ -5136,7 +5156,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901a';
+const VERSION = 'v0.1.20260901b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10850,7 +10870,7 @@ function _rollerShowResult() {
     document.getElementById('roller-status').textContent = '';
     if (success && _roller.locContext) {
       const { bodyType, partKey } = _roller.locContext;
-      const hitPart = (critSuccess && partKey) ? partKey : rollHitLocation(bodyType, partKey);
+      const hitPart = _resolveCalledShotHitPart(bodyType, partKey, critSuccess);
       const locData = getHitLocData(bodyType);
       const partLabel = locData.parts[hitPart]?.label || hitPart;
       bcHitLoc = `HIT: ${partLabel}`;
