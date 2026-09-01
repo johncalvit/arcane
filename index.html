@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901e';
+const VERSION = 'v0.1.20260901f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10370,6 +10370,11 @@ async function atAutoAddMapTokens() {
     atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', initiative: null, tieBreak: null, slots: _newSlots() });
   }
   renderAtList();
+  // The Tokens tab's own "+/⚔ add to combat" button (renderOnMapTokens)
+  // reads atCombatants too, but nothing told it to redraw after this bulk
+  // add — if a GM was already sitting on that tab, every token just added
+  // here kept showing a stale "+" until they switched tabs away and back.
+  renderOnMapTokens();
 }
 
 // ─── Compact character sheet ──────────────────────────────────────────────────
