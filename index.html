@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901h';
+const VERSION = 'v0.1.20260901i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12112,6 +12112,23 @@ async function onTokenMouseUp(e) {
     if (mapTokens[movedId]) {
       mapTokens[movedId].x_pct = x_pct;
       mapTokens[movedId].y_pct = y_pct;
+    }
+    // Outside combat there's no action economy to spend against, so this is
+    // purely informational — a player dragging their OWN character (never
+    // the GM, and never a monster/NPC token) sees how far that was and
+    // about how long it'd take, same feet/Speed math a budgeted in-combat
+    // Move already uses (_commitMoveSlot), just without opening the action
+    // dialog or touching a slot. Silently skipped on an uncalibrated map —
+    // _pctDistFt returns null with no mapScalePPF, and every map should be
+    // calibrated before characters go on it anyway, so this is the
+    // exception, not something worth a fallback display for.
+    if (!isGM() && draggedTok && draggedTok.entity_type === 'character' && draggedTok.entity_id === currentCharacterId
+        && _dragStartXPct != null) {
+      const feet = _pctDistFt(_dragStartXPct, _dragStartYPct, x_pct, y_pct);
+      if (feet != null) {
+        const secs = Math.max(1, Math.round(feet / pathGetSpeed(draggedCombId)));
+        showToast(`${Math.round(feet)} ft · ~${secs}s`, 'good');
+      }
     }
   }
   _dragStartXPct = null;
