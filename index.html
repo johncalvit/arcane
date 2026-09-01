@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901i';
+const VERSION = 'v0.1.20260901j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9591,6 +9591,41 @@ function _atSharedRound() {
   return isGM() ? atRound : (_atStateFromGM?.round || atRound);
 }
 
+// Pushes the GM's full atCombatants array (not just round/activeId/active —
+// see at-state, sent on every renderAtList) out to every connected player.
+// Reported live: a player who'd been connected continuously across two
+// encounters didn't get their "Roll Initiative" prompt back for the second
+// one, even though the GM's own screen correctly showed them needing to
+// roll. Root cause — atResetFull() nulls out every combatant's initiative
+// (and c.slots) to prep a fresh roll, but that only ever mutated the GM's
+// own local objects; renderAtList's at-state broadcast doesn't carry the
+// combatants array at all, only the round/active-turn summary. A player
+// whose OWN combatant entry survived the reset (their character stayed on
+// the map the whole time, so atAutoAddMapTokens never removed/re-added
+// them) kept whatever non-null initiative their stale local copy already
+// had from the finished encounter — _paSecCombat's "already rolled, hide
+// the prompt" check saw that stale number and hid it, even though the real
+// (GM's) value had gone back to null. Other players who happened to
+// reconnect between encounters self-healed via the existing late-joiner
+// at-sync-request path; this player's session just never re-ran it.
+// Reuses the exact same at-full-state payload/handler the late-joiner sync
+// already uses — this just PUSHES it proactively instead of waiting for a
+// player to ask.
+function _atBroadcastFullState() {
+  if (!isGM() || !mapChannel) return;
+  const sorted = atSortedCombatants();
+  mapChannel.send({ type: 'broadcast', event: 'at-full-state', payload: {
+    round: atRound,
+    activeId: sorted[atActiveIdx]?.id || null,
+    active: atCombatActive,
+    combatants: atCombatants.map(c => ({
+      id: c.id, name: c.name, avatar: c.avatar, type: c.type,
+      initiative: c.initiative, tieBreak: c.tieBreak, slots: c.slots,
+      dropped: !!c.dropped,
+    })),
+  }});
+}
+
 function atStartCombat() {
   if (!atCombatants.length) return;
   atActiveIdx = 0;
@@ -9741,6 +9776,11 @@ function atResetFull() {
   });
   _atUpdateBlink();
   renderAtList();
+  // renderAtList's at-state broadcast is round/active-turn only — it never
+  // carries the combatants array, so the initiative:null this just set
+  // locally never reached anyone already connected. See
+  // _atBroadcastFullState's comment for the bug this caused.
+  _atBroadcastFullState();
 }
 
 // One-time cleanup for grab/carry links stuck from before Held/Holding/
@@ -10068,6 +10108,7 @@ function atAddCombatant() {
   const avatar = opt.dataset.avatar || null;
   atCombatants.push({ id: val, name, avatar, type, initiative: null, tieBreak: null, slots: _newSlots() });
   renderAtList();
+  _atBroadcastFullState(); // adding a combatant isn't covered by at-state's round/active-only payload
 }
 
 function atAddTokenToCombat(tokenId) {
@@ -10088,6 +10129,7 @@ function atAddTokenToCombat(tokenId) {
   atCombatants.push({ id: combatantId, name, avatar, type, initiative: null, tieBreak: null, slots: _newSlots() });
   renderAtList();
   renderOnMapTokens();
+  _atBroadcastFullState(); // adding a combatant isn't covered by at-state's round/active-only payload
 }
 
 function atRemoveCombatant(id) {
@@ -10375,6 +10417,11 @@ async function atAutoAddMapTokens() {
   // add — if a GM was already sitting on that tab, every token just added
   // here kept showing a stale "+" until they switched tabs away and back.
   renderOnMapTokens();
+  // Same reason atAddTokenToCombat/atResetFull do this — a bulk change to
+  // the combatants array (new map, new encounter) isn't covered by
+  // at-state's round/active-only payload, so already-connected players
+  // never learn about it otherwise.
+  _atBroadcastFullState();
 }
 
 // ─── Compact character sheet ──────────────────────────────────────────────────
@@ -11284,19 +11331,7 @@ function subscribeMapRealtime() {
     // Late-joiner sync: a player asks for state on connect; GM answers with
     // the full tracker so refreshing mid-combat self-heals.
     .on('broadcast', { event: 'at-sync-request' }, () => {
-      if (isGM() && mapChannel) {
-        const sorted = atSortedCombatants();
-        mapChannel.send({ type: 'broadcast', event: 'at-full-state', payload: {
-          round: atRound,
-          activeId: sorted[atActiveIdx]?.id || null,
-          active: atCombatActive,
-          combatants: atCombatants.map(c => ({
-            id: c.id, name: c.name, avatar: c.avatar, type: c.type,
-            initiative: c.initiative, tieBreak: c.tieBreak, slots: c.slots,
-            dropped: !!c.dropped,
-          })),
-        }});
-      }
+      _atBroadcastFullState();
     })
     .on('broadcast', { event: 'at-full-state' }, ({ payload }) => {
       if (!isGM()) {
