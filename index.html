@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260901l';
+const VERSION = 'v0.1.20260905a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13638,16 +13638,18 @@ async function refreshTokenPanel() {
 }
 
 // An armored fist gripping a spiked mace, pointing right — the Foe toggle's
-// icon. Went through two earlier tries: ⚔ (confused with the "in combat"
-// icon right next to it), then a skull (read as "dead" rather than
-// "hostile"). foe_icon.png is bundled art (trimmed to its own bounding box
-// and made transparent — the source was a plain graphic on a white square)
-// rather than an emoji or inline SVG, since nothing built-in matched. A
-// raster image can't reuse currentColor the way the old SVG did, so the
+// icon. Went through several earlier tries: ⚔ (confused with the "in
+// combat" icon right next to it), a skull (read as "dead" rather than
+// "hostile"), then a hand-drawn inline SVG version of this same idea (too
+// simple to read clearly). foe_icon.png is bundled art, trimmed to just the
+// glyph itself and made transparent — the supplied source had its own
+// decorative card frame and near-black backdrop, both cropped away — rather
+// than an emoji or inline SVG, since nothing built-in matched. A raster
+// image can't reuse currentColor the way the SVG version did, so the
 // active/inactive states are opacity + the button's existing border-color
 // instead of a color-fill trick.
 function _foeIconHtml() {
-  return `<img src="foe_icon.png" width="20" height="12" style="vertical-align:-2px;display:inline-block;">`;
+  return `<img src="foe_icon.png" width="17" height="12" style="vertical-align:-2px;display:inline-block;">`;
 }
 
 function renderOnMapTokens() {
