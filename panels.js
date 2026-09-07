@@ -631,14 +631,37 @@ let _dlgCombatantId = null;
 // user on the Combat section's small per-slot buttons.
 let _dlgReopenId = null;
 
+// Set alongside _dlgReopenId when the attack that's mid-resolution is one of
+// the round-ending actions (a Ranged Attack, per the design discussion) —
+// _dlgMaybeReopen checks this to auto-advance the turn instead of reopening
+// the dialog once the roll actually finishes, same as the instant round-
+// ending actions do right away.
+let _dlgRoundEndPendingId = null;
+
 function _dlgMaybeReopen() {
   if (!_dlgReopenId) return;
   const id = _dlgReopenId;
   _dlgReopenId = null;
   const c = atCombatants.find(x => x.id === id);
   if (!c) return;
+  if (_dlgRoundEndPendingId === id) {
+    _dlgRoundEndPendingId = null;
+    if (_atIsCombatActive() && _atSharedActive()?.id === id) atAcceptAction(id);
+    return;
+  }
   // Only reopen if it's still meaningfully this combatant's moment
   if (_atIsCombatActive() && _atSharedActive()?.id === id) atOpenActionDialog(id);
+}
+
+// Sentinel, Evade, Go Prone, Load, a Ranged Attack, Cast, and Target all end
+// the acting combatant's round outright (per the design discussion) — get
+// half their movement first (soft-warned, not blocked, past that), then one
+// of these, then straight to the next combatant with no separate Done
+// click. Cast and Target have their own confirm/auto-advance wiring
+// (_openSpellPickerModal's row click; enterTargetAimMode's endsRound flag)
+// since neither goes through this dialog's generic 'set'/'attack' dispatch.
+function _isRoundEndingLabel(label) {
+  return label === 'Sentinel' || label === 'Evade' || label === 'Go Prone' || label.startsWith('Load — ');
 }
 
 // closeRoller is defined in index.html, loaded before this file — wrap it
@@ -747,7 +770,7 @@ function _dlgRender(body) {
       <div style="background:var(--bg3);border-radius:3px;height:6px;overflow:hidden;">
         <div style="width:${movePct}%;height:100%;background:${halfUsed ? '#c97040' : 'var(--gold)'};"></div>
       </div>
-      ${halfUsed ? `<div style="font-size:0.62rem;color:#c97040;margin-top:2px;">Over half movement used — Evade unavailable this round.</div>` : ''}
+      ${halfUsed ? `<div style="font-size:0.62rem;color:#c97040;margin-top:2px;">Over half movement used this round — a soft warning, not a block.</div>` : ''}
     </div>`;
 
   // ── Full body section ──────────────────────────────────────────────────────
@@ -768,7 +791,10 @@ function _dlgRender(body) {
     // _hasRangedWeaponEquipped/_hasMeleeCapability.
     const noWeapon = (a.label === 'Target'   && !_hasRangedWeaponEquipped(ent))
                    || (a.label === 'Sentinel' && !_hasMeleeCapability(ent));
-    const disabled = (halfUsed && a.label === 'Evade') || noWeapon;
+    // Movement no longer hard-blocks any of these (see the movement-bar note
+    // above) — half the round's movement is allowed before picking one, past
+    // that it's just a soft warning, same as an over-budget Move already is.
+    const disabled = noWeapon;
     // Target needs a facing picked on the map before it locks in (a cone,
     // unlike Sentinel's all-around circle) — see enterTargetAimMode.
     // Everything else sets the slot immediately, same as always.
@@ -780,7 +806,7 @@ function _dlgRender(body) {
       label: a.label, sub: lit ? _slotCountdownLabel(c.slots.full) : _dlgDurLabel(a.dur), lit, disabled,
       title: noWeapon
         ? (a.label === 'Target' ? 'Needs a ranged weapon in hand' : 'Needs a melee weapon or a free hand')
-        : disabled ? 'Over half movement used this round' : '',
+        : '',
       data: lit ? { dact: 'off', slot: 'full' } : setData,
     });
   }).join('');
@@ -1133,20 +1159,50 @@ async function _dlgClick(e) {
 
 async function _dlgAct(d, id, body) {
   switch (d.dact) {
-    case 'set':
-      await atSetSlot(id, d.slot, d.label, +d.dur, d.locks === '1');
-      _dlgRender(body);
+    case 'set': {
+      // Sentinel/Evade/Go Prone/Load end the round outright — see
+      // _isRoundEndingLabel. Evade additionally cancels an in-progress cast
+      // (windup or maintained), so it gets its own confirm wording and a
+      // cancel step first, per the design discussion.
+      const endsRound = _isRoundEndingLabel(d.label);
+      let castInfo = null;
+      if (endsRound) {
+        let msg = 'Selecting this action will end your round.';
+        if (d.label === 'Evade' && typeof _castInProgressInfo === 'function') {
+          castInfo = _castInProgressInfo(id);
+          if (castInfo) msg = `Selecting this action will cancel the spell casting (${castInfo.spell.name}).`;
+        }
+        const ok = await styledConfirm(msg);
+        if (!ok) { _dlgRender(body); break; }
+        if (castInfo) await _cancelCastInProgress(id, castInfo);
+      }
+      // Force locksAll for these regardless of the chip's own `locks` data —
+      // Load in particular is normally a channel-only (non-locking) action;
+      // ending the round means it commits the whole turn like the others.
+      await atSetSlot(id, d.slot, d.label, +d.dur, endsRound || d.locks === '1');
+      if (endsRound) { atCloseModal(); atAcceptAction(id); }
+      else _dlgRender(body);
       break;
+    }
     case 'off':
       atClearSlot(id, d.slot);
       _dlgRender(body);
       break;
-    case 'attack':
-      await atSetSlot(id, d.slot, d.label, +d.dur, false);
+    case 'attack': {
+      // Only a Ranged Attack is in the round-ending list — melee and
+      // Consume (both ranged:0) are untouched.
+      const endsRound = d.ranged === '1';
+      if (endsRound) {
+        const ok = await styledConfirm('Selecting this action will end your round.');
+        if (!ok) { _dlgRender(body); break; }
+      }
+      await atSetSlot(id, d.slot, d.label, +d.dur, endsRound);
       _dlgReopenId = id; // reopen once targeting + the roll resolve
+      if (endsRound) _dlgRoundEndPendingId = id; // ...or auto-advance instead, see _dlgMaybeReopen
       atCloseModal();
       enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range);
       break;
+    }
     case 'custom': {
       const label  = document.getElementById('dlg-custom-label')?.value.trim();
       const slot   = document.getElementById('dlg-custom-slot')?.value || 'full';
@@ -1160,10 +1216,13 @@ async function _dlgAct(d, id, body) {
       await atCastSpell(id, d.spellname);
       _dlgRender(body);
       break;
-    case 'aimtarget':
+    case 'aimtarget': {
+      const ok = await styledConfirm('Selecting this action will end your round.');
+      if (!ok) { _dlgRender(body); break; }
       atCloseModal();
-      enterTargetAimMode(id);
+      enterTargetAimMode(id, true); // true: auto-advance once facing commits
       break;
+    }
     case 'openspellpicker':
       _openSpellPickerModal(id); // opens on top of the still-open dialog; re-renders on pick
       break;

@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260905a';
+const VERSION = 'v0.1.20260907a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7725,12 +7725,15 @@ function _openSpellPickerModal(combatantId) {
       <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}% rd1 · ${costLabel}</span>`;
     row.onclick = async () => {
       if (notBuilt) return;
+      // Beginning a cast is a full-round commitment — same "ends your round"
+      // confirm every other round-ending action gets, and the same
+      // auto-advance once it's actually set (no separate Done click).
+      const ok = await styledConfirm('Selecting this action will end your round.');
+      if (!ok) return;
       overlay.remove();
       await atCastSpell(combatantId, spell.name);
-      if (typeof _dlgRender === 'function') {
-        const body = document.getElementById('at-dialog-body');
-        if (body) _dlgRender(body);
-      }
+      atCloseModal();
+      atAcceptAction(combatantId);
     };
     card.appendChild(row);
   });
@@ -8903,6 +8906,76 @@ async function atStopMaintaining(casterRef, opts) {
     logCombat(`${casterEnt?.name || 'Someone'} stops maintaining ${info.spell.name}.`, 'roll');
   }
   refreshUI();
+}
+
+// Is this combatant mid-windup ("Casting: X" in their full-body slot) or
+// already maintaining a spell right now? One shared shape either way, so
+// callers (Evade's cast-cancel confirm, a Parry's focus check) don't need
+// to know which state a caster is actually in.
+function _castInProgressInfo(casterCid) {
+  const c = atCombatants.find(x => x.id === casterCid);
+  const fullLabel = c?.slots?.full?.label;
+  if (typeof fullLabel === 'string' && fullLabel.startsWith('Casting: ')) {
+    const spellName = fullLabel.slice('Casting: '.length);
+    const spell = SPELLS.find(s => s.name === spellName);
+    if (spell) return { kind: 'windup', spell, startRound: c.slots.full.startRound };
+  }
+  const maintaining = _maintainedSpellInfo(casterCid);
+  if (maintaining) return { kind: 'maintaining', spell: maintaining.spell };
+  return null;
+}
+
+// Cancels whatever _castInProgressInfo found — a windup is just cleared (no
+// roll, no cost, same as the dialog's own "✕ Cancel" chip); a maintained
+// spell unwinds through the normal stop-maintaining path.
+async function _cancelCastInProgress(casterCid, info) {
+  if (!info) return;
+  if (info.kind === 'windup') atClearSlot(casterCid, 'full');
+  else await atStopMaintaining(casterCid);
+}
+
+// The % a caster needs to roll under to hold their concentration after
+// physically parrying a blow — "the same value as successfully casting the
+// spell". A windup in progress has a real accumulated round-by-round value
+// already (_spellSuccessRoll); an already-maintained spell has no such
+// per-round context (it already succeeded once), so this falls back to that
+// same formula's round-1 baseline as the closest equivalent.
+function _castFocusTarget(casterCid, info) {
+  const ent = getEntity(casterCid);
+  if (!ent || !info) return null;
+  if (info.kind === 'windup') {
+    const nowRound = _atSharedRound();
+    const roundsWaited = Math.max(1, nowRound - (info.startRound != null ? info.startRound : nowRound) + 1);
+    return _spellSuccessRoll(ent, info.spell, roundsWaited);
+  }
+  return _spellSuccessRoll(ent, info.spell, 1);
+}
+
+// Physically parrying a blow risks a caster's concentration — rolled
+// automatically the instant Parry is chosen as a defense (see
+// _buildDefenseOptions), regardless of whether the parry itself ends up
+// stopping the hit; the act of fighting back with a weapon is what's
+// disruptive, not the outcome. Failure cancels the cast exactly like a
+// deliberate Evade would.
+function _maybeRollCastingFocus(casterCid) {
+  const info = _castInProgressInfo(casterCid);
+  if (!info) return;
+  const target = _castFocusTarget(casterCid, info);
+  if (target == null) return;
+  const casterEnt = getEntity(casterCid);
+  openRoller({
+    label: `Maintain Focus — ${info.spell.name}`,
+    target, targetLabel: 'roll under to keep casting',
+    onComplete: async (n) => {
+      const success = n <= 5 || (n < 96 && n <= target);
+      if (success) {
+        logCombat(`${casterEnt?.name || 'The caster'} keeps focus on ${info.spell.name} despite the parry.`, 'good');
+        return;
+      }
+      await _cancelCastInProgress(casterCid, info);
+      logCombat(`${casterEnt?.name || 'The caster'} loses focus on ${info.spell.name} while parrying!`, 'roll');
+    },
+  });
 }
 
 // Resolves a completed cast: opens the shared roller for the casting check
@@ -12562,7 +12635,13 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
           reduction,
           // Spends this hand's action for the round — it can't also attack
           // (or parry again) with this weapon until it's free next round.
-          onSelect: () => atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false),
+          onSelect: () => {
+            atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false);
+            // Physically parrying while mid-cast risks concentration — see
+            // _maybeRollCastingFocus. Block (bracing behind a shield) doesn't
+            // trigger this; only actively fighting back with a weapon does.
+            if (r.action === 'Parry') _maybeRollCastingFocus(defCid);
+          },
         });
       }
     }
@@ -12623,7 +12702,10 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
               const defVal   = calcHitValue(wRow.hitFormula, defAttrs);
               const reduction = defVal != null ? Math.round(defVal * defSize) : 0;
               best = { label: `${keyword} — ${weaponName} (−${reduction})`, reduction,
-                        onSelect: () => atSetSlot(defCid, slotKey, `${keyword} — ${weaponName}`, 1, false) };
+                        onSelect: () => {
+                          atSetSlot(defCid, slotKey, `${keyword} — ${weaponName}`, 1, false);
+                          if (keyword === 'Parry') _maybeRollCastingFocus(defCid);
+                        } };
               defenseOptions.unshift(best);
             }
             break;
@@ -12672,7 +12754,10 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
         defenseOptions.push({ label: `${r.action} — ${itemName} (−${Math.round(defVal * defSize)})`, reduction: Math.round(defVal * defSize),
-          onSelect: () => atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false) });
+          onSelect: () => {
+            atSetSlot(defCid, side, `${r.action} — ${itemName}`, 1, false);
+            if (r.action === 'Parry') _maybeRollCastingFocus(defCid);
+          } });
       }
     }
     if (!conds.has('prone')) {
@@ -12946,9 +13031,11 @@ function drawSentinelRanges() {
 // Sector spell already uses, just simpler: no cast, no distance gating on
 // the click, only a direction. Reuses the aoe-svg overlay (never active at
 // the same time as this) rather than adding a new DOM element.
-let targetAimMode = false, targetAimCasterCid = null;
+let targetAimMode = false, targetAimCasterCid = null, _targetAimEndsRound = false;
 
-function enterTargetAimMode(combatantId) {
+// endsRound: whether committing this aim should auto-advance the turn (the
+// dialog's own "Target" chip always passes true — see _dlgAct's confirm).
+function enterTargetAimMode(combatantId, endsRound) {
   if (attackMode)    exitAttackMode();
   if (pathMode)      exitPathMode();
   if (aoeMode)       exitAoeCastMode();
@@ -12956,6 +13043,7 @@ function enterTargetAimMode(combatantId) {
   if (targetAimMode) exitTargetAimMode();
   targetAimMode      = true;
   targetAimCasterCid = combatantId;
+  _targetAimEndsRound = !!endsRound;
   document.getElementById('map-viewport').classList.add('attack-mode');
   document.getElementById('aoe-svg').style.display = 'block';
   _targetAimRedraw(null, null);
@@ -12964,6 +13052,7 @@ function enterTargetAimMode(combatantId) {
 function exitTargetAimMode() {
   targetAimMode      = false;
   targetAimCasterCid = null;
+  _targetAimEndsRound = false;
   document.getElementById('map-viewport').classList.remove('attack-mode');
   const svg = document.getElementById('aoe-svg');
   svg.style.display = 'none';
@@ -13069,9 +13158,12 @@ function targetAimMouseUp(e) {
     const dy = ((yPct - token.y_pct) / 100) * mapImgH;
     facingDeg = Math.atan2(dy, dx) * 180 / Math.PI;
   }
+  // Capture before exitTargetAimMode() resets it back to false.
+  const shouldEndRound = _targetAimEndsRound;
   exitTargetAimMode();
   atSetSlot(combatantId, 'full', 'Target', 99, true).then(() => {
     if (token) _setTokenFacing(token.id, facingDeg);
+    if (shouldEndRound) atAcceptAction(combatantId);
   });
 }
 
@@ -14226,6 +14318,23 @@ function pathTotalFeet() {
   return (dist / mapScale) / mapScalePPF;
 }
 
+// Interpolates a point at `targetDist` (viewport px) along a polyline —
+// used to place the half-movement ring at the right spot on the path
+// instead of just at its very end. Returns null if the path is shorter
+// than targetDist.
+function _pathPointAtDistance(pts, targetDist) {
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const segLen = Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    if (acc + segLen >= targetDist) {
+      const t = segLen === 0 ? 0 : (targetDist - acc) / segLen;
+      return { x: pts[i-1].x + (pts[i].x - pts[i-1].x) * t, y: pts[i-1].y + (pts[i].y - pts[i-1].y) * t };
+    }
+    acc += segLen;
+  }
+  return null;
+}
+
 function pathRenderSvg(mouseX, mouseY) {
   const svg = document.getElementById('path-svg');
   if (!svg) return;
@@ -14280,8 +14389,30 @@ function pathRenderSvg(mouseX, mouseY) {
     const secs = feet / spd;
     const secRound = Math.round(secs * 10) / 10;
     const timeStr  = secRound <= 3 ? secRound + 's' : secRound + 's ⚠';
-    const fillClr  = secs <= 2 ? '#4de080' : secs <= 4 ? '#f0d080' : '#e06060';
-    const label = `${Math.round(feet)} ft · ${timeStr}`;
+
+    // Half-movement marker — Sentinel/Evade/Go Prone/Load/a Ranged Attack/
+    // Cast/Target all allow up to half a round's movement before picking
+    // one (see the design discussion); a soft warning past that, same
+    // orange (#c97040) the action dialog's own movement bar already uses,
+    // not a hard stop. A ring on the path itself shows WHERE that happened,
+    // since the dialog's own bar only shows the final total.
+    const halfBudgetFt = spd * 1.5; // half of a full round's speed*3 ft
+    const pastHalf = feet >= halfBudgetFt;
+    if (pastHalf) {
+      const halfPx = halfBudgetFt * mapScalePPF * mapScale;
+      const markerPt = _pathPointAtDistance(allPts, halfPx);
+      if (markerPt) {
+        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        ring.setAttribute('cx', markerPt.x); ring.setAttribute('cy', markerPt.y);
+        ring.setAttribute('r', 7);
+        ring.setAttribute('fill', 'none');
+        ring.setAttribute('stroke', '#c97040');
+        ring.setAttribute('stroke-width', '2');
+        svg.appendChild(ring);
+      }
+    }
+    const fillClr = pastHalf ? '#c97040' : secs <= 2 ? '#4de080' : secs <= 4 ? '#f0d080' : '#e06060';
+    const label = `${Math.round(feet)} ft · ${timeStr}${pastHalf ? ' · past half move' : ''}`;
 
     const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
     const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
@@ -16821,6 +16952,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260831a"></script>
+<script src="panels.js?v=20260907a"></script>
 </body>
 </html>
