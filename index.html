@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260907a';
+const VERSION = 'v0.1.20260907b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10261,22 +10261,17 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   // duration, Evade, attacks, ...), not just spells.
   const entry = { label, startRound: _atSharedRound(), durationRounds, locksAll: !!locksAll };
 
-  if (locksAll && c._preMoveX != null) {
-    atCloseModal(); // dismiss action chooser before confirm dialog appears
-    const cancelMove = await styledConfirm(`"${label}" cancels movement. Move token back to original position?`);
-    if (cancelMove) {
-      const tokenEl = c._preMoveTokenId ? document.getElementById('token-' + c._preMoveTokenId) : null;
-      if (tokenEl) { tokenEl.style.left = c._preMoveX + '%'; tokenEl.style.top = c._preMoveY + '%'; }
-      if (c._preMoveTokenId && mapTokens[c._preMoveTokenId]) {
-        mapTokens[c._preMoveTokenId].x_pct = c._preMoveX;
-        mapTokens[c._preMoveTokenId].y_pct = c._preMoveY;
-        sb.from('map_tokens').update({ x_pct: c._preMoveX, y_pct: c._preMoveY }).eq('id', c._preMoveTokenId);
-        tokenChannel?.send({ type: 'broadcast', event: 'token-move',
-          payload: { id: c._preMoveTokenId, x_pct: c._preMoveX, y_pct: c._preMoveY } });
-      }
-    }
-    delete c._preMoveX; delete c._preMoveY; delete c._preMoveTokenId;
-  }
+  // Pre-move tracking (enterPathMode) used to feed a "this cancels movement,
+  // revert?" prompt here for any full-body action — obsolete now that
+  // Sentinel/Evade/Go Prone/Load/a Ranged Attack/Cast/Target are all
+  // designed to allow up to half a round's movement before picking one (see
+  // the design discussion) and every other locksAll action already lived
+  // alongside that same map-driven movement. Reverting was never something
+  // this tool enforced anywhere else — "manage, don't enforce" — and kept
+  // firing a confusing second prompt right after the new round-ending
+  // confirm even when the movement was exactly what the player intended to
+  // keep. Just clear the tracking; the movement itself always stands now.
+  if (locksAll) { delete c._preMoveX; delete c._preMoveY; delete c._preMoveTokenId; }
 
   if (locksAll) {
     // Full-body action claims every channel
