@@ -5167,7 +5167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260907b';
+const VERSION = 'v0.1.20260907c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12225,12 +12225,28 @@ async function onTokenMouseUp(e) {
     // _pctDistFt returns null with no mapScalePPF, and every map should be
     // calibrated before characters go on it anyway, so this is the
     // exception, not something worth a fallback display for.
-    if (!isGM() && draggedTok && draggedTok.entity_type === 'character' && draggedTok.entity_id === currentCharacterId
-        && _dragStartXPct != null) {
-      const feet = _pctDistFt(_dragStartXPct, _dragStartYPct, x_pct, y_pct);
-      if (feet != null) {
-        const secs = Math.max(1, Math.round(feet / pathGetSpeed(draggedCombId)));
-        showToast(`${Math.round(feet)} ft · ~${secs}s`, 'good');
+    if (!isGM() && draggedTok && draggedTok.entity_type === 'character') {
+      // Temporary diagnostic for the "toast isn't showing" live report —
+      // requiring devtools to see WHY a real player's own drag didn't
+      // produce the distance toast made that unreportable from a
+      // screenshare. logCombat posts to the shared Journal everyone
+      // already watches, same pattern _findSentinelCrossings' [sentinel
+      // debug] lines used for exactly this kind of hard-to-repro report.
+      // Only ever fires for a non-GM client's OWN drag that fell through
+      // to this untracked branch — never for the GM, never for a normal
+      // in-combat tracked move. Safe to leave in or strip out later.
+      if (draggedTok.entity_id !== currentCharacterId) {
+        logCombat(`[drag debug] skipped distance toast — dragged token "${draggedTok.label}" isn't this client's own character (currentCharacterId=${currentCharacterId || 'null'})`, 'roll');
+      } else if (_dragStartXPct == null) {
+        logCombat(`[drag debug] skipped distance toast for ${draggedTok.label} — no drag start position was recorded`, 'roll');
+      } else {
+        const feet = _pctDistFt(_dragStartXPct, _dragStartYPct, x_pct, y_pct);
+        if (feet != null) {
+          const secs = Math.max(1, Math.round(feet / pathGetSpeed(draggedCombId)));
+          showToast(`${Math.round(feet)} ft · ~${secs}s`, 'good');
+        } else {
+          logCombat(`[drag debug] skipped distance toast for ${draggedTok.label} — map has no scale set (mapScalePPF=${mapScalePPF})`, 'roll');
+        }
       }
     }
   }
