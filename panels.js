@@ -122,6 +122,7 @@ function _paSecCombat(ent, canEdit, prefixHtml) {
 function _paSecStats(attrs, baseAttrs) {
   const groups = [
     { label: 'Physical',  keys: ATTRIBUTES.filter(a => a.group === 'physical') },
+    { label: 'Movement',  keys: ATTRIBUTES.filter(a => a.group === 'movement') },
     { label: 'Cognitive', keys: ATTRIBUTES.filter(a => a.group === 'cognitive') },
     { label: 'Senses',    keys: ATTRIBUTES.filter(a => a.group === 'senses') },
   ];

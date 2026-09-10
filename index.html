@@ -1098,6 +1098,8 @@
       </p>
       <h3>Physical</h3>
       <div class="attr-grid" id="attrs-physical"></div>
+      <h3>Movement</h3>
+      <div class="attr-grid" id="attrs-movement"></div>
       <h3>Cognitive</h3>
       <div class="attr-grid" id="attrs-cognitive"></div>
       <h3>Senses</h3>
@@ -1204,6 +1206,9 @@
 
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Physical</div>
         <div class="grid-2" style="margin-bottom:12px;" id="smgr-physical"></div>
+
+        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Movement</div>
+        <div class="grid-2" style="margin-bottom:12px;" id="smgr-movement"></div>
 
         <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:8px;">Cognitive</div>
         <div class="grid-2" style="margin-bottom:12px;" id="smgr-cognitive"></div>
@@ -1921,9 +1926,9 @@ let characterXP = 0;
 // Attribute definitions: { key, label, rawStat, raceKey, desc, group, cssClass }
 const ATTRIBUTES = [
   { key:'Power',          label:'Power',               rawStat:'Strength',    raceKey:'Power',        desc:'Damage & lifting. Can deadlift 10× Power.',          group:'physical' },
-  { key:'Speed',          label:'Speed',               rawStat:'Strength',    raceKey:'Speed',        desc:'Movement speed in feet per second.',                  group:'physical' },
-  { key:'Fly',            label:'Fly Speed',           rawStat:'Strength',    raceKey:'Fly',   raceDefault:0, desc:'Flight speed in feet per second, for species capable of flight. 0 = cannot fly.', group:'physical' },
-  { key:'Swim',           label:'Swim Speed',          rawStat:'Strength',    raceKey:'Swim',  raceDefault:0, desc:'Swimming speed in feet per second, beyond ordinary movement. 0 = no innate swim bonus.', group:'physical' },
+  { key:'Speed',          label:'(Running) Speed',     rawStat:'Strength',    raceKey:'Speed',        desc:'Movement speed in feet per second.',                  group:'movement' },
+  { key:'Fly',            label:'Fly Speed',           rawStat:'Strength',    raceKey:'Fly',   raceDefault:0, desc:'Flight speed in feet per second, for species capable of flight. 0 = cannot fly.', group:'movement' },
+  { key:'Swim',           label:'Swim Speed',          rawStat:'Strength',    raceKey:'Swim',  raceDefault:0, desc:'Swimming speed in feet per second, beyond ordinary movement. 0 = no innate swim bonus.', group:'movement' },
   { key:'Toughness',      label:'Toughness',           rawStat:'Endurance',   raceKey:'Toughness',    desc:'Absorb & withstand physical damage, ability to heal.',group:'physical' },
   { key:'Stamina',        label:'Stamina',             rawStat:'Endurance',   raceKey:'Stamina',      desc:'Energy for physical activity.',                       group:'physical' },
   { key:'ManualDex',      label:'Manual Dexterity',    rawStat:'Agility',     raceKey:'ManualDex',    desc:'Fine motor skills with hands.',                       group:'physical' },
@@ -2029,8 +2034,8 @@ function recalc() {
   document.getElementById('disp-target').textContent = attrs._targetAdj;
 
   // Attribute cards
-  for (const group of ['physical','cognitive','senses']) {
-    const container = document.getElementById('attrs-' + (group === 'physical' ? 'physical' : group === 'cognitive' ? 'cognitive' : 'senses'));
+  for (const group of ['physical','movement','cognitive','senses']) {
+    const container = document.getElementById('attrs-' + group);
     if (!container) continue;
     container.innerHTML = '';
     for (const attr of ATTRIBUTES.filter(a=>a.group===group)) {
@@ -4622,7 +4627,7 @@ function _buildSpeciesNaturalInputs() {
 }
 
 function _buildSpeciesAttrInputs() {
-  ['physical','cognitive','senses'].forEach(group => {
+  ['physical','movement','cognitive','senses'].forEach(group => {
     const container = document.getElementById('smgr-' + group);
     if (!container) return;
     container.innerHTML = '';
@@ -5167,7 +5172,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260907c';
+const VERSION = 'v0.1.20260910a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6535,7 +6540,7 @@ function getEntity(ref) {
   if (bloodLossPct > 0) {
     if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
     for (const a of ATTRIBUTES) {
-      if (a.group === 'physical') attrs[a.key] = (attrs[a.key] || 0) * (1 - bloodLossPct);
+      if (a.group === 'physical' || a.group === 'movement') attrs[a.key] = (attrs[a.key] || 0) * (1 - bloodLossPct);
     }
   }
 
@@ -16963,6 +16968,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260907a"></script>
+<script src="panels.js?v=20260910a"></script>
 </body>
 </html>
