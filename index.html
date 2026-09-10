@@ -5172,7 +5172,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260910a';
+const VERSION = 'v0.1.20260910b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11482,6 +11482,25 @@ function _armVisibilityResync() {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !isGM() && mapChannel)
       mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
+  });
+  // A backgrounded/throttled tab (above) still has a live socket — the
+  // broadcast just got queued or dropped, so re-sending on the same channel
+  // is enough. Getting frozen into the back-forward cache (navigating away
+  // then back with Back/Forward) is a different, harder failure: the browser
+  // actively closes the WebSocket before freezing the page, so `mapChannel`/
+  // `tokenChannel` are references to channel objects whose socket is dead —
+  // `.send()` on them silently goes nowhere, no error, no reconnect. Reported
+  // live as a player never receiving the action dialog or any combat/token
+  // updates after their tab had clearly gone through a back/forward cycle.
+  // `pageshow` with `event.persisted` is the signal a bfcache restore
+  // actually happened; fully re-subscribing (not just re-sending) tears down
+  // the dead channel object and opens a fresh socket.
+  window.addEventListener('pageshow', (e) => {
+    if (!e.persisted) return;
+    if (document.getElementById('play-mode')?.classList.contains('active')) {
+      subscribeMapRealtime();
+      if (typeof subscribeTokenRealtime === 'function') subscribeTokenRealtime();
+    }
   });
 }
 
