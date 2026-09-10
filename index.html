@@ -1032,7 +1032,10 @@
         </div>
         <div class="field field-inline">
           <label>XP</label>
-          <div id="char-xp-display" style="font-size:0.85rem;color:var(--text-bright);padding:4px 0;" title="Awarded by the GM after combat — see the Finish Combat button">0</div>
+          <div style="display:flex;align-items:baseline;gap:6px;padding:4px 0;">
+            <div id="char-xp-display" style="font-size:0.85rem;color:var(--text-bright);" title="Awarded by the GM after combat — see the Finish Combat button">0</div>
+            <div id="char-xp-next" style="font-size:0.75rem;color:var(--text-dim);"></div>
+          </div>
         </div>
         <div class="field field-inline">
           <label>Sex</label>
@@ -1898,6 +1901,12 @@ function _levelFromXp(xp) {
   while (3 * Math.pow(lvl + 2, 3) <= xp) lvl++;
   return lvl;
 }
+// XP required to REACH a given level — same curve as _levelFromXp, solved
+// the other direction. Level 1 is the free starting point (0 XP); level
+// L≥2 needs 3×(L+1)³ (81/192/375/648/... for L=2/3/4/5/...).
+function _xpForLevel(lvl) {
+  return lvl <= 1 ? 0 : 3 * Math.pow(lvl + 1, 3);
+}
 // Recomputes characterLevel from characterXP and refreshes everything that
 // depends on it (the Level display, the Raw Stats bonus, Final Attributes).
 // Called wherever characterXP changes — load, reset, or a live XP award.
@@ -1905,6 +1914,8 @@ function _refreshLevelFromXp() {
   characterLevel = _levelFromXp(characterXP);
   const levelDisplay = document.getElementById('char-level');
   if (levelDisplay) levelDisplay.textContent = characterLevel;
+  const xpNextDisplay = document.getElementById('char-xp-next');
+  if (xpNextDisplay) xpNextDisplay.textContent = `/ ${_xpForLevel(characterLevel + 1)} for Lv ${characterLevel + 1}`;
   buildStatRows();
   recalc();
 }
@@ -5172,7 +5183,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260910b';
+const VERSION = 'v0.1.20260910c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
