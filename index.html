@@ -5183,7 +5183,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260911a';
+const VERSION = 'v0.1.20260911b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15497,7 +15497,7 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
     entity_id:   creature.id,
     label,
     avatar_url,
-    ...findTokenPlacement(),
+    ...viewportCenterPlacement(),
     visible:     true,
   });
   // Realtime INSERT → upsertTokenElement + refreshTokenPanel
