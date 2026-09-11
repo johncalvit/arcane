@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260911c';
+const VERSION = 'v0.1.20260911d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12127,7 +12127,15 @@ function startTokenDrag(e, tokenId) {
   _dragStartXPct = t.x_pct;
   _dragStartYPct = t.y_pct;
   const el = document.getElementById('token-' + tokenId);
-  if (el) el.classList.add('dragging', 'selected');
+  if (el) {
+    // Only one token shows the selected ring at a time — clear it off
+    // whatever was selected before (it's added here but never removed,
+    // so without this every token clicked this session stayed lit).
+    document.querySelectorAll('.map-token.selected').forEach(prev => {
+      if (prev !== el) prev.classList.remove('selected');
+    });
+    el.classList.add('dragging', 'selected');
+  }
 
   // record where in the token we clicked (in canvas coords)
   const vp   = document.getElementById('map-viewport');
