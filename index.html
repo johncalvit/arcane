@@ -2087,13 +2087,16 @@ function calcMaxSpeed(attrs, totalCarried) {
 
 const PRONE_SPEED_FACTOR = 0.25; // crawling — quarter speed while prone
 
-// Best-effort carried weight for encumbrance. The own character reads its live
-// loadout (body + weapons + equipment + armor); other entities fall back to
-// body weight (their gear isn't tracked here).
+// Carried weight for encumbrance. The own character reads its live,
+// possibly-unsaved DOM loadout tables (body + weapons + equipment + armor);
+// everyone else (other players' characters, spawned creatures) reads the
+// same total off their saved row data instead (see getEntity's carriedWeight),
+// so their gear actually weighs them down too instead of silently vanishing.
 function _entityCarried(ent, attrs) {
   if (ent && ent.type === 'char' && ent.id === currentCharacterId && typeof getCarriedWeight === 'function') {
     try { return getCarriedWeight(attrs).total || 0; } catch (e) {}
   }
+  if (ent && ent.carriedWeight != null) return ent.carriedWeight;
   return (attrs && attrs._weight) || 0;
 }
 
@@ -3288,7 +3291,10 @@ function getArmorSelections() {
 }
 
 // Armor weight per piece = area weight ratio × target size × material's weight-per-modifier.
-function calcArmorWeight(attrs) {
+// armorOverride/bodyTypeOverride let this compute another entity's armor
+// weight (e.g. a spawned creature's stored `armor`/`body_type`) instead of
+// always reading the live builder DOM — omit both for the builder's own use.
+function calcArmorWeight(attrs, armorOverride, bodyTypeOverride) {
   const breakdown = {};
   let total = 0;
   if (!attrs) return { total, breakdown };
@@ -3296,8 +3302,9 @@ function calcArmorWeight(attrs) {
   // linked config file saved before armor weights/types were corrupted to {}.
   const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
   const typeData     = Object.keys(ARMOR_TYPE_DATA).length    ? ARMOR_TYPE_DATA    : DEFAULT_ARMOR_TYPE_DATA;
-  const armor = getArmorSelections();
-  for (const area of _builderArmorSlots()) {
+  const armor = armorOverride || getArmorSelections();
+  const slots = bodyTypeOverride ? _armorSlotsFor(bodyTypeOverride) : _builderArmorSlots();
+  for (const area of slots) {
     const material = armor[area.key];
     const matData = typeData[material];
     const areaWeight = areaWeights[area.key] || 0;
@@ -5183,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260911b';
+const VERSION = 'v0.1.20260911c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6525,6 +6532,18 @@ function getEntity(ref) {
     ...(row.equipment || []).map(e => e.name),
   ].filter(Boolean))];
 
+  // Total carried weight (weapons + equipment + armor, on top of body weight)
+  // computed from this entity's own saved data — mirrors what the live
+  // Character Builder's getCarriedWeight reads off its DOM tables, since
+  // nothing here has that DOM to read. Used by _entityCarried so encumbrance
+  // actually slows down a spawned creature (or another player's character),
+  // not just the one character the local session has open.
+  const gearWeight =
+    (row.weapons   || []).reduce((s, w) => s + (parseFloat(w.wt) || 0), 0) +
+    (row.equipment || []).reduce((s, e) => s + (parseFloat(e.unitWt) || 0) * (parseFloat(e.qty) || 0), 0) +
+    calcArmorWeight(row._attrs, row.armor || {}, row.body_type || (isChar ? undefined : 'Humanoid')).total;
+  const carriedWeight = (row._attrs._weight || 0) + gearWeight;
+
   // Timed buffs from consumables ride as hidden `buff:<attrKey>:<amount>`
   // markers on the token's conditions — layered onto attrs here (not memoized
   // on the row) so they track condition changes without invalidating _attrs.
@@ -6571,6 +6590,7 @@ function getEntity(ref) {
     // would fight its own escalation as blood loss and rounds-elapsed climb
     // together. Don't mutate this — it's the memoized row cache, shared.
     baseAttrs: row._attrs,
+    carriedWeight,
     held:      Object.assign(_speciesNaturalDefaults(row.species), row.held_items || {}),
     armor:     row.armor || {},
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
@@ -17012,6 +17032,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260910a"></script>
+<script src="panels.js?v=20260911a"></script>
 </body>
 </html>

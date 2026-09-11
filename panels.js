@@ -188,16 +188,11 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
       return `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">${_paEsc(slot.label)}: <span style="color:var(--text);">${cur ? _itemNameSpan(cur) : '<span style="color:var(--text-dim);">None</span>'}</span></div>`;
     }).join('');
   } else if (canEdit) {
-    let options = loadoutOverride || ent.loadout;
-    if (ent.type !== 'char') {
-      // Natural weapons (naturalSlot tagged — Fangs, Claws, ...) aren't
-      // something a hand can pick up; they only ever show in their own
-      // body-plan channel (see _dlgRender), not this right/left catalog.
-      options = [...new Set([
-        ...MELEE_WEAPONS.filter(r => !r.naturalSlot).map(r => r.weapon),
-        ...RANGED_WEAPONS.map(r => r.weapon),
-      ])].sort();
-    }
+    // A creature's hand options are its own saved loadout — same as a
+    // character's — unioned with whatever it's already holding, so it can't
+    // be re-armed with anything in the game, only what it (or the GM, via
+    // the Loadout tab) actually gave it.
+    const options = [...new Set([...(loadoutOverride || ent.loadout || []), held.right, held.left].filter(Boolean))];
     html += ['right', 'left'].map(side => {
       const cur = held[side] || '';
       const opts = ['', ...options].map(n =>
@@ -815,14 +810,16 @@ function _dlgRender(body) {
   // ── Channel sections from the body plan ────────────────────────────────────
   const fullActive = !!c.slots.full;
 
-  // Item list for the hand selectors: a character's own carried loadout, or the
-  // full weapon catalogue for creatures / other-owned entities the GM equips.
+  // Item list for the hand selectors: a character's own carried loadout, or a
+  // creature/other-owned entity's own saved loadout (Loadout tab, same as a
+  // character's) — never the full weapon catalogue. Whatever's already
+  // equipped is unioned in too, so a monster hand-armed straight from
+  // held_items (skipping the Loadout tab entirely) doesn't lose the ability
+  // to show, or re-select, the very weapon it's already holding.
   const isOwn = ent?.type === 'char' && ent.id === currentCharacterId;
   const handItems = isOwn && typeof getLoadoutItemNames === 'function'
     ? getLoadoutItemNames()
-    : (ent?.loadout && ent.loadout.length
-        ? ent.loadout
-        : [...new Set([...MELEE_WEAPONS.filter(r => !r.naturalSlot).map(r => r.weapon), ...RANGED_WEAPONS.map(r => r.weapon)])].sort());
+    : [...new Set([...(ent?.loadout || []), ent?.held?.right, ent?.held?.left].filter(Boolean))];
 
   // Natural weapons available for a given body-plan slot (Fangs/Claws/... —
   // same MELEE_WEAPONS table as hand weapons, just filtered to rows tagged
