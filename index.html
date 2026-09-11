@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260911e';
+const VERSION = 'v0.1.20260911f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6263,6 +6263,44 @@ async function setCondition(tokenId, condition, active, opts) {
   const { error } = await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
   if (error) _writeErrorToast(error, 'map_tokens (condition)');
   // Realtime UPDATE will sync to other clients automatically
+  refreshUI();
+}
+
+// Apply several condition changes to one token as ONE write instead of one
+// setCondition() call per key. Several call sites (a downed check setting
+// unconscious+prone together, a spell's secondary condition plus its hidden
+// "since" marker, ...) used to fire back-to-back separate writes to the SAME
+// map_tokens row. Each write broadcasts its own full-row realtime echo, and
+// subscribeTokenRealtime's handler unconditionally replaces mapTokens[id]
+// with whatever snapshot arrives — with no ordering guarantee across
+// separate network round-trips. Under real latency, an earlier write's echo
+// landing after a later write's echo silently reverts the later one —
+// reported live as a target correctly logged as knocked unconscious by a
+// spell, found merely Stunned a couple of rounds later with nothing in the
+// Journal ever having cleared it. Collapsing each related group into one
+// write removes the multi-echo race within that group (it doesn't fix
+// ordering between two still-separate calls, e.g. a spell's condition and a
+// later, unrelated hit's downed check, but every current back-to-back
+// same-token case in this codebase now goes through here).
+// changes: array of [conditionOrMarker, active] pairs. Doesn't route through
+// the held/holding/carrying relational redirect setCondition(..., false)
+// does — none of today's batched call sites touch those keys.
+async function setConditions(tokenId, changes) {
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const current = new Set(Array.isArray(t.conditions) ? t.conditions : []);
+  for (const [condition, active] of changes) {
+    if (active) { current.add(condition); continue; }
+    current.delete(condition);
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:' }[condition];
+    if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
+  }
+  const newConds = [...current];
+  t.conditions = newConds;
+  _refreshTokenBadges(tokenId);
+  drawSentinelRanges();
+  const { error } = await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
+  if (error) _writeErrorToast(error, 'map_tokens (condition)');
   refreshUI();
 }
 
@@ -8802,21 +8840,22 @@ async function _applyAoeFailure(casterEnt, spell, ent, token) {
 async function _applySpellCondition(tokenId, conditionKey) {
   const condDef = CONDITION_DEFS.find(d => d.key === conditionKey || d.label.toLowerCase() === conditionKey.toLowerCase());
   if (!condDef) return;
-  await setCondition(tokenId, condDef.key, true);
-  if (condDef.key === 'bleeding')  await setCondition(tokenId, 'bleedsince:' + _atSharedRound(), true);
-  if (condDef.key === 'stunned')   await setCondition(tokenId, 'stunsince:' + _atSharedRound(), true);
-  if (condDef.key === 'corroding') await setCondition(tokenId, 'corrodesince:' + _atSharedRound(), true);
+  const changes = [[condDef.key, true]];
+  if (condDef.key === 'bleeding')  changes.push(['bleedsince:' + _atSharedRound(), true]);
+  if (condDef.key === 'stunned')   changes.push(['stunsince:' + _atSharedRound(), true]);
+  if (condDef.key === 'corroding') changes.push(['corrodesince:' + _atSharedRound(), true]);
   if (condDef.key === 'slowed') {
     // 'slowed' only actually reduces speed via a legdmg: marker
     // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
     // tied to a real struck leg, so add a synthetic one. Harmless if it
     // collides with a real leg-hit marker; still just counts as one.
-    await setCondition(tokenId, 'legdmg:frostbite', true);
+    changes.push(['legdmg:frostbite', true]);
     // Also lets a spell-inflicted slow be shaken off via a Power-based save
     // (atResolveRecovery/_recoverTarget's 'slowed' entry) as an alternative
     // to healing the leg — see the CONDITION_DEFS description.
-    await setCondition(tokenId, 'slowsince:' + _atSharedRound(), true);
+    changes.push(['slowsince:' + _atSharedRound(), true]);
   }
+  await setConditions(tokenId, changes);
 }
 
 // Apply a spell's fixed effect fields to a target — same shape/semantics as
@@ -9392,14 +9431,11 @@ async function _checkDownedState(tokenId, ent) {
   const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const bMax = _bloodMax(tMax);
   if ((ent.damage.blood || 0) >= bMax) {
-    await setCondition(tokenId, 'unconscious', true);
-    await setCondition(tokenId, 'dead', true);
-    await setCondition(tokenId, 'prone', true);
+    await setConditions(tokenId, [['unconscious', true], ['dead', true], ['prone', true]]);
     return 'dead';
   }
   if ((ent.damage.toughness || 0) >= tMax) {
-    await setCondition(tokenId, 'unconscious', true);
-    await setCondition(tokenId, 'prone', true);
+    await setConditions(tokenId, [['unconscious', true], ['prone', true]]);
     return 'unconscious';
   }
   const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
