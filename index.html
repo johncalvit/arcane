@@ -5183,7 +5183,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260910c';
+const VERSION = 'v0.1.20260911a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13728,7 +13728,7 @@ async function addCharacterToken(charId, charName, avatarPath) {
     entity_id: charId,
     label: charName,
     avatar_url,
-    ...findTokenPlacement(),
+    ...viewportCenterPlacement(),
     visible: true,
   });
   // INSERT triggers Realtime → upsertTokenElement + refreshTokenPanel
@@ -15336,6 +15336,20 @@ function updateScaleIndicator() {
 }
 
 // ── Token placement helper ────────────────────────────────────────────────────
+// Where the GM's map viewport is currently centered, in image % coords —
+// used so a newly added character token lands where the GM is looking
+// instead of at the top-left placement grid.
+function viewportCenterPlacement() {
+  const vp = document.getElementById('map-viewport');
+  if (!vp || !mapImgW || !mapImgH) return findTokenPlacement();
+  const imgX = (vp.clientWidth  / 2 - mapOffsetX) / mapScale;
+  const imgY = (vp.clientHeight / 2 - mapOffsetY) / mapScale;
+  return {
+    x_pct: Math.min(100, Math.max(0, (imgX / mapImgW) * 100)),
+    y_pct: Math.min(100, Math.max(0, (imgY / mapImgH) * 100)),
+  };
+}
+
 function findTokenPlacement() {
   const count = Object.values(mapTokens).length;
   // Space tokens by 1.6× TOKEN_SIZE in image pixels, laid out in a grid
