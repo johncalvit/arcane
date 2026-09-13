@@ -286,10 +286,9 @@ function _paSecSkills(skills, attrs) {
 // entirely for non-casters (no magic-class skill at all) rather than showing
 // an empty section.
 function _paSecSpellBook(ent) {
-  if (typeof hasMagicClass !== 'function' || typeof SPELLS === 'undefined') return '';
-  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
-  if (!knownClasses.length) return '';
-  const count = SPELLS.filter(s => knownClasses.includes(s.magicClass)).length;
+  if (typeof _knownSpellsFor !== 'function' || typeof SPELLS === 'undefined') return '';
+  const count = _knownSpellsFor(ent).length;
+  if (!count) return '';
   const content = `<button data-pa="open-spellbook" data-cid="${_paEsc(ent.ref)}"
     style="width:100%;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;
     font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.10);color:var(--text);">
@@ -942,9 +941,8 @@ function _dlgRender(body) {
   // own inline chip stopped scaling past a couple of known spells. While a
   // cast is mid-windup, that spell's own lit/complete chip takes over instead.
   let arcaneHtml = '';
-  if (ent && typeof SPELLS !== 'undefined' && typeof hasMagicClass === 'function') {
-    const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
-    if (knownClasses.length) {
+  if (ent && typeof SPELLS !== 'undefined' && typeof _knownSpellsFor === 'function') {
+    if (_knownSpellsFor(ent).length) {
       const maintaining = typeof _maintainedSpellInfo === 'function' ? _maintainedSpellInfo(combatantId) : null;
       const cur = c.slots.full;
       const inWindup = cur && typeof cur.label === 'string' && cur.label.startsWith('Casting: ');

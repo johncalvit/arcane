@@ -1546,6 +1546,7 @@
                timer. Field/column hidden rather than deleted, same as Features. -->
           <div class="field" style="display:none;"><label>Casting Time (rounds)</label><input type="text" id="spf-castingtime" placeholder="0 = Instant"></div>
           <div class="field"><label>Cost</label><input type="text" id="spf-cost" placeholder="0"></div>
+          <div class="field"><label>Memory Cost (to learn)</label><input type="text" id="spf-memorycost" placeholder="e.g. 3 — raised by any deficiency vs Difficulty Value"></div>
           <div class="field"><label>Maintained (cost is per round)</label>
             <select id="spf-maintained"><option value="0">No — one-time cost</option><option value="1">Yes — per round while sustained</option></select>
           </div>
@@ -1602,7 +1603,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th style="display:none;">Cast</th><th>Cost</th><th>Difficulty</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th style="display:none;">Cast</th><th>Cost</th><th>Memory</th><th>Difficulty</th><th></th></tr></thead>
         <tbody id="spellmgr-list"></tbody>
       </table>
     </div>
@@ -1654,7 +1655,16 @@
     <!-- SPELL BOOK -->
     <div id="panel-spellbook" class="panel">
       <h2>Spell Book</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Every spell this character has access to, based on their invested magic-class skills (Arcane, Deific, Demonic, Nature).</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Any character with at least 1 point in Quintessence can permanently memorize spells here, spending Memory Points (Knowledge × Level) — a matching magic-class skill (Arcane, Deific, Demonic, Nature) doesn't unlock spells any more, it only boosts casting success. Once memorized, a spell can't be unlearned or exchanged.</p>
+      <div class="points-bar" id="spellbook-memory-bar" style="display:none;">
+        <div class="label">Memory Points Used</div>
+        <div class="value" id="memory-points-used">0</div>
+        <div class="progress-track"><div class="progress-fill" id="memory-points-bar-fill" style="width:0%"></div></div>
+        <div class="label">of</div>
+        <div class="value" id="memory-points-total">0</div>
+        <div class="label">Left:</div>
+        <div class="value" id="memory-points-left">0</div>
+      </div>
       <div id="spellbook-list"></div>
     </div>
 
@@ -2064,6 +2074,11 @@ function recalc() {
 
   // Skill points
   updateSkillPoints(attrs);
+
+  // Spell Book (Memory Points bar + learnable/known spell list) — live off
+  // current attrs/level the same way Skill Points is, so raising Knowledge
+  // or leveling up is reflected immediately if that tab happens to be open.
+  buildSpellBookPanel(attrs);
 
   // Playsheet
   updatePlaysheet(attrs);
@@ -2810,16 +2825,56 @@ function buildSkillList() {
 }
 
 // ─── SPELL BOOK (character builder + playsheet) ────────────────────────────
-// Which magic classes (Arcane/Deific/Demonic/Nature) this character has
-// access to — same rule _openSpellPickerModal uses in Play Mode
-// (hasMagicClass, keyed off SKILLS the entity actually knows), just read
-// off skillInvestments (the builder's own in-progress state) instead of a
-// saved entity's `skills` object, since a character being built here has no
-// entity row yet.
-function _builderKnownMagicClasses() {
-  return ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls =>
-    Object.entries(skillInvestments).some(([name, pts]) =>
-      pts > 0 && (SKILLS.find(s => s.name === name) || {}).type === cls));
+// Spell memorization: a character with at least 1 point in the Quintessence
+// raw stat is eligible to learn ANY spell — no magic-class skill needed for
+// eligibility any more; a matching Spell Theory-type skill (Arcane/Deific/
+// Demonic/Nature) only ever affects casting success (_spellSkillBonus),
+// decoupled from what's learnable. "Learning" a spell permanently adds it to
+// characterKnownSpells (never removable/exchangeable — see learnSpell) and
+// spends Memory Points, a pool derived from Knowledge×Level (not Skill
+// Points — deliberately a separate resource so investing in spells doesn't
+// starve a caster's other skills).
+let characterKnownSpells = [];
+
+// A spell's Memory Cost for THIS character: its own configured base cost,
+// raised by the same deficiency the miscast table charges a mismatched
+// caster for (_spellDeficiency) — a spell attempted well outside your
+// aptitude takes disproportionately more mental space to hold onto, not
+// just more risk to actually cast.
+function _spellMemoryCost(attrs, spell) {
+  return (spell.memoryCost || 0) + _spellDeficiency(attrs, spell);
+}
+
+// Knowledge × Level — recomputed live (like every other derived attribute
+// here), so leveling up or reallocating raw stats immediately reflects in
+// how much room is left, both for what's already known (cost is computed
+// fresh, not locked in at purchase time) and for what's still affordable.
+function _memoryPointsTotal(attrs) {
+  return Math.round((attrs?.Knowledge || 0) * characterLevel);
+}
+
+function _memoryPointsUsed(attrs) {
+  return characterKnownSpells.reduce((sum, name) => {
+    const spell = SPELLS.find(s => s.name === name);
+    return sum + (spell ? _spellMemoryCost(attrs, spell) : 0);
+  }, 0);
+}
+
+// Permanently memorize a spell — spends Memory Points, no undo. Confirmed
+// (styledConfirm) since "cannot be unbought or exchanged" makes this exactly
+// the kind of one-way action this app always confirms before committing.
+async function learnSpell(name) {
+  if (characterKnownSpells.includes(name)) return;
+  const spell = SPELLS.find(s => s.name === name);
+  if (!spell) return;
+  const attrs = calcAttributes();
+  const cost  = _spellMemoryCost(attrs, spell);
+  const left  = _memoryPointsTotal(attrs) - _memoryPointsUsed(attrs);
+  if (cost > left) { alert(`Not enough Memory Points — ${spell.name} costs ${cost}, only ${left} left.`); return; }
+  const ok = await styledConfirm(`Permanently memorize "${spell.name}" for ${cost} Memory Point${cost === 1 ? '' : 's'}? This can't be undone or exchanged later.`);
+  if (!ok) return;
+  characterKnownSpells.push(name);
+  recalc();
 }
 
 // One spell's full reference card — shared by the dedicated Spell Book panel
@@ -2852,18 +2907,73 @@ function _spellDetailCardHTML(spell) {
     </div>`;
 }
 
+// Spells actually memorized — used by the Playsheet's read-only Spell Book
+// section (full reference cards), unlike buildSpellBookPanel below (the
+// interactive learn/browse list).
 function _builderKnownSpells() {
-  const knownClasses = _builderKnownMagicClasses();
-  return (typeof SPELLS !== 'undefined' ? SPELLS : []).filter(s => knownClasses.includes(s.magicClass));
+  return (typeof SPELLS !== 'undefined' ? SPELLS : []).filter(s => characterKnownSpells.includes(s.name));
 }
 
-function buildSpellBookPanel() {
+// The Character Builder's interactive Spell Book tab: a Memory Points bar
+// plus every configured spell, each either "✓ Known" or a "Learn (cost)"
+// button — not gated by magic-class skill any more, just Quintessence ≥ 1
+// (see the block above learnSpell). attrs optional — recalc() passes its own
+// already-computed attrs; called standalone (e.g. from showPanel) it
+// computes its own.
+function buildSpellBookPanel(attrs) {
   const container = document.getElementById('spellbook-list');
   if (!container) return;
-  const known = _builderKnownSpells();
-  container.innerHTML = known.length
-    ? known.map(_spellDetailCardHTML).join('')
-    : '<p style="color:var(--text-dim);font-size:0.85rem;">No spells known yet — invest points in an Arcane, Deific, Demonic, or Nature skill to unlock spells of that class.</p>';
+  attrs = attrs || calcAttributes();
+
+  const bar = document.getElementById('spellbook-memory-bar');
+  const eligible = (statValues.Quintessence || 0) >= 1;
+  if (bar) bar.style.display = eligible ? '' : 'none';
+
+  if (!eligible) {
+    container.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">Invest at least 1 point in Quintessence to become eligible to learn spells.</p>';
+    return;
+  }
+
+  const total = _memoryPointsTotal(attrs);
+  const used  = _memoryPointsUsed(attrs);
+  const left  = total - used;
+  const totalEl = document.getElementById('memory-points-total');
+  const usedEl  = document.getElementById('memory-points-used');
+  const leftEl  = document.getElementById('memory-points-left');
+  if (totalEl) totalEl.textContent = total;
+  if (usedEl)  usedEl.textContent  = used;
+  if (leftEl) { leftEl.textContent = left; leftEl.className = 'value' + (left < 0 ? ' warn' : left === 0 ? ' ok' : ''); }
+  const fill = document.getElementById('memory-points-bar-fill');
+  if (fill) {
+    const pct = total > 0 ? Math.min(used / total * 100, 100) : (used > 0 ? 100 : 0);
+    fill.style.width = pct + '%';
+    fill.className = 'progress-fill' + (used > total ? ' over' : '');
+  }
+
+  if (!SPELLS.length) {
+    container.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No spells configured yet — add some in GM Config.</p>';
+    return;
+  }
+
+  container.innerHTML = SPELLS.map(spell => {
+    const known = characterKnownSpells.includes(spell.name);
+    const base  = spell.memoryCost || 0;
+    const cost  = _spellMemoryCost(attrs, spell);
+    const defNote = cost !== base ? ` (${base} base + ${cost - base} deficiency)` : '';
+    const canAfford = known || cost <= left;
+    return `
+      <div class="ps-block" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+        <div>
+          <div style="font-weight:bold;">${_paEsc(spell.name)}
+            <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;text-transform:uppercase;letter-spacing:0.04em;">${_paEsc(spell.magicClass)} · ${_paEsc(spell.spellType)}</span>
+          </div>
+          <div style="font-size:0.75rem;color:var(--text-dim);">${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${cost} memory${defNote}</div>
+        </div>
+        ${known
+          ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known</span>`
+          : `<button class="btn-sm" ${canAfford ? '' : 'disabled'} onclick="learnSpell('${spell.name.replace(/'/g, "\\'")}')" title="${canAfford ? '' : 'Not enough Memory Points left'}">Learn (${cost})</button>`}
+      </div>`;
+  }).join('');
 }
 
 // ─── SKILL MANAGER ──────────────────────────────────────────────────────────
@@ -4420,6 +4530,7 @@ function openSpellForm(index) {
   document.getElementById('spf-range').value           = row ? row.range : '';
   document.getElementById('spf-castingtime').value     = row ? row.castingTime : '';
   document.getElementById('spf-cost').value            = row ? row.cost : '';
+  document.getElementById('spf-memorycost').value      = row ? (row.memoryCost || '') : '';
   document.getElementById('spf-maintained').value      = row && row.maintained ? '1' : '0';
   document.getElementById('spf-difficultystat').value  = row ? row.difficultyStat : 'Logic';
   document.getElementById('spf-difficultyvalue').value = row ? row.difficultyValue : '';
@@ -4461,6 +4572,7 @@ function saveSpell() {
     range: document.getElementById('spf-range').value.trim(),
     castingTime: parseFloat(document.getElementById('spf-castingtime').value) || 0,
     cost: parseFloat(document.getElementById('spf-cost').value) || 0,
+    memoryCost: parseFloat(document.getElementById('spf-memorycost').value) || 0,
     maintained: document.getElementById('spf-maintained').value === '1',
     difficultyStat: document.getElementById('spf-difficultystat').value,
     difficultyValue: parseFloat(document.getElementById('spf-difficultyvalue').value) || 0,
@@ -4513,7 +4625,7 @@ function buildSpellManagerTable() {
   SPELLS.forEach((row, i) => {
     const cost = row.maintained ? `${row.cost}/round` : `${row.cost}`;
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td style="display:none;">${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
+    tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td style="display:none;">${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.memoryCost || 0}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSpellForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteSpell(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -4815,6 +4927,7 @@ function gatherCharacterData() {
     mental:  document.getElementById('sel-mental').value,
     level:   characterLevel,
     xp:      characterXP,
+    knownSpells: [...characterKnownSpells],
     notes:   document.getElementById('char-notes')?.value || '',
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
@@ -4867,7 +4980,7 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       { ...data.stats, Level: data.level, XP: data.xp },
+    stats:       { ...data.stats, Level: data.level, XP: data.xp, KnownSpells: data.knownSpells },
     notes:       data.notes || '',
     features:    data.features,
     skills:      data.skills,
@@ -5099,6 +5212,7 @@ function _doNewCharacter() {
   if (newNotesEl) newNotesEl.value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   characterXP = 0;
+  characterKnownSpells = [];
   const newXpDisplay = document.getElementById('char-xp-display');
   if (newXpDisplay) newXpDisplay.textContent = '0';
   _refreshLevelFromXp(); // also sets characterLevel, the Level display, and rebuilds stat rows
@@ -5190,7 +5304,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913a';
+const VERSION = 'v0.1.20260913b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -5915,6 +6029,9 @@ function applyCharacterData(data) {
   characterXP = Math.round(data.stats?.XP || 0);
   const xpDisplay = document.getElementById('char-xp-display');
   if (xpDisplay) xpDisplay.textContent = characterXP;
+  // Known spells — same stats piggyback as XP/Level (see saveCharacter);
+  // permanent once bought, so this is a straight restore, never merged.
+  characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
   // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
   // to compute the +1/level stat bonus, so it has to already be current.
   _refreshLevelFromXp();
@@ -7744,6 +7861,22 @@ function hasMagicClass(ent, magicClass) {
   return Object.keys(ent?.skills || {}).some(k => (SKILLS.find(s => s.name === k) || {}).type === magicClass);
 }
 
+// Which spells an entity can actually cast. A character is gated by exactly
+// what they've permanently memorized via the Character Builder's Spell Book
+// (stats.KnownSpells — see learnSpell/gatherCharacterData); a matching
+// magic-class skill no longer unlocks spells for them, only boosts casting
+// success (_spellSkillBonus). A creature isn't part of that memorization
+// economy at all (GM-built, not leveled through the builder), so it keeps
+// the older rule — every spell matching a magic-class skill it knows.
+function _knownSpellsFor(ent) {
+  if (ent?.type === 'char') {
+    const known = Array.isArray(ent.stats?.KnownSpells) ? ent.stats.KnownSpells : [];
+    return SPELLS.filter(s => known.includes(s.name));
+  }
+  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
+  return SPELLS.filter(s => knownClasses.includes(s.magicClass));
+}
+
 // Spell-picker modal: lists every spell the caster knows (from their magic-
 // class skills) with a live success%/cost preview, rather than cramming
 // every known spell as its own chip in the action dialog — that stops
@@ -7752,8 +7885,7 @@ function hasMagicClass(ent, magicClass) {
 function _openSpellPickerModal(combatantId) {
   const ent = getEntity(combatantId);
   if (!ent) return;
-  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
-  const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
+  const known = _knownSpellsFor(ent);
 
   const existing = document.getElementById('spell-picker-modal');
   if (existing) existing.remove();
@@ -7831,8 +7963,7 @@ function _openSpellPickerModal(combatantId) {
 function _openPlaySpellBookModal(combatantId) {
   const ent = getEntity(combatantId);
   if (!ent) return;
-  const knownClasses = ['Arcane', 'Deific', 'Demonic', 'Nature'].filter(cls => hasMagicClass(ent, cls));
-  const known = SPELLS.filter(s => knownClasses.includes(s.magicClass));
+  const known = _knownSpellsFor(ent);
 
   const existing = document.getElementById('spellbook-view-modal');
   if (existing) existing.remove();
@@ -9068,9 +9199,19 @@ function _maybeRollCastingFocus(casterCid) {
 // added straight onto the d100 roll — which is why the table's bands run
 // past 100; the roll can only exceed a clean d100 by being under-qualified
 // for what was just attempted.
+// Shared by the miscast table and spell memorization cost — how far short
+// of the spell's own difficultyValue the given attrs' matching
+// difficultyStat falls, floored at 0 (meeting or beating the requirement
+// carries no penalty either way). Takes a plain attrs object rather than an
+// entity so the Character Builder (which has no entity, just live attrs from
+// calcAttributes()) can use it too.
+function _spellDeficiency(attrs, spell) {
+  const statVal = Math.round(attrs?.[spell.difficultyStat] || 0);
+  return Math.max(0, Math.round(spell.difficultyValue || 0) - statVal);
+}
+
 function _spellMiscastModifier(casterEnt, spell) {
-  const statVal = casterEnt?.attrs?.[spell.difficultyStat] || 0;
-  const deficiency = Math.max(0, (spell.difficultyValue || 0) - statVal);
+  const deficiency = _spellDeficiency(casterEnt?.attrs, spell);
   return deficiency * (spell.cost || 0);
 }
 
@@ -16355,7 +16496,7 @@ Pick what you're wearing per body slot (Head, Torso, Arms, Legs, etc. — the ex
 
 ## 7. Spell Book (casters only)
 
-If you've invested in Quintessence and a magic-related skill, the Spell Book panel lists every spell you're eligible to know. Casting itself happens later, in Play Mode.
+At least 1 point in Quintessence makes you eligible to permanently memorize any spell — a magic-related skill (Arcane, Deific, Demonic, Nature) isn't required to learn one any more, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the panel) — a spell you're a poor match for (your Difficulty Stat falls short of what it needs) costs extra to hold onto. Once memorized, a spell is yours for good — it can't be unlearned or swapped out. Casting itself happens later, in Play Mode, and only from what you've actually memorized here.
 
 ## 8. Save
 
@@ -17321,6 +17462,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260911a"></script>
+<script src="panels.js?v=20260913a"></script>
 </body>
 </html>
