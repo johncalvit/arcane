@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260911f';
+const VERSION = 'v0.1.20260912a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9068,13 +9068,27 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   if (!casterEnt) { showToast('Could not load caster.', 'error'); return; }
 
   const roundsWaited = _castPendingRounds;
-  const target = _spellSuccessRoll(casterEnt, spell, roundsWaited);
+  const castThreshold = _spellSuccessRoll(casterEnt, spell, roundsWaited);
+
+  // Attack-type spells with a Hit Formula collapse the casting check and the
+  // hit roll into ONE roll instead of two sequential ones — the same roll
+  // that decides whether the bolt connects also decides whether the pattern
+  // held at all, exactly like a called-shot/defended weapon attack already
+  // works. Everyone else (Area/Creation bursts, a plain buff/effect) still
+  // gets just the one casting-success roll, unchanged. See _resolveSpellAttack
+  // for how the two thresholds (hit, always clamped under the cast ceiling;
+  // cast, untouched by defense/called shot) interact.
+  if (spell.spellType === 'Attack' && spell.hitFormula) {
+    const targetTok = _pathFindToken(targetRef);
+    if (targetTok) await _resolveSpellAttack(casterEnt, spell, targetTok, castThreshold);
+    return;
+  }
 
   openRoller({
     label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus`,
+    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus`,
     onComplete: async (n) => {
-      const success = n <= 5 || (n < 96 && n <= target);
+      const success = n <= 5 || (n < 96 && n <= castThreshold);
       const paid = await _payQuintessence(casterEnt, spell.cost || 0);
       const paidParts = [];
       if (paid.quint)      paidParts.push(`${paid.quint} Quint`);
@@ -9103,14 +9117,6 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
           logCombat(`${casterEnt.name} casts ${spell.name}${costNote}.`, 'good');
           if (spell.maintained) await _startMaintaining(casterEnt, spell, null);
           await _resolveSpellAoe(casterEnt, spell, aoePoint);
-        // Attack-type spells with a Hit Formula resolve like a ranged
-        // weapon from here — the casting check only confirms the pattern
-        // held; it still has to actually connect with the target, through
-        // the same defense/called-shot/roller flow a weapon attack uses.
-        } else if (spell.spellType === 'Attack' && spell.hitFormula) {
-          showToast(`${spell.name} takes shape!${costNote}`, 'good');
-          const targetTok = _pathFindToken(targetRef);
-          if (targetTok) await _resolveSpellAttack(casterEnt, spell, targetTok);
         } else {
           await _applySpellEffectToTarget(spell, targetRef);
           if (spell.maintained) await _startMaintaining(casterEnt, spell, targetRef);
@@ -9128,14 +9134,29 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   });
 }
 
-// Attack-type spell with a Hit Formula, once casting succeeds: reuses the
-// exact target-size/range-penalty/Obscured/defense-option/called-shot/roller
-// machinery a ranged weapon attack gets (_buildDefenseOptions,
-// _openCalledShotModal), but damage is capped by the spell's own damageMax
-// (or damageStat) and category — NOT the caster's Power, since magic damage
-// shouldn't scale with physical strength. See _applyDamageAfterHit's
-// ctx.damageCategory/ctx.spell handling for how that's threaded through.
-async function _resolveSpellAttack(casterEnt, spell, targetToken) {
+// Attack-type spell with a Hit Formula: one roll now covers BOTH whether the
+// casting pattern holds AND whether it connects, reusing the exact target-
+// size/range-penalty/Obscured/defense-option/called-shot/roller machinery a
+// ranged weapon attack gets (_buildDefenseOptions, _openCalledShotModal) —
+// including a stray hit on a nearby token if it goes wide, same as an arrow.
+// Damage is capped by the spell's own damageMax (or damageStat) and category
+// — NOT the caster's Power, since magic damage shouldn't scale with physical
+// strength. See _applyDamageAfterHit's ctx.damageCategory/ctx.spell handling
+// for how that's threaded through.
+//
+// castThreshold (from _resolveSpellCast's _spellSuccessRoll) and the hit
+// threshold computed here come from unrelated formulas, so nothing
+// guarantees hit% stays under cast% — a called-shot/defense-reduced hit
+// chance COULD end up above what the caster could reliably cast at all.
+// Clamping the hit threshold to castThreshold before defense/called-shot
+// further reduce it means you can never land a shot with more precision
+// than your casting control actually allows, while defense/called-shot
+// still narrow the hit chance further on top of that, same as always.
+// castThreshold itself stays untouched by any of that — it's "did the
+// pattern hold", not "did it land" — so a roll can clear it (spell forms,
+// Quintessence spent, stray-shot still possible on a miss) even while
+// missing the narrower, defense-adjusted hit chance.
+async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold) {
   const casterToken = _pathFindToken(casterEnt.ref);
   const hitValue = calcHitValue(spell.hitFormula, casterEnt.attrs);
 
@@ -9159,9 +9180,14 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken) {
   }
   const targetObscured = getConditions(targetToken.id).has('obscured');
   const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) : null;
-  const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
+  // Clamp to castThreshold BEFORE defense/called-shot reduce it further below
+  // (those still apply on top, same as any other attack) — see the function
+  // comment for why the clamp exists at all.
+  const clampedRawThreshold = rawThreshold != null && castThreshold != null
+    ? Math.min(rawThreshold, castThreshold) : rawThreshold;
+  const threshold = clampedRawThreshold != null ? Math.round(clampedRawThreshold) : null;
 
-  const { defenseOptions, targetBodyType } = _buildDefenseOptions(targetToken, true, rawThreshold);
+  const { defenseOptions, targetBodyType } = _buildDefenseOptions(targetToken, true, clampedRawThreshold);
 
   const atkPower = casterEnt.attrs.Power || 1;
   const dmgCap   = spell.damageMax || (spell.damageStat ? Math.round(casterEnt.attrs[spell.damageStat] || 0) : 10);
@@ -9182,6 +9208,26 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken) {
     spell,
   };
 
+  // Same stray-hit mechanic a ranged weapon miss gets (_triggerStrayShot) —
+  // a spell that goes wide can still catch someone else standing nearby.
+  let strayContext = null;
+  if (mapScalePPF > 0 && casterToken) {
+    strayContext = {
+      atkImgX:    (casterToken.x_pct / 100) * mapImgW,
+      atkImgY:    (casterToken.y_pct / 100) * mapImgH,
+      tgtImgX:    (targetToken.x_pct / 100) * mapImgW,
+      tgtImgY:    (targetToken.y_pct / 100) * mapImgH,
+      tgtTokenId: targetToken.id,
+      atkTokenId: casterToken.id,
+      adjustedHit,
+      rangeFt,
+      weaponRow:   damageContext.weaponRow,
+      atkPower,
+      actionLabel: spell.name,
+      attackerCombatantId: casterEnt.ref,
+    };
+  }
+
   const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
   const subtitle = hitValue != null
     ? (rangeIncrements > 0
@@ -9191,7 +9237,29 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken) {
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
-    actionLabel: spell.name, defenseOptions, strayContext: null, damageContext,
+    actionLabel: spell.name, defenseOptions, strayContext, damageContext,
+    // The roller's own hit/miss/damage/stray handling already covers
+    // everything the hit threshold decides; this only adds the spell-
+    // specific outcome the roller has no concept of — did the pattern hold
+    // at all — using castThreshold directly (untouched by defense/called
+    // shot, which only ever narrow the CONNECT chance, not the cast itself).
+    onComplete: async (n) => {
+      const heldPattern = n <= 5 || (n < 96 && n <= castThreshold);
+      const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+      const paidParts = [];
+      if (paid.quint)      paidParts.push(`${paid.quint} Quint`);
+      if (paid.stamina)    paidParts.push(`${paid.stamina} Stamina`);
+      if (paid.toughness)  paidParts.push(`${paid.toughness} Toughness`);
+      if (paid.blood)      paidParts.push(`${paid.blood} Blood`);
+      const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
+      if (heldPattern) {
+        showToast(`${spell.name} takes shape!${costNote}`, 'good');
+      } else {
+        logCombat(`${casterEnt.name} fails to cast ${spell.name}${costNote}.`, 'roll');
+        showToast(`${spell.name} fizzles.${costNote}`, 'warn');
+      }
+      refreshUI();
+    },
   });
 }
 
@@ -10588,7 +10656,7 @@ async function _acSetHand(entityType, entityId, side, value) {
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
 // ── Called-shot picker ────────────────────────────────────────────────────────
-function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext }) {
+function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext, onComplete }) {
   const locData = getHitLocData(bodyType);
   // Roll-under d100 → chance to hit, clamped to the crit floor/ceiling (n≤5
   // always hits, n≥96 always misses). This is the no-defense hit chance.
@@ -10638,14 +10706,14 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     const openWith = (chosen) => {
       if (chosen === 'LOCAL') {
         openRoller({ label: actionLabel, min: 1, max: 100, target: locThreshold,
-          targetLabel: locSubtitle, defenseOptions, strayContext, locContext: locCtx, damageContext });
+          targetLabel: locSubtitle, defenseOptions, strayContext, locContext: locCtx, damageContext, onComplete });
         return;
       }
       const red = chosen && chosen.reduction ? chosen.reduction : 0;
       const finalTarget = locThreshold != null ? Math.max(0, Math.round(locThreshold - red)) : null;
       const sub = chosen && chosen.reduction ? `${locSubtitle} · def: ${chosen.label}` : `${locSubtitle} · no defense`;
       openRoller({ label: actionLabel, min: 1, max: 100, target: finalTarget,
-        targetLabel: sub, strayContext, locContext: locCtx, damageContext }); // defense already chosen → no buttons
+        targetLabel: sub, strayContext, locContext: locCtx, damageContext, onComplete }); // defense already chosen → no buttons
     };
 
     // Reactive defense: if someone ELSE controls the target, ask them to choose.
