@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260912b';
+const VERSION = 'v0.1.20260912c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9113,74 +9113,114 @@ function _paidCostNote(paid) {
 // ("Additional to X above" in the spec), so a single roll can trigger
 // several effects at once (e.g. a 140 gets the drain, chime, shockwave, AND
 // blast, not just the blast).
+//
+// Shown on the shared roller (not silent) — everyone at the table watches
+// this land and sees the consequence, same as any other roll. No numeric
+// target (the outcome is a banded table, not a single success/fail line),
+// so this follows the same no-target-roller idiom _grappleContest already
+// uses: set the result label/class and re-broadcast them manually
+// (roller-result-update) since the roller's own built-in broadcast only
+// fills that in for a plain numeric-target roll. The band's effect lines
+// are shown live via the roller's damage-display area (mirrored to every
+// spectator via roller-damage, same channel an attack's damage breakdown
+// already uses) AND written to the permanent Journal, so the detail isn't
+// lost once the roller closes.
 async function _resolveSpellMiscast(casterEnt, spell) {
   const cost = spell.cost || 0;
   const modifier = _spellMiscastModifier(casterEnt, spell);
-  const d100 = Math.floor(Math.random() * 100) + 1;
-  const roll = d100 + modifier;
-  const modNote = modifier ? ` (${d100} + ${modifier} deficiency)` : '';
+  const modLabel = modifier ? ` (+${modifier} deficiency)` : '';
 
-  if (roll <= 50) {
-    logCombat(`${casterEnt.name}'s failed ${spell.name} passes without incident — control holds, no Quintessence lost (rolled ${roll}${modNote}).`, 'roll');
-    return;
-  }
-  if (roll <= 80) {
-    const paid = await _payQuintessence(casterEnt, cost);
-    logCombat(`${casterEnt.name} loses ${_paidCostNote(paid)} to the failed ${spell.name} (rolled ${roll}${modNote}).`, 'roll');
-    return;
-  }
+  return new Promise(resolve => {
+    openRoller({
+      label: `Miscast — ${spell.name}${modLabel}`,
+      onComplete: async (d100) => {
+        const roll = d100 + modifier;
+        const lines = [];
+        const note = (msg, kind = 'roll') => { lines.push(msg); logCombat(msg, kind); };
+        let resultLabel, resultClass;
 
-  // 81+: the spell's normal cost, then an equal amount drained again on top.
-  await _payQuintessence(casterEnt, cost);
-  const paid2 = await _payQuintessence(casterEnt, cost);
-  logCombat(`${casterEnt.name}'s failed ${spell.name} drains an extra ${_paidCostNote(paid2)} beyond its cost (rolled ${roll}${modNote}).`, 'roll');
-  if (roll <= 90) return;
+        if (roll <= 50) {
+          resultLabel = 'No Issue'; resultClass = 'success';
+          note(`${casterEnt.name}'s failed ${spell.name} passes without incident — control holds, no Quintessence lost (rolled ${roll}).`);
+        } else {
+          resultClass = 'fail';
+          resultLabel = roll <= 80 ? 'Cast Fails' : roll <= 90 ? 'Backlash'
+                      : roll <= 100 ? 'Backlash + Chime' : roll <= 130 ? 'Backlash + Shockwave' : 'Backlash + Blast';
 
-  // 91+: Quintessence Chime — a detectable ripple. No in-app "detection"
-  // roll exists for other casters yet, so this is a Journal note for the GM
-  // to act on narratively. QP = the total Quintessence actually disrupted
-  // this mishap (the doubled drain just above).
-  const qp = cost * 2;
-  const chimeFt = Math.round(Math.pow(qp, 3));
-  logCombat(`⚡ Quintessence Chime — ${casterEnt.name}'s mishap ripples outward, detectable by spellcasters within ${chimeFt} ft.`, 'roll');
-  if (roll <= 100) return;
+          if (roll <= 80) {
+            const paid = await _payQuintessence(casterEnt, cost);
+            note(`${casterEnt.name} loses ${_paidCostNote(paid)} to the failed ${spell.name} (rolled ${roll}).`);
+          } else {
+            // 81+: the spell's normal cost, then an equal amount drained again.
+            await _payQuintessence(casterEnt, cost);
+            const paid2 = await _payQuintessence(casterEnt, cost);
+            note(`${casterEnt.name}'s failed ${spell.name} drains an extra ${_paidCostNote(paid2)} beyond its cost (rolled ${roll}).`);
 
-  // 101+: Shockwave — radius = half the spell's cost, in feet. Everyone
-  // caught (the caster included) saves under 3×Physical Coordination or
-  // goes prone.
-  const casterTok = _pathFindToken(casterEnt.ref);
-  const radiusFt = cost / 2;
-  const caught = _tokensWithinFeetOfCaster(casterTok, radiusFt);
-  logCombat(`💥 Shockwave — a thunderclap of raw Quintessence bursts from ${casterEnt.name} (${Math.round(radiusFt)} ft radius).`, 'roll');
-  for (const tok of caught) {
-    const ent = getEntity(_tokenCid(tok));
-    if (!ent) continue;
-    const { n, success } = _rollUnderSave(3 * (ent.attrs.PhysCoord || 0));
-    if (!success) {
-      _setProne(tok.id, true);
-      logCombat(`${ent.name} is knocked prone by the shockwave (rolled ${n}).`, 'roll');
-    }
-  }
-  if (roll <= 130) return;
+            if (roll > 90) {
+              // Quintessence Chime — a detectable ripple. No in-app
+              // "detection" roll exists for other casters yet, so this is a
+              // Journal note for the GM to act on narratively. QP = the
+              // total Quintessence actually disrupted (the doubled drain
+              // just above).
+              const qp = cost * 2;
+              const chimeFt = Math.round(Math.pow(qp, 3));
+              note(`⚡ Quintessence Chime — ${casterEnt.name}'s mishap ripples outward, detectable by spellcasters within ${chimeFt} ft.`);
+            }
+            if (roll > 100) {
+              // Shockwave — radius = half the spell's cost, in feet.
+              // Everyone caught (the caster included) saves under
+              // 3×Physical Coordination or goes prone.
+              const casterTok = _pathFindToken(casterEnt.ref);
+              const radiusFt = cost / 2;
+              const caught = _tokensWithinFeetOfCaster(casterTok, radiusFt);
+              note(`💥 Shockwave — a thunderclap of raw Quintessence bursts from ${casterEnt.name} (${Math.round(radiusFt)} ft radius).`);
+              for (const tok of caught) {
+                const ent = getEntity(_tokenCid(tok));
+                if (!ent) continue;
+                const { n, success } = _rollUnderSave(3 * (ent.attrs.PhysCoord || 0));
+                if (!success) {
+                  _setProne(tok.id, true);
+                  note(`${ent.name} is knocked prone by the shockwave (rolled ${n}).`);
+                }
+              }
+              if (roll > 130) {
+                // Quintessence Blast — same radius; everyone caught saves
+                // under 3×Toughness or takes damage (up to half the
+                // spell's cost).
+                note(`☄ Quintessence Blast — the shockwave detonates outward from ${casterEnt.name}!`);
+                for (const tok of caught) {
+                  const cid = _tokenCid(tok);
+                  const ent = getEntity(cid);
+                  if (!ent) continue;
+                  const { n, success } = _rollUnderSave(3 * (ent.attrs.Toughness || 0));
+                  if (success) { note(`${ent.name} weathers the blast (rolled ${n}).`); continue; }
+                  const dmg = Math.max(1, Math.round(Math.random() * (cost / 2)));
+                  await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, dmg, 0);
+                  const after = await _checkDownedState(tok.id, getEntity(cid));
+                  const suffix = after === 'unconscious' ? ' — 💤 downed' : after === 'dead' ? ' — ☠ dead' : '';
+                  note(`${ent.name} takes ${dmg} damage from the blast (rolled ${n})${suffix}.`, 'hit');
+                }
+              }
+            }
+          }
+        }
 
-  // 131+: Quintessence Blast — same radius; everyone caught saves under
-  // 3×Toughness or takes damage (up to half the spell's cost).
-  logCombat(`☄ Quintessence Blast — the shockwave detonates outward from ${casterEnt.name}!`, 'roll');
-  for (const tok of caught) {
-    const cid = _tokenCid(tok);
-    const ent = getEntity(cid);
-    if (!ent) continue;
-    const { n, success } = _rollUnderSave(3 * (ent.attrs.Toughness || 0));
-    if (success) {
-      logCombat(`${ent.name} weathers the blast (rolled ${n}).`, 'roll');
-      continue;
-    }
-    const dmg = Math.max(1, Math.round(Math.random() * (cost / 2)));
-    await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, dmg, 0);
-    const after = await _checkDownedState(tok.id, getEntity(cid));
-    const suffix = after === 'unconscious' ? ' — 💤 downed' : after === 'dead' ? ' — ☠ dead' : '';
-    logCombat(`${ent.name} takes ${dmg} damage from the blast (rolled ${n})${suffix}.`, 'hit');
-  }
+        const resultEl = document.getElementById('roller-result-label');
+        const numEl    = document.getElementById('roller-number');
+        if (resultEl) { resultEl.textContent = resultLabel; resultEl.className = resultClass; }
+        if (numEl) numEl.className = resultClass;
+        _rollerBroadcast('roller-result-update', { resultLabel, resultClass });
+
+        const html = lines.map(l => `<div style="font-size:0.72rem;color:var(--text-dim);margin-top:2px;">${_paEsc(l)}</div>`).join('');
+        const dmgEl = document.getElementById('roller-damage-display');
+        if (dmgEl) { dmgEl.style.display = 'block'; dmgEl.innerHTML = html; }
+        _rollerBroadcast('roller-damage', { html });
+
+        refreshUI();
+        resolve();
+      },
+    });
+  });
 }
 
 // Resolves a completed cast: opens the shared roller for the casting check
