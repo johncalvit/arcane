@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260912d';
+const VERSION = 'v0.1.20260913a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9074,27 +9074,6 @@ function _spellMiscastModifier(casterEnt, spell) {
   return deficiency * (spell.cost || 0);
 }
 
-// Every token (creature or character) within radiusFt of casterToken,
-// INCLUDING the caster themselves — they're standing at the epicenter of
-// their own mishap.
-function _tokensWithinFeetOfCaster(casterToken, radiusFt) {
-  if (!casterToken || mapScalePPF <= 0 || radiusFt <= 0) return [];
-  const cx = (casterToken.x_pct / 100) * mapImgW, cy = (casterToken.y_pct / 100) * mapImgH;
-  const radiusPx = radiusFt * mapScalePPF;
-  return Object.values(mapTokens).filter(t => {
-    if (!t.entity_type || !t.entity_id) return false;
-    const tx = (t.x_pct / 100) * mapImgW, ty = (t.y_pct / 100) * mapImgH;
-    return Math.hypot(tx - cx, ty - cy) <= radiusPx;
-  });
-}
-
-// Same crit-floor/ceiling convention every other roll-under save in this app
-// uses (n≤5 always succeeds, n≥96 always fails).
-function _rollUnderSave(target) {
-  const n = Math.floor(Math.random() * 100) + 1;
-  return { n, success: n <= 5 || (n < 96 && n <= target) };
-}
-
 function _paidCostNote(paid) {
   const parts = [];
   if (paid.quint)     parts.push(`${paid.quint} Quint`);
@@ -9125,6 +9104,15 @@ function _paidCostNote(paid) {
 // spectator via roller-damage, same channel an attack's damage breakdown
 // already uses) AND written to the permanent Journal, so the detail isn't
 // lost once the roller closes.
+//
+// The Shockwave/Blast bands (101+) aren't a bespoke area effect — they're
+// resolved as a real Area spell burst centered on the caster, modeled on
+// two spells named "Tremor" and "Deity's Wrath" that Game Config is
+// expected to define (their save formula, setsCondition, damageCategory —
+// whatever the GM configured — is what actually applies; this table only
+// overrides their radius, and Blast's damage cap, to match THIS mishap).
+// If either name isn't configured, that band's effect is skipped with a
+// note instead of guessing at numbers nobody set.
 async function _resolveSpellMiscast(casterEnt, spell) {
   const cost = spell.cost || 0;
   const modifier = _spellMiscastModifier(casterEnt, spell);
@@ -9167,38 +9155,47 @@ async function _resolveSpellMiscast(casterEnt, spell) {
               note(`⚡ Quintessence Chime — ${casterEnt.name}'s mishap ripples outward, detectable by spellcasters within ${chimeFt} ft.`);
             }
             if (roll > 100) {
-              // Shockwave — radius = half the spell's cost, in feet.
-              // Everyone caught (the caster included) saves under
-              // 3×Physical Coordination or goes prone.
+              // Shockwave — resolved as a real Area spell burst, centered on
+              // the caster instead of an aimed point: a shallow clone of the
+              // GM's own "Tremor" spell (whatever save formula/condition
+              // it's configured with — Game Config decides that, not this
+              // table) with its radius overridden to half the failed
+              // spell's cost, in feet. Cloned so a miscast never mutates
+              // Tremor's own saved config. Same _aoeAffectedTokens/
+              // _resolveAoeFlagged pipeline any other AOE spell uses, so
+              // saves show up as the normal per-target roller everyone
+              // already watches, and a player-cast miscast still routes
+              // through the GM the same way a player's own AOE cast does.
               const casterTok = _pathFindToken(casterEnt.ref);
               const radiusFt = cost / 2;
-              const caught = _tokensWithinFeetOfCaster(casterTok, radiusFt);
-              note(`💥 Shockwave — a thunderclap of raw Quintessence bursts from ${casterEnt.name} (${Math.round(radiusFt)} ft radius).`);
-              for (const tok of caught) {
-                const ent = getEntity(_tokenCid(tok));
-                if (!ent) continue;
-                const { n, success } = _rollUnderSave(3 * (ent.attrs.PhysCoord || 0));
-                if (!success) {
-                  _setProne(tok.id, true);
-                  note(`${ent.name} is knocked prone by the shockwave (rolled ${n}).`);
-                }
+              const tremorTemplate = SPELLS.find(s => s.name === 'Tremor');
+              if (!casterTok) {
+                note(`💥 Shockwave — no token on the map for ${casterEnt.name}, effect skipped.`);
+              } else if (!tremorTemplate) {
+                note(`💥 Shockwave — no "Tremor" spell configured in Game Config to model it on; effect skipped.`);
+              } else {
+                const shockSpell = { ...tremorTemplate, aoeSize: `${radiusFt} ft radius` };
+                note(`💥 Shockwave — a thunderclap of raw Quintessence bursts from ${casterEnt.name} (${Math.round(radiusFt)} ft radius).`);
+                const caught = _aoeAffectedTokens(casterEnt.ref, shockSpell, casterTok.x_pct, casterTok.y_pct);
+                if (caught.length) await _resolveAoeFlagged(casterEnt, shockSpell, caught);
+                else note(`Shockwave catches no one.`);
               }
               if (roll > 130) {
-                // Quintessence Blast — same radius; everyone caught saves
-                // under 3×Toughness or takes damage (up to half the
-                // spell's cost).
-                note(`☄ Quintessence Blast — the shockwave detonates outward from ${casterEnt.name}!`);
-                for (const tok of caught) {
-                  const cid = _tokenCid(tok);
-                  const ent = getEntity(cid);
-                  if (!ent) continue;
-                  const { n, success } = _rollUnderSave(3 * (ent.attrs.Toughness || 0));
-                  if (success) { note(`${ent.name} weathers the blast (rolled ${n}).`); continue; }
-                  const dmg = Math.max(1, Math.round(Math.random() * (cost / 2)));
-                  await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, dmg, 0);
-                  const after = await _checkDownedState(tok.id, getEntity(cid));
-                  const suffix = after === 'unconscious' ? ' — 💤 downed' : after === 'dead' ? ' — ☠ dead' : '';
-                  note(`${ent.name} takes ${dmg} damage from the blast (rolled ${n})${suffix}.`, 'hit');
+                // Quintessence Blast — same idea, modeled on "Deity's
+                // Wrath" instead, with its damage cap ALSO overridden (half
+                // the failed spell's cost) since that's meant to scale with
+                // THIS mishap, not Deity's Wrath's own configured damage.
+                const wrathTemplate = SPELLS.find(s => s.name === "Deity's Wrath");
+                if (!casterTok) {
+                  note(`☄ Quintessence Blast — no token on the map for ${casterEnt.name}, effect skipped.`);
+                } else if (!wrathTemplate) {
+                  note(`☄ Quintessence Blast — no "Deity's Wrath" spell configured in Game Config to model it on; effect skipped.`);
+                } else {
+                  const blastSpell = { ...wrathTemplate, aoeSize: `${radiusFt} ft radius`, damageMax: Math.max(1, Math.round(cost / 2)) };
+                  note(`☄ Quintessence Blast — the shockwave detonates outward from ${casterEnt.name}!`);
+                  const caught = _aoeAffectedTokens(casterEnt.ref, blastSpell, casterTok.x_pct, casterTok.y_pct);
+                  if (caught.length) await _resolveAoeFlagged(casterEnt, blastSpell, caught);
+                  else note(`Blast catches no one.`);
                 }
               }
             }
