@@ -2999,19 +2999,35 @@ function buildSpellBookPanel(attrs) {
     return;
   }
 
+  // Stand-in for the "ent" _spellSuccessRoll/_spellSkillBonus normally read
+  // (attrs/skills/level) — the builder has no entity yet, just this live
+  // state, but skillInvestments' keys are exactly the skill names
+  // _spellSkillBonus looks for, so it works as-is for the "known skills"
+  // check that feeds the class-match bonus.
+  const pseudoEnt = { attrs, skills: skillInvestments, level: characterLevel };
+
   container.innerHTML = filtered.map(spell => {
     const known = characterKnownSpells.includes(spell.name);
     const base  = spell.memoryCost || 0;
     const cost  = _spellMemoryCost(attrs, spell);
     const defNote = cost !== base ? ` (${base} base + ${cost - base} deficiency)` : '';
     const canAfford = known || cost <= left;
+    // Base (round-1, no skill investment needed to see it) cast success%,
+    // and whether the character's own Difficulty Stat meets the spell's
+    // requirement outright (green) or falls short (red, same deficiency
+    // _spellMemoryCost already charges extra for).
+    const castPct = _spellSuccessRoll(pseudoEnt, spell, 1);
+    const sufficient = _spellDeficiency(attrs, spell) === 0;
+    const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
+      background:${sufficient ? '#4de080' : '#e05555'};margin-right:5px;flex-shrink:0;"
+      title="${sufficient ? 'Meets' : 'Falls short of'} the required ${_paEsc(spell.difficultyStat)} ${spell.difficultyValue}"></span>`;
     return `
       <div class="ps-block" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
         <div>
           <div style="font-weight:bold;">${_paEsc(spell.name)}
             <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;text-transform:uppercase;letter-spacing:0.04em;">${_paEsc(spell.magicClass)} · ${_paEsc(spell.spellType)}</span>
           </div>
-          <div style="font-size:0.75rem;color:var(--text-dim);">${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${cost} memory${defNote}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;">${dot}${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${castPct}% cast · ${cost} memory${defNote}</div>
         </div>
         ${known
           ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known</span>`
@@ -5365,7 +5381,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913e';
+const VERSION = 'v0.1.20260913f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
