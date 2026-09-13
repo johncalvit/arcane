@@ -2035,6 +2035,16 @@ function calcAttributes() {
 function recalc() {
   const attrs = calcAttributes();
 
+  // Tab title tracks the Name field live while in Character Builder mode
+  // (char-name's own oninput already calls recalc() on every keystroke).
+  // Guarded so a stray recalc() call while in Play/Config mode — neither of
+  // which currently makes one, but nothing enforces that — can't stomp the
+  // title those modes set for themselves.
+  if (document.getElementById('gm-config-nav')?.style.display === 'none'
+      && !document.getElementById('play-mode')?.classList.contains('active')) {
+    _updateBuilderTitle();
+  }
+
   // Refresh skill success percentages (attrs affect per-point gain)
   buildSkillList();
 
@@ -4703,6 +4713,17 @@ function showPanel(id) {
 
 const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
 
+// Browser tab title while in Character Builder mode — "Arcane - Character
+// Builder" plus whatever's currently in the Name field, so a GM with
+// several tabs open (one per character, or builder vs. Play Mode) can tell
+// them apart without switching to each. Only meaningful in builder mode
+// itself; enterConfigMode/enterPlayMode below set their own title so this
+// never lingers stale once the user switches away.
+function _updateBuilderTitle() {
+  const name = document.getElementById('char-name')?.value?.trim();
+  document.title = 'Arcane - Character Builder' + (name ? ` - ${name}` : '');
+}
+
 function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
   document.getElementById('gm-config-nav').style.display  = '';
@@ -4710,6 +4731,7 @@ function enterConfigMode(panel) {
   cfgBtn.textContent = '✎ Character Design Mode';
   cfgBtn.onclick = exitConfigMode;
   document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
+  document.title = 'Arcane - Game Configuration';
   showPanel(panel || 'skillmgr');
 }
 
@@ -4720,6 +4742,7 @@ function exitConfigMode() {
   cfgBtn.textContent = '⚙ GM Config Mode';
   cfgBtn.onclick = () => enterConfigMode();
   document.getElementById('app-title').textContent        = '✦ Arcane Character Builder';
+  _updateBuilderTitle();
   showPanel('overview');
 }
 
@@ -5338,7 +5361,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913c';
+const VERSION = 'v0.1.20260913d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6163,6 +6186,7 @@ function applyCharacterData(data) {
 buildStatRows();
 buildFeatures();
 buildArmorFields();
+_updateBuilderTitle(); // the app opens in Character Builder mode by default
 
 // Handle auth state changes — login shows app, logout shows login screen
 sb.auth.onAuthStateChange(async (event, session) => {
@@ -6261,6 +6285,7 @@ function enterPlayMode() {
   document.getElementById('play-title').textContent = campaignName
     ? `⚔ Arcane — ${campaignName}`
     : '⚔ Arcane';
+  document.title = campaignName ? `Arcane - ${campaignName}` : 'Arcane';
 
   // Layout: GM gets right panel
   const layout = document.getElementById('play-layout');
@@ -6307,6 +6332,10 @@ function exitPlayMode() {
   document.getElementById('play-mode-btn').style.display = '';
   if (mapChannel) { mapChannel.unsubscribe(); mapChannel = null; }
   cleanupMapInteraction();
+  // Restore whichever tab title belongs to the mode underneath Play Mode
+  // (Builder or Config — entering Play Mode doesn't force either one).
+  if (document.getElementById('gm-config-nav')?.style.display === 'none') _updateBuilderTitle();
+  else document.title = 'Arcane - Game Configuration';
 }
 
 // ─── Action Tracker ───────────────────────────────────────────────────────────
