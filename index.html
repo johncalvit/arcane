@@ -1665,6 +1665,7 @@
         <div class="label">Left:</div>
         <div class="value" id="memory-points-left">0</div>
       </div>
+      <div class="skill-filter" id="spellbook-filters" style="margin-bottom:10px;"></div>
       <div id="spellbook-list"></div>
     </div>
 
@@ -2914,25 +2915,49 @@ function _builderKnownSpells() {
   return (typeof SPELLS !== 'undefined' ? SPELLS : []).filter(s => characterKnownSpells.includes(s.name));
 }
 
+// Class/status filter for the learn list below — 'All', 'Known' (a pseudo-
+// filter, not a magicClass, same idea as Skills' 'Selected'), or one of the
+// magic classes actually present in SPELLS (Arcane/Deific/Demonic/Nature by
+// default, but only whichever ones exist so a GM's custom set doesn't show
+// empty buttons).
+let spellBookFilter = 'All';
+function buildSpellBookFilters() {
+  const container = document.getElementById('spellbook-filters');
+  if (!container) return;
+  const classes = ['All', 'Known', ...new Set(SPELLS.map(s => s.magicClass).filter(Boolean))];
+  container.innerHTML = '';
+  for (const c of classes) {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn' + (c === spellBookFilter ? ' active' : '');
+    btn.textContent = c;
+    btn.onclick = () => { spellBookFilter = c; buildSpellBookPanel(); };
+    container.appendChild(btn);
+  }
+}
+
 // The Character Builder's interactive Spell Book tab: a Memory Points bar
-// plus every configured spell, each either "✓ Known" or a "Learn (cost)"
-// button — not gated by magic-class skill any more, just Quintessence ≥ 1
-// (see the block above learnSpell). attrs optional — recalc() passes its own
-// already-computed attrs; called standalone (e.g. from showPanel) it
-// computes its own.
+// plus every configured spell (filterable by class — see spellBookFilter
+// above), each either "✓ Known" or a "Learn (cost)" button — not gated by
+// magic-class skill any more, just Quintessence ≥ 1 (see the block above
+// learnSpell). attrs optional — recalc() passes its own already-computed
+// attrs; called standalone (e.g. from showPanel) it computes its own.
 function buildSpellBookPanel(attrs) {
   const container = document.getElementById('spellbook-list');
   if (!container) return;
   attrs = attrs || calcAttributes();
 
   const bar = document.getElementById('spellbook-memory-bar');
+  const filterBar = document.getElementById('spellbook-filters');
   const eligible = (statValues.Quintessence || 0) >= 1;
   if (bar) bar.style.display = eligible ? '' : 'none';
+  if (filterBar) filterBar.style.display = eligible ? '' : 'none';
 
   if (!eligible) {
     container.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">Invest at least 1 point in Quintessence to become eligible to learn spells.</p>';
     return;
   }
+
+  buildSpellBookFilters();
 
   const total = _memoryPointsTotal(attrs);
   const used  = _memoryPointsUsed(attrs);
@@ -2955,7 +2980,16 @@ function buildSpellBookPanel(attrs) {
     return;
   }
 
-  container.innerHTML = SPELLS.map(spell => {
+  const filtered = spellBookFilter === 'All' ? SPELLS
+    : spellBookFilter === 'Known' ? SPELLS.filter(s => characterKnownSpells.includes(s.name))
+    : SPELLS.filter(s => s.magicClass === spellBookFilter);
+
+  if (!filtered.length) {
+    container.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No spells match this filter.</p>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(spell => {
     const known = characterKnownSpells.includes(spell.name);
     const base  = spell.memoryCost || 0;
     const cost  = _spellMemoryCost(attrs, spell);
@@ -5304,7 +5338,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913b';
+const VERSION = 'v0.1.20260913c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6032,6 +6066,7 @@ function applyCharacterData(data) {
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
   characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
+  spellBookFilter = 'All';
   // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
   // to compute the +1/level stat bonus, so it has to already be current.
   _refreshLevelFromXp();
