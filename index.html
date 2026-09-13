@@ -4713,15 +4713,20 @@ function showPanel(id) {
 
 const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
 
-// Browser tab title while in Character Builder mode — "Arcane - Character
-// Builder" plus whatever's currently in the Name field, so a GM with
-// several tabs open (one per character, or builder vs. Play Mode) can tell
-// them apart without switching to each. Only meaningful in builder mode
-// itself; enterConfigMode/enterPlayMode below set their own title so this
-// never lingers stale once the user switches away.
+// Browser tab title AND the in-page header (#app-title) while in Character
+// Builder mode — "Arcane Character Builder" plus whatever's currently in the
+// Name field, so a GM with several tabs open (one per character, or builder
+// vs. Play Mode) can tell them apart without switching to each, and the
+// on-screen header itself isn't just a generic, always-identical banner any
+// more. Only meaningful in builder mode itself; enterConfigMode/
+// enterPlayMode below set their own titles so this never lingers stale once
+// the user switches away.
 function _updateBuilderTitle() {
   const name = document.getElementById('char-name')?.value?.trim();
+  const suffix = name ? ` — ${name}` : '';
   document.title = 'Arcane - Character Builder' + (name ? ` - ${name}` : '');
+  const header = document.getElementById('app-title');
+  if (header) header.textContent = `✦ Arcane Character Builder${suffix}`;
 }
 
 function enterConfigMode(panel) {
@@ -4741,7 +4746,6 @@ function exitConfigMode() {
   const cfgBtn = document.getElementById('config-mode-btn');
   cfgBtn.textContent = '⚙ GM Config Mode';
   cfgBtn.onclick = () => enterConfigMode();
-  document.getElementById('app-title').textContent        = '✦ Arcane Character Builder';
   _updateBuilderTitle();
   showPanel('overview');
 }
@@ -5361,7 +5365,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913d';
+const VERSION = 'v0.1.20260913e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
