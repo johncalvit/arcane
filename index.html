@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260912c';
+const VERSION = 'v0.1.20260912d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9247,7 +9247,18 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   // gets just the one casting-success roll, unchanged. See _resolveSpellAttack
   // for how the two thresholds (hit, always clamped under the cast ceiling;
   // cast, untouched by defense/called shot) interact.
-  if (spell.spellType === 'Attack' && spell.hitFormula) {
+  //
+  // targetType !== 'Area' matters: the spell form's Hit Formula field has no
+  // gating of its own (it's shown and editable regardless of Target Type), so
+  // an Area spell built by copying/editing an Attack spell (or one that once
+  // was Individual) can carry a leftover hitFormula value. The original
+  // single-roll flow's if/else-if chain always checked targetType==='Area'
+  // FIRST, so a stray hitFormula there was harmless dead data; this branch
+  // runs before that chain even opens the roller, so without this check it
+  // would hijack a genuine Area cast — reported live as an Acid Blast (Area)
+  // popping the single-target called-shot picker instead of resolving as an
+  // AOE burst.
+  if (spell.spellType === 'Attack' && spell.hitFormula && spell.targetType !== 'Area') {
     const targetTok = _pathFindToken(targetRef);
     if (targetTok) await _resolveSpellAttack(casterEnt, spell, targetTok, castThreshold);
     return;
