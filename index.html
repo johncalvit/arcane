@@ -5190,7 +5190,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260912a';
+const VERSION = 'v0.1.20260912b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9053,12 +9053,141 @@ function _maybeRollCastingFocus(casterCid) {
   });
 }
 
+// ── Spell Miscast (failed casting-success roll) ─────────────────────────────
+// A caster attempting a spell beyond their control risks a real consequence
+// beyond just fizzling for free — rolled automatically (Math.random(), not
+// the visible spinning roller) the same way a bleed/exhaustion tick resolves
+// silently straight to the Journal, since this is a consequence TABLE, not a
+// player action worth dramatizing with a click.
+//
+// Deficiency: how far short of the spell's own difficultyValue the caster's
+// difficultyStat falls — 0 if they meet or beat it, so an overqualified
+// caster carries no extra risk. Multiplied by the spell's Quintessence cost
+// (a bigger, pricier spell attempted out of your depth is a bigger gamble):
+// a spell needing Logic 15, attempted at Logic 12, for 3 SP → (15-12)×3 = +9
+// added straight onto the d100 roll — which is why the table's bands run
+// past 100; the roll can only exceed a clean d100 by being under-qualified
+// for what was just attempted.
+function _spellMiscastModifier(casterEnt, spell) {
+  const statVal = casterEnt?.attrs?.[spell.difficultyStat] || 0;
+  const deficiency = Math.max(0, (spell.difficultyValue || 0) - statVal);
+  return deficiency * (spell.cost || 0);
+}
+
+// Every token (creature or character) within radiusFt of casterToken,
+// INCLUDING the caster themselves — they're standing at the epicenter of
+// their own mishap.
+function _tokensWithinFeetOfCaster(casterToken, radiusFt) {
+  if (!casterToken || mapScalePPF <= 0 || radiusFt <= 0) return [];
+  const cx = (casterToken.x_pct / 100) * mapImgW, cy = (casterToken.y_pct / 100) * mapImgH;
+  const radiusPx = radiusFt * mapScalePPF;
+  return Object.values(mapTokens).filter(t => {
+    if (!t.entity_type || !t.entity_id) return false;
+    const tx = (t.x_pct / 100) * mapImgW, ty = (t.y_pct / 100) * mapImgH;
+    return Math.hypot(tx - cx, ty - cy) <= radiusPx;
+  });
+}
+
+// Same crit-floor/ceiling convention every other roll-under save in this app
+// uses (n≤5 always succeeds, n≥96 always fails).
+function _rollUnderSave(target) {
+  const n = Math.floor(Math.random() * 100) + 1;
+  return { n, success: n <= 5 || (n < 96 && n <= target) };
+}
+
+function _paidCostNote(paid) {
+  const parts = [];
+  if (paid.quint)     parts.push(`${paid.quint} Quint`);
+  if (paid.stamina)   parts.push(`${paid.stamina} Stamina`);
+  if (paid.toughness) parts.push(`${paid.toughness} Toughness`);
+  if (paid.blood)     parts.push(`${paid.blood} Blood`);
+  return parts.length ? parts.join(' + ') : '0';
+}
+
+// The failure-consequence table itself. Called instead of a plain "fizzles"
+// whenever the casting-success check misses (both the plain single-roll
+// flow and the merged attack-spell roll route failures here) — replaces the
+// old flat "pay the cost either way" with graduated stakes: a lucky failure
+// costs nothing at all, an unlucky one can blow a hole in the caster's own
+// side of the battlefield. Each band is additive with the ones below it
+// ("Additional to X above" in the spec), so a single roll can trigger
+// several effects at once (e.g. a 140 gets the drain, chime, shockwave, AND
+// blast, not just the blast).
+async function _resolveSpellMiscast(casterEnt, spell) {
+  const cost = spell.cost || 0;
+  const modifier = _spellMiscastModifier(casterEnt, spell);
+  const d100 = Math.floor(Math.random() * 100) + 1;
+  const roll = d100 + modifier;
+  const modNote = modifier ? ` (${d100} + ${modifier} deficiency)` : '';
+
+  if (roll <= 50) {
+    logCombat(`${casterEnt.name}'s failed ${spell.name} passes without incident — control holds, no Quintessence lost (rolled ${roll}${modNote}).`, 'roll');
+    return;
+  }
+  if (roll <= 80) {
+    const paid = await _payQuintessence(casterEnt, cost);
+    logCombat(`${casterEnt.name} loses ${_paidCostNote(paid)} to the failed ${spell.name} (rolled ${roll}${modNote}).`, 'roll');
+    return;
+  }
+
+  // 81+: the spell's normal cost, then an equal amount drained again on top.
+  await _payQuintessence(casterEnt, cost);
+  const paid2 = await _payQuintessence(casterEnt, cost);
+  logCombat(`${casterEnt.name}'s failed ${spell.name} drains an extra ${_paidCostNote(paid2)} beyond its cost (rolled ${roll}${modNote}).`, 'roll');
+  if (roll <= 90) return;
+
+  // 91+: Quintessence Chime — a detectable ripple. No in-app "detection"
+  // roll exists for other casters yet, so this is a Journal note for the GM
+  // to act on narratively. QP = the total Quintessence actually disrupted
+  // this mishap (the doubled drain just above).
+  const qp = cost * 2;
+  const chimeFt = Math.round(Math.pow(qp, 3));
+  logCombat(`⚡ Quintessence Chime — ${casterEnt.name}'s mishap ripples outward, detectable by spellcasters within ${chimeFt} ft.`, 'roll');
+  if (roll <= 100) return;
+
+  // 101+: Shockwave — radius = half the spell's cost, in feet. Everyone
+  // caught (the caster included) saves under 3×Physical Coordination or
+  // goes prone.
+  const casterTok = _pathFindToken(casterEnt.ref);
+  const radiusFt = cost / 2;
+  const caught = _tokensWithinFeetOfCaster(casterTok, radiusFt);
+  logCombat(`💥 Shockwave — a thunderclap of raw Quintessence bursts from ${casterEnt.name} (${Math.round(radiusFt)} ft radius).`, 'roll');
+  for (const tok of caught) {
+    const ent = getEntity(_tokenCid(tok));
+    if (!ent) continue;
+    const { n, success } = _rollUnderSave(3 * (ent.attrs.PhysCoord || 0));
+    if (!success) {
+      _setProne(tok.id, true);
+      logCombat(`${ent.name} is knocked prone by the shockwave (rolled ${n}).`, 'roll');
+    }
+  }
+  if (roll <= 130) return;
+
+  // 131+: Quintessence Blast — same radius; everyone caught saves under
+  // 3×Toughness or takes damage (up to half the spell's cost).
+  logCombat(`☄ Quintessence Blast — the shockwave detonates outward from ${casterEnt.name}!`, 'roll');
+  for (const tok of caught) {
+    const cid = _tokenCid(tok);
+    const ent = getEntity(cid);
+    if (!ent) continue;
+    const { n, success } = _rollUnderSave(3 * (ent.attrs.Toughness || 0));
+    if (success) {
+      logCombat(`${ent.name} weathers the blast (rolled ${n}).`, 'roll');
+      continue;
+    }
+    const dmg = Math.max(1, Math.round(Math.random() * (cost / 2)));
+    await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, dmg, 0);
+    const after = await _checkDownedState(tok.id, getEntity(cid));
+    const suffix = after === 'unconscious' ? ' — 💤 downed' : after === 'dead' ? ' — ☠ dead' : '';
+    logCombat(`${ent.name} takes ${dmg} damage from the blast (rolled ${n})${suffix}.`, 'hit');
+  }
+}
+
 // Resolves a completed cast: opens the shared roller for the casting check
-// (round-accumulated success% — see _spellSuccessRoll/_castPendingRounds),
-// pays the Quintessence cascade regardless of outcome (the energy is spent
-// whether or not the pattern holds — a real failure-consequence table is
-// future work, but see _spellRawAccum for the unclamped number it'll read),
-// and on success applies the spell's effect to the target.
+// (round-accumulated success% — see _spellSuccessRoll/_castPendingRounds).
+// On success, pays the Quintessence cost and applies the spell's effect; on
+// failure, the cost (if any) and every further consequence come from the
+// miscast table above instead of a flat "fizzles for free."
 // `aoePoint` ({xPct,yPct}) is set instead of a real targetRef for Area
 // spells — see enterAoeCastMode/aoeMouseDown.
 async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
@@ -9089,15 +9218,10 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
     target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= castThreshold);
-      const paid = await _payQuintessence(casterEnt, spell.cost || 0);
-      const paidParts = [];
-      if (paid.quint)      paidParts.push(`${paid.quint} Quint`);
-      if (paid.stamina)    paidParts.push(`${paid.stamina} Stamina`);
-      if (paid.toughness)  paidParts.push(`${paid.toughness} Toughness`);
-      if (paid.blood)      paidParts.push(`${paid.blood} Blood`);
-      const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
 
       if (success) {
+        const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+        const costNote = (paid.quint || paid.stamina || paid.toughness || paid.blood) ? ` (spent ${_paidCostNote(paid)})` : '';
         if (spell.spellType === 'Creation' && spell.targetType === 'Area') {
           // Creation spells place a real obstacle on the map (a wall,
           // reusing the same geometry/rendering the GM's own wall-drawing
@@ -9126,8 +9250,8 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
           showToast(`${spell.name} cast successfully!${costNote}`, 'good');
         }
       } else {
-        logCombat(`${casterEnt.name} fails to cast ${spell.name}${costNote}.`, 'roll');
-        showToast(`${spell.name} fizzles.${costNote}`, 'warn');
+        showToast(`${spell.name} fizzles.`, 'warn');
+        await _resolveSpellMiscast(casterEnt, spell);
       }
       refreshUI();
     },
@@ -9245,18 +9369,13 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     // shot, which only ever narrow the CONNECT chance, not the cast itself).
     onComplete: async (n) => {
       const heldPattern = n <= 5 || (n < 96 && n <= castThreshold);
-      const paid = await _payQuintessence(casterEnt, spell.cost || 0);
-      const paidParts = [];
-      if (paid.quint)      paidParts.push(`${paid.quint} Quint`);
-      if (paid.stamina)    paidParts.push(`${paid.stamina} Stamina`);
-      if (paid.toughness)  paidParts.push(`${paid.toughness} Toughness`);
-      if (paid.blood)      paidParts.push(`${paid.blood} Blood`);
-      const costNote = paidParts.length ? ` (spent ${paidParts.join(' + ')})` : '';
       if (heldPattern) {
+        const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+        const costNote = (paid.quint || paid.stamina || paid.toughness || paid.blood) ? ` (spent ${_paidCostNote(paid)})` : '';
         showToast(`${spell.name} takes shape!${costNote}`, 'good');
       } else {
-        logCombat(`${casterEnt.name} fails to cast ${spell.name}${costNote}.`, 'roll');
-        showToast(`${spell.name} fizzles.${costNote}`, 'warn');
+        showToast(`${spell.name} fizzles.`, 'warn');
+        await _resolveSpellMiscast(casterEnt, spell);
       }
       refreshUI();
     },
