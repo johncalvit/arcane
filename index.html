@@ -964,6 +964,7 @@
       <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species</button>
       <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skills</button>
       <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor</button>
+      <button class="nav-btn" onclick="showPanel('armorpiecemgr')">🪖 Armor Pieces</button>
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons</button>
       <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons</button>
       <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables</button>
@@ -1339,6 +1340,68 @@
       </table>
     </div>
 
+    <!-- ARMOR PIECES MANAGER -->
+    <div id="panel-armorpiecemgr" class="panel">
+      <h2>Armor Pieces</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        A specific manufactured item (Full Helmet, Kettle Hat, ...) that references one Material above — the material
+        still supplies damage reduction and Weight/Mod — but carries its own Gap, Noise, and Vision/Hearing modifiers
+        (a full helm covers the face, a kettle hat doesn't, even in the same steel). Slot "Any (Generic)" fits any body
+        slot as plain draped material with no special shape — one is auto-created per Material so nothing you already
+        set up needs to change. A character buys/finds a SPECIFIC SIZE of a piece in the Loadout tab; that size (not
+        this row) determines its actual weight and cost.
+      </p>
+      <button class="btn" onclick="openArmorPieceForm(null)" style="margin-bottom:16px;">+ Add Armor Piece</button>
+      <div id="armorpiece-form-anchor"></div>
+
+      <div id="armorpiece-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="armorpiece-form-title" style="margin-top:0;">New Armor Piece</h3>
+        <div class="grid-3">
+          <div class="field">
+            <label>Piece Name</label>
+            <input type="text" id="apf-name" placeholder="e.g. Full Helmet">
+          </div>
+          <div class="field">
+            <label>Slot</label>
+            <select id="apf-slot"></select>
+          </div>
+          <div class="field">
+            <label>Material</label>
+            <select id="apf-material"></select>
+          </div>
+          <div class="field">
+            <label>Gap</label>
+            <input type="text" id="apf-gap" placeholder="e.g. 4" title="Overrides the material's own Gap for this specific piece — a to-hit roll at or below this skips its DR entirely.">
+          </div>
+          <div class="field">
+            <label>Noise</label>
+            <input type="text" id="apf-noise" placeholder="0" title="How much this piece gives away movement — not consumed by anything yet (stealth/detection is a future feature), just recorded here.">
+          </div>
+          <div class="field">
+            <label>Vision Modifier %</label>
+            <input type="text" id="apf-visionmod" placeholder="0" title="Applied to the wearer's Day Vision AND Night Vision while equipped — negative reduces both equally.">
+          </div>
+          <div class="field">
+            <label>Hearing Modifier %</label>
+            <input type="text" id="apf-hearingmod" placeholder="0" title="Applied to the wearer's Hearing while equipped.">
+          </div>
+          <div class="field">
+            <label>Cost per Modifier</label>
+            <input type="text" id="apf-costpermod" placeholder="e.g. 8" title="Like the material's Weight/Mod, but for price — an owned instance's actual cost is area weight × its own size × this.">
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveArmorPiece()">Save Piece</button>
+          <button class="btn danger" onclick="closeArmorPieceForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th>Cost/Mod</th><th></th></tr></thead>
+        <tbody id="armorpiecemgr-list"></tbody>
+      </table>
+    </div>
+
     <!-- MELEE WEAPONS MANAGER -->
     <div id="panel-meleemgr" class="panel">
       <h2>Melee Weapons</h2>
@@ -1643,12 +1706,30 @@
           <tbody id="equip-list"></tbody>
         </table>
       </div>
+      <div class="loadout-section">
+        <h3>Armor</h3>
+        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;font-style:italic;">
+          Buy or record a specific armor piece in the size YOU need — weight and cost are fixed to that size the
+          moment it's added, not recalculated later. Armor scavenged from someone else keeps whatever size fit
+          THEM, so it'll only actually equip (see the Armor tab) if it happens to match your own Target Size.
+        </p>
+        <div class="loadout-add">
+          <select id="armorpiece-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <input type="number" id="armorpiece-size" min="1" step="1" title="Target Size this specific piece is sized for — defaults to your own"
+            style="width:70px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:'Georgia',serif;">
+          <button class="btn" onclick="addArmorPiece()">Add Piece</button>
+        </div>
+        <table class="loadout-table">
+          <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Size</th><th>Weight</th><th>Cost</th><th></th></tr></thead>
+          <tbody id="armor-owned-list"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- ARMOR -->
     <div id="panel-armor" class="panel">
       <h2>Armor</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Select armor coverage for each body area.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip an owned armor piece (Loadout tab) into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
     </div>
 
@@ -2242,14 +2323,19 @@ function updatePlaysheet(attrs) {
     ? loadoutRows.join('')
     : '<span style="color:var(--text-dim)">Nothing equipped.</span>';
 
-  // Armor
-  const armor = getArmorSelections();
+  // Armor — shows the actual equipped PIECE name (Full Helmet), not just
+  // its underlying material, so a helmet and a hauberk of the same steel
+  // don't look identical here.
+  const equippedArmor = _equippedArmorInstances();
   const armorWeights = calcArmorWeight(attrs);
-  const armorRows = _builderArmorSlots().map(area => `
+  const armorRows = _builderArmorSlots().map(area => {
+    const inst = equippedArmor[area.key];
+    return `
     <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
       <span>${area.label} <span style="color:var(--text-dim);">(${Math.round(armorWeights.breakdown[area.key]||0)} lbs)</span></span>
-      <span style="color:${armor[area.key]==='None' ? 'var(--text-dim)' : 'var(--gold2)'};">${armor[area.key]||'None'}</span>
-    </div>`).join('');
+      <span style="color:${inst ? 'var(--gold2)' : 'var(--text-dim)'};">${inst ? _paEsc(inst.name) : 'None'}</span>
+    </div>`;
+  }).join('');
   const armorTotalRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;">
       <span>Total Armor Weight</span><span style="color:var(--gold2);">${Math.round(armorWeights.total)} lbs</span>
     </div>`;
@@ -3322,6 +3408,18 @@ function buildLoadoutSelects() {
     });
     es.appendChild(og);
   }
+
+  const aps = document.getElementById('armorpiece-select');
+  if (aps) {
+    aps.innerHTML = '';
+    ARMOR_PIECES.forEach((p, i) => {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = `${p.name}${p.slot ? ` (${p.slot})` : ' (any slot)'} — ${p.material}`;
+      aps.appendChild(o);
+    });
+  }
+  const sizeInput = document.getElementById('armorpiece-size');
+  if (sizeInput && !sizeInput.value) sizeInput.value = calcAttributes()._targetAdj || 4;
 }
 
 // Resolve an equipment/consumable line item to its record (weight etc.).
@@ -3345,6 +3443,65 @@ function addWeapon() {
   }
   select.selectedIndex = -1;
   recalc();
+}
+
+// Adds an OWNED INSTANCE of an armor piece — not just a catalog reference —
+// at whatever size is entered (defaults to the character's own Target Size,
+// see buildLoadoutSelects). Weight and cost are computed ONCE, right here,
+// from that size, and frozen into the row's own dataset (same "compute at
+// add-time, never recompute later" convention _wallCommit/addWeapon/addEquip
+// already use) — a piece found on someone else's body keeps THEIR size, and
+// therefore their weight/cost, forever, regardless of who ends up holding it.
+function addArmorPiece() {
+  const select = document.getElementById('armorpiece-select');
+  const idx = parseInt(select.value, 10);
+  const piece = ARMOR_PIECES[idx];
+  if (!piece) return;
+  const size = parseFloat(document.getElementById('armorpiece-size').value) || 0;
+  if (size <= 0) { alert('Enter a valid size for this piece.'); return; }
+
+  const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
+  const mat = ARMOR_TYPE_DATA[piece.material] || DEFAULT_ARMOR_TYPE_DATA[piece.material];
+  // A generic (slot: null) piece isn't tied to one body area's coverage
+  // ratio — flat 1, so its weight/cost are purely a function of size and
+  // the underlying material/piece factors.
+  const areaWeight = piece.slot ? (areaWeights[piece.slot] || 0) : 1;
+  const weight = areaWeight * size * (mat?.weightPerMod || 0);
+  const cost   = areaWeight * size * (piece.costPerMod || 0);
+  const id = 'armorpc-' + Date.now() + '-' + Math.round(Math.random() * 9999);
+
+  const tbody = document.getElementById('armor-owned-list');
+  const tr = document.createElement('tr');
+  tr.dataset.id = id;
+  tr.dataset.name = piece.name;
+  tr.dataset.slot = piece.slot || '';
+  tr.dataset.material = piece.material;
+  tr.dataset.size = size;
+  tr.dataset.gap = piece.gap;
+  tr.dataset.noise = piece.noise || 0;
+  tr.dataset.visionmod = piece.visionMod || 0;
+  tr.dataset.hearingmod = piece.hearingMod || 0;
+  tr.dataset.weight = weight;
+  tr.dataset.cost = cost;
+  tr.innerHTML = `<td>${_paEsc(piece.name)}</td><td>${piece.slot ? _paEsc(piece.slot) : 'any'}</td><td>${_paEsc(piece.material)}</td><td>${size}</td><td>${Math.round(weight * 10) / 10}</td><td>${Math.round(cost)}</td>
+    <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
+  tbody.appendChild(tr);
+  buildArmorFields();
+  recalc();
+}
+
+// Every armor piece this character currently owns (Loadout tab), read
+// straight off that table's rows — same "DOM is the source of truth" pattern
+// weapons/equipment already use, so gatherCharacterData needs no separate
+// array kept in sync.
+function _ownedArmorPieces() {
+  return [...document.querySelectorAll('#armor-owned-list tr')].map(tr => ({
+    id: tr.dataset.id, name: tr.dataset.name, slot: tr.dataset.slot || null,
+    material: tr.dataset.material, size: parseFloat(tr.dataset.size) || 0,
+    gap: parseFloat(tr.dataset.gap) || 0, noise: parseFloat(tr.dataset.noise) || 0,
+    visionMod: parseFloat(tr.dataset.visionmod) || 0, hearingMod: parseFloat(tr.dataset.hearingmod) || 0,
+    weight: parseFloat(tr.dataset.weight) || 0, cost: parseFloat(tr.dataset.cost) || 0,
+  }));
 }
 
 function addEquip() {
@@ -3414,6 +3571,31 @@ const DEFAULT_ARMOR_TYPE_DATA = {
 let ARMOR_AREA_WEIGHTS = { ...DEFAULT_ARMOR_AREA_WEIGHTS };
 let ARMOR_TYPE_DATA = { ...DEFAULT_ARMOR_TYPE_DATA };
 
+// Armor Pieces: a specific manufactured item (Full Helmet, Kettle Hat, ...)
+// that references one Material above — the material still supplies damage
+// reduction and Weight/Mod — but carries its own gap/noise/vision/hearing,
+// since two helmets of the same steel can fit very differently (a full helm
+// covers the face, a kettle hat doesn't) even though they're the same metal.
+// slot: null means "generic" — fits any body slot as plain draped material
+// with no special shape, matching how armor worked before this existed; one
+// is auto-generated per material below so nothing already set up breaks.
+// costPerMod mirrors a material's weightPerMod, but for price: an owned
+// instance's actual weight/cost (computed when a character adds it to their
+// Loadout — see addArmorPiece) is areaWeight[slot] × THAT INSTANCE'S OWN
+// size (chosen at purchase/found-on-a-body time, not this template) ×
+// material.weightPerMod (weight) or this.costPerMod (cost).
+const DEFAULT_ARMOR_PIECES = [
+  { name: 'Full Helmet',   slot: 'head',  material: 'Steel Plate',  gap: 4,  noise: 0,  visionMod: -50, hearingMod: -50, costPerMod: 8 },
+  { name: 'Kettle Hat',    slot: 'head',  material: 'Steel Plate',  gap: 40, noise: 0,  visionMod: -10, hearingMod: -10, costPerMod: 4 },
+  { name: 'Scale Hauberk', slot: 'torso', material: 'Bronze Scale', gap: 20, noise: 15, visionMod: 0,   hearingMod: 0,   costPerMod: 3 },
+  ...Object.keys(DEFAULT_ARMOR_TYPE_DATA).map(mat => ({
+    name: `${mat} (Generic)`, slot: null, material: mat,
+    gap: DEFAULT_ARMOR_TYPE_DATA[mat].gap, noise: 0, visionMod: 0, hearingMod: 0,
+    costPerMod: DEFAULT_ARMOR_TYPE_DATA[mat].weightPerMod || 1,
+  })),
+];
+let ARMOR_PIECES = [...DEFAULT_ARMOR_PIECES];
+
 // The armor slots for whichever body type is CURRENTLY selected in the
 // builder form — every armor function below operates on this instead of
 // the fixed Humanoid six, so a Quadruped/Dragon/etc. template gets its own
@@ -3423,23 +3605,45 @@ function _builderArmorSlots() {
   return _armorSlotsFor(document.getElementById('sel-bodytype')?.value || 'Humanoid');
 }
 
+// A piece fits a body slot if it was bought/found specifically for it, or
+// it's a generic (slot: null) piece — those drape over any area the same
+// way a bare material selection always could.
+function _armorPieceFitsSlot(piece, slotKey) {
+  return piece.slot === slotKey || piece.slot === null;
+}
+
 function buildArmorFields() {
-  const prevSelections = getArmorSelections();
-  const types = Object.keys(ARMOR_TYPE_DATA).length ? Object.keys(ARMOR_TYPE_DATA) : Object.keys(DEFAULT_ARMOR_TYPE_DATA);
+  // Preserve by INSTANCE ID (not material name any more) across a rebuild —
+  // e.g. switching body type regenerates the slot list, but an already-
+  // equipped piece should stay equipped in whichever slot still exists.
+  const prevSelections = getEquippedArmorIds();
+  const owned = _ownedArmorPieces();
+  const mySize = Math.round(calcAttributes()._targetAdj || 0);
   const container = document.getElementById('armor-fields');
   const areas = _builderArmorSlots();
-  container.innerHTML = areas.map(area => `
+  container.innerHTML = areas.map(area => {
+    const fitting = owned.filter(o => _armorPieceFitsSlot(o, area.key));
+    const options = fitting.map(o => {
+      const sizeOk = Math.round(o.size) === mySize;
+      return `<option value="${o.id}" ${sizeOk ? '' : 'disabled'}
+        title="${sizeOk ? '' : `Sized for Target Size ${o.size}, not yours (${mySize}) — won't fit`}">
+        ${o.name} (${o.material}, size ${o.size})${sizeOk ? '' : ' — wrong size'}
+      </option>`;
+    }).join('');
+    return `
     <div class="field">
       <label>${area.label}</label>
       <select id="armor-${area.key}" onchange="recalc()" style="width:100%;">
-        ${types.map(t => `<option>${t}</option>`).join('')}
+        <option value="">— None —</option>
+        ${options}
       </select>
       <div id="armor-wt-${area.key}" style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">0 lbs</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   for (const area of areas) {
     const el = document.getElementById('armor-'+area.key);
     const prev = prevSelections[area.key];
-    if (prev && types.includes(prev)) el.value = prev;
+    if (prev && [...el.options].some(o => o.value === prev && !o.disabled)) el.value = prev;
   }
 }
 
@@ -3451,11 +3655,40 @@ function updateArmorWeightDisplay(attrs) {
   }
 }
 
-function getArmorSelections() {
+// Raw select values — {slotKey: ownedInstanceId} — the actual DOM state.
+// Kept separate from getArmorSelections (below), which resolves those ids
+// back down to material names for the parts of the app (armor DB column,
+// getArmorDR/DR lookups, other entities' saved data) that only ever expected
+// a material name there and never needed to know about piece instances.
+function getEquippedArmorIds() {
   const result = {};
   for (const area of _builderArmorSlots()) {
     const el = document.getElementById('armor-'+area.key);
-    if (el) result[area.key] = el.value;
+    if (el && el.value) result[area.key] = el.value;
+  }
+  return result;
+}
+
+// The actual OWNED INSTANCE equipped in each slot (not just its material) —
+// carries size/gap/noise/vision/hearing/weight, none of which a bare
+// material name could express. Used for weight totals and the piece-
+// specific gap/vision/hearing effects a plain material selection never had.
+function _equippedArmorInstances() {
+  const ids = getEquippedArmorIds();
+  const owned = _ownedArmorPieces();
+  const result = {};
+  for (const [slot, id] of Object.entries(ids)) {
+    const inst = owned.find(o => o.id === id);
+    if (inst) result[slot] = inst;
+  }
+  return result;
+}
+
+function getArmorSelections() {
+  const equipped = _equippedArmorInstances();
+  const result = {};
+  for (const area of _builderArmorSlots()) {
+    result[area.key] = equipped[area.key]?.material || 'None';
   }
   return result;
 }
@@ -3468,12 +3701,39 @@ function calcArmorWeight(attrs, armorOverride, bodyTypeOverride) {
   const breakdown = {};
   let total = 0;
   if (!attrs) return { total, breakdown };
-  // Fall back to built-in defaults if the live tables are empty — e.g. an older
-  // linked config file saved before armor weights/types were corrupted to {}.
+  const slots = bodyTypeOverride ? _armorSlotsFor(bodyTypeOverride) : _builderArmorSlots();
+
+  // The live builder's own character (no override) has actual OWNED
+  // INSTANCES with their OWN frozen weight — computed once, from THAT
+  // instance's size, when it was added (see addArmorPiece) — so sum those
+  // directly instead of recomputing from the current Target Size. A
+  // scavenged piece keeps whoever it was sized for's weight regardless of
+  // who's now carrying it around (though anything actually EQUIPPABLE had
+  // to match the wearer's own size in the first place — see buildArmorFields'
+  // disabled-on-mismatch options).
+  if (!armorOverride) {
+    const equipped = _equippedArmorInstances();
+    for (const area of slots) {
+      const wt = equipped[area.key]?.weight || 0;
+      breakdown[area.key] = wt;
+      total += wt;
+    }
+    return { total, breakdown };
+  }
+
+  // Anyone else (a creature, or another character read from saved data
+  // rather than the live builder DOM) still uses the old direct material-
+  // per-slot model — creatures were never moved onto the owned-instance
+  // system (see getEntity's carriedWeight comment), and for a character
+  // this reproduces the same number the owned-instance path would anyway
+  // (their gear was only equippable in the first place if its size matched
+  // their own Target Size — see the disabled-on-mismatch note above), it
+  // just can't express piece-specific gap/vision/hearing the way the real
+  // instance can (see _applyDamageAfterHit / getEntity for where those are
+  // read from the entity's own armorOwned/armorEquipped instead).
   const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
   const typeData     = Object.keys(ARMOR_TYPE_DATA).length    ? ARMOR_TYPE_DATA    : DEFAULT_ARMOR_TYPE_DATA;
-  const armor = armorOverride || getArmorSelections();
-  const slots = bodyTypeOverride ? _armorSlotsFor(bodyTypeOverride) : _builderArmorSlots();
+  const armor = armorOverride;
   for (const area of slots) {
     const material = armor[area.key];
     const matData = typeData[material];
@@ -3597,6 +3857,110 @@ function buildArmorManagerTable() {
     tr.innerHTML = `<td>${name}</td><td>${mat.weightPerMod}</td><td>${mat.gap ?? 5}</td>${protectionCells}
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorForm('${name.replace(/'/g,"\\'")}')">Edit</button>
       <button class="remove-btn" onclick="deleteArmorMaterial('${name.replace(/'/g,"\\'")}')">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─── ARMOR PIECES MANAGER ───────────────────────────────────────────────────
+let editingArmorPieceIndex = null;
+
+function positionArmorPieceForm(index) {
+  const form = document.getElementById('armorpiece-form');
+  const oldRow = document.getElementById('armorpiece-form-row');
+  if (oldRow) oldRow.remove();
+
+  if (index !== null) {
+    const tbody = document.getElementById('armorpiecemgr-list');
+    const targetRow = tbody.rows[index];
+    const row = document.createElement('tr');
+    row.id = 'armorpiece-form-row';
+    const cell = document.createElement('td');
+    cell.colSpan = 9;
+    row.appendChild(cell);
+    if (targetRow) targetRow.after(row); else tbody.appendChild(row);
+    cell.appendChild(form);
+  } else {
+    document.getElementById('armorpiece-form-anchor').appendChild(form);
+  }
+}
+
+function _buildArmorPieceFormSelects() {
+  const slotSel = document.getElementById('apf-slot');
+  const slotKeys = Object.keys(ARMOR_AREA_WEIGHTS).length ? Object.keys(ARMOR_AREA_WEIGHTS) : Object.keys(DEFAULT_ARMOR_AREA_WEIGHTS);
+  slotSel.innerHTML = `<option value="">— Any (Generic) —</option>` +
+    slotKeys.map(k => `<option value="${k}">${k}</option>`).join('');
+
+  const matSel = document.getElementById('apf-material');
+  const matNames = Object.keys(ARMOR_TYPE_DATA).length ? Object.keys(ARMOR_TYPE_DATA) : Object.keys(DEFAULT_ARMOR_TYPE_DATA);
+  matSel.innerHTML = matNames.map(m => `<option>${m}</option>`).join('');
+}
+
+function openArmorPieceForm(index) {
+  editingArmorPieceIndex = index;
+  positionArmorPieceForm(index);
+  _buildArmorPieceFormSelects();
+  const row = index !== null ? ARMOR_PIECES[index] : null;
+  document.getElementById('armorpiece-form-title').textContent = row ? 'Edit Armor Piece' : 'New Armor Piece';
+  document.getElementById('apf-name').value       = row ? row.name : '';
+  document.getElementById('apf-slot').value       = row ? (row.slot || '') : '';
+  document.getElementById('apf-material').value   = row ? row.material : (Object.keys(ARMOR_TYPE_DATA)[0] || 'None');
+  document.getElementById('apf-gap').value        = row ? row.gap : 5;
+  document.getElementById('apf-noise').value      = row ? (row.noise || 0) : 0;
+  document.getElementById('apf-visionmod').value  = row ? (row.visionMod || 0) : 0;
+  document.getElementById('apf-hearingmod').value = row ? (row.hearingMod || 0) : 0;
+  document.getElementById('apf-costpermod').value = row ? (row.costPerMod || 0) : 0;
+  document.getElementById('armorpiece-form').style.display = 'block';
+}
+
+function closeArmorPieceForm() {
+  editingArmorPieceIndex = null;
+  document.getElementById('armorpiece-form').style.display = 'none';
+  positionArmorPieceForm(null);
+}
+
+function saveArmorPiece() {
+  const name = document.getElementById('apf-name').value.trim();
+  if (!name) { alert('Piece name is required.'); return; }
+  const row = {
+    name,
+    slot: document.getElementById('apf-slot').value || null,
+    material: document.getElementById('apf-material').value,
+    gap: parseFloat(document.getElementById('apf-gap').value) || 0,
+    noise: parseFloat(document.getElementById('apf-noise').value) || 0,
+    visionMod: parseFloat(document.getElementById('apf-visionmod').value) || 0,
+    hearingMod: parseFloat(document.getElementById('apf-hearingmod').value) || 0,
+    costPerMod: parseFloat(document.getElementById('apf-costpermod').value) || 0,
+  };
+  if (editingArmorPieceIndex !== null) ARMOR_PIECES[editingArmorPieceIndex] = row;
+  else ARMOR_PIECES.push(row);
+
+  writeConfigToDisk();
+  closeArmorPieceForm();
+  buildArmorPieceManagerTable();
+  buildLoadoutSelects();
+}
+
+function deleteArmorPiece(index) {
+  const row = ARMOR_PIECES[index];
+  if (!confirm(`Delete armor piece "${row.name}"?`)) return;
+  closeArmorPieceForm();
+  ARMOR_PIECES.splice(index, 1);
+  writeConfigToDisk();
+  buildArmorPieceManagerTable();
+  buildLoadoutSelects();
+}
+
+function buildArmorPieceManagerTable() {
+  const tbody = document.getElementById('armorpiecemgr-list');
+  if (!tbody) return;
+  if (document.getElementById('armorpiece-form-row')) closeArmorPieceForm();
+  tbody.innerHTML = '';
+  ARMOR_PIECES.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
+      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.costPerMod || 0}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteArmorPiece(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
 }
@@ -4727,7 +5091,7 @@ function showPanel(id) {
   if (id === 'spellbook')  buildSpellBookPanel();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
 
 // Browser tab title AND the in-page header (#app-title) while in Character
 // Builder mode — "Arcane Character Builder" plus whatever's currently in the
@@ -5012,6 +5376,8 @@ function gatherCharacterData() {
     weapons,
     equipment,
     armor: getArmorSelections(),
+    armorOwned: _ownedArmorPieces(),
+    armorEquipped: getEquippedArmorIds(),
     heldItems: getHeldItems(),
     avatarUrl,
   };
@@ -5057,7 +5423,8 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       { ...data.stats, Level: data.level, XP: data.xp, KnownSpells: data.knownSpells },
+    stats:       { ...data.stats, Level: data.level, XP: data.xp, KnownSpells: data.knownSpells,
+                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped },
     notes:       data.notes || '',
     features:    data.features,
     skills:      data.skills,
@@ -5299,10 +5666,8 @@ function _doNewCharacter() {
   buildSkillList();
   document.getElementById('weapon-list').innerHTML = '';
   document.getElementById('equip-list').innerHTML = '';
-  for (const area of ARMOR_AREAS) {
-    const el = document.getElementById('armor-' + area.key);
-    if (el) el.value = 'None';
-  }
+  document.getElementById('armor-owned-list').innerHTML = '';
+  buildArmorFields(); // rebuilds each slot's options against the now-empty owned list
   recalc();
 }
 
@@ -5353,6 +5718,7 @@ function gatherConfigData() {
     skills: SKILLS,
     armorAreaWeights: ARMOR_AREA_WEIGHTS,
     armorTypes: ARMOR_TYPE_DATA,
+    armorPieces: ARMOR_PIECES,
     meleeWeapons: MELEE_WEAPONS,
     rangedWeapons: RANGED_WEAPONS,
     consumables: CONSUMABLES,
@@ -5381,7 +5747,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260913g';
+const VERSION = 'v0.1.20260914a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6038,6 +6404,7 @@ function applyConfigData(data) {
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
+  replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
   migrateSkills();
   rebuildAllConfigUI();
 }
@@ -6051,6 +6418,7 @@ function rebuildAllConfigUI() {
   buildSkillManagerTable();
   buildArmorFields();
   buildArmorManagerTable();
+  buildArmorPieceManagerTable();
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   buildConsumablesManagerTable();
@@ -6170,15 +6538,37 @@ function applyCharacterData(data) {
     });
   }
 
-  // Armor — rebuild the fields for THIS character's body type first (sel-bodytype
-  // was just set above); loading a Quadruped after editing a Humanoid, say,
-  // would otherwise still be showing the previous character's Arm/Leg fields
-  // when these values try to restore into them.
-  if (data.armor) {
-    buildArmorFields();
+  // Armor — owned pieces (stats.ArmorOwned, same piggyback as XP/KnownSpells)
+  // restore first, since buildArmorFields reads them from the DOM to build
+  // each slot's option list; THEN rebuild the fields for THIS character's
+  // body type (sel-bodytype was just set above — loading a Quadruped after
+  // editing a Humanoid, say, would otherwise still show the previous
+  // character's Arm/Leg slots); THEN restore which instance is equipped
+  // where (stats.ArmorEquipped — instance ids, not the derived material
+  // names in the plain `armor` column, which exists only for the DR lookups
+  // that never needed to know about pieces at all).
+  const ownedArmor = Array.isArray(data.stats?.ArmorOwned) ? data.stats.ArmorOwned : [];
+  if (ownedArmor.length) {
+    const tbody = document.getElementById('armor-owned-list');
+    tbody.innerHTML = '';
+    ownedArmor.forEach(o => {
+      const tr = document.createElement('tr');
+      tr.dataset.id = o.id; tr.dataset.name = o.name; tr.dataset.slot = o.slot || '';
+      tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
+      tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
+      tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
+      tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight||0) * 10) / 10}</td><td>${Math.round(o.cost||0)}</td>
+        <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+  buildArmorFields();
+  const equippedArmor = data.stats?.ArmorEquipped;
+  if (equippedArmor) {
     for (const area of _builderArmorSlots()) {
       const el = document.getElementById('armor-'+area.key);
-      if (el && data.armor[area.key]) el.value = data.armor[area.key];
+      const val = equippedArmor[area.key];
+      if (el && val && [...el.options].some(o => o.value === val)) el.value = val;
     }
   }
 
@@ -6257,6 +6647,7 @@ document.addEventListener('DOMContentLoaded', () => {
   buildSkillManagerTable();
   buildArmorFields();
   buildArmorManagerTable();
+  buildArmorPieceManagerTable();
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   recalc();
@@ -6813,6 +7204,35 @@ function getEntity(ref) {
     }
   }
 
+  // Armor vision/hearing modifiers (a full helmet mainly, but nothing
+  // restricts these to the head slot specifically) — % applied to Day
+  // Vision AND Night Vision equally, plus Hearing, summed across every slot
+  // with an equipped piece that has one. Creatures were never moved onto
+  // the owned-instance armor system (see carriedWeight's comment above), so
+  // armorOwned/armorEquipped are always empty for them and this naturally
+  // no-ops — only characters who've actually equipped a piece with a real
+  // visionMod/hearingMod (see Game Config → Armor Pieces) are affected.
+  const armorOwned = Array.isArray(row.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
+  const armorEquipped = row.stats?.ArmorEquipped || {};
+  let visionPct = 0, hearingPct = 0;
+  for (const slotKey of Object.keys(armorEquipped)) {
+    const inst = armorOwned.find(o => o.id === armorEquipped[slotKey]);
+    if (!inst) continue;
+    visionPct += inst.visionMod || 0;
+    hearingPct += inst.hearingMod || 0;
+  }
+  if (visionPct || hearingPct) {
+    if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
+    if (visionPct) {
+      const mult = Math.max(0, 1 + visionPct / 100);
+      attrs.DayVision = (attrs.DayVision || 0) * mult;
+      attrs.NightVision = (attrs.NightVision || 0) * mult;
+    }
+    if (hearingPct) {
+      attrs.Hearing = (attrs.Hearing || 0) * Math.max(0, 1 + hearingPct / 100);
+    }
+  }
+
   return {
     ref, type,
     id:        row.id,
@@ -6832,6 +7252,7 @@ function getEntity(ref) {
     carriedWeight,
     held:      Object.assign(_speciesNaturalDefaults(row.species), row.held_items || {}),
     armor:     row.armor || {},
+    armorOwned, armorEquipped,
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
@@ -9974,10 +10395,13 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // Humanoid's Arms/Legs (which don't exist for it and would never match).
   let targetArmor = {};
   let targetBodyType = 'Humanoid';
+  let targetArmorOwned = [], targetArmorEquipped = {};
   if (targetEntityType === 'character') {
     const row = playCharCache[targetEntityId];
     targetArmor = row?.armor || {};
     targetBodyType = row?.body_type || 'Humanoid';
+    targetArmorOwned = Array.isArray(row?.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
+    targetArmorEquipped = row?.stats?.ArmorEquipped || {};
   } else {
     const row = sessionCreatureCache[targetEntityId];
     targetArmor = row?.armor || {};
@@ -9991,9 +10415,14 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   const category  = ctx.damageCategory || getAttackCategory(actionLabel);
   // Gap: a precise enough TO-HIT roll (not the damage roll) finds a weak
   // point and bypasses this armor's DR entirely for the hit, regardless of
-  // how good the armor otherwise is.
+  // how good the armor otherwise is. The specific PIECE equipped in this
+  // slot (a Full Helmet vs. a Kettle Hat) overrides its material's own
+  // generic gap when one's actually equipped there — creatures and any
+  // slot with no owned-instance data just fall back to the material's own
+  // value, same as before this existed.
+  const equippedPiece = targetArmorOwned.find(o => o.id === targetArmorEquipped[armorSlot]);
   const armorMat  = ARMOR_TYPE_DATA[armorType] || DEFAULT_ARMOR_TYPE_DATA[armorType];
-  const armorGap  = armorMat?.gap ?? 5;
+  const armorGap  = equippedPiece?.gap ?? armorMat?.gap ?? 5;
   const gapHit    = hitRoll != null && hitRoll <= armorGap && armorType !== 'None';
   const dr        = gapHit ? 0 : getArmorDR(armorType, category);
 
@@ -17629,6 +18058,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260913a"></script>
+<script src="panels.js?v=20260914a"></script>
 </body>
 </html>

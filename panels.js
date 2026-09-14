@@ -258,9 +258,18 @@ function _paSecArmor(ent) {
   const slots = typeof _armorSlotsFor === 'function' ? _armorSlotsFor(ent.bodyType) :
     [{ key:'head', label:'Head' }, { key:'torso', label:'Torso' }, { key:'rarm', label:'R.Arm' },
      { key:'larm', label:'L.Arm' }, { key:'rleg', label:'R.Leg' }, { key:'lleg', label:'L.Leg' }];
+  // Shows the actual equipped PIECE name (Full Helmet) when the entity has
+  // one (characters, via ent.armorOwned/armorEquipped — see getEntity,
+  // index.html), falling back to the plain material name armor[key] always
+  // carries (creatures, or a slot with no piece data at all).
   const armor = ent.armor || {};
-  const rows = slots.map(s =>
-    `<div class="ps-stat-row"><span class="ps-stat-label">${_paEsc(s.label)}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(armor[s.key] || 'None')}</span></div>`).join('');
+  const owned = ent.armorOwned || [];
+  const equipped = ent.armorEquipped || {};
+  const rows = slots.map(s => {
+    const inst = owned.find(o => o.id === equipped[s.key]);
+    const label = inst ? inst.name : (armor[s.key] || 'None');
+    return `<div class="ps-stat-row"><span class="ps-stat-label">${_paEsc(s.label)}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(label)}</span></div>`;
+  }).join('');
   return _paSection('Armor', rows);
 }
 
