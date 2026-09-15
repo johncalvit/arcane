@@ -2943,8 +2943,22 @@ let characterKnownSpells = [];
 // caster for (_spellDeficiency) — a spell attempted well outside your
 // aptitude takes disproportionately more mental space to hold onto, not
 // just more risk to actually cast.
+//
+// Base falls back to the spell's own Quintessence cost (floored at 1) when
+// Memory Cost hasn't actually been set in Game Config → Spells (0 either
+// way — the form saves a blank field as literal 0, so an unconfigured spell
+// and a deliberate "costs nothing" can't be told apart, and the latter
+// isn't a meaningful thing for a GM to want anyway). Reported live as every
+// spell showing "0 memory" with nothing but a deficiency surcharge on top —
+// a flat 0 default made an entire existing spell list look broken the
+// moment this feature shipped, instead of landing on some reasonable
+// number tied to how costly/powerful the spell already is. Still fully
+// overridable per spell any time a GM sets a real value.
+function _spellMemoryBase(spell) {
+  return spell.memoryCost || Math.max(1, spell.cost || 1);
+}
 function _spellMemoryCost(attrs, spell) {
-  return (spell.memoryCost || 0) + _spellDeficiency(attrs, spell);
+  return _spellMemoryBase(spell) + _spellDeficiency(attrs, spell);
 }
 
 // Knowledge × Level — recomputed live (like every other derived attribute
@@ -3099,7 +3113,7 @@ function buildSpellBookPanel(attrs) {
 
   container.innerHTML = filtered.map(spell => {
     const known = characterKnownSpells.includes(spell.name);
-    const base  = spell.memoryCost || 0;
+    const base  = _spellMemoryBase(spell);
     const cost  = _spellMemoryCost(attrs, spell);
     const defNote = cost !== base ? ` (${base} base + ${cost - base} deficiency)` : '';
     const canAfford = known || cost <= left;
@@ -5115,6 +5129,11 @@ function _updateBuilderTitle() {
 }
 
 function enterConfigMode(panel) {
+  // Defense in depth on top of hiding the button (see selectCampaign) — the
+  // button hide is what stops an accidental click, but nothing stopped this
+  // function itself from being called directly (devtools console, or simply
+  // an old cached page that hadn't picked up the hide yet).
+  if (!isGM()) { alert('Only the GM can open Game Configuration.'); return; }
   document.getElementById('char-nav').style.display       = 'none';
   document.getElementById('gm-config-nav').style.display  = '';
   const cfgBtn = document.getElementById('config-mode-btn');
@@ -5752,7 +5771,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260914b';
+const VERSION = 'v0.1.20260914c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6221,6 +6240,12 @@ async function selectCampaign(id, name, gmId) {
   // Invite section (inside GM Tools) only applies to the GM of the selected campaign
   const inviteSection = document.getElementById('landing-invite-section');
   if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
+  // GM Config Mode edits shared, campaign-wide rules (Skills/Armor/Spells/...)
+  // — reported live as a non-GM playtester having apparently been able to
+  // open it and edit a skill's Type field. Nothing gated this button to the
+  // actual GM at all; any logged-in member of the campaign could click it.
+  const cfgBtn = document.getElementById('config-mode-btn');
+  if (cfgBtn) cfgBtn.style.display = userIsGm ? '' : 'none';
   // Reset invite result on campaign change
   const inviteResult = document.getElementById('landing-invite-result');
   if (inviteResult) inviteResult.style.display = 'none';
@@ -12810,6 +12835,12 @@ selectCampaign = async function(id, name, gmId) {
     if (inviteSection) inviteSection.style.display = userIsGm ? '' : 'none';
     const gmTools = document.getElementById('landing-gm-tools');
     if (gmTools && userIsGm) gmTools.style.display = '';
+    // Re-apply with the AUTHORITATIVE gm_id (the plain selectCampaign above
+    // only had whatever gmId the campaign list already had cached, which
+    // isn't guaranteed correct) — same reasoning as inviteSection/gmTools
+    // just above.
+    const cfgBtn = document.getElementById('config-mode-btn');
+    if (cfgBtn) cfgBtn.style.display = userIsGm ? '' : 'none';
   }
 };
 
