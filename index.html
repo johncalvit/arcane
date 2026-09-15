@@ -3914,12 +3914,9 @@ function _buildArmorPieceFormSelects() {
   matSel.innerHTML = matNames.map(m => `<option>${m}</option>`).join('');
 }
 
-function openArmorPieceForm(index) {
-  editingArmorPieceIndex = index;
-  positionArmorPieceForm(index);
-  _buildArmorPieceFormSelects();
-  const row = index !== null ? ARMOR_PIECES[index] : null;
-  document.getElementById('armorpiece-form-title').textContent = row ? 'Edit Armor Piece' : 'New Armor Piece';
+// Shared by Add/Edit (openArmorPieceForm) and Copy (copyArmorPiece) — both
+// just fill the same fields from a row (or blanks); see _fillMeleeForm.
+function _fillArmorPieceForm(row) {
   document.getElementById('apf-name').value       = row ? row.name : '';
   document.getElementById('apf-slot').value       = row ? (row.slot || '') : '';
   document.getElementById('apf-material').value   = row ? row.material : (Object.keys(ARMOR_TYPE_DATA)[0] || 'None');
@@ -3928,7 +3925,53 @@ function openArmorPieceForm(index) {
   document.getElementById('apf-visionmod').value  = row ? (row.visionMod || 0) : 0;
   document.getElementById('apf-hearingmod').value = row ? (row.hearingMod || 0) : 0;
   document.getElementById('apf-costpermod').value = row ? (row.costPerMod || 0) : 0;
+}
+
+function openArmorPieceForm(index) {
+  editingArmorPieceIndex = index;
+  positionArmorPieceForm(index);
+  _buildArmorPieceFormSelects();
+  const row = index !== null ? ARMOR_PIECES[index] : null;
+  document.getElementById('armorpiece-form-title').textContent = row ? 'Edit Armor Piece' : 'New Armor Piece';
+  _fillArmorPieceForm(row);
   document.getElementById('armorpiece-form').style.display = 'block';
+}
+
+// Duplicate a row into the form as a brand-new entry — see copyMeleeWeapon.
+function copyArmorPiece(index) {
+  const src = ARMOR_PIECES[index];
+  if (!src) return;
+  editingArmorPieceIndex = null;
+  positionArmorPieceForm(index);
+  _buildArmorPieceFormSelects();
+  document.getElementById('armorpiece-form-title').textContent = 'Copy Armor Piece';
+  _fillArmorPieceForm(src);
+  document.getElementById('armorpiece-form').style.display = 'block';
+  document.getElementById('apf-name').focus();
+}
+
+// Short suffixes for Copy As Suit piece names below — distinct from
+// ARMOR_AREAS' longer labels ("Right Arm/Hand"), since these get appended
+// onto a piece name rather than shown on their own.
+const ARMOR_SUIT_SLOT_LABELS = { head:'Head', torso:'Torso', rarm:'R Arm', larm:'L Arm', rleg:'R Leg', lleg:'L Leg' };
+
+// Fill out the rest of a humanoid suit from one piece: a new piece for every
+// slot the original doesn't already occupy (a generic piece, slot null,
+// doesn't "occupy" any of these, so all six get one), same material/gap/
+// noise/vision/hearing/cost as the original, just named for its own slot —
+// for the common case of designing one suit (Enchanted Robe, Plate Mail...)
+// without retyping every field five more times by hand.
+function copyArmorPieceAsSuit(index) {
+  const src = ARMOR_PIECES[index];
+  if (!src) return;
+  const missing = ARMOR_AREAS.filter(a => a.key !== src.slot);
+  if (!missing.length) { alert('This piece already covers every slot.'); return; }
+  missing.forEach(a => {
+    ARMOR_PIECES.push({ ...src, name: `${src.name} (${ARMOR_SUIT_SLOT_LABELS[a.key] || a.label})`, slot: a.key });
+  });
+  writeConfigToDisk();
+  buildArmorPieceManagerTable();
+  buildLoadoutSelects();
 }
 
 function closeArmorPieceForm() {
@@ -3979,6 +4022,8 @@ function buildArmorPieceManagerTable() {
     tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
       <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.costPerMod || 0}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPieceAsSuit(${i})" title="Add a matching piece for every other slot (named e.g. &quot;${p.name} (R Arm)&quot;)">Copy As Suit</button>
       <button class="remove-btn" onclick="deleteArmorPiece(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
@@ -5771,7 +5816,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260914c';
+const VERSION = 'v0.1.20260915a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
