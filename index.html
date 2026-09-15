@@ -1958,8 +1958,13 @@ function baseWeightFromHeight(h) {
 }
 
 function inchesToFeetStr(inches) {
-  const ft = Math.floor(inches / 12);
-  const inv = Math.round(inches % 12);
+  // Round the TOTAL first, then split — rounding feet and inches
+  // separately let a remainder like 11.6in round up to "12in" on its own
+  // instead of carrying into the next foot (e.g. 59.6in showed as
+  // "4ft 12in" instead of "5ft 0in").
+  const total = Math.round(inches);
+  const ft = Math.floor(total / 12);
+  const inv = total % 12;
   return `${ft}ft ${inv}in`;
 }
 
@@ -5747,7 +5752,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260914a';
+const VERSION = 'v0.1.20260914b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
