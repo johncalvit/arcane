@@ -1278,6 +1278,10 @@
           <label>Attributes Used for Success % Calculation (count = how many times added)</label>
           <div class="feature-list" id="sf-success-attrs" style="grid-template-columns:1fr 1fr 1fr;"></div>
         </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Description <span style="color:var(--text-dim);font-weight:normal;">(shown to players as a tooltip)</span></label>
+          <textarea id="sf-description" rows="2" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;" placeholder="e.g. Tracking prey, reading terrain, foraging in the wild."></textarea>
+        </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveSkill()">Save Skill</button>
           <button class="btn danger" onclick="closeSkillForm()">Cancel</button>
@@ -2910,9 +2914,12 @@ function buildSkillList() {
     const item = document.createElement('div');
     item.className = 'skill-item';
     item.dataset.name = s.name;
+    const nameAttrs = s.description
+      ? ` title="${s.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);"`
+      : '';
     item.innerHTML = `
       <div class="skill-info">
-        <div class="si-name">${s.name}</div>
+        <div class="si-name"${nameAttrs}>${s.name}</div>
         <div class="si-type">${s.type}${s.req ? ' · ' + s.req : ''}</div>
       </div>
       <div class="skill-invest">
@@ -3197,6 +3204,7 @@ function openSkillForm(index) {
   document.getElementById('sf-cost').value   = skill ? skillCost(skill) : 3;
   document.getElementById('sf-reqattr').value = skill ? (skill.reqAttr || '') : '';
   document.getElementById('sf-reqval').value  = skill ? (skill.reqVal || '') : '';
+  document.getElementById('sf-description').value = skill ? (skill.description || '') : '';
   const counts = countSuccessAttrs(skill ? skill.successAttrs : []);
   document.querySelectorAll('#sf-success-attrs input[type="number"]').forEach(inp => {
     inp.value = counts[inp.dataset.attr] || 0;
@@ -3224,8 +3232,9 @@ function saveSkill() {
   });
   const reqAttrLabel = reqAttr ? (ATTRIBUTES.find(a=>a.key===reqAttr)||{}).label : '';
   const req = reqAttr ? `${reqAttrLabel} ${reqVal || 0}+` : '';
+  const description = document.getElementById('sf-description').value.trim();
 
-  const skill = { name, type, cost, req, reqAttr, reqVal, successAttrs };
+  const skill = { name, type, cost, req, reqAttr, reqVal, successAttrs, description };
   if (editingSkillIndex !== null) {
     SKILLS[editingSkillIndex] = skill;
   } else {
@@ -3281,7 +3290,10 @@ function buildSkillManagerTable() {
       ? Object.entries(counts).map(([k,n]) => `${(ATTRIBUTES.find(a=>a.key===k)||{}).label || k}${n>1 ? ' ×'+n : ''}`).join(', ')
       : '—';
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${s.name}</td><td>${s.type}</td><td>${skillCost(s)}</td><td>${reqLabel}${s.reqVal ? ' '+s.reqVal+'+' : ''}</td><td>${successLabel}</td>
+    const nameCell = s.description
+      ? `<td title="${s.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${s.name}</td>`
+      : `<td>${s.name}</td>`;
+    tr.innerHTML = `${nameCell}<td>${s.type}</td><td>${skillCost(s)}</td><td>${reqLabel}${s.reqVal ? ' '+s.reqVal+'+' : ''}</td><td>${successLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSkillForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteSkill(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -5816,7 +5828,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260915a';
+const VERSION = 'v0.1.20260916a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
