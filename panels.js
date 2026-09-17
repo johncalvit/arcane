@@ -665,7 +665,7 @@ function _dlgMaybeReopen() {
 // (_openSpellPickerModal's row click; enterTargetAimMode's endsRound flag)
 // since neither goes through this dialog's generic 'set'/'attack' dispatch.
 function _isRoundEndingLabel(label) {
-  return label === 'Sentinel' || label === 'Evade' || label === 'Go Prone' || label.startsWith('Load — ');
+  return label === 'Sentinel' || label === 'Evade' || label === 'Go Prone' || label === 'Infiltrate' || label.startsWith('Load — ');
 }
 
 // closeRoller is defined in index.html, loaded before this file — wrap it
@@ -799,12 +799,13 @@ function _dlgRender(body) {
     // above) — half the round's movement is allowed before picking one, past
     // that it's just a soft warning, same as an over-budget Move already is.
     const disabled = noWeapon;
-    // Target needs a facing picked on the map before it locks in (a cone,
-    // unlike Sentinel's all-around circle) — see enterTargetAimMode.
-    // Everything else sets the slot immediately, same as always.
-    const setData = a.label === 'Target'
-      ? { dact: 'aimtarget' } // combatantId comes from _dlgAct's own `id` param, not this data blob
-      : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 };
+    // Target and Vigilant both need a facing picked on the map before they
+    // lock in (a cone, unlike Sentinel's all-around circle) — see
+    // enterTargetAimMode/enterVigilantAimMode. Everything else (Infiltrate
+    // included — no facing needed to just sneak) sets the slot immediately.
+    const setData = a.label === 'Target'   ? { dact: 'aimtarget' }   // combatantId comes from
+                  : a.label === 'Vigilant' ? { dact: 'aimvigilant' } // _dlgAct's own `id` param,
+                  : { dact: 'set', slot: 'full', label: a.label, dur: a.dur, locks: 1 }; // not this data blob
     return _dlgChip({
       // When active, show the countdown; otherwise the action's total duration.
       label: a.label, sub: lit ? _slotCountdownLabel(c.slots.full) : _dlgDurLabel(a.dur), lit, disabled,
@@ -1226,6 +1227,13 @@ async function _dlgAct(d, id, body) {
       if (!ok) { _dlgRender(body); break; }
       atCloseModal();
       enterTargetAimMode(id, true); // true: auto-advance once facing commits
+      break;
+    }
+    case 'aimvigilant': {
+      const ok = await styledConfirm('Selecting this action will end your round.');
+      if (!ok) { _dlgRender(body); break; }
+      atCloseModal();
+      enterVigilantAimMode(id, true); // true: auto-advance once facing commits
       break;
     }
     case 'openspellpicker':

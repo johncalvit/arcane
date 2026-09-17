@@ -5828,7 +5828,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260916a';
+const VERSION = 'v0.1.20260916b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6852,6 +6852,12 @@ const CONDITION_DEFS = [
     desc:'Ready to attack any enemy that enters melee range.' },
   { key:'target',      label:'Target',      icon:'🎯', color:'#40c0ff',
     desc:'Ready to shoot any enemy that enters the guarded sector with a ranged weapon.' },
+  { key:'vigilant',    label:'Vigilant',    icon:'🦉', color:'#a060ff',
+    desc:'Watching a 120° sector and listening/smelling all around it for anyone Infiltrating nearby. A successful spot ends their Infiltrate and offers a melee Attack if they’re in reach.' },
+  { key:'infiltrating',label:'Infiltrating',icon:'🥷', color:'#4a6a4a',
+    desc:'Sneaking — eligible to go unnoticed past a Vigilant watcher (see Vigilant). Noisier armor, higher Speed, and bigger Target Size all make this harder; ends automatically the moment a Vigilant actually spots you.' },
+  { key:'bathed',      label:'Bathed',      icon:'🛁', color:'#5fa8d3',
+    desc:'Recently washed up — halves the chance of being smelled while Infiltrating. Clear when the GM judges its effect has worn off.' },
   { key:'stunned',     label:'Stunned',     icon:'💫', color:'#ff5555',
     desc:'Disoriented; cannot take actions.' },
   { key:'paralyzed',   label:'Paralyzed',   icon:'⛓', color:'#ff5555',
@@ -6895,6 +6901,8 @@ function _defCondFromLabel(label) {
   if (label === 'Evade') return 'evading';
   if (label === 'Sentinel') return 'sentinel';
   if (label === 'Target')   return 'target';
+  if (label === 'Vigilant') return 'vigilant';
+  if (label === 'Infiltrate') return 'infiltrating';
   return null;
 }
 
@@ -6905,7 +6913,7 @@ function _defCondFromLabel(label) {
 async function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
-  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target']) {
+  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating']) {
     if (conds.has(c)) await setCondition(token.id, c, false);
   }
 }
@@ -6932,7 +6940,7 @@ async function setCondition(tokenId, condition, active, opts) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -6971,7 +6979,7 @@ async function setConditions(tokenId, changes) {
   for (const [condition, active] of changes) {
     if (active) { current.add(condition); continue; }
     current.delete(condition);
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -7301,12 +7309,13 @@ function getEntity(ref) {
   // visionMod/hearingMod (see Game Config → Armor Pieces) are affected.
   const armorOwned = Array.isArray(row.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
   const armorEquipped = row.stats?.ArmorEquipped || {};
-  let visionPct = 0, hearingPct = 0;
+  let visionPct = 0, hearingPct = 0, armorNoise = 0;
   for (const slotKey of Object.keys(armorEquipped)) {
     const inst = armorOwned.find(o => o.id === armorEquipped[slotKey]);
     if (!inst) continue;
     visionPct += inst.visionMod || 0;
     hearingPct += inst.hearingMod || 0;
+    armorNoise += inst.noise || 0; // see Vigilant/Infiltrate's _infiltratorNoiseScore
   }
   if (visionPct || hearingPct) {
     if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
@@ -7339,7 +7348,7 @@ function getEntity(ref) {
     carriedWeight,
     held:      Object.assign(_speciesNaturalDefaults(row.species), row.held_items || {}),
     armor:     row.armor || {},
-    armorOwned, armorEquipped,
+    armorOwned, armorEquipped, armorNoise,
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
@@ -10635,6 +10644,8 @@ const AT_FULLBODY = [
   { label: 'Evade',          dur: 99 }, // lock-on stance — persists until cleared
   { label: 'Sentinel',       dur: 99 },
   { label: 'Target',         dur: 99 }, // ranged cousin of Sentinel — see enterTargetAimMode
+  { label: 'Vigilant',       dur: 99 }, // watches a sector for Infiltrators — see enterVigilantAimMode
+  { label: 'Infiltrate',     dur: 99 }, // sneaking stance a Vigilant watcher can spot — see _vigilantDetects
   { label: 'Go Prone',       dur: 1 },
   { label: 'Charge',         dur: 3 },
   { label: 'Use Item',       dur: 2 },
@@ -12429,6 +12440,13 @@ function subscribeMapRealtime() {
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
     })
+    // The GM flipped the active map's Day/Dark lighting (see
+    // toggleMapLighting) — every Vigilant cone depends on this, so redraw.
+    .on('broadcast', { event: 'map-lighting-sync' }, ({ payload }) => {
+      mapIsDark = !!payload.dark;
+      _updateMapLightingBtn();
+      if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+    })
     // GM-triggered (see resetFogOfWar) — wipes THIS client's own explored-
     // area memory so the next drawFog() rebuilds from scratch, unexplored
     // except for whatever's in current line of sight right now. A no-op for
@@ -12565,6 +12583,16 @@ async function loadActiveMap(mapId) {
   const { data, error } = await sb.from('maps').select('name, image_url').eq('id', mapId).single();
   if (error || !data) return;
 
+  // Best-effort, separate query for the lighting column — kept apart from
+  // the query above so an older database that hasn't run the migration for
+  // it yet (see supabase-add-map-lighting.sql) still loads the map fine;
+  // this just silently defaults to Day instead of breaking map loading for
+  // every player. See toggleMapLighting/_vigilantVisionRangeFt.
+  const { data: lightData } = await sb.from('maps').select('dark').eq('id', mapId).single();
+  mapIsDark = !!lightData?.dark;
+  _updateMapLightingBtn();
+  if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+
   placeholder.style.display = 'none';
   img.onload = () => {
     mapImgW = img.naturalWidth;
@@ -12632,6 +12660,29 @@ async function activateMap(mapId) {
     loadActiveMap(mapId);
     loadMapLibrary();
   }
+}
+
+// GM-only Day/Dark toggle for the active map — the only source
+// _vigilantVisionRangeFt reads to pick DayVision vs NightVision. Written to
+// the maps table (falls back to a no-op toast if that column doesn't exist
+// yet — see supabase-add-map-lighting.sql) and broadcast live so every
+// client's Vigilant cones update immediately, the same way saveMapWalls
+// syncs wall changes.
+async function toggleMapLighting() {
+  if (!isGM() || !activeMapId) return;
+  mapIsDark = !mapIsDark;
+  _updateMapLightingBtn();
+  drawSentinelRanges();
+  mapChannel?.send({ type: 'broadcast', event: 'map-lighting-sync', payload: { dark: mapIsDark } });
+  const { error } = await sb.from('maps').update({ dark: mapIsDark }).eq('id', activeMapId);
+  if (error) showToast('Lighting set locally, but not saved — ask the GM to run supabase-add-map-lighting.sql', 'error');
+}
+
+function _updateMapLightingBtn() {
+  const btn = document.getElementById('map-lighting-btn');
+  if (!btn) return;
+  btn.textContent = mapIsDark ? '🌙 Dark' : '☀ Day';
+  btn.title = 'Vigilant vision cones use ' + (mapIsDark ? 'Night' : 'Day') + ' Vision on this map. Click to switch.';
 }
 
 // ─── Map upload ───────────────────────────────────────────────────────────────
@@ -13943,6 +13994,151 @@ function _targetWeaponRangeFt(t) {
 
 const TARGET_CONE_DEG = 15;
 
+// ── Vigilant / Infiltrate — sneaking detection ────────────────────────────
+// Vigilant watches a 120°-wide sector (like Target's narrow cone, just much
+// wider) for anyone Infiltrating nearby, PLUS a full circle around itself for
+// hearing and another, smaller one for smell — sight is the only one of the
+// three that needs a facing and a clear line, since a sound or a scent
+// doesn't care which way the watcher is looking. Only tokens carrying the
+// 'infiltrating' condition are ever checked at all (an explicit stance a
+// player opts into, per the design discussion) — everyone else is just
+// plainly visible, same as always.
+const VIGILANT_CONE_DEG = 120;
+// Generous fixed ranges for the two senses that don't have their own "how
+// far could you possibly hear/smell" stat — vision's range comes straight
+// off DayVision/NightVision instead (see _vigilantVisionRangeFt). Both
+// easily tunable here if a GM's table wants a quieter or louder world.
+const VIGILANT_HEARING_RANGE_FT = 60;
+const VIGILANT_SMELL_RANGE_FT   = 20;
+// Pivot for the hearing/smell "chance" curve below — roughly the noise/odor
+// score of an average, unarmored, average-speed, human-sized target. Below
+// it a watcher's real chance stays well under their raw Hearing/Smell stat;
+// well above it (heavy noisy armor, a fast sprint, or a giant) it climbs
+// toward that stat's full value, but never past it. Sensible starting
+// points, not measured — easy to retune here once this has actually been
+// played with.
+const VIGILANT_HEARING_PIVOT = 20;
+const VIGILANT_SMELL_PIVOT   = 20;
+// Smell is a placeholder per the design discussion — no real per-species or
+// per-armor-piece odor data exists yet, just a flat baseline scaled by size
+// (a bigger body gives off more scent) and halved by a manually-toggled
+// Bathed condition (see CONDITION_DEFS) standing in for "washed recently."
+const SMELL_BASE_ODOR   = 8;
+const SMELL_BATHED_MULT = 0.5;
+
+// Which lighting a Vigilant's vision cone should use on the active map — set
+// by the GM (see toggleMapLighting) and synced live to every client the same
+// way mapWalls is (see the 'map-lighting-sync' broadcast). Defaults to Day,
+// so an unset/older map behaves exactly as if this feature didn't exist.
+let mapIsDark = false;
+
+// A ref string ('char::<id>' / 'creature::<id>') for getEntity, from a raw
+// map_tokens row — same convention _findSentinelCrossings already derives
+// inline; pulled out here since Vigilant needs it in several more places.
+function _refForToken(t) {
+  return t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+}
+
+// Vision range in feet IS the relevant attribute's raw value, day or night —
+// the same "an attribute's number doubles as a feet measurement" convention
+// Speed (ft/s) already uses elsewhere in this game. Conveniently reuses that
+// same number as the actual spot chance too (see _vigilantDetects) — better
+// eyes both see further and notice more.
+function _vigilantVisionRangeFt(watcherEnt) {
+  const v = mapIsDark ? watcherEnt.attrs.NightVision : watcherEnt.attrs.DayVision;
+  return Math.max(0, v || 0);
+}
+
+// How much noise an Infiltrating character makes: their equipped armor's own
+// noise values (see Game Config → Armor Pieces — tracked since that feature
+// shipped, but inert until now) plus their raw Speed (a naturally fast mover
+// is a louder one — "slower is quieter" from the design discussion), all
+// scaled up by their own Target Size — a giant in the same armor, moving at
+// the same speed, is simply louder than a halfling.
+function _infiltratorNoiseScore(moverEnt) {
+  const size = Math.max(0.1, moverEnt.attrs._targetAdj || 1);
+  return ((moverEnt.armorNoise || 0) + (moverEnt.attrs.Speed || 0)) * size;
+}
+
+// Placeholder odor score — see SMELL_BASE_ODOR's comment above. Bigger
+// bodies smell more; a recent Bathed condition halves it.
+function _infiltratorOdorScore(moverTok, moverEnt) {
+  const size = Math.max(0.1, moverEnt.attrs._targetAdj || 1);
+  const bathed = getConditions(moverTok.id).has('bathed');
+  return SMELL_BASE_ODOR * size * (bathed ? SMELL_BATHED_MULT : 1);
+}
+
+// Shared saturating curve for both hearing and smell: 0 score → 0% chance
+// no matter how sharp the watcher's ear/nose is; well above `pivot` the
+// chance climbs toward the watcher's own raw stat (capped 0-100), never
+// past it — a deaf watcher never hears anything no matter how loud.
+function _vigilantSenseChance(watcherStat, score, pivot) {
+  const stat = Math.max(0, Math.min(100, watcherStat || 0));
+  if (score <= 0) return 0;
+  return Math.round(stat * score / (score + pivot));
+}
+
+// Edge-to-edge distance in feet between two tokens' centers, at a specific
+// point along the mover's path — same convention _sentinelZoneCheck already
+// computes inline; pulled out for the new Vigilant call sites below rather
+// than touched into that already-working function.
+function _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct) {
+  const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
+  const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
+  const rawDistFt = Math.hypot(dx, dy) / mapScalePPF;
+  const watcherRadiusFt = (getTokenSize(watcherTok) / 2) / mapScalePPF;
+  const moverRadiusFt   = (getTokenSize(moverTok) / 2) / mapScalePPF;
+  return Math.max(0, rawDistFt - watcherRadiusFt - moverRadiusFt);
+}
+
+// Is the mover within the watcher's melee reach at this specific point? Gates
+// whether a Vigilant's "Spotted!" prompt even offers an Attack button — most
+// detections happen well outside melee (hearing runs out to 60ft), so most
+// of the time only Call Out is offered. See _maybeShowSentinelPrompt.
+function _vigilantMeleeReachOk(watcherTok, moverTok, xPct, yPct) {
+  return _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct) <= _sentinelMeleeReachFt(watcherTok);
+}
+
+// The actual probability roll for one Vigilant/Infiltrate crossing — called
+// exactly once, by whichever client's own move triggered it (see
+// _resolveSentinelCheck), so every client agrees on the same outcome without
+// re-rolling independently. Only ever reached after _sentinelZoneCheck's
+// vigilant branch has already confirmed the position falls within at least
+// one of the three sense zones; this re-checks which one(s) specifically
+// apply at this exact point and rolls only those, sight first.
+function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
+  const watcherEnt = getEntity(_refForToken(watcherTok));
+  const moverEnt   = getEntity(_refForToken(moverTok));
+  if (!watcherEnt || !moverEnt) return { detected: false, sense: null };
+
+  const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
+  const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
+  const distFt = _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct);
+
+  const visionFt = _vigilantVisionRangeFt(watcherEnt);
+  if (distFt <= visionFt) {
+    const facingDeg = _tokenFacingDeg(watcherTok);
+    const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
+    let diff = Math.abs(pointDeg - facingDeg);
+    if (diff > 180) diff = 360 - diff;
+    if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) {
+      if (Math.random() * 100 < Math.max(0, Math.min(100, visionFt))) return { detected: true, sense: 'sight' };
+    }
+  }
+  // Hearing/smell are omnidirectional and ignore line of sight — this game
+  // has no acoustic wall-blocking model, so sound and scent are treated as
+  // carrying around corners freely, unlike vision.
+  if (distFt <= VIGILANT_HEARING_RANGE_FT) {
+    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, _infiltratorNoiseScore(moverEnt), VIGILANT_HEARING_PIVOT);
+    if (Math.random() * 100 < chance) return { detected: true, sense: 'hearing' };
+  }
+  if (distFt <= VIGILANT_SMELL_RANGE_FT) {
+    const chance = _vigilantSenseChance(watcherEnt.attrs.Smell, _infiltratorOdorScore(moverTok, moverEnt), VIGILANT_SMELL_PIVOT);
+    if (Math.random() * 100 < chance) return { detected: true, sense: 'smell' };
+  }
+  return { detected: false, sense: null };
+}
+
 // ── Wall-aware trimming for Sentinel/Target zones ─────────────────────────
 // Reuses the exact same raycasting primitives _fogVisibilityPolygon already
 // uses for a player's own sight (_fogOccluderSegments/_fogRayHit, both
@@ -14055,7 +14251,8 @@ function drawSentinelRanges() {
     const conds = getConditions(t.id);
     const isSentinel = conds.has('sentinel');
     const isTarget   = conds.has('target');
-    if (!isSentinel && !isTarget) continue;
+    const isVigilant = conds.has('vigilant');
+    if (!isSentinel && !isTarget && !isVigilant) continue;
 
     const vpX = (t.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
     const vpY = (t.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
@@ -14114,6 +14311,56 @@ function drawSentinelRanges() {
       label.textContent = `🎯 ${t.label} · ${rangeFt}ft`;
       svg.appendChild(label);
     }
+
+    if (isVigilant) {
+      const watcherEnt = getEntity(_refForToken(t));
+      const visionFt   = watcherEnt ? _vigilantVisionRangeFt(watcherEnt) : 0;
+      const facingDeg  = _tokenFacingDeg(t);
+      const facingRad  = facingDeg * Math.PI / 180;
+      const halfRad    = (VIGILANT_CONE_DEG / 2) * Math.PI / 180;
+      let labelR = 0;
+
+      if (visionFt > 0) {
+        const radiusImgPx = visionFt * mapScalePPF;
+        const arc = _wallTrimmedFan(originImgX, originImgY, radiusImgPx, facingRad - halfRad, facingRad + halfRad, segs).map(toVp);
+        const wedge = [{ x: vpX, y: vpY }, ...arc];
+        labelR = Math.max(1, radiusImgPx * mapScale);
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', `M ${wedge.map(p => `${p.x} ${p.y}`).join(' L ')} Z`);
+        path.setAttribute('fill', 'rgba(160,96,255,0.07)');
+        path.setAttribute('stroke', '#a060ff');
+        path.setAttribute('stroke-width', '2');
+        path.setAttribute('stroke-dasharray', '8,4');
+        svg.appendChild(path);
+      }
+
+      // Hearing/smell — faint outline-only circles (no wall trimming; this
+      // game has no acoustic wall-blocking model, so sound/scent carry
+      // around corners freely, unlike vision) kept low-key so they don't
+      // clutter the map the way a filled shape would.
+      for (const [radiusFt, dash, opacity] of [[VIGILANT_HEARING_RANGE_FT, '3,5', 0.35], [VIGILANT_SMELL_RANGE_FT, '1,4', 0.5]]) {
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', vpX); circle.setAttribute('cy', vpY);
+        circle.setAttribute('r', radiusFt * mapScalePPF * mapScale);
+        circle.setAttribute('fill', 'none');
+        circle.setAttribute('stroke', '#a060ff');
+        circle.setAttribute('stroke-width', '1');
+        circle.setAttribute('stroke-dasharray', dash);
+        circle.setAttribute('opacity', String(opacity));
+        svg.appendChild(circle);
+      }
+
+      const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      label.setAttribute('x', vpX + Math.cos(facingRad) * labelR * 0.6);
+      label.setAttribute('y', vpY + Math.sin(facingRad) * labelR * 0.6 - 6);
+      label.setAttribute('text-anchor', 'middle');
+      label.setAttribute('fill', '#a060ff');
+      label.setAttribute('font-size', '11');
+      label.setAttribute('font-family', 'Georgia,serif');
+      label.textContent = `🦉 ${t.label} · ${Math.round(visionFt)}ft`;
+      svg.appendChild(label);
+    }
   }
 }
 
@@ -14124,9 +14371,17 @@ function drawSentinelRanges() {
 // the click, only a direction. Reuses the aoe-svg overlay (never active at
 // the same time as this) rather than adding a new DOM element.
 let targetAimMode = false, targetAimCasterCid = null, _targetAimEndsRound = false;
+// Which cone this aim step is actually for — 'target' (the original) or
+// 'vigilant' (120°, ranged off DayVision/NightVision instead of a weapon).
+// Reuses every bit of Target's aim-mode plumbing below (mutual-exclusion
+// guards, mouse handlers, global listener wiring) rather than duplicating
+// it all for a second, near-identical mode — only the range/angle/label and
+// what gets committed on mouseup (see targetAimMouseUp) actually differ.
+let _targetAimKind = 'target';
 
 // endsRound: whether committing this aim should auto-advance the turn (the
-// dialog's own "Target" chip always passes true — see _dlgAct's confirm).
+// dialog's own "Target"/"Vigilant" chips always pass true — see _dlgAct's
+// confirm).
 function enterTargetAimMode(combatantId, endsRound) {
   if (attackMode)    exitAttackMode();
   if (pathMode)      exitPathMode();
@@ -14136,8 +14391,17 @@ function enterTargetAimMode(combatantId, endsRound) {
   targetAimMode      = true;
   targetAimCasterCid = combatantId;
   _targetAimEndsRound = !!endsRound;
+  _targetAimKind      = 'target';
   document.getElementById('map-viewport').classList.add('attack-mode');
   document.getElementById('aoe-svg').style.display = 'block';
+  _targetAimRedraw(null, null);
+}
+
+// Vigilant's own entry point — see enterTargetAimMode above for why this
+// just reuses the same mode/handlers with _targetAimKind flipped.
+function enterVigilantAimMode(combatantId, endsRound) {
+  enterTargetAimMode(combatantId, endsRound);
+  _targetAimKind = 'vigilant';
   _targetAimRedraw(null, null);
 }
 
@@ -14145,6 +14409,7 @@ function exitTargetAimMode() {
   targetAimMode      = false;
   targetAimCasterCid = null;
   _targetAimEndsRound = false;
+  _targetAimKind      = 'target';
   document.getElementById('map-viewport').classList.remove('attack-mode');
   const svg = document.getElementById('aoe-svg');
   svg.style.display = 'none';
@@ -14158,22 +14423,27 @@ function _targetAimRedraw(cursorXPct, cursorYPct) {
   const token = _pathFindToken(targetAimCasterCid);
   if (!token) return;
 
-  const rangeFt = _targetWeaponRangeFt(token);
+  const isVigilant = _targetAimKind === 'vigilant';
+  const rangeFt = isVigilant
+    ? (() => { const ent = getEntity(_refForToken(token)); return ent ? _vigilantVisionRangeFt(ent) : 0; })()
+    : _targetWeaponRangeFt(token);
+  const coneDeg = isVigilant ? VIGILANT_CONE_DEG : TARGET_CONE_DEG;
+  const color   = isVigilant ? '#a060ff' : '#40c0ff';
   const vpX = (token.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
   const vpY = (token.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
   const originImgX = (token.x_pct / 100) * mapImgW, originImgY = (token.y_pct / 100) * mapImgH;
   const dirVpX = cursorXPct != null ? (cursorXPct / 100) * mapImgW * mapScale + mapOffsetX : vpX + 1;
   const dirVpY = cursorYPct != null ? (cursorYPct / 100) * mapImgH * mapScale + mapOffsetY : vpY;
   const dirAngle = Math.atan2(dirVpY - vpY, dirVpX - vpX);
-  const halfRad  = (TARGET_CONE_DEG / 2) * Math.PI / 180;
+  const halfRad  = (coneDeg / 2) * Math.PI / 180;
   const radiusImgPx = rangeFt * mapScalePPF;
   const toVp = p => ({ x: p.x * mapScale + mapOffsetX, y: p.y * mapScale + mapOffsetY });
   const arc = _wallTrimmedFan(originImgX, originImgY, radiusImgPx, dirAngle - halfRad, dirAngle + halfRad, _fogOccluderSegments()).map(toVp);
   const wedge = [{ x: vpX, y: vpY }, ...arc];
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
   path.setAttribute('d', `M ${wedge.map(p => `${p.x} ${p.y}`).join(' L ')} Z`);
-  path.setAttribute('fill', 'rgba(64,192,255,0.22)');
-  path.setAttribute('stroke', '#40c0ff');
+  path.setAttribute('fill', isVigilant ? 'rgba(160,96,255,0.22)' : 'rgba(64,192,255,0.22)');
+  path.setAttribute('stroke', color);
   path.setAttribute('stroke-width', '2');
   svg.appendChild(path);
 
@@ -14181,11 +14451,11 @@ function _targetAimRedraw(cursorXPct, cursorYPct) {
   prompt.setAttribute('x', vpX);
   prompt.setAttribute('y', vpY - 12);
   prompt.setAttribute('text-anchor', 'middle');
-  prompt.setAttribute('fill', 'rgba(64,192,255,0.9)');
+  prompt.setAttribute('fill', isVigilant ? 'rgba(160,96,255,0.9)' : 'rgba(64,192,255,0.9)');
   prompt.setAttribute('font-size', '11');
   prompt.setAttribute('font-family', 'Georgia,serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
-  prompt.textContent = 'Target — click to set facing · Esc to cancel';
+  prompt.textContent = (isVigilant ? 'Vigilant' : 'Target') + ' — click to set facing · Esc to cancel';
   svg.appendChild(prompt);
 }
 
@@ -14250,10 +14520,11 @@ function targetAimMouseUp(e) {
     const dy = ((yPct - token.y_pct) / 100) * mapImgH;
     facingDeg = Math.atan2(dy, dx) * 180 / Math.PI;
   }
-  // Capture before exitTargetAimMode() resets it back to false.
+  // Capture before exitTargetAimMode() resets both back to their defaults.
   const shouldEndRound = _targetAimEndsRound;
+  const label = _targetAimKind === 'vigilant' ? 'Vigilant' : 'Target';
   exitTargetAimMode();
-  atSetSlot(combatantId, 'full', 'Target', 99, true).then(() => {
+  atSetSlot(combatantId, 'full', label, 99, true).then(() => {
     if (token) _setTokenFacing(token.id, facingDeg);
     if (shouldEndRound) atAcceptAction(combatantId);
   });
@@ -14301,6 +14572,27 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
         return _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct);
       }
     }
+  }
+  // Vigilant: purely geometric here — is this position within reach of ANY
+  // of the three sense zones at all? The actual probability roll only
+  // happens once, later, at the specific crossing point this finds (see
+  // _vigilantDetects) — never here, or the 40-sample scan _findSentinelCrossings
+  // runs per segment would effectively re-roll the same single crossing
+  // event up to 40 times.
+  if (conds.has('vigilant')) {
+    if (!moverTok || !getConditions(moverTok.id).has('infiltrating')) return false;
+    const watcherEnt = getEntity(_refForToken(watcherTok));
+    if (!watcherEnt) return false;
+    const visionFt = _vigilantVisionRangeFt(watcherEnt);
+    if (distFt <= visionFt) {
+      const facingDeg = _tokenFacingDeg(watcherTok);
+      const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
+      let diff = Math.abs(pointDeg - facingDeg);
+      if (diff > 180) diff = 360 - diff;
+      if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) return true;
+    }
+    if (distFt <= VIGILANT_HEARING_RANGE_FT) return true;
+    if (distFt <= VIGILANT_SMELL_RANGE_FT) return true;
   }
   return false;
 }
@@ -14379,12 +14671,12 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   for (const t of Object.values(mapTokens)) {
     if (t.id === moverTok.id) continue;
     const conds = getConditions(t.id);
-    if (!conds.has('sentinel') && !conds.has('target')) continue;
+    if (!conds.has('sentinel') && !conds.has('target') && !conds.has('vigilant')) continue;
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
     else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
-    if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target').join('/')}): SKIPPED — ${why}`); continue; }
+    if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/')}): SKIPPED — ${why}`); continue; }
     let hit = false;
     for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
       const frac = i / _SENTINEL_CHECK_SAMPLES;
@@ -14436,6 +14728,21 @@ function _controlsToken(t) {
 let _sentinelCheckPending = null;
 
 function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
+  // Vigilant's "crossing" (see _sentinelZoneCheck) is only a geometric
+  // possibility — the actual probability roll happens here, once, on
+  // whichever client's own move triggered it, so every client agrees on the
+  // outcome without re-rolling independently. A miss is completely silent:
+  // no prompt, no broadcast, nothing recorded — the move just continues as
+  // if this watcher didn't exist, exactly like it never noticed at all.
+  const watcherTok = _pathFindToken(sentinelCid);
+  const moverTok   = _pathFindToken(moverCid);
+  let vigilantSense = null;
+  if (watcherTok && moverTok && getConditions(watcherTok.id).has('vigilant')) {
+    const result = _vigilantDetects(watcherTok, moverTok, xPct, yPct);
+    if (!result.detected) return Promise.resolve();
+    vigilantSense = result.sense;
+  }
+
   const checkId = 'sc' + Date.now() + Math.random().toString(36).slice(2);
   // Close the mover's own action dialog first, if it happens to be open —
   // e.g. the GM had it up while drawing this very move with the Path tool.
@@ -14450,12 +14757,12 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
   const wasOpen = !!modal && modal.style.display !== 'none';
   if (wasOpen) atCloseModal();
   return new Promise(resolve => {
-    _sentinelCheckPending = { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, resolve };
+    _sentinelCheckPending = { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense, resolve };
     mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-start',
-      payload: { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct } });
+      payload: { checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense } });
     // Also try to show it locally — covers the GM moving one monster past
     // another monster's watch, or solo testing, with no network round trip.
-    _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct });
+    _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense });
   }).then(() => {
     if (wasOpen && _atIsCombatActive() && _atSharedActive()?.id === moverCid) atOpenActionDialog(moverCid);
   });
@@ -14471,6 +14778,12 @@ function _maybeShowSentinelPrompt(payload) {
   const moverTok  = _pathFindToken(payload.moverCid);
   const moverName = moverTok?.label || 'An enemy';
   const isTargetAction = getConditions(watcherTok.id).has('target');
+  const isVigilant = !!payload.vigilantSense;
+  // Vigilant already succeeded its spot roll by the time this shows (see
+  // _resolveSentinelCheck) — the only open question is whether the watcher
+  // also happens to be close enough to swing, which most detections (up to
+  // 60ft for hearing) won't be. No Attack button at all then, just Call Out.
+  const canMeleeAttack = isVigilant && moverTok && mapScalePPF > 0 && _vigilantMeleeReachOk(watcherTok, moverTok, payload.x_pct, payload.y_pct);
 
   const overlay = document.createElement('div');
   overlay.id = 'sentinel-check-modal-' + payload.checkId;
@@ -14478,13 +14791,15 @@ function _maybeShowSentinelPrompt(payload) {
     background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:14px 20px;
     font-family:Georgia,serif;font-size:0.85rem;color:var(--text);text-align:center;
     box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
-  overlay.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">
-      ${isTargetAction ? '🎯' : '👁'} ${_paEsc(watcherTok.label)} — ${_paEsc(moverName)} entered ${isTargetAction ? 'the guarded sector' : 'melee range'}. Attack?</div>
+  const headline = isVigilant
+    ? `🦉 ${_paEsc(watcherTok.label)} spots ${_paEsc(moverName)} sneaking (by ${_paEsc(payload.vigilantSense)})!`
+    : `${isTargetAction ? '🎯' : '👁'} ${_paEsc(watcherTok.label)} — ${_paEsc(moverName)} entered ${isTargetAction ? 'the guarded sector' : 'melee range'}. Attack?`;
+  overlay.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">${headline}</div>
     <div style="display:flex;gap:10px;justify-content:center;">
-      <button data-ans="1" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
-        font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--text);">Attack</button>
+      ${(!isVigilant || canMeleeAttack) ? `<button data-ans="1" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+        font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--text);">Attack</button>` : ''}
       <button data-ans="0" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
-        font-size:0.8rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">Let it pass</button>
+        font-size:0.8rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">${isVigilant ? 'Call Out' : 'Let it pass'}</button>
     </div>`;
   overlay.querySelectorAll('button').forEach(btn => {
     btn.onclick = () => _answerSentinelCheck(payload.checkId, btn.dataset.ans === '1');
@@ -14513,7 +14828,19 @@ async function _applySentinelAnswer(checkId, attack) {
   const pending = _sentinelCheckPending;
   _sentinelCheckPending = null;
   if (attack) await _resolveSentinelAttack(pending);
+  else if (pending.vigilantSense) await _vigilantCallOut(pending);
   pending.resolve();
+}
+
+// The Vigilant player chose Call Out instead of (or couldn't) Attack —
+// still ends the infiltrator's stance and logs the spot, per the design
+// discussion ("Infiltrate ends either way" once actually detected).
+async function _vigilantCallOut(pending) {
+  const watcherTok = _pathFindToken(pending.sentinelCid);
+  const moverTok   = _pathFindToken(pending.moverCid);
+  if (!watcherTok || !moverTok) return;
+  await setCondition(moverTok.id, 'infiltrating', false);
+  logCombat(`${watcherTok.label} spots ${moverTok.label} sneaking (by ${pending.vigilantSense}) and calls it out!`, 'roll');
 }
 
 // Reuses the exact same hit/defense/damage pipeline any other attack goes
@@ -14526,7 +14853,7 @@ async function _applySentinelAnswer(checkId, attack) {
 // spend only the attacking hand — the move slot is never touched, so they
 // can still move this round, per spec.
 async function _resolveSentinelAttack(pending) {
-  const { sentinelCid, moverCid } = pending;
+  const { sentinelCid, moverCid, vigilantSense } = pending;
   const sentinelEnt = getEntity(sentinelCid);
   const sentinelTok = _pathFindToken(sentinelCid);
   const moverTok    = _pathFindToken(moverCid);
@@ -14563,8 +14890,11 @@ async function _resolveSentinelAttack(pending) {
   }
   if (!weaponName || !actionLabel) return;
 
-  atClearSlot(sentinelCid, 'full'); // no longer holding — auto-clears sentinel/target
-  logCombat(`${sentinelTok.label} reacts to ${moverTok.label} entering ${isTargetAction ? 'their guarded sector' : 'melee range'}!`, 'roll');
+  atClearSlot(sentinelCid, 'full'); // no longer holding — auto-clears sentinel/target/vigilant
+  if (vigilantSense) await setCondition(moverTok.id, 'infiltrating', false); // spotted — stance ends
+  logCombat(vigilantSense
+    ? `${sentinelTok.label} spots ${moverTok.label} sneaking (by ${vigilantSense}) and attacks!`
+    : `${sentinelTok.label} reacts to ${moverTok.label} entering ${isTargetAction ? 'their guarded sector' : 'melee range'}!`, 'roll');
   enterAttackMode(sentinelCid, weaponName, actionLabel, isTargetAction, rangeFt);
   attackTokenClick(moverTok.id);
 }
@@ -17959,6 +18289,7 @@ async function _deleteMapPin(pinId) {
           <button class="btn" style="width:100%;font-size:0.8rem;" onclick="triggerMapUpload()">⬆ Upload Map Image</button>
           <input type="file" id="map-file-input" accept="image/*" style="display:none" onchange="onMapFileSelected(this)">
           <div id="map-upload-status" style="font-size:0.72rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
+          <button class="btn" id="map-lighting-btn" style="width:100%;font-size:0.8rem;margin-top:6px;" onclick="toggleMapLighting()">☀ Day</button>
         </div>
         <div id="map-list" style="overflow-y:auto;max-height:32vh;flex:0 0 auto;"></div>
 
@@ -18151,6 +18482,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260914a"></script>
+<script src="panels.js?v=20260916a"></script>
 </body>
 </html>
