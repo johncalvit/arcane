@@ -5828,7 +5828,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260916b';
+const VERSION = 'v0.1.20260916c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14039,14 +14039,25 @@ function _refForToken(t) {
   return t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
 }
 
-// Vision range in feet IS the relevant attribute's raw value, day or night —
-// the same "an attribute's number doubles as a feet measurement" convention
-// Speed (ft/s) already uses elsewhere in this game. Conveniently reuses that
-// same number as the actual spot chance too (see _vigilantDetects) — better
-// eyes both see further and notice more.
-function _vigilantVisionRangeFt(watcherEnt) {
+// DayVision/NightVision are 0-100-ish stats, same scale as every other
+// attribute this game sums into a skill success % (Perception uses
+// Hearing+DayVision directly, capped 100) — unlike Speed, they were never
+// meant to double as a feet measurement on their own (a raw value of 9
+// would be a 9ft cone, reported live as absurdly short). This is the raw
+// stat, used only as the sight detection CHANCE (see _vigilantDetects);
+// _vigilantVisionRangeFt below is the separate, scaled-up FEET version used
+// everywhere the cone's actual reach on the map matters.
+function _vigilantVisionStat(watcherEnt) {
   const v = mapIsDark ? watcherEnt.attrs.NightVision : watcherEnt.attrs.DayVision;
-  return Math.max(0, v || 0);
+  return Math.max(0, Math.min(100, v || 0));
+}
+
+// Feet per point of the vision stat above — a sensible starting point (an
+// average DayVision around 10 gives an 80ft cone, comparable to a Sentinel/
+// Target's own range) rather than a measured value; easy to retune here.
+const VIGILANT_VISION_FT_PER_POINT = 8;
+function _vigilantVisionRangeFt(watcherEnt) {
+  return _vigilantVisionStat(watcherEnt) * VIGILANT_VISION_FT_PER_POINT;
 }
 
 // How much noise an Infiltrating character makes: their equipped armor's own
@@ -14122,7 +14133,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
     let diff = Math.abs(pointDeg - facingDeg);
     if (diff > 180) diff = 360 - diff;
     if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) {
-      if (Math.random() * 100 < Math.max(0, Math.min(100, visionFt))) return { detected: true, sense: 'sight' };
+      if (Math.random() * 100 < _vigilantVisionStat(watcherEnt)) return { detected: true, sense: 'sight' };
     }
   }
   // Hearing/smell are omnidirectional and ignore line of sight — this game
