@@ -5828,7 +5828,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260916c';
+const VERSION = 'v0.1.20260916d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14201,6 +14201,24 @@ function _angleWithinArc(ang, start, end) {
 // angle (for crisp edges rather than a rounded-off approximation), and cast
 // a ray at each — a wall closer than radiusPx clips the shape there instead
 // of it reaching its full circle/cone extent.
+// Wall-corner angles come out of Math.atan2 in its own canonical [-π,π]
+// range, but startRad/endRad are an arbitrary linear range (e.g. a 120°
+// Vigilant cone facing 170° runs from ~2.97 to ~4.01 — past π) — adding a
+// corner's raw atan2 value straight into the same set the code below sorts
+// numerically put it at the wrong end of that range whenever the cone
+// crossed the ±π wraparound, producing a self-intersecting "reflected"
+// wedge (reported live on a wide Vigilant cone; Target's narrow 15° one
+// only hits this at a handful of unlucky facings). Shifts `ang` by whole
+// turns until it actually falls inside [startRad, endRad] — safe to call
+// only once _angleWithinArc has already confirmed it belongs there.
+function _projectAngleIntoRange(ang, startRad, endRad) {
+  const twoPi = 2 * Math.PI;
+  let a = ang;
+  while (a < startRad) a += twoPi;
+  while (a > endRad) a -= twoPi;
+  return a;
+}
+
 function _wallTrimmedFan(originX, originY, radiusPx, startRad, endRad, segs) {
   const fullCircle = Math.abs((endRad - startRad) - 2 * Math.PI) < 1e-6;
   const N = fullCircle ? 72 : 24;
@@ -14211,7 +14229,8 @@ function _wallTrimmedFan(originX, originY, radiusPx, startRad, endRad, segs) {
     for (const p of [a, b]) {
       const ang = Math.atan2(p.y - originY, p.x - originX);
       if (fullCircle || _angleWithinArc(ang, startRad, endRad)) {
-        angleSet.add(ang); angleSet.add(ang - EPS); angleSet.add(ang + EPS);
+        const proj = _projectAngleIntoRange(ang, startRad, endRad);
+        angleSet.add(proj); angleSet.add(proj - EPS); angleSet.add(proj + EPS);
       }
     }
   }
