@@ -923,8 +923,8 @@
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;">
     <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
-    <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="enterPlayMode()">▶ Play Mode</button>
-    <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="enterConfigMode()">⚙ GM Config Mode</button>
+    <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="_clickPlayModeBtn()">▶ Play Mode</button>
+    <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="_enterConfigModeFromCharDesign()">⚙ GM Config Mode</button>
   </div>
 </header>
 
@@ -5185,6 +5185,50 @@ function _updateBuilderTitle() {
   if (header) header.textContent = `✦ Arcane Character Builder${suffix}`;
 }
 
+// Offered every time someone clicks away from Character Design Mode into
+// Play Mode or GM Config Mode — reported live: a playtester's character was
+// never actually saved (saveCharacter silently refuses an unnamed one, see
+// its own comment there), so no row existed for them in the database at
+// all and no token could ever represent them once they joined the map. A
+// gentle reminder, not a hard block: Cancel always lets them through,
+// unsaved, if that's really what they want.
+async function _offerSaveBeforeLeavingCharDesign() {
+  const data = gatherCharacterData();
+  const hasName = !!(data.name && data.name.trim());
+  if (!hasName) {
+    const goBack = await styledConfirm(
+      "Your character doesn't have a name yet, so it can't be saved — Save Character will silently do nothing until it does. Go back and name it first?"
+    );
+    if (goBack) {
+      showPanel('overview');
+      document.getElementById('char-name')?.focus();
+      return false; // block the navigation so they can actually fix it
+    }
+    return true; // proceeding on purpose, still unsaved
+  }
+  const save = await styledConfirm(`Save "${data.name}" before continuing?`);
+  if (save) await saveCharacter();
+  return true;
+}
+
+async function _clickPlayModeBtn() {
+  if (!(await _offerSaveBeforeLeavingCharDesign())) return;
+  enterPlayMode();
+}
+
+// Only for the button click that actually leaves Character Design Mode —
+// see where this is wired in (the header button, and exitConfigMode's own
+// reassignment of it). enterConfigMode() itself stays ungated: it's also
+// reached from a couple of internal/programmatic paths (the landing page's
+// "jump straight to this config panel" shortcut, switching directly from
+// Play Mode to GM Config Mode) that were never inside an active Character
+// Design Mode editing session to begin with, so there's nothing to offer
+// saving there.
+async function _enterConfigModeFromCharDesign() {
+  if (!(await _offerSaveBeforeLeavingCharDesign())) return;
+  enterConfigMode();
+}
+
 function enterConfigMode(panel) {
   // Defense in depth on top of hiding the button (see selectCampaign) — the
   // button hide is what stops an accidental click, but nothing stopped this
@@ -5206,7 +5250,7 @@ function exitConfigMode() {
   document.getElementById('char-nav').style.display       = '';
   const cfgBtn = document.getElementById('config-mode-btn');
   cfgBtn.textContent = '⚙ GM Config Mode';
-  cfgBtn.onclick = () => enterConfigMode();
+  cfgBtn.onclick = _enterConfigModeFromCharDesign;
   _updateBuilderTitle();
   showPanel('overview');
 }
@@ -5480,6 +5524,13 @@ async function saveCharacter() {
   const data = gatherCharacterData();
   if (!data.name) {
     setCharSaveStatus('Enter a character name before saving.', false);
+    // The status line alone is easy to miss (reported live: a character
+    // silently never got saved this way) — an unmissable nudge, same
+    // precedent as enterConfigMode's permission alert, plus jump straight
+    // to where the name field actually is.
+    alert("This character needs a name before it can be saved — nothing was saved.");
+    showPanel('overview');
+    document.getElementById('char-name')?.focus();
     return;
   }
   setCharSaveStatus('Saving…', false);
@@ -5828,7 +5879,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260916d';
+const VERSION = 'v0.1.20260923a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
