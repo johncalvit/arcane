@@ -5879,7 +5879,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260923a';
+const VERSION = 'v0.1.20260923b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6750,7 +6750,17 @@ sb.auth.onAuthStateChange(async (event, session) => {
     // stable to live in (created only if they GM none). Fire-and-forget; the
     // landing modal reloads campaigns when it opens.
     _ensureHomeCampaign().then(() => { if (document.getElementById('modal-landing')?.style.display === 'flex') _landingLoadCampaigns(); });
-    if (!currentCampaignId) showLandingModal();
+    // Only pop the landing/character-select modal open on an ACTUAL sign-in
+    // (or the initial page-load session check) — not on every event this
+    // fires with a still-valid session. Supabase automatically raises a
+    // TOKEN_REFRESHED event roughly every 50 minutes purely in the
+    // background, with no user action at all; gating on event type only
+    // (the previous code) meant a player who hadn't joined a campaign yet
+    // (currentCampaignId stays null the whole time) could get yanked back
+    // to this screen mid-edit whenever one of those fired — reported live
+    // as the app appearing to "ask to log in a second time" while creating
+    // a first character.
+    if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && !currentCampaignId) showLandingModal();
     // Show campaign join input for non-GM users who aren't in a campaign yet
     if ($('nav-join-campaign')) $('nav-join-campaign').style.display = '';
   } else {
