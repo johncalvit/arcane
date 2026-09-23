@@ -5879,7 +5879,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260923b';
+const VERSION = 'v0.1.20260923c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12578,6 +12578,16 @@ function subscribeMapRealtime() {
       }
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
+    // A player with no token on the active map asked to be added (see the
+    // "no token yet" banner in drawFog's no-viewer branch / _requestMapToken)
+    // — only the GM's own client acts on it, with an attention-grabbing
+    // toast on top of the ordinary Journal entry _requestMapToken already
+    // logs (that part reaches everyone through the existing combat-log
+    // broadcast above, same as any other journal entry).
+    .on('broadcast', { event: 'token-request' }, ({ payload }) => {
+      if (!isGM() || !payload?.name) return;
+      showToast(`🙋 ${payload.name} has no token on this map — asking to be added. See the Tokens tab.`);
+    })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
         mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
@@ -16436,6 +16446,29 @@ function _fogViewerToken() {
   return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === currentCharacterId) || null;
 }
 
+// The "🙋 Request to be added" button on the no-token banner drawFog shows
+// (see there) — pings the GM directly instead of a player just being stuck
+// looking at a black screen with no way to say anything. Two channels at
+// once: a toast for the GM specifically if they're online right now (see
+// the 'token-request' handler in subscribeMapRealtime), and an ordinary
+// Journal entry (via logCombat, already broadcast to everyone) so it's
+// still visible afterward even if the GM steps away mid-request.
+async function _requestMapToken() {
+  if (isGM() || !currentCharacterId) return;
+  const btn = document.getElementById('no-token-request-btn');
+  const name = playCharCache[currentCharacterId]?.name || document.getElementById('char-name')?.value || 'A player';
+  mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name } });
+  logCombat(`🙋 ${name} has no token on this map and is requesting to be added.`, 'roll');
+  showToast('Request sent to the GM.');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Request sent ✓';
+    // Re-enable after a bit in case the GM missed it — cheap insurance,
+    // not a real delivery guarantee (nothing here is persisted server-side).
+    setTimeout(() => { btn.disabled = false; btn.textContent = '🙋 Request to be added'; }, 30000);
+  }
+}
+
 // Standard point-in-polygon (ray-casting parity test) — used to decide
 // whether a given TOKEN currently falls inside the viewer's visibility
 // polygon, separately from the terrain reveal below.
@@ -16567,6 +16600,12 @@ let _fogScratchCanvas  = null;
 function drawFog() {
   const canvas = document.getElementById('fog-canvas');
   if (!canvas) return;
+  // Only the specific "map's loaded but this player has no token on it"
+  // case below ever shows this — default it off here so every other
+  // branch (GM, no map yet, or a real viewer found) doesn't need its own
+  // separate cleanup.
+  const noTokenBanner = document.getElementById('no-token-banner');
+  if (noTokenBanner) noTokenBanner.style.display = 'none';
 
   // The GM always sees everything — no fog to compute, same as before.
   if (isGM()) {
@@ -16577,7 +16616,8 @@ function drawFog() {
   }
 
   const viewer = _fogViewerToken();
-  if (!viewer || mapImgW <= 0 || mapImgH <= 0) {
+  const mapNotLoadedYet = mapImgW <= 0 || mapImgH <= 0;
+  if (!viewer || mapNotLoadedYet) {
     // A player with no token on this map yet (not placed, mid-join, or on
     // a different map) must NOT get a free look at it — block everything
     // instead of showing everything. This used to fall through to the same
@@ -16587,7 +16627,7 @@ function drawFog() {
     // token. Opposite of _fogShowAllTokens below: solid black, nothing
     // visible, until there's an actual viewpoint to see from.
     _fogLastPoly = [];
-    if (mapImgW > 0 && mapImgH > 0) {
+    if (!mapNotLoadedYet) {
       canvas.width  = mapImgW;
       canvas.height = mapImgH;
       const ctx = canvas.getContext('2d');
@@ -16595,6 +16635,10 @@ function drawFog() {
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, mapImgW, mapImgH);
       canvas.style.display = 'block';
+      // Only once the map has actually finished loading — no point offering
+      // to request a token while it's still mid-load, that's not this
+      // player's actual problem yet (see _requestMapToken).
+      if (!viewer && noTokenBanner) noTokenBanner.style.display = 'block';
     } else {
       canvas.style.display = 'none';
     }
@@ -18313,6 +18357,18 @@ async function _deleteMapPin(pinId) {
              padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:Georgia,serif;
              white-space:nowrap;pointer-events:none;">
           📍 Pin Mode — click the map to drop a note · <b>Esc</b> or the <b>Pins</b> button to exit
+        </div>
+        <!-- Shown to a player (never the GM) whenever they have no token on
+             the active map — see drawFog's no-viewer branch, which is also
+             what paints the map solid black behind this. Previously a dead
+             end with no way to signal the GM; see _requestMapToken. -->
+        <div id="no-token-banner" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+             z-index:30;background:rgba(20,15,5,0.94);border:1px solid var(--gold);border-radius:8px;
+             padding:20px 26px;font-size:0.85rem;color:var(--text);font-family:Georgia,serif;
+             text-align:center;max-width:80vw;">
+          <div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">🗺 You don't have a token on this map yet</div>
+          <div style="color:var(--text-dim);font-size:0.78rem;margin-bottom:14px;">The GM hasn't placed you here — ask them to add you.</div>
+          <button id="no-token-request-btn" class="btn" onclick="_requestMapToken()">🙋 Request to be added</button>
         </div>
         <div class="map-placeholder" id="map-placeholder">
           <div class="big-icon">🗺</div>
