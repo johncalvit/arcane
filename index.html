@@ -939,6 +939,7 @@
       <button class="nav-btn" onclick="showPanel('features')" style="display:none;">✦ Features</button>
       <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
       <div class="nav-section">Equipment</div>
+      <button class="nav-btn" onclick="showPanel('shop')">🛒 Shop</button>
       <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
       <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
       <div class="nav-section">Magic</div>
@@ -968,7 +969,9 @@
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons</button>
       <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons</button>
       <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables</button>
+      <button class="nav-btn" onclick="showPanel('equipmgr')">🎒 Equipment</button>
       <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spells</button>
+      <button class="nav-btn" onclick="showPanel('economymgr')">💰 Economy</button>
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
       <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
@@ -1036,6 +1039,13 @@
           <div style="display:flex;align-items:baseline;gap:6px;padding:4px 0;">
             <div id="char-xp-display" style="font-size:0.85rem;color:var(--text-bright);" title="Awarded by the GM after combat — see the Finish Combat button">0</div>
             <div id="char-xp-next" style="font-size:0.75rem;color:var(--text-dim);"></div>
+          </div>
+        </div>
+        <div class="field field-inline">
+          <label>Purse</label>
+          <div style="display:flex;align-items:baseline;gap:8px;padding:4px 0;">
+            <div id="char-purse-display" style="font-size:0.85rem;color:var(--text-bright);" title="Crowns and Pence (100 pence = 1 Crown) — spent automatically by the Shop, or adjust directly for GM-granted loot.">0p</div>
+            <span class="ornament" style="cursor:pointer;font-size:0.7rem;" onclick="adjustPurse()" title="Adjust purse">✎ adjust</span>
           </div>
         </div>
         <div class="field field-inline">
@@ -1390,8 +1400,8 @@
             <input type="text" id="apf-hearingmod" placeholder="0" title="Applied to the wearer's Hearing while equipped.">
           </div>
           <div class="field">
-            <label>Cost per Modifier</label>
-            <input type="text" id="apf-costpermod" placeholder="e.g. 8" title="Like the material's Weight/Mod, but for price — an owned instance's actual cost is area weight × its own size × this.">
+            <label>Price per Modifier (pence)</label>
+            <input type="text" id="apf-costpermod" placeholder="e.g. 8" title="Like the material's Weight/Mod, but for price (100 pence = 1 Crown) — an owned instance's actual price is area weight × its own size × this. This IS the currency the Shop charges.">
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
@@ -1401,7 +1411,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th>Cost/Mod</th><th></th></tr></thead>
+        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th>Price/Mod</th><th></th></tr></thead>
         <tbody id="armorpiecemgr-list"></tbody>
       </table>
     </div>
@@ -1461,6 +1471,10 @@
             <input type="text" id="mf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
           </div>
           <div class="field">
+            <label>Price (pence)</label>
+            <input type="text" id="mf-price" placeholder="0" title="100 pence = 1 Crown. Shared across every action row for this weapon name — the Shop uses whichever row it finds first, same as Weight already does.">
+          </div>
+          <div class="field">
             <label>Natural Weapon Slot</label>
             <select id="mf-naturalslot">
               <option value="">— Held weapon (not natural) —</option>
@@ -1478,7 +1492,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Natural Slot</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Natural Slot</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -1540,6 +1554,10 @@
             <label>Weight (lbs)</label>
             <input type="text" id="rf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
           </div>
+          <div class="field">
+            <label>Price (pence)</label>
+            <input type="text" id="rf-price" placeholder="0" title="100 pence = 1 Crown. Shared across every action row for this weapon name — the Shop uses whichever row it finds first, same as Weight already does.">
+          </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveRangedWeapon()">Save Action</button>
@@ -1548,7 +1566,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th></th></tr></thead>
         <tbody id="rangedmgr-list"></tbody>
       </table>
     </div>
@@ -1567,6 +1585,7 @@
         <div class="grid-3">
           <div class="field"><label>Name</label><input type="text" id="cf-name" placeholder="e.g. Healing Potion"></div>
           <div class="field"><label>Weight (lbs)</label><input type="text" id="cf-wt" placeholder="0.5"></div>
+          <div class="field"><label>Price (pence)</label><input type="text" id="cf-price" placeholder="0" title="100 pence = 1 Crown"></div>
           <div class="field"><label>Clears (conditions)</label><input type="text" id="cf-clears" placeholder="e.g. bleeding, stunned"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="cf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="cf-stamina" placeholder="0"></div>
@@ -1586,9 +1605,62 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Name</th><th>Wt</th><th>Tough</th><th>Stam</th><th>Blood</th><th>Clears</th><th>Buff</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Wt</th><th>Price</th><th>Tough</th><th>Stam</th><th>Blood</th><th>Clears</th><th>Buff</th><th></th></tr></thead>
         <tbody id="consumablesmgr-list"></tbody>
       </table>
+    </div>
+
+    <!-- EQUIPMENT MANAGER -->
+    <div id="panel-equipmgr" class="panel">
+      <h2>Equipment</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        General gear — backpacks, rope, tools, and the like. Weight-only until now; Price lets these be bought
+        through the Shop alongside weapons, armor, and consumables.
+      </p>
+      <button class="btn" onclick="openEquipForm(null)" style="margin-bottom:16px;">+ Add Equipment</button>
+      <div id="equip-form-anchor"></div>
+
+      <div id="equipmgr-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="equipmgr-form-title" style="margin-top:0;">New Equipment</h3>
+        <div class="grid-3">
+          <div class="field"><label>Name</label><input type="text" id="ef-name" placeholder="e.g. Backpack"></div>
+          <div class="field"><label>Weight (lbs)</label><input type="text" id="ef-wt" placeholder="0"></div>
+          <div class="field"><label>Price (pence)</label><input type="text" id="ef-price" placeholder="0" title="100 pence = 1 Crown"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveEquip()">Save Equipment</button>
+          <button class="btn danger" onclick="closeEquipForm()">Cancel</button>
+        </div>
+      </div>
+
+      <table class="loadout-table">
+        <thead><tr><th>Name</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+        <tbody id="equipmgr-list"></tbody>
+      </table>
+    </div>
+
+    <!-- ECONOMY SETTINGS -->
+    <div id="panel-economymgr" class="panel">
+      <h2>Economy</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        Currency is Crowns and Pence (100 pence = 1 Crown). A brand-new character's starting purse is this baseline,
+        multiplied by their background if they took Noble or Urchin/Underclass as a Blessing/Curse — set once, at
+        that character's very first save, and never recomputed after (so it can't undo a player's own spending).
+      </p>
+      <div class="grid-3">
+        <div class="field">
+          <label>Starting Crowns (baseline)</label>
+          <input type="text" id="econ-starting-crowns" placeholder="5" oninput="saveEconomySettings()">
+        </div>
+        <div class="field">
+          <label>Noble Multiplier</label>
+          <input type="text" id="econ-noble-mult" placeholder="4" oninput="saveEconomySettings()">
+        </div>
+        <div class="field">
+          <label>Urchin/Underclass Multiplier</label>
+          <input type="text" id="econ-urchin-mult" placeholder="0.2" oninput="saveEconomySettings()">
+        </div>
+      </div>
     </div>
 
     <!-- SPELL MANAGER -->
@@ -1673,6 +1745,45 @@
         <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th style="display:none;">Cast</th><th>Cost</th><th>Memory</th><th>Difficulty</th><th></th></tr></thead>
         <tbody id="spellmgr-list"></tbody>
       </table>
+    </div>
+
+    <!-- SHOP -->
+    <div id="panel-shop" class="panel">
+      <h2>Shop</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">
+        Buy gear straight from whatever's in Game Config — a purchase is deducted from your own purse immediately
+        and added straight to your Loadout, same as adding it there by hand.
+      </p>
+      <div class="summary-card" style="display:inline-block;margin-bottom:16px;">
+        <div class="label">Your Purse</div><div class="value" id="shop-purse-display">—</div>
+      </div>
+
+      <h3 class="collapsible" onclick="toggleCollapse('shop-weapons')">⚔ Weapons<span class="collapse-arrow" id="arrow-shop-weapons">▼</span></h3>
+      <div class="collapse-body" id="body-shop-weapons">
+        <table class="loadout-table">
+          <thead><tr><th>Weapon</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <tbody id="shop-weapons-list"></tbody>
+        </table>
+      </div>
+
+      <h3 class="collapsible" onclick="toggleCollapse('shop-gear')">🎒 Equipment &amp; Consumables<span class="collapse-arrow" id="arrow-shop-gear">▼</span></h3>
+      <div class="collapse-body" id="body-shop-gear">
+        <table class="loadout-table">
+          <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <tbody id="shop-gear-list"></tbody>
+        </table>
+      </div>
+
+      <h3 class="collapsible" onclick="toggleCollapse('shop-armor')">🪖 Armor Pieces<span class="collapse-arrow" id="arrow-shop-armor">▼</span></h3>
+      <div class="collapse-body" id="body-shop-armor">
+        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;">
+          Priced at whatever size you buy it — defaults to your own Target Size.
+        </p>
+        <table class="loadout-table">
+          <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Size</th><th>Price</th><th></th></tr></thead>
+          <tbody id="shop-armor-list"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- LOADOUT -->
@@ -1779,6 +1890,7 @@
           <div class="ps-row"><span class="ps-label">Weight (with Equipment)</span><span class="ps-val" id="ps-weight-total">—</span></div>
           <div class="ps-row"><span class="ps-label">Maximum Speed</span><span class="ps-val" id="ps-maxspeed">—</span></div>
           <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
+          <div class="ps-row"><span class="ps-label">Purse</span><span class="ps-val" id="ps-purse">—</span></div>
         </div>
       </div><!-- end ps-header -->
         </div><!-- end right column -->
@@ -2035,6 +2147,14 @@ function _levelStatBonus() {
 // saveCharacter carry it explicitly.
 let characterXP = 0;
 
+// Same piggyback pattern as Level/XP (stats.Pence) — the character's purse,
+// in pence (see formatMoney). A brand-new character's starting amount is
+// set once, at their very first save (see saveCharacter), derived from the
+// Economy settings and any Noble/Urchin-Underclass background; after that
+// it only ever changes through actual spending/income (the Shop, or
+// adjustPurse for GM-granted loot), never recomputed from the formula again.
+let characterPence = 0;
+
 // Attribute definitions: { key, label, rawStat, raceKey, desc, group, cssClass }
 const ATTRIBUTES = [
   { key:'Power',          label:'Power',               rawStat:'Strength',    raceKey:'Power',        desc:'Damage & lifting. Can deadlift 10× Power.',          group:'physical' },
@@ -2150,6 +2270,7 @@ function recalc() {
   document.getElementById('points-left').className = 'value' + (left < 0 ? ' warn' : left === 0 ? ' ok' : '');
 
   // Overview summary
+  updatePurseDisplay();
   document.getElementById('disp-height').textContent = inchesToFeetStr(attrs._heightInches);
   document.getElementById('disp-weight').textContent = Math.round(attrs._weight) + ' lbs';
   document.getElementById('disp-speed').textContent  = Math.round(attrs.Speed) + ' ft/s';
@@ -3390,6 +3511,57 @@ const DEFAULT_EQUIPMENT = [
 let WEAPONS   = [...DEFAULT_WEAPONS];
 let EQUIPMENT = [...DEFAULT_EQUIPMENT];
 
+// ─── CURRENCY (Crowns & Pence) ────────────────────────────────────────────────
+// Stored everywhere internally as a single integer count of pence (avoids
+// float rounding on repeated purchases) — Crowns are purely a display/input
+// convenience layered on top. 100 pence = 1 Crown.
+const PENCE_PER_CROWN = 100;
+function formatMoney(pence) {
+  pence = Math.round(pence || 0);
+  const neg = pence < 0;
+  pence = Math.abs(pence);
+  const cr = Math.floor(pence / PENCE_PER_CROWN);
+  const p  = pence % PENCE_PER_CROWN;
+  const parts = [];
+  if (cr) parts.push(cr + 'cr');
+  if (p || !cr) parts.push(p + 'p');
+  return (neg ? '-' : '') + parts.join(' ');
+}
+
+// GM-tunable economy settings (Game Config → Economy) — see saveEconomySettings.
+// A brand-new character's starting purse is STARTING_CROWNS × whichever of
+// these multipliers applies to their chosen Background Blessing/Curse (Noble
+// or Urchin/Underclass — see BLESSINGS_CURSES), computed once at that
+// character's very first save (see saveCharacter) and never recomputed after,
+// so it can't undo a player's own subsequent spending or income.
+let STARTING_CROWNS    = 5;
+let NOBLE_WEALTH_MULT  = 4;
+let URCHIN_WEALTH_MULT = 0.2;
+
+// Refreshes every on-screen purse readout from characterPence — called
+// after anything changes it (a Shop purchase, adjustPurse, loading/starting
+// a character). Both the Overview and Playsheet elements are optional
+// lookups since either panel may not be in the DOM yet at boot.
+function updatePurseDisplay() {
+  const overview = document.getElementById('char-purse-display');
+  if (overview) overview.textContent = formatMoney(characterPence);
+  const playsheet = document.getElementById('ps-purse');
+  if (playsheet) playsheet.textContent = formatMoney(characterPence);
+}
+
+// Manual purse adjustment — for GM-granted loot, a fine paid, etc. outside
+// the Shop's own buy flow. Plain pence delta rather than separate Crown/
+// Pence inputs, matching this app's existing prompt()-based quick-input
+// convention (see the campaign/help notes' title prompts).
+function adjustPurse() {
+  const input = prompt(`Adjust purse by how many pence? (100 pence = 1 Crown)\nCurrent: ${formatMoney(characterPence)}\nUse a negative number to remove funds.`, '');
+  if (input === null) return;
+  const delta = parseInt(input, 10);
+  if (isNaN(delta)) { alert('Enter a whole number of pence.'); return; }
+  characterPence = Math.max(0, characterPence + delta);
+  updatePurseDisplay();
+}
+
 // One dropdown entry per unique weapon NAME across the Melee/Ranged Weapons
 // Managers (MELEE_WEAPONS/RANGED_WEAPONS) — a weapon usually has several
 // action rows there (Slash/Smash/Parry/Hook for one axe), but the Loadout
@@ -3409,6 +3581,7 @@ function _weaponLoadoutCatalog() {
       wt: r.wt || 0,
       damage: r.damageMax ? `max ${r.damageMax} dmg` : '',
       reach: r.reach ?? r.rangeIncrement ?? 0,
+      price: r.price || 0,
     });
   }
   return out;
@@ -3514,7 +3687,7 @@ function addArmorPiece() {
   tr.dataset.hearingmod = piece.hearingMod || 0;
   tr.dataset.weight = weight;
   tr.dataset.cost = cost;
-  tr.innerHTML = `<td>${_paEsc(piece.name)}</td><td>${piece.slot ? _paEsc(piece.slot) : 'any'}</td><td>${_paEsc(piece.material)}</td><td>${size}</td><td>${Math.round(weight * 10) / 10}</td><td>${Math.round(cost)}</td>
+  tr.innerHTML = `<td>${_paEsc(piece.name)}</td><td>${piece.slot ? _paEsc(piece.slot) : 'any'}</td><td>${_paEsc(piece.material)}</td><td>${size}</td><td>${Math.round(weight * 10) / 10}</td><td>${formatMoney(cost)}</td>
     <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
   tbody.appendChild(tr);
   buildArmorFields();
@@ -3552,6 +3725,121 @@ function addEquip() {
   }
   select.selectedIndex = -1;
   recalc();
+}
+
+// ─── SHOP ───────────────────────────────────────────────────────────────────
+// Buying something here is just "select it, then call the same Loadout add
+// function a manual pick would" — reuses addWeapon/addEquip/addArmorPiece
+// verbatim (weight/cost computation included) rather than re-deriving any of
+// it, with an affordability check and the purse deduction wrapped around it.
+function _selectSingleOption(select, value) {
+  [...select.options].forEach(o => { o.selected = (o.value === String(value)); });
+}
+
+function _buyWeapon(name) {
+  const w = _weaponLoadoutCatalog().find(x => x.name === name);
+  if (!w) return;
+  const price = w.price || 0;
+  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  _selectSingleOption(document.getElementById('weapon-select'), name);
+  addWeapon();
+  characterPence -= price;
+  updatePurseDisplay();
+  buildShopPanel();
+}
+
+function _buyGear(name) {
+  const item = _lookupEquipItem(name);
+  if (!item) return;
+  const price = item.price || 0;
+  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  const qtyInput = document.getElementById('equip-qty');
+  const prevQty = qtyInput.value; // a Buy click is always exactly 1 unit, regardless of whatever the Loadout tab's own qty field was last set to
+  qtyInput.value = 1;
+  _selectSingleOption(document.getElementById('equip-select'), name);
+  addEquip();
+  qtyInput.value = prevQty;
+  characterPence -= price;
+  updatePurseDisplay();
+  buildShopPanel();
+}
+
+// Same area-weight × size × costPerMod formula addArmorPiece itself uses —
+// kept in sync by reading through it rather than copying the arithmetic.
+function _shopArmorPrice(index) {
+  const piece = ARMOR_PIECES[index];
+  if (!piece) return 0;
+  const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
+  const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
+  const areaWeight = piece.slot ? (areaWeights[piece.slot] || 0) : 1;
+  return Math.round(areaWeight * size * (piece.costPerMod || 0));
+}
+
+function _shopArmorPriceUpdate(index) {
+  const el = document.getElementById('shop-armor-price-' + index);
+  if (el) el.textContent = formatMoney(_shopArmorPrice(index));
+}
+
+function _buyArmorPiece(index) {
+  const piece = ARMOR_PIECES[index];
+  if (!piece) return;
+  const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
+  if (size <= 0) { alert('Enter a valid size.'); return; }
+  const price = _shopArmorPrice(index);
+  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  document.getElementById('armorpiece-select').value = index;
+  document.getElementById('armorpiece-size').value = size;
+  addArmorPiece();
+  characterPence -= price;
+  updatePurseDisplay();
+  buildShopPanel();
+}
+
+function buildShopPanel() {
+  updatePurseDisplay();
+  const purseEl = document.getElementById('shop-purse-display');
+  if (purseEl) purseEl.textContent = formatMoney(characterPence);
+
+  const wTbody = document.getElementById('shop-weapons-list');
+  if (wTbody) {
+    wTbody.innerHTML = '';
+    _weaponLoadoutCatalog().forEach(w => {
+      const afford = characterPence >= (w.price || 0);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${w.name}</td><td>${w.wt}</td><td>${formatMoney(w.price)}</td>
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="_buyWeapon('${w.name.replace(/'/g, "\\'")}')">Buy</button></td>`;
+      wTbody.appendChild(tr);
+    });
+  }
+
+  const gTbody = document.getElementById('shop-gear-list');
+  if (gTbody) {
+    gTbody.innerHTML = '';
+    [...EQUIPMENT, ...CONSUMABLES].forEach(item => {
+      const afford = characterPence >= (item.price || 0);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${item.name}</td><td>${item.wt}</td><td>${formatMoney(item.price)}</td>
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="_buyGear('${item.name.replace(/'/g, "\\'")}')">Buy</button></td>`;
+      gTbody.appendChild(tr);
+    });
+  }
+
+  const aTbody = document.getElementById('shop-armor-list');
+  if (aTbody) {
+    aTbody.innerHTML = '';
+    const defaultSize = calcAttributes()._targetAdj || 4;
+    ARMOR_PIECES.forEach((p, i) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${p.name}</td><td>${p.slot || 'any'}</td><td>${p.material}</td>
+        <td><input type="number" id="shop-armor-size-${i}" value="${defaultSize}" min="1" step="1"
+          style="width:56px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px;border-radius:4px;text-align:center;"
+          oninput="_shopArmorPriceUpdate(${i})"></td>
+        <td id="shop-armor-price-${i}">—</td>
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button></td>`;
+      aTbody.appendChild(tr);
+    });
+    ARMOR_PIECES.forEach((p, i) => _shopArmorPriceUpdate(i));
+  }
 }
 
 // ─── ARMOR ──────────────────────────────────────────────────────────────────
@@ -4032,7 +4320,7 @@ function buildArmorPieceManagerTable() {
   ARMOR_PIECES.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
-      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.costPerMod || 0}</td>
+      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${formatMoney(p.costPerMod)}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPieceAsSuit(${i})" title="Add a matching piece for every other slot (named e.g. &quot;${p.name} (R Arm)&quot;)">Copy As Suit</button>
@@ -4234,6 +4522,7 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-damagemax').value   = row ? row.damageMax : 0;
   document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
   document.getElementById('mf-wt').value          = row ? (row.wt || 0) : 0;
+  document.getElementById('mf-price').value       = row ? (row.price || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
 }
 
@@ -4281,6 +4570,7 @@ function saveMeleeWeapon() {
     damageMax: parseFloat(document.getElementById('mf-damagemax').value) || 0,
     maxPowerMod: parseFloat(document.getElementById('mf-maxpowermod').value) || 0,
     wt: parseFloat(document.getElementById('mf-wt').value) || 0,
+    price: parseInt(document.getElementById('mf-price').value, 10) || 0,
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
   };
   if (editingMeleeIndex !== null) {
@@ -4321,7 +4611,7 @@ function buildMeleeWeaponsManagerTable() {
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
       : '—';
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${slotLabel}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
@@ -4872,6 +5162,7 @@ function _fillRangedForm(row) {
   document.getElementById('rf-damagemax').value      = row ? row.damageMax : 0;
   document.getElementById('rf-maxpowermod').value    = row ? row.maxPowerMod : 0;
   document.getElementById('rf-wt').value             = row ? (row.wt || 0) : 0;
+  document.getElementById('rf-price').value          = row ? (row.price || 0) : 0;
 }
 
 function openRangedWeaponForm(index) {
@@ -4919,6 +5210,7 @@ function saveRangedWeapon() {
     damageMax: parseFloat(document.getElementById('rf-damagemax').value) || 0,
     maxPowerMod: parseFloat(document.getElementById('rf-maxpowermod').value) || 0,
     wt: parseFloat(document.getElementById('rf-wt').value) || 0,
+    price: parseInt(document.getElementById('rf-price').value, 10) || 0,
   };
   if (editingRangedIndex !== null) {
     RANGED_WEAPONS[editingRangedIndex] = row;
@@ -4950,6 +5242,7 @@ function openConsumableForm(index) {
   document.getElementById('consumable-form-title').textContent = row ? 'Edit Consumable' : 'New Consumable';
   document.getElementById('cf-name').value        = row ? row.name : '';
   document.getElementById('cf-wt').value          = row ? row.wt : '';
+  document.getElementById('cf-price').value       = row ? (row.price || '') : '';
   document.getElementById('cf-clears').value      = row ? (row.clears || '') : '';
   document.getElementById('cf-toughness').value   = row ? row.restoreToughness : '';
   document.getElementById('cf-stamina').value     = row ? row.restoreStamina : '';
@@ -4972,6 +5265,7 @@ function saveConsumable() {
   const row = {
     name,
     wt: parseFloat(document.getElementById('cf-wt').value) || 0,
+    price: parseInt(document.getElementById('cf-price').value, 10) || 0,
     restoreToughness: parseFloat(document.getElementById('cf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('cf-stamina').value) || 0,
     restoreBlood: parseFloat(document.getElementById('cf-blood').value) || 0,
@@ -5014,11 +5308,81 @@ function buildConsumablesManagerTable() {
     const nameCell = row.description
       ? `<td title="${row.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${row.name}</td>`
       : `<td>${row.name}</td>`;
-    tr.innerHTML = `${nameCell}<td>${row.wt}</td><td>${row.restoreToughness || '—'}</td><td>${row.restoreStamina || '—'}</td><td>${row.restoreBlood || '—'}</td><td>${row.clears || '—'}</td><td>${buff}</td>
+    tr.innerHTML = `${nameCell}<td>${row.wt}</td><td>${formatMoney(row.price)}</td><td>${row.restoreToughness || '—'}</td><td>${row.restoreStamina || '—'}</td><td>${row.restoreBlood || '—'}</td><td>${row.clears || '—'}</td><td>${buff}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openConsumableForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteConsumable(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
+}
+
+// ─── EQUIPMENT MANAGER ────────────────────────────────────────────────────────
+let editingEquipIndex = null;
+function openEquipForm(index) {
+  editingEquipIndex = index;
+  const row = index !== null ? EQUIPMENT[index] : null;
+  document.getElementById('equipmgr-form-title').textContent = row ? 'Edit Equipment' : 'New Equipment';
+  document.getElementById('ef-name').value  = row ? row.name : '';
+  document.getElementById('ef-wt').value    = row ? row.wt : '';
+  document.getElementById('ef-price').value = row ? (row.price || '') : '';
+  document.getElementById('equipmgr-form').style.display = 'block';
+}
+
+function closeEquipForm() {
+  editingEquipIndex = null;
+  document.getElementById('equipmgr-form').style.display = 'none';
+}
+
+function saveEquip() {
+  const name = document.getElementById('ef-name').value.trim();
+  if (!name) { alert('Equipment name is required.'); return; }
+  const row = {
+    name,
+    wt: parseFloat(document.getElementById('ef-wt').value) || 0,
+    price: parseInt(document.getElementById('ef-price').value, 10) || 0,
+  };
+  if (editingEquipIndex !== null) EQUIPMENT[editingEquipIndex] = row;
+  else EQUIPMENT.push(row);
+  writeConfigToDisk();
+  closeEquipForm();
+  buildEquipManagerTable();
+  if (document.getElementById('equip-select')) buildLoadoutSelects();
+}
+
+function deleteEquip(index) {
+  const row = EQUIPMENT[index];
+  if (!confirm(`Delete "${row.name}"?`)) return;
+  closeEquipForm();
+  EQUIPMENT.splice(index, 1);
+  writeConfigToDisk();
+  buildEquipManagerTable();
+  if (document.getElementById('equip-select')) buildLoadoutSelects();
+}
+
+function buildEquipManagerTable() {
+  const tbody = document.getElementById('equipmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  EQUIPMENT.forEach((row, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${formatMoney(row.price)}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openEquipForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteEquip(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ─── ECONOMY SETTINGS ─────────────────────────────────────────────────────────
+function _loadEconomySettingsUI() {
+  document.getElementById('econ-starting-crowns').value = STARTING_CROWNS;
+  document.getElementById('econ-noble-mult').value      = NOBLE_WEALTH_MULT;
+  document.getElementById('econ-urchin-mult').value     = URCHIN_WEALTH_MULT;
+}
+
+function saveEconomySettings() {
+  STARTING_CROWNS    = parseFloat(document.getElementById('econ-starting-crowns').value) || 0;
+  NOBLE_WEALTH_MULT   = parseFloat(document.getElementById('econ-noble-mult').value) || 0;
+  URCHIN_WEALTH_MULT  = parseFloat(document.getElementById('econ-urchin-mult').value) || 0;
+  writeConfigToDisk();
 }
 
 // ─── SPELL MANAGER ───────────────────────────────────────────────────────────
@@ -5139,7 +5503,7 @@ function buildRangedWeaponsManagerTable() {
   tbody.innerHTML = '';
   RANGED_WEAPONS.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyRangedWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
@@ -5165,9 +5529,12 @@ function showPanel(id) {
   if (id === 'skillmgr')   buildSkillManagerTable();
   if (id === 'speciesmgr') buildSpeciesManagerTable();
   if (id === 'spellbook')  buildSpellBookPanel();
+  if (id === 'equipmgr')   buildEquipManagerTable();
+  if (id === 'economymgr') _loadEconomySettingsUI();
+  if (id === 'shop')       buildShopPanel();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','spellmgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','spellmgr','economymgr'];
 
 // Browser tab title AND the in-page header (#app-title) while in Character
 // Builder mode — "Arcane Character Builder" plus whatever's currently in the
@@ -5468,6 +5835,18 @@ function deleteSpecies(name) {
 
 // ─── IMPORT / EXPORT ────────────────────────────────────────────────────────
 
+// A brand-new character's starting purse — see characterPence's comment for
+// when this actually runs. Only Noble and Urchin/Underclass (the two
+// Background-subtype Blessings/Curses — see FEATURES) affect it; everyone
+// else gets the plain baseline.
+function _startingPenceForFeatures(features) {
+  const feats = features || [];
+  let mult = 1;
+  if (feats.includes('Noble')) mult = NOBLE_WEALTH_MULT;
+  else if (feats.includes('Urchin/Underclass')) mult = URCHIN_WEALTH_MULT;
+  return Math.round(STARTING_CROWNS * PENCE_PER_CROWN * mult);
+}
+
 function gatherCharacterData() {
   const weapons = [...document.querySelectorAll('#weapon-list tr')].map(tr => ({
     name:   tr.cells[0].textContent,
@@ -5493,6 +5872,7 @@ function gatherCharacterData() {
     mental:  document.getElementById('sel-mental').value,
     level:   characterLevel,
     xp:      characterXP,
+    pence:   characterPence,
     knownSpells: [...characterKnownSpells],
     notes:   document.getElementById('char-notes')?.value || '',
     stats:   { ...statValues },
@@ -5533,6 +5913,16 @@ async function saveCharacter() {
     document.getElementById('char-name')?.focus();
     return;
   }
+  // Starting purse, derived from character build — computed exactly once,
+  // right here at a character's very first save (currentCharacterId is
+  // still null then), never again afterward, so this can't clobber a
+  // player's own subsequent spending or income. See the Economy Config
+  // panel for the tunable baseline/multipliers.
+  if (currentCharacterId === null) {
+    characterPence = _startingPenceForFeatures(data.features);
+    data.pence = characterPence;
+    updatePurseDisplay();
+  }
   setCharSaveStatus('Saving…', false);
   // A character always needs a campaign to live in. If none is selected, drop
   // it into the user's personal Home campaign (auto-created) so a brand-new
@@ -5555,7 +5945,7 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       { ...data.stats, Level: data.level, XP: data.xp, KnownSpells: data.knownSpells,
+    stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
                    ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped },
     notes:       data.notes || '',
     features:    data.features,
@@ -5788,6 +6178,8 @@ function _doNewCharacter() {
   if (newNotesEl) newNotesEl.value = '';
   statValues = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
   characterXP = 0;
+  characterPence = 0; // real starting amount is derived at this character's first save — see saveCharacter
+  updatePurseDisplay();
   characterKnownSpells = [];
   const newXpDisplay = document.getElementById('char-xp-display');
   if (newXpDisplay) newXpDisplay.textContent = '0';
@@ -5855,6 +6247,9 @@ function gatherConfigData() {
     rangedWeapons: RANGED_WEAPONS,
     consumables: CONSUMABLES,
     spells: SPELLS,
+    startingCrowns: STARTING_CROWNS,
+    nobleWealthMult: NOBLE_WEALTH_MULT,
+    urchinWealthMult: URCHIN_WEALTH_MULT,
   };
 }
 
@@ -5879,7 +6274,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260928a';
+const VERSION = 'v0.1.20260928b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -6543,6 +6938,9 @@ function applyConfigData(data) {
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
+  STARTING_CROWNS    = data.startingCrowns    ?? 5;
+  NOBLE_WEALTH_MULT  = data.nobleWealthMult   ?? 4;
+  URCHIN_WEALTH_MULT = data.urchinWealthMult  ?? 0.2;
   migrateSkills();
   rebuildAllConfigUI();
 }
@@ -6560,6 +6958,7 @@ function rebuildAllConfigUI() {
   buildMeleeWeaponsManagerTable();
   buildRangedWeaponsManagerTable();
   buildConsumablesManagerTable();
+  buildEquipManagerTable();
   buildSpellManagerTable();
   recalc();
 }
@@ -6612,6 +7011,10 @@ function applyCharacterData(data) {
   characterXP = Math.round(data.stats?.XP || 0);
   const xpDisplay = document.getElementById('char-xp-display');
   if (xpDisplay) xpDisplay.textContent = characterXP;
+  // Purse — same stats piggyback as XP (see characterPence's own comment for
+  // when this actually gets its real starting value).
+  characterPence = Math.round(data.stats?.Pence || 0);
+  updatePurseDisplay();
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
   characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
@@ -6695,7 +7098,7 @@ function applyCharacterData(data) {
       tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
       tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
       tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
-      tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight||0) * 10) / 10}</td><td>${Math.round(o.cost||0)}</td>
+      tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight||0) * 10) / 10}</td><td>${formatMoney(o.cost)}</td>
         <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
       tbody.appendChild(tr);
     });
