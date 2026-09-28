@@ -5879,7 +5879,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260923c';
+const VERSION = 'v0.1.20260928a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13038,6 +13038,12 @@ let _dragStartYPct   = null;
 
 const TOKEN_SIZE = 44; // canvas-pixel diameter
 const ITEM_TOKEN_ICON = 'map_items_token.png'; // shared art for dropped ground items (falls back to 📦 if missing)
+// A dropped item (potion, coin, scroll, ...) isn't creature-sized — reported
+// live as rendering at the same default size as an actual character/creature
+// token, dwarfing what it's meant to represent. Fixed footprint, not derived
+// from anything about the specific item (there's no per-item size data to
+// draw from), just a sensible "small object on the ground" stand-in.
+const ITEM_TOKEN_FEET = 3;
 
 // ── GM tab switch ─────────────────────────────────────────────────────────────
 function switchGmTab(tab) {
@@ -13051,6 +13057,12 @@ function switchGmTab(tab) {
 
 // ── Token rendering ───────────────────────────────────────────────────────────
 function getTokenSize(t) {
+  if (t && t.entity_type === 'item') {
+    // Same calibrated feet-to-px conversion the creature branch below uses,
+    // just against a fixed footprint instead of a computed one.
+    if (mapScalePPF > 0) return Math.round(Math.max(10, Math.min(120, ITEM_TOKEN_FEET * mapScalePPF)));
+    return Math.round(TOKEN_SIZE * (ITEM_TOKEN_FEET / 5.5)); // uncalibrated — same 66in/5.5ft baseline as the fallback below
+  }
   let race = '', gender = '', age = '', height = '', build = '';
   if (t && t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id]) {
     const row = playCharCache[t.entity_id];
