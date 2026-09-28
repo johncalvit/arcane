@@ -1400,8 +1400,8 @@
             <input type="text" id="apf-hearingmod" placeholder="0" title="Applied to the wearer's Hearing while equipped.">
           </div>
           <div class="field">
-            <label>Price per Modifier (pence)</label>
-            <input type="text" id="apf-costpermod" placeholder="e.g. 8" title="Like the material's Weight/Mod, but for price (100 pence = 1 Crown) — an owned instance's actual price is area weight × its own size × this. This IS the currency the Shop charges.">
+            <label>Price per Modifier (Crowns)</label>
+            <input type="text" id="apf-costpermod" placeholder="e.g. 4" title="In Crowns, not pence — an owned instance's actual price is area weight × its own size × this (e.g. a Kettle Hat at 4cr/mod, bought at size 5, costs 20cr). This IS what the Shop charges.">
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
@@ -1661,6 +1661,13 @@
           <input type="text" id="econ-urchin-mult" placeholder="0.2" oninput="saveEconomySettings()">
         </div>
       </div>
+      <h3 style="margin-top:20px;">Catalog Prices</h3>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">
+        For a campaign whose Weapons/Equipment/Consumables/Armor Pieces were set up before prices existed — fills in
+        a starting price for anything that doesn't have one yet (never overwrites one you've already set by hand),
+        and adds any newer default items your list is missing entirely (e.g. Arrows, Crossbow Bolts).
+      </p>
+      <button class="btn" onclick="fillInDefaultPrices()">🏷 Fill In Default Prices</button>
     </div>
 
     <!-- SPELL MANAGER -->
@@ -3477,36 +3484,38 @@ const DEFAULT_WEAPONS = [
   { name:"Sling",               wt:0.5,  damage:"1d4",    reach:0   },
 ];
 const DEFAULT_EQUIPMENT = [
-  { name:"Backpack",            wt:2  },
-  { name:"Bedroll",             wt:5  },
-  { name:"Blanket",             wt:3  },
-  { name:"Canteen (full)",      wt:2  },
-  { name:"Candle (×10)",        wt:1  },
-  { name:"Chalk (×10)",         wt:0.5},
-  { name:"Climbing Gear",       wt:8  },
-  { name:"Crowbar",             wt:5  },
-  { name:"Flint & Steel",       wt:0.5},
-  { name:"Grappling Hook",      wt:4  },
-  { name:"Hammer",              wt:2  },
-  { name:"Healer's Kit",        wt:3  },
-  { name:"Lantern",             wt:2  },
-  { name:"Lock (good)",         wt:1  },
-  { name:"Manacles",            wt:2  },
-  { name:"Mirror (small)",      wt:0.5},
-  { name:"Oil (flask)",         wt:1  },
-  { name:"Pick, Miner's",       wt:10 },
-  { name:"Piton (×10)",         wt:2.5},
-  { name:"Pole (10 ft)",        wt:8  },
-  { name:"Pouch",               wt:0.5},
-  { name:"Rations (1 day)",     wt:2  },
-  { name:"Rope, Hemp (50 ft)",  wt:10 },
-  { name:"Rope, Silk (50 ft)",  wt:5  },
-  { name:"Sack",                wt:0.5},
-  { name:"Shovel",              wt:8  },
-  { name:"Thieves' Tools",      wt:1  },
-  { name:"Torch (×3)",          wt:3  },
-  { name:"Waterskin",           wt:4  },
-  { name:"Writing Kit",         wt:1  },
+  { name:"Backpack",            wt:2,   price:200  },
+  { name:"Bedroll",             wt:5,   price:300  },
+  { name:"Blanket",             wt:3,   price:100  },
+  { name:"Canteen (full)",      wt:2,   price:50   },
+  { name:"Candle (×10)",        wt:1,   price:20   },
+  { name:"Chalk (×10)",         wt:0.5, price:10   },
+  { name:"Climbing Gear",       wt:8,   price:500  },
+  { name:"Crowbar",             wt:5,   price:200  },
+  { name:"Flint & Steel",       wt:0.5, price:50   },
+  { name:"Grappling Hook",      wt:4,   price:300  },
+  { name:"Hammer",              wt:2,   price:100  },
+  { name:"Healer's Kit",        wt:3,   price:500  },
+  { name:"Lantern",             wt:2,   price:300  },
+  { name:"Lock (good)",         wt:1,   price:200  },
+  { name:"Manacles",            wt:2,   price:300  },
+  { name:"Mirror (small)",      wt:0.5, price:500  },
+  { name:"Oil (flask)",         wt:1,   price:20   },
+  { name:"Pick, Miner's",       wt:10,  price:300  },
+  { name:"Piton (×10)",         wt:2.5, price:50   },
+  { name:"Pole (10 ft)",        wt:8,   price:20   },
+  { name:"Pouch",               wt:0.5, price:20   },
+  { name:"Rations (1 day)",     wt:2,   price:10   },
+  { name:"Rope, Hemp (50 ft)",  wt:10,  price:100  },
+  { name:"Rope, Silk (50 ft)",  wt:5,   price:1000 },
+  { name:"Sack",                wt:0.5, price:10   },
+  { name:"Shovel",              wt:8,   price:200  },
+  { name:"Thieves' Tools",      wt:1,   price:500  },
+  { name:"Torch (×3)",          wt:3,   price:15   },
+  { name:"Waterskin",           wt:4,   price:50   },
+  { name:"Writing Kit",         wt:1,   price:300  },
+  { name:"Arrows (×20)",        wt:2,   price:100  },
+  { name:"Crossbow Bolts (×20)",wt:2.5, price:150  },
 ];
 let WEAPONS   = [...DEFAULT_WEAPONS];
 let EQUIPMENT = [...DEFAULT_EQUIPMENT];
@@ -3671,7 +3680,10 @@ function addArmorPiece() {
   // the underlying material/piece factors.
   const areaWeight = piece.slot ? (areaWeights[piece.slot] || 0) : 1;
   const weight = areaWeight * size * (mat?.weightPerMod || 0);
-  const cost   = areaWeight * size * (piece.costPerMod || 0);
+  // costPerMod is in Crowns (see the form field) — everything else in this
+  // app's currency is stored internally as pence, so convert here, once, at
+  // the point the actual owned instance is created.
+  const cost   = Math.round(areaWeight * size * (piece.costPerMod || 0) * PENCE_PER_CROWN);
   const id = 'armorpc-' + Date.now() + '-' + Math.round(Math.random() * 9999);
 
   const tbody = document.getElementById('armor-owned-list');
@@ -3772,7 +3784,7 @@ function _shopArmorPrice(index) {
   const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
   const areaWeights = Object.keys(ARMOR_AREA_WEIGHTS).length ? ARMOR_AREA_WEIGHTS : DEFAULT_ARMOR_AREA_WEIGHTS;
   const areaWeight = piece.slot ? (areaWeights[piece.slot] || 0) : 1;
-  return Math.round(areaWeight * size * (piece.costPerMod || 0));
+  return Math.round(areaWeight * size * (piece.costPerMod || 0) * PENCE_PER_CROWN); // costPerMod is in Crowns — see addArmorPiece
 }
 
 function _shopArmorPriceUpdate(index) {
@@ -3898,11 +3910,13 @@ let ARMOR_TYPE_DATA = { ...DEFAULT_ARMOR_TYPE_DATA };
 // slot: null means "generic" — fits any body slot as plain draped material
 // with no special shape, matching how armor worked before this existed; one
 // is auto-generated per material below so nothing already set up breaks.
-// costPerMod mirrors a material's weightPerMod, but for price: an owned
-// instance's actual weight/cost (computed when a character adds it to their
-// Loadout — see addArmorPiece) is areaWeight[slot] × THAT INSTANCE'S OWN
-// size (chosen at purchase/found-on-a-body time, not this template) ×
-// material.weightPerMod (weight) or this.costPerMod (cost).
+// costPerMod mirrors a material's weightPerMod, but for price, and it's in
+// CROWNS (not pence — see PENCE_PER_CROWN) since these are meant to be
+// tuned as round, human-scale numbers, not fiddly pence amounts. An owned
+// instance's actual weight/price (computed when a character adds it to
+// their Loadout — see addArmorPiece) is areaWeight[slot] × THAT INSTANCE'S
+// OWN size (chosen at purchase/found-on-a-body time, not this template) ×
+// material.weightPerMod (weight) or this.costPerMod × 100 (price in pence).
 const DEFAULT_ARMOR_PIECES = [
   { name: 'Full Helmet',   slot: 'head',  material: 'Steel Plate',  gap: 4,  noise: 0,  visionMod: -50, hearingMod: -50, costPerMod: 8 },
   { name: 'Kettle Hat',    slot: 'head',  material: 'Steel Plate',  gap: 40, noise: 0,  visionMod: -10, hearingMod: -10, costPerMod: 4 },
@@ -4320,7 +4334,7 @@ function buildArmorPieceManagerTable() {
   ARMOR_PIECES.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
-      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${formatMoney(p.costPerMod)}</td>
+      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.costPerMod || 0}cr</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPieceAsSuit(${i})" title="Add a matching piece for every other slot (named e.g. &quot;${p.name} (R Arm)&quot;)">Copy As Suit</button>
@@ -4330,6 +4344,23 @@ function buildArmorPieceManagerTable() {
 }
 
 // ─── MELEE WEAPONS MANAGER ──────────────────────────────────────────────────
+// Sensible starting prices (pence — see PENCE_PER_CROWN), keyed by weapon
+// name and applied to every action-row sharing it below, since price is
+// per weapon, not per action (same "one value per name, not per row" deal
+// Weight already lives with — see _weaponLoadoutCatalog's "first row found"
+// comment). Natural weapons (naturalSlot set) and Bare Handed are never
+// purchasable, so they're simply absent here and stay priced at 0. GM-
+// editable afterward like everything else — these are just a starting point.
+const DEFAULT_MELEE_WEAPON_PRICES = {
+  "Axe, Hatchet": 500, "Battleaxe": 2000, "Club": 100, "Flail": 1800,
+  "Glaive": 2500, "Greataxe": 3500, "Greatclub": 300, "Greatsword": 4000,
+  "Halberd": 2500, "Hammer, Carpenter's": 300, "Hammer, Sledge": 600,
+  "Hammer, War": 1500, "Javelin": 300, "Knife": 300, "Lance, Heavy Cavalry": 2500,
+  "Lance, Light Cavalry": 1500, "Mace": 1000, "Morningstar": 1500, "Net": 500,
+  "Pike": 1200, "Rapier": 2000, "Scimitar": 1800, "Shield, Buckler": 500,
+  "Shield, Large": 1500, "Shield, Small": 800, "Spear, Long": 800, "Staff": 200,
+  "Sword, Long": 1500, "Sword, Short": 800, "Trident": 1000, "Whip": 400,
+};
 // Flat list of weapon+action rows — a single weapon (e.g. Battleaxe) has one
 // row per action it supports (Slash, Smash, Parry, Hook...), since each action
 // has its own reach/hit-formula/damage. Config-driven, with a built-in fallback
@@ -4481,7 +4512,7 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Rear Claws",  action:"Rake",  naturalSlot:"hindlegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
   { weapon:"Tail Slam",   action:"Slam",  naturalSlot:"tail",     minReach:0, reach:1,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:8, maxPowerMod:0.5 },
   { weapon:"Stinger",     action:"Sting", naturalSlot:"tail",     minReach:0, reach:0.5, hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.3 },
-];
+].map(r => ({ ...r, price: DEFAULT_MELEE_WEAPON_PRICES[r.weapon] || 0 }));
 let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
 let editingMeleeIndex = null;
 
@@ -4620,6 +4651,14 @@ function buildMeleeWeaponsManagerTable() {
 }
 
 // ─── RANGED WEAPONS MANAGER ─────────────────────────────────────────────────
+// See DEFAULT_MELEE_WEAPON_PRICES's comment — same deal, one price per
+// weapon name (pence), applied to every action-row below that shares it.
+const DEFAULT_RANGED_WEAPON_PRICES = {
+  "Axe, Hatchet (Thrown)": 500, "Blowgun": 500, "Bow, Horse": 2000, "Bow, Hunting": 1500,
+  "Bow, Light": 1000, "Bow, War": 2500, "Club (Thrown)": 100, "Crossbow, Hand": 1500,
+  "Crossbow, Heavy": 3500, "Crossbow, Light": 2000, "Dart": 100, "Javelin": 300,
+  "Sling Pellet": 100, "Sling Stone": 100, "Spear, Short/Long": 600,
+};
 // Same flat weapon+action structure as melee weapons, but with a range
 // increment / max range instead of reach. Config-driven, with a built-in
 // fallback transcribed from "Arcane Ranged Weapons.csv" so it's never empty.
@@ -4639,7 +4678,7 @@ const DEFAULT_RANGED_WEAPONS = [
   { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
   { weapon:"Javelin",               action:"Stab",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
   { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
-];
+].map(r => ({ ...r, price: DEFAULT_RANGED_WEAPON_PRICES[r.weapon] || 0 }));
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
 
@@ -4649,11 +4688,11 @@ let editingRangedIndex = null;
 // clear conditions (comma-separated keys, e.g. "bleeding"), and one timed buff
 // (attribute + amount + duration text — GM-managed, no auto-expiry yet).
 const DEFAULT_CONSUMABLES = [
-  { name:"Water",              wt:1,   restoreToughness:0, restoreStamina:2, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+  { name:"Water",              wt:1,   price:5,    restoreToughness:0, restoreStamina:2, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
     description:"A skin of clean drinking water. Refreshes a tired body — restores 2 Stamina." },
-  { name:"Healing Potion",     wt:0.5, restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"bleeding", buffAttr:"",             buffAmount:0,  buffMinutes:"",
+  { name:"Healing Potion",     wt:0.5, price:1000, restoreToughness:5, restoreStamina:0, restoreBlood:0, clears:"bleeding", buffAttr:"",             buffAmount:0,  buffMinutes:"",
     description:"A ruby-red draft that knits flesh back together. Restores 5 Toughness and stanches any active bleeding." },
-  { name:"Night Vision Potion",wt:0.5, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100",
+  { name:"Night Vision Potion",wt:0.5, price:800,  restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100",
     description:"A murky brew that makes the drinker's eyes glint faintly in the dark. Grants a temporary +10 Night Vision for 10-100 minutes (GM tracks when it fades)." },
 ];
 let CONSUMABLES = [...DEFAULT_CONSUMABLES];
@@ -5383,6 +5422,47 @@ function saveEconomySettings() {
   NOBLE_WEALTH_MULT   = parseFloat(document.getElementById('econ-noble-mult').value) || 0;
   URCHIN_WEALTH_MULT  = parseFloat(document.getElementById('econ-urchin-mult').value) || 0;
   writeConfigToDisk();
+}
+
+// For a campaign whose catalog predates prices — fills in a price for
+// anything that doesn't have one yet (never overwrites one already set),
+// and adds any default catalog items this campaign's own lists are
+// missing entirely (e.g. a campaign saved before Arrows/Crossbow Bolts
+// existed). The no-SQL alternative to hand-patching a saved config.
+function fillInDefaultPrices() {
+  let filled = 0, added = 0;
+  const fillArr = (arr, defaults, keyField) => {
+    for (const row of arr) {
+      if (row.price) continue;
+      const def = defaults.find(d => d[keyField] === row[keyField]);
+      if (def && def.price) { row.price = def.price; filled++; }
+    }
+  };
+  fillArr(MELEE_WEAPONS, DEFAULT_MELEE_WEAPONS, 'weapon');
+  fillArr(RANGED_WEAPONS, DEFAULT_RANGED_WEAPONS, 'weapon');
+  fillArr(EQUIPMENT, DEFAULT_EQUIPMENT, 'name');
+  fillArr(CONSUMABLES, DEFAULT_CONSUMABLES, 'name');
+  for (const piece of ARMOR_PIECES) {
+    if (piece.costPerMod) continue;
+    const def = DEFAULT_ARMOR_PIECES.find(d => d.name === piece.name);
+    if (def && def.costPerMod) { piece.costPerMod = def.costPerMod; filled++; }
+  }
+  for (const def of DEFAULT_EQUIPMENT) {
+    if (!EQUIPMENT.some(e => e.name === def.name)) { EQUIPMENT.push({ ...def }); added++; }
+  }
+  for (const def of DEFAULT_CONSUMABLES) {
+    if (!CONSUMABLES.some(c => c.name === def.name)) { CONSUMABLES.push({ ...def }); added++; }
+  }
+  writeConfigToDisk();
+  buildMeleeWeaponsManagerTable();
+  buildRangedWeaponsManagerTable();
+  buildEquipManagerTable();
+  buildConsumablesManagerTable();
+  buildArmorPieceManagerTable();
+  buildLoadoutSelects();
+  alert(filled || added
+    ? `Filled in ${filled} price(s) and added ${added} new default item(s) that were missing.`
+    : 'Nothing to do — every item already has a price and no default items are missing.');
 }
 
 // ─── SPELL MANAGER ───────────────────────────────────────────────────────────
@@ -6274,7 +6354,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260928b';
+const VERSION = 'v0.1.20260928c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
