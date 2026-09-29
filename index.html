@@ -6354,7 +6354,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260928c';
+const VERSION = 'v0.1.20260929a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8026,12 +8026,26 @@ function _writeErrorToast(error, context) {
 async function updateEntity(ref, patch) {
   const row = _entityCacheRow(ref);
   if (!row) return false;
+  // Snapshot the fields this patch touches, so a rejected write (e.g. a
+  // permission gap — reported live as a player's hit on a GM's creature
+  // showing in the Journal but never actually reducing its Toughness,
+  // because session_creatures had no RLS policy letting a non-GM write to
+  // it at all) can revert the optimistic update below instead of leaving
+  // the attacker's own screen quietly showing a "success" nobody else ever
+  // saw and that will vanish the moment their cache reloads.
+  const before = {};
+  for (const k of Object.keys(patch)) before[k] = row[k];
   Object.assign(row, patch);
   delete row._attrs;
+  refreshUI(); // immediate optimistic feedback while the write is in flight
   const table = ref.startsWith('char::') ? 'characters' : 'session_creatures';
   const { error } = await sb.from(table).update(patch).eq('id', row.id);
-  if (error) _writeErrorToast(error, table);
-  refreshUI();
+  if (error) {
+    Object.assign(row, before);
+    delete row._attrs;
+    _writeErrorToast(error, table);
+    refreshUI();
+  }
   return !error;
 }
 
