@@ -6354,7 +6354,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260929a';
+const VERSION = 'v0.1.20260929b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7413,7 +7413,7 @@ const CONDITION_DEFS = [
   { key:'dead',        label:'Dead',        icon:'☠', color:'#cc2222',
     desc:'Killed in combat.' },
   { key:'bleeding',    label:'Bleeding',    icon:'🩸', color:'#c02020',
-    desc:'Losing Blood each round. Blood lost also weakens every physical stat by that same % (restored as Blood heals). Clear the condition (or bind wounds) to stop.' },
+    desc:'Losing Blood each round. Blood lost also weakens every physical stat but Toughness by that same % (restored as Blood heals). Clear the condition (or bind wounds) to stop.' },
   { key:'deafened',    label:'Deafened',    icon:'🔇', color:'#888888',
     desc:'Cannot hear.' },
   { key:'held',        label:'Held',        icon:'✊', color:'#d98c40',
@@ -7834,11 +7834,21 @@ function getEntity(ref) {
   // store or clear, so it un-reduces the instant Blood is healed/recovered.
   // Uses the BASE (pre-reduction) Toughness for the pool size so the % can't
   // spiral as Toughness itself shrinks from the loss.
+  //
+  // Toughness itself is excluded from the reduction — reported live as not
+  // working right in actual play. Toughness already has its own, separate
+  // damage track (damage.toughness, applied directly by applyDamage); on
+  // top of that, this loop was ALSO shrinking the live attrs.Toughness value
+  // every combat calc reads (defense rolls, tMax elsewhere, ...) purely from
+  // blood loss, double-penalizing the same wound and making Toughness-based
+  // math drift out of sync with what the sheet actually shows. Every other
+  // physical/movement stat (Power, Speed, Stamina, ...) still weakens.
   const baseBloodMax = _bloodMax(Math.round(row._attrs.Toughness ?? 10));
   const bloodLossPct = baseBloodMax > 0 ? Math.min(1, Math.max(0, (row.damage?.blood || 0) / baseBloodMax)) : 0;
   if (bloodLossPct > 0) {
     if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
     for (const a of ATTRIBUTES) {
+      if (a.key === 'Toughness') continue;
       if (a.group === 'physical' || a.group === 'movement') attrs[a.key] = (attrs[a.key] || 0) * (1 - bloodLossPct);
     }
   }
