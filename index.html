@@ -922,6 +922,7 @@
     <h1 id="app-title" class="mode-title">✦ Arcane Character Builder</h1>
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;">
+    <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
     <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
     <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="_clickPlayModeBtn()">▶ Play Mode</button>
     <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="_enterConfigModeFromCharDesign()">⚙ GM Config Mode</button>
@@ -6354,7 +6355,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260929d';
+const VERSION = 'v0.1.20260929e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17837,6 +17838,116 @@ async function _onDocImageFileSelected(e) {
   textarea.selectionStart = textarea.selectionEnd = start + finalText.length;
 }
 
+// ── Report a Bug / Request a Feature ────────────────────────────────────────
+// Stored as an ordinary GM-only campaign document (see saveDocument) — no new
+// table, just a new way to create one. Needs its own RLS policy (see
+// supabase-fix-bug-report-rls.sql): the existing "GMs can manage campaign
+// docs" policy is GM-only, but a report has to come FROM a player, so a
+// non-GM needs INSERT permission here that nothing previously granted.
+let _bugReportScreenshotBlob = null;
+
+function openBugReportModal() {
+  if (!currentUser) { alert('Sign in first.'); return; }
+  document.getElementById('bugreport-type').value = 'bug';
+  document.getElementById('bugreport-title').value = '';
+  document.getElementById('bugreport-description').value = '';
+  document.getElementById('bugreport-status').textContent = '';
+  document.getElementById('bugreport-screenshot-status').textContent = '';
+  const preview = document.getElementById('bugreport-screenshot-preview');
+  preview.style.display = 'none';
+  preview.src = '';
+  _bugReportScreenshotBlob = null;
+  document.getElementById('modal-bug-report').style.display = 'flex';
+}
+
+function closeBugReportModal() {
+  document.getElementById('modal-bug-report').style.display = 'none';
+}
+
+// getDisplayMedia (real screen/tab/window capture, not a DOM approximation —
+// deliberately, so a genuine rendering glitch shows up in the screenshot
+// instead of being smoothed over by reconstructing the DOM from scratch)
+// needs one user consent prompt per capture; grab a single frame, then
+// immediately stop sharing rather than leaving the share active. Not
+// supported at all on iOS Safari — the button just reports that and the
+// report can still be submitted without a screenshot.
+async function _bugReportCaptureScreenshot() {
+  const statusEl = document.getElementById('bugreport-screenshot-status');
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    statusEl.textContent = "Screenshot isn't supported in this browser — you can still submit without one.";
+    return;
+  }
+  let stream;
+  try {
+    statusEl.textContent = 'Pick the tab/window to capture…';
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'never' } });
+  } catch (e) {
+    statusEl.textContent = 'Screenshot cancelled.';
+    return;
+  }
+  try {
+    const video = document.createElement('video');
+    video.srcObject = stream;
+    await video.play();
+    await new Promise(r => requestAnimationFrame(r)); // let one real frame land before grabbing it
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    _bugReportScreenshotBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const preview = document.getElementById('bugreport-screenshot-preview');
+    preview.src = URL.createObjectURL(_bugReportScreenshotBlob);
+    preview.style.display = 'block';
+    statusEl.textContent = 'Screenshot captured.';
+  } finally {
+    stream.getTracks().forEach(t => t.stop()); // one frame is all we need — don't leave sharing active
+  }
+}
+
+async function _bugReportSubmit() {
+  if (!currentUser) { alert('Sign in first.'); return; }
+  if (!currentCampaignId) { alert('Select a campaign first.'); return; }
+  const type = document.getElementById('bugreport-type').value;
+  const title = document.getElementById('bugreport-title').value.trim();
+  const description = document.getElementById('bugreport-description').value.trim();
+  if (!title) { alert('Enter a short title.'); return; }
+
+  const statusEl = document.getElementById('bugreport-status');
+  statusEl.textContent = 'Submitting…';
+
+  let screenshotUrl = '';
+  if (_bugReportScreenshotBlob) {
+    const path = `${currentUser.id}/bugreport-${Date.now()}.png`;
+    const { error: upErr } = await sb.storage.from('documents').upload(path, _bugReportScreenshotBlob, { contentType: 'image/png', upsert: false });
+    if (upErr) {
+      statusEl.textContent = 'Screenshot upload failed — submitting without it.';
+    } else {
+      screenshotUrl = sb.storage.from('documents').getPublicUrl(path).data.publicUrl;
+    }
+  }
+
+  const reporterName = currentUser.user_metadata?.display_name || currentUser.email || 'Unknown';
+  const bodyLines = [
+    `**Reported by:** ${reporterName}`,
+    `**App version:** ${VERSION}`,
+    '',
+    description || '(no description provided)',
+  ];
+  if (screenshotUrl) bodyLines.push('', `![screenshot](${screenshotUrl})`);
+
+  const saved = await saveDocument({
+    scope: 'campaign',
+    campaign_id: currentCampaignId,
+    title: `${type === 'feature' ? '💡 Feature' : '🐛 Bug'}: ${title}`,
+    body: bodyLines.join('\n'),
+    visible_to_players: false, // private to the GM, same as any other GM-authored note by default
+  });
+
+  if (!saved) { statusEl.textContent = 'Submit failed — try again.'; return; }
+  closeBugReportModal();
+  showToast('Thanks! Your report was submitted.');
+}
+
 // ── Markdown → HTML, with headings as nested collapsible sections ─────────
 // Deliberately not a full CommonMark implementation — just enough for what
 // the planning discussion asked for: headings (#.....######) that nest by
@@ -18828,6 +18939,7 @@ async function _deleteMapPin(pinId) {
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div style="margin-left:auto;display:flex;gap:8px;">
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
+      <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
       <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
@@ -19079,6 +19191,44 @@ async function _deleteMapPin(pinId) {
 <!-- Action Picker Modal -->
 <div id="at-action-modal" class="at-modal-overlay" style="display:none;" onclick="if(event.target===this)atCloseModal()">
   <div class="at-modal" id="at-dialog-body"><!-- built by atOpenActionDialog (panels.js) --></div>
+</div>
+
+<!-- ─── REPORT BUG / REQUEST FEATURE ────────────────────────────────────── -->
+<div id="modal-bug-report" style="display:none;position:fixed;inset:0;z-index:9600;
+  background:rgba(0,0,0,0.82);align-items:center;justify-content:center;">
+  <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
+    padding:24px 28px;width:480px;max-width:94vw;max-height:88vh;overflow-y:auto;
+    display:flex;flex-direction:column;gap:14px;font-family:Georgia,serif;">
+    <h2 style="margin:0;font-size:1.05rem;color:var(--gold2);">🐛 Report a Bug / Request a Feature</h2>
+    <p style="margin:0;color:var(--text-dim);font-size:0.78rem;">
+      Goes straight to the GM as a private campaign note — they'll see it, you won't need to remember to mention it.
+    </p>
+    <div class="field">
+      <label>Type</label>
+      <select id="bugreport-type">
+        <option value="bug">🐛 Bug</option>
+        <option value="feature">💡 Feature Request</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="bugreport-title" placeholder="Short summary">
+    </div>
+    <div class="field">
+      <label>Description</label>
+      <textarea id="bugreport-description" rows="5" style="width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;" placeholder="What happened? What did you expect instead?"></textarea>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn" id="bugreport-screenshot-btn" onclick="_bugReportCaptureScreenshot()">📸 Attach Screenshot</button>
+      <span id="bugreport-screenshot-status" style="font-size:0.75rem;color:var(--text-dim);"></span>
+    </div>
+    <img id="bugreport-screenshot-preview" style="display:none;max-width:100%;border:1px solid var(--border);border-radius:4px;">
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn" onclick="_bugReportSubmit()">Submit</button>
+      <button class="btn danger" onclick="closeBugReportModal()">Cancel</button>
+    </div>
+    <div id="bugreport-status" style="font-size:0.78rem;color:var(--gold2);text-align:center;min-height:1em;"></div>
+  </div>
 </div>
 
 <!-- ─── MOVE TO CAMPAIGN MODAL ──────────────────────────────────────────── -->
