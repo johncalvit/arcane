@@ -6354,7 +6354,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260929b';
+const VERSION = 'v0.1.20260929c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11656,7 +11656,7 @@ function atOpenAwardXpModal() {
     const ent = getEntity(c.id);
     const name = ent?.name || tok.label || c.id;
     if (_isTokenFoe(tok)) {
-      _axpFoeRows.push({ id: c.id, name, defeated: getConditions(tok.id).has('dead'), reward: _xpRewardFor(c.id) });
+      _axpFoeRows.push({ id: c.id, name, tokenId: tok.id, defeated: getConditions(tok.id).has('dead'), reward: _xpRewardFor(c.id) });
     } else if (tok.entity_type === 'character') {
       _axpPartyRows.push({ id: c.id, name });
     }
@@ -11699,6 +11699,9 @@ function atOpenAwardXpModal() {
       <div>Total party XP: <span id="axp-total" style="color:var(--gold2);font-weight:bold;">0</span></div>
       <div>Per player: <span id="axp-share" style="color:var(--gold2);font-weight:bold;">0</span></div>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.8rem;color:var(--text-dim);cursor:pointer;">
+      <input type="checkbox" id="axp-remove-tokens" checked> Remove defeated foes from the map
+    </label>
     <div style="display:flex;gap:10px;justify-content:center;">
       <button class="btn" onclick="_axpConfirmAward()">Award XP</button>
       <button class="btn danger" onclick="document.getElementById('award-xp-modal').remove()">Cancel</button>
@@ -11731,15 +11734,28 @@ function _axpRecalc() {
 
 async function _axpConfirmAward() {
   const { total, includedIdxs, share } = _axpTotals();
-  if (!includedIdxs.length || share <= 0) { document.getElementById('award-xp-modal')?.remove(); return; }
 
-  for (const i of includedIdxs) {
-    const charId = _axpPartyRows[i].id.split('::')[1];
-    await _awardXpToCharacter(charId, share);
+  if (includedIdxs.length && share > 0) {
+    for (const i of includedIdxs) {
+      const charId = _axpPartyRows[i].id.split('::')[1];
+      await _awardXpToCharacter(charId, share);
+    }
+    logCombat(`Combat finished — ${total} XP awarded (${share} each to ${includedIdxs.length} ${includedIdxs.length === 1 ? 'character' : 'characters'}).`, 'good');
+    showToast(`Awarded ${share} XP to ${includedIdxs.length} character(s).`, 'good');
   }
-  logCombat(`Combat finished — ${total} XP awarded (${share} each to ${includedIdxs.length} ${includedIdxs.length === 1 ? 'character' : 'characters'}).`, 'good');
+
+  // Independent of XP actually being awarded above — a GM might clear 0-XP
+  // trash off the map, or have no party selected to award to at all, and
+  // still want the defeated foes gone. Reuses the same checkboxes that
+  // decide XP credit, since those already represent "this one was actually
+  // defeated" per the row-defaulting comment above.
+  if (document.getElementById('axp-remove-tokens')?.checked) {
+    const defeated = _axpFoeRows.filter((r, i) => document.getElementById(`axp-foe-${i}`)?.checked);
+    for (const r of defeated) await removeToken(r.tokenId);
+    if (defeated.length) logCombat(`Removed ${defeated.length} defeated ${defeated.length === 1 ? 'foe' : 'foes'} from the map.`, 'good');
+  }
+
   document.getElementById('award-xp-modal')?.remove();
-  showToast(`Awarded ${share} XP to ${includedIdxs.length} character(s).`, 'good');
 }
 
 // Piggybacks on the same stats JSONB blob as Level (see saveCharacter/
