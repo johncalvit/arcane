@@ -6354,7 +6354,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260929c';
+const VERSION = 'v0.1.20260929d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14889,6 +14889,10 @@ function drawSentinelRanges() {
     const isTarget   = conds.has('target');
     const isVigilant = conds.has('vigilant');
     if (!isSentinel && !isTarget && !isVigilant) continue;
+    // A watcher's own range shape/label shouldn't be visible to a player who
+    // can't currently see the watcher itself — same fog rule its token
+    // already follows (see _fogEntityVisible's comment).
+    if (!_fogEntityVisible(t)) continue;
 
     const vpX = (t.x_pct / 100) * mapImgW * mapScale + mapOffsetX;
     const vpY = (t.y_pct / 100) * mapImgH * mapScale + mapOffsetY;
@@ -17025,6 +17029,20 @@ let _fogLastPoly = [];
 // — everything but the viewer's own token, which always shows. A no-op for
 // the GM (sees everyone, always) or once fog is otherwise disabled (empty
 // _fogLastPoly), so nothing stays incorrectly hidden.
+// Same visibility test _fogApplyTokenVisibility applies to a token's own
+// DOM element, pulled out so anything else drawn FOR a token (a Sentinel/
+// Target/Vigilant range shape+label, so far) can respect fog too — reported
+// live as a watcher's range circle and name showing through solid fog for a
+// player who couldn't otherwise see or know about it at all. The GM always
+// sees everything, same as the token itself.
+function _fogEntityVisible(t) {
+  if (isGM()) return true;
+  const viewer = _fogViewerToken();
+  if (!viewer) return false;
+  return t.id === viewer.id || !_fogLastPoly.length
+    || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
+}
+
 function _fogApplyTokenVisibility(tokenId) {
   if (isGM()) return;
   const t = mapTokens[tokenId];
@@ -17036,8 +17054,7 @@ function _fogApplyTokenVisibility(tokenId) {
   // a player added mid-session could see every monster's position before
   // the GM had even placed their own token.
   if (!viewer) { el.style.display = 'none'; return; }
-  const visible = t.id === viewer.id || !_fogLastPoly.length
-    || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
+  const visible = _fogEntityVisible(t);
   el.style.display = visible ? '' : 'none';
 }
 function _fogApplyAllTokenVisibility() {
@@ -17178,6 +17195,7 @@ function drawFog() {
       canvas.style.display = 'none';
     }
     _fogHideAllTokens();
+    if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
     return;
   }
 
@@ -17250,6 +17268,11 @@ function drawFog() {
   canvas.style.display = 'block';
 
   _fogApplyAllTokenVisibility();
+  // Keep Sentinel/Target/Vigilant range shapes in step with fog too (see
+  // _fogEntityVisible) — otherwise a watcher revealed or hidden by the
+  // viewer's own movement wouldn't update its range circle until something
+  // else happened to redraw it.
+  if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
 }
 
 function drawWalls(mouseX, mouseY) {
