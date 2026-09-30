@@ -6381,7 +6381,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260930b';
+const VERSION = 'v0.1.20260930c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -18125,11 +18125,28 @@ function shareImageToJournal(imageUrl, caption) {
 // title/body are just rows in the shared 'global'-scope documents table.
 let _helpDocs = [];
 let _helpActiveId = null;
+let _helpActiveIsReport = false;
 let _helpEditing = false;
+// GM-only inbox of this campaign's own submitted 🐛/💡 reports (see
+// openBugReportModal) — plain 'campaign'-scope documents, same table as
+// Campaign Notes, just filtered by their title prefix and surfaced in their
+// own group here instead, since they were getting lost mixed in with
+// ordinary GM-authored notes. Never loaded for a non-GM viewer — these stay
+// exactly as private as they already were in Campaign Notes.
+let _helpReportDocs = [];
 
 async function openHelpPanel() {
   _helpDocs = await loadDocuments({ scope: 'global' });
-  _helpActiveId = _helpDocs[0]?.id || null;
+  _helpReportDocs = (isGM() && currentCampaignId)
+    ? (await loadDocuments({ scope: 'campaign', campaign_id: currentCampaignId }))
+        .filter(d => /^(🐛 Bug|💡 Feature):/.test(d.title))
+    : [];
+  // Prefer a real global doc as the initial selection; only fall back to the
+  // first report if there are no Help docs at all yet (still lets a GM with
+  // zero Help docs but a waiting report land somewhere real instead of a
+  // blank pane).
+  _helpActiveId = _helpDocs[0]?.id ?? _helpReportDocs[0]?.id ?? null;
+  _helpActiveIsReport = !_helpDocs.length && !!_helpReportDocs.length;
   _helpEditing = false;
   _renderHelpPanel();
 }
@@ -18167,6 +18184,17 @@ async function _helpDeleteDoc(id) {
   _helpDocs = _helpDocs.filter(d => d.id !== id);
   _helpActiveId = _helpDocs[0]?.id || null;
   _helpEditing = false;
+  _renderHelpPanel();
+}
+
+// A report is read-only here (see _renderHelpPanel) — delete is the only
+// action, for once the GM's actually triaged it.
+async function _helpDeleteReport(id) {
+  const doc = _helpReportDocs.find(d => d.id === id);
+  if (!doc || !confirm(`Delete "${doc.title}"? This can't be undone.`)) return;
+  if (!(await deleteDocument(id))) return;
+  _helpReportDocs = _helpReportDocs.filter(d => d.id !== id);
+  if (_helpActiveId === id) { _helpActiveId = _helpDocs[0]?.id || null; _helpActiveIsReport = false; }
   _renderHelpPanel();
 }
 
@@ -18213,8 +18241,10 @@ function _renderHelpPanel() {
   body.style.cssText = 'display:flex;flex:1;min-height:0;';
   card.appendChild(body);
 
-  // No docs at all yet — a first-run empty state (GM: offer to seed; player: nothing to see).
-  if (!_helpDocs.length) {
+  // No docs at all yet — a first-run empty state (GM: offer to seed; player:
+  // nothing to see). Skipped for a GM who has reports waiting even with zero
+  // Help docs, so those don't get hidden behind this empty state.
+  if (!_helpDocs.length && !(canEdit && _helpReportDocs.length)) {
     const empty = document.createElement('div');
     empty.style.cssText = 'padding:30px;text-align:center;color:var(--text-dim);flex:1;';
     empty.innerHTML = canEdit
@@ -18236,11 +18266,11 @@ function _renderHelpPanel() {
   list.style.cssText = 'width:180px;flex-shrink:0;border-right:1px solid var(--border);overflow-y:auto;padding:8px;';
   _helpDocs.forEach(d => {
     const item = document.createElement('div');
-    const active = d.id === _helpActiveId;
+    const active = d.id === _helpActiveId && !_helpActiveIsReport;
     item.textContent = d.title;
     item.style.cssText = `padding:7px 9px;border-radius:5px;cursor:pointer;font-size:0.82rem;margin-bottom:2px;
       color:${active ? 'var(--gold2)' : 'var(--text)'};background:${active ? 'rgba(201,168,76,0.15)' : 'transparent'};`;
-    item.onclick = () => { _helpActiveId = d.id; _helpEditing = false; _renderHelpPanel(); };
+    item.onclick = () => { _helpActiveId = d.id; _helpActiveIsReport = false; _helpEditing = false; _renderHelpPanel(); };
     list.appendChild(item);
   });
   if (canEdit) {
@@ -18250,14 +18280,41 @@ function _renderHelpPanel() {
     newBtn.onclick = _helpNewDoc;
     list.appendChild(newBtn);
   }
+  // Bug/Feature reports (see openBugReportModal) — GM-only, in their own
+  // labeled group below the regular Help docs so they're easy to find
+  // instead of getting lost mixed into Campaign Notes.
+  if (canEdit) {
+    const reportsHeader = document.createElement('div');
+    reportsHeader.textContent = `🐛 Reports${_helpReportDocs.length ? ' (' + _helpReportDocs.length + ')' : ''}`;
+    reportsHeader.style.cssText = 'margin:14px 0 4px;padding:0 2px;font-size:0.66rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);border-top:1px solid var(--border);padding-top:10px;';
+    list.appendChild(reportsHeader);
+    if (!_helpReportDocs.length) {
+      const empty = document.createElement('div');
+      empty.textContent = 'No reports yet.';
+      empty.style.cssText = 'padding:6px 9px;font-size:0.76rem;font-style:italic;color:var(--text-dim);';
+      list.appendChild(empty);
+    }
+    _helpReportDocs.forEach(d => {
+      const item = document.createElement('div');
+      const active = d.id === _helpActiveId && _helpActiveIsReport;
+      item.textContent = d.title;
+      item.style.cssText = `padding:7px 9px;border-radius:5px;cursor:pointer;font-size:0.82rem;margin-bottom:2px;
+        color:${active ? 'var(--gold2)' : 'var(--text)'};background:${active ? 'rgba(201,168,76,0.15)' : 'transparent'};`;
+      item.onclick = () => { _helpActiveId = d.id; _helpActiveIsReport = true; _helpEditing = false; _renderHelpPanel(); };
+      list.appendChild(item);
+    });
+  }
   body.appendChild(list);
 
   // Content (right)
   const content = document.createElement('div');
   content.style.cssText = 'flex:1;overflow-y:auto;padding:16px 20px;min-width:0;';
-  const doc = _helpDocs.find(d => d.id === _helpActiveId) || _helpDocs[0];
+  const doc = _helpActiveIsReport
+    ? (_helpReportDocs.find(d => d.id === _helpActiveId) || _helpReportDocs[0])
+    : (_helpDocs.find(d => d.id === _helpActiveId) || _helpDocs[0]);
+  if (!doc) { body.appendChild(content); overlay.appendChild(card); document.body.appendChild(overlay); return; }
 
-  if (_helpEditing) {
+  if (_helpEditing && !_helpActiveIsReport) {
     content.innerHTML = `
       <input id="help-edit-title" type="text" value="${_paEsc(doc.title)}"
         style="width:100%;font-size:0.95rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
@@ -18279,7 +18336,15 @@ function _renderHelpPanel() {
     const titleRow = document.createElement('div');
     titleRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-bottom:10px;';
     titleRow.innerHTML = `<div style="font-size:0.95rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(doc.title)}</div>`;
-    if (canEdit) {
+    if (canEdit && _helpActiveIsReport) {
+      // Read-only — a report isn't something the GM authors, so there's
+      // nothing to edit, just triage: read it, then clear it once handled.
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑 Delete';
+      deleteBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:#e05555;border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;';
+      deleteBtn.onclick = () => _helpDeleteReport(doc.id);
+      titleRow.appendChild(deleteBtn);
+    } else if (canEdit) {
       const editBtn = document.createElement('button');
       editBtn.textContent = '✎ Edit';
       editBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;';
