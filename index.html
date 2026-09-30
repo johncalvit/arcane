@@ -1082,6 +1082,7 @@
         <div class="summary-card"><div class="label">Weight</div><div class="value" id="disp-weight">—</div></div>
         <div class="summary-card"><div class="label">Speed</div><div class="value" id="disp-speed">—</div></div>
         <div class="summary-card"><div class="label">Target Size</div><div class="value" id="disp-target">—</div></div>
+        <div class="summary-card"><div class="label">Blood</div><div class="value" id="disp-blood">—</div></div>
       </div>
       </div>
 
@@ -1903,6 +1904,7 @@
           <div class="ps-row"><span class="ps-label">Weight (with Equipment)</span><span class="ps-val" id="ps-weight-total">—</span></div>
           <div class="ps-row"><span class="ps-label">Maximum Speed</span><span class="ps-val" id="ps-maxspeed">—</span></div>
           <div class="ps-row"><span class="ps-label">Target Size</span><span class="ps-val" id="ps-target">—</span></div>
+          <div class="ps-row"><span class="ps-label">Blood</span><span class="ps-val" id="ps-blood">—</span></div>
           <div class="ps-row"><span class="ps-label">Purse</span><span class="ps-val" id="ps-purse">—</span></div>
         </div>
       </div><!-- end ps-header -->
@@ -2299,6 +2301,7 @@ function recalc() {
   document.getElementById('disp-weight').textContent = Math.round(attrs._weight) + ' lbs';
   document.getElementById('disp-speed').textContent  = Math.round(attrs.Speed) + ' ft/s';
   document.getElementById('disp-target').textContent = attrs._targetAdj;
+  document.getElementById('disp-blood').textContent = _bloodMax(Math.round(attrs.Toughness), attrs._bloodMult);
 
   // Attribute cards
   for (const group of ['physical','movement','cognitive','senses']) {
@@ -2406,6 +2409,7 @@ function updatePlaysheet(attrs) {
   const maxSpeed = calcMaxSpeed(attrs, carriedTotal);
   document.getElementById('ps-maxspeed').textContent = maxSpeed === null ? '—' : Math.round(maxSpeed)+' ft/s';
   document.getElementById('ps-target').textContent = attrs._targetAdj;
+  document.getElementById('ps-blood').textContent = _bloodMax(Math.round(attrs.Toughness), attrs._bloodMult);
 
   const psStats = document.getElementById('ps-stats');
   psStats.innerHTML = '';
@@ -6377,7 +6381,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260930a';
+const VERSION = 'v0.1.20260930b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -19368,6 +19372,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260930a"></script>
+<script src="panels.js?v=20260930b"></script>
 </body>
 </html>

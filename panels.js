@@ -372,6 +372,11 @@ function renderEntityPanel(ref, opts = {}) {
   const _proneNow = _spdTok ? getConditions(_spdTok.id).has('prone') : false;
   const speedStr = speed != null ? Math.round(speed) + ' ft/s' + (_proneNow ? ' (crawl)' : '') : '—';
   const sizeStr = attrs._targetAdj != null ? attrs._targetAdj : '—';
+  // Max Blood pool — normally equal to Toughness, but a construct/undead
+  // species can scale it down via its own Blood modifier (see the Species
+  // Manager); shown here as a computed reference stat, same category as
+  // Size, alongside the current/max reading already in the Health section.
+  const bloodStr = attrs.Toughness != null ? _bloodMax(Math.round(attrs.Toughness), attrs._bloodMult) : '—';
   const sub = [ent.species, ent.bodyType].filter(Boolean).join(' · ');
   // Level/XP only for characters — creatures don't track either (see
   // _xpRewardFor/atOpenAwardXpModal, XP is a party-of-PCs concept here).
@@ -402,6 +407,7 @@ function renderEntityPanel(ref, opts = {}) {
           <div style="display:flex;gap:12px;margin-top:5px;">
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${speedStr}</div></div>
             <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">${sizeStr}</div></div>
+            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Blood</div><div style="font-size:0.82rem;color:var(--text);">${bloodStr}</div></div>
             ${levelXpHtml}
           </div>
         </div>
@@ -412,6 +418,7 @@ function renderEntityPanel(ref, opts = {}) {
       <div style="display:flex;gap:12px;margin-bottom:10px;">
         <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${speedStr}</div></div>
         <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${sizeStr}</div></div>
+        <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Blood</div><div style="font-size:0.82rem;">${bloodStr}</div></div>
         ${levelXpHtml}
       </div>`;
   }
