@@ -1175,6 +1175,11 @@
             <input type="number" id="smgr-weight" min="0.1" max="5" step="0.05" value="1">
           </div>
           <div class="field">
+            <label>Blood Multiplier</label>
+            <input type="number" id="smgr-blood" min="0" max="5" step="0.05" value="1"
+              title="Scales the Blood pool (normally = max Toughness) independently of it. 0 is fine for a construct/undead that doesn't really bleed — floored at 1 point either way, so it's never an instant, unconditional kill.">
+          </div>
+          <div class="field">
             <label>Body Type</label>
             <select id="smgr-body-type">
               <option>Humanoid</option>
@@ -2246,6 +2251,17 @@ function calcAttributes() {
   // Target size
   const buildTA = (BUILD_DATA[build] || {}).TargetAdj || 1;
   results._targetAdj = Math.round(results._heightInches / 12 * buildTA);
+
+  // Blood — species-only multiplier (not gender/age/height/build — a trait
+  // of the species, not the individual) on top of the Toughness-derived
+  // pool size (see _bloodMax). Lets a construct/undead species (golem,
+  // animated skeleton) that doesn't meaningfully bleed have a near-zero
+  // Blood buffer instead of one scaled to their full Toughness. `?? 1` not
+  // `|| 1` so an explicit 0 (no blood at all) computes to 0, not silently
+  // back to a 1× "bleeds like anyone else" default — _bloodMax's own floor
+  // (never below 1) is what keeps that from meaning instant, unconditional
+  // death the moment Toughness bottoms out.
+  results._bloodMult = (RACE_DATA[race] || {}).Blood ?? 1;
 
   return results;
 }
@@ -5795,6 +5811,7 @@ function openSpeciesForm(name) {
   document.getElementById('smgr-name').value        = name || '';
   document.getElementById('smgr-height').value       = d.Height ?? 66;
   document.getElementById('smgr-weight').value       = d.Weight ?? 1;
+  document.getElementById('smgr-blood').value        = d.Blood ?? 1;
   document.getElementById('smgr-body-type').value    = d.BodyType ?? 'Humanoid';
   document.getElementById('smgr-monster-only').checked = !!d.monsterOnly;
   _setSpeciesAvatarPreview(d.avatarUrl || '');
@@ -5858,9 +5875,14 @@ function saveSpecies() {
     return;
   }
 
+  // Not `|| 1` — an explicit 0 (a construct/undead with no real blood) is
+  // falsy and would silently save as the 1× default instead, same reasoning
+  // as the raceDefault handling below for Fly/Swim's own explicit-0 case.
+  const bloodVal = parseFloat(document.getElementById('smgr-blood').value);
   const entry = {
     Height: parseFloat(document.getElementById('smgr-height').value) || 66,
     Weight: parseFloat(document.getElementById('smgr-weight').value) || 1,
+    Blood: isNaN(bloodVal) ? 1 : bloodVal,
     BodyType: document.getElementById('smgr-body-type').value || 'Humanoid',
     monsterOnly: document.getElementById('smgr-monster-only').checked || false,
     avatarUrl: document.getElementById('smgr-avatar-img').src && document.getElementById('smgr-avatar-img').style.display !== 'none'
@@ -6355,7 +6377,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260929e';
+const VERSION = 'v0.1.20260930a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7844,7 +7866,7 @@ function getEntity(ref) {
   // blood loss, double-penalizing the same wound and making Toughness-based
   // math drift out of sync with what the sheet actually shows. Every other
   // physical/movement stat (Power, Speed, Stamina, ...) still weakens.
-  const baseBloodMax = _bloodMax(Math.round(row._attrs.Toughness ?? 10));
+  const baseBloodMax = _bloodMax(Math.round(row._attrs.Toughness ?? 10), row._attrs._bloodMult);
   const bloodLossPct = baseBloodMax > 0 ? Math.min(1, Math.max(0, (row.damage?.blood || 0) / baseBloodMax)) : 0;
   if (bloodLossPct > 0) {
     if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
@@ -8089,10 +8111,17 @@ function _entityRef(entityType, entityId) {
 
 
 // Write damage to cache + DB, refresh UI
-// Blood pool: equals max Toughness. Damage past a depleted Toughness spills
+// Blood pool: equals max Toughness, scaled by the species' own Blood
+// modifier (see calcAttributes — a construct/undead species with little or
+// no blood can set this near 0). Damage past a depleted Toughness spills
 // into Blood; death is Blood <= 0 (Toughness 0 is only unconsciousness).
-function _bloodMax(toughnessMax) {
-  return Math.max(1, Math.round(toughnessMax || 10));
+// Floored at 1 regardless of how low the modifier goes — a species with
+// literally 0 blood still has this one point of structural give before
+// going down, rather than an instant, unconditional kill the moment
+// Toughness bottoms out (and a genuine divide-by-zero elsewhere is avoided
+// for free, since nothing here would otherwise stop bloodMult from being 0).
+function _bloodMax(toughnessMax, bloodMult) {
+  return Math.max(1, Math.round((toughnessMax || 10) * (bloodMult ?? 1)));
 }
 // Quintessence pool: equals the Quintessence attribute (can legitimately be 0
 // for a non-magical character — no forced minimum, unlike Blood/Stamina which
@@ -8194,7 +8223,7 @@ async function _payQuintessence(ent, cost) {
     remaining -= paid.toughness;
   }
   if (remaining > 0) {
-    const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
+    const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10), ent.baseAttrs._bloodMult);
     const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
     paid.blood = Math.min(remaining, bCur);
     remaining -= paid.blood;
@@ -8226,7 +8255,7 @@ function _totalCastableResource(ent) {
   const sCur = Math.max(0, sMax - (ent.damage.stamina || 0));
   const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const tCur = Math.max(0, tMax - (ent.damage.toughness || 0));
-  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
+  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10), ent.baseAttrs._bloodMult);
   const bCur = Math.max(0, bMax - (ent.damage.blood || 0));
   return qCur + sCur + tCur + bCur;
 }
@@ -8287,11 +8316,11 @@ function _hpEditClick(el, entityType, entityId, stat, curVal, statMax) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { refreshUI(); } });
 }
 
-function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, quintMax) {
+function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, quintMax, bloodMult) {
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
   const sMax = Math.max(1, Math.round(staminaMax   || 10));
-  const bMax = _bloodMax(tMax);
+  const bMax = _bloodMax(tMax, bloodMult);
   const qMax = _quintMax(quintMax);
   const tCur = Math.max(0, tMax - (damage.toughness || 0));
   const sCur = Math.max(0, sMax - (damage.stamina   || 0));
@@ -8563,7 +8592,7 @@ async function applyConsumable(consumable, targetToken, itemName, holderRef) {
   // real Toughness/Stamina/Blood capacity.
   const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
-  const bMax = _bloodMax(tMax);
+  const bMax = _bloodMax(tMax, ent.baseAttrs._bloodMult);
   const wasUnconscious = ent.conditions.has('unconscious');
   const wasDead = ent.conditions.has('dead');
   const newDamage = {
@@ -10172,7 +10201,7 @@ async function _applySpellEffectToTarget(spell, targetRef, opts = {}) {
   // real Toughness/Stamina/Blood capacity.
   const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
   const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
-  const bMax = _bloodMax(tMax);
+  const bMax = _bloodMax(tMax, ent.baseAttrs._bloodMult);
   const wasUnconscious = ent.conditions.has('unconscious');
   const wasDead = ent.conditions.has('dead');
   const newDamage = {
@@ -10942,7 +10971,7 @@ async function applyBloodLoss(ent, amount) {
   // shrinks THIS bMax for the very next tick, making an already-bleeding
   // target die faster and faster for reasons unrelated to how much blood
   // they've actually lost relative to their real capacity.
-  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10));
+  const bMax = _bloodMax(Math.round(ent.baseAttrs.Toughness ?? 10), ent.baseAttrs._bloodMult);
   const newBlood = Math.min(bMax, (ent.damage.blood || 0) + amount);
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { blood: newBlood }) });
 }
@@ -10975,7 +11004,7 @@ async function _checkDownedState(tokenId, ent) {
   // judge "did this hit kill them" against a Toughness/Stamina ceiling that's
   // already shrunk from the very blood loss the hit just caused.
   const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
-  const bMax = _bloodMax(tMax);
+  const bMax = _bloodMax(tMax, ent.baseAttrs._bloodMult);
   if ((ent.damage.blood || 0) >= bMax) {
     await setConditions(tokenId, [['unconscious', true], ['dead', true], ['prone', true]]);
     return 'dead';
@@ -15596,6 +15625,8 @@ function calcAttributesFromData(data) {
   results._weight = baseW * rW * gW * aW * bW;
   const buildTA = (BUILD_DATA[build] || {}).TargetAdj || 1;
   results._targetAdj = Math.round(results._heightInches / 12 * buildTA);
+  // Blood — see calcAttributes' own comment on the same field.
+  results._bloodMult = (RACE_DATA[race] || {}).Blood ?? 1;
   return results;
 }
 
@@ -19337,6 +19368,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260916a"></script>
+<script src="panels.js?v=20260930a"></script>
 </body>
 </html>

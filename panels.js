@@ -56,8 +56,8 @@ function _paSecHealth(ent, canEdit) {
   if (ent.type !== 'char' && !isGM()) return '';
   const entityType = ent.type === 'char' ? 'character' : 'creature';
   const html = canEdit
-    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id, ent.attrs.Quintessence)
-    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, null, null, ent.attrs.Quintessence);
+    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id, ent.attrs.Quintessence, ent.attrs._bloodMult)
+    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, null, null, ent.attrs.Quintessence, ent.attrs._bloodMult);
   return _paSection('Health', html);
 }
 
