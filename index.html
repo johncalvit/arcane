@@ -3808,9 +3808,23 @@ function _shopArmorPrice(index) {
   return Math.round(areaWeight * size * (piece.costPerMod || 0) * PENCE_PER_CROWN); // costPerMod is in Crowns — see addArmorPiece
 }
 
+// The character's own Target Size, rounded the same way buildArmorFields'
+// own fit-check (mySize) already does — shared here so the Shop's default
+// and its mismatch warning can never drift from what actually determines
+// whether a piece equips.
+function _shopCharacterSize() {
+  return Math.round(calcAttributes()._targetAdj || 0);
+}
+
 function _shopArmorPriceUpdate(index) {
   const el = document.getElementById('shop-armor-price-' + index);
   if (el) el.textContent = formatMoney(_shopArmorPrice(index));
+  const warnEl = document.getElementById('shop-armor-warn-' + index);
+  if (warnEl) {
+    const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
+    const mySize = _shopCharacterSize();
+    warnEl.style.display = (size !== mySize) ? '' : 'none';
+  }
 }
 
 function _buyArmorPiece(index) {
@@ -3818,6 +3832,14 @@ function _buyArmorPiece(index) {
   if (!piece) return;
   const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
   if (size <= 0) { alert('Enter a valid size.'); return; }
+  // Buying at any size other than your own Target Size is still allowed
+  // (scavenging/gifting someone else's armor is a real thing — see
+  // addArmorPiece), just confirmed first, since it silently wouldn't equip
+  // otherwise — reported live as the Shop selling armor that doesn't fit.
+  const mySize = _shopCharacterSize();
+  if (size !== mySize && !confirm(
+    `This is sized for Target Size ${size}, but your character is size ${mySize} — it won't fit in the Armor tab until it matches. Buy it anyway?`
+  )) return;
   const price = _shopArmorPrice(index);
   if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
   document.getElementById('armorpiece-select').value = index;
@@ -3860,14 +3882,17 @@ function buildShopPanel() {
   const aTbody = document.getElementById('shop-armor-list');
   if (aTbody) {
     aTbody.innerHTML = '';
-    const defaultSize = calcAttributes()._targetAdj || 4;
+    // Defaults to the character's own Target Size — see _shopCharacterSize
+    // — so a piece bought without touching this field always fits; the
+    // warning below only ever shows once someone deliberately changes it.
+    const defaultSize = _shopCharacterSize() || 4;
     ARMOR_PIECES.forEach((p, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${p.name}</td><td>${p.slot || 'any'}</td><td>${p.material}</td>
         <td><input type="number" id="shop-armor-size-${i}" value="${defaultSize}" min="1" step="1"
           style="width:56px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px;border-radius:4px;text-align:center;"
           oninput="_shopArmorPriceUpdate(${i})"></td>
-        <td id="shop-armor-price-${i}">—</td>
+        <td><span id="shop-armor-price-${i}">—</span><span id="shop-armor-warn-${i}" style="display:none;color:#e05555;font-size:0.72rem;margin-left:6px;" title="Won't fit your character at this size — see the Armor tab's own size check">⚠ won't fit</span></td>
         <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button></td>`;
       aTbody.appendChild(tr);
     });
@@ -6381,7 +6406,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260930d';
+const VERSION = 'v0.1.20260930e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
