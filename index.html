@@ -6381,7 +6381,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260930c';
+const VERSION = 'v0.1.20260930d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17924,7 +17924,14 @@ async function _bugReportCaptureScreenshot() {
     const video = document.createElement('video');
     video.srcObject = stream;
     await video.play();
-    await new Promise(r => requestAnimationFrame(r)); // let one real frame land before grabbing it
+    // The browser's own "Choose what to share" picker is still visibly
+    // closing for a moment after getDisplayMedia resolves — reported live
+    // as the screenshot capturing that dialog itself instead of the page
+    // underneath. A single animation frame isn't enough; give the picker
+    // time to actually finish dismissing before grabbing anything.
+    statusEl.textContent = 'Capturing…';
+    await new Promise(r => setTimeout(r, 600));
+    await new Promise(r => requestAnimationFrame(r)); // then let one real frame land before grabbing it
     const canvas = document.createElement('canvas');
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
