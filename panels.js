@@ -1045,6 +1045,7 @@ function _dlgRender(body) {
   if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: '🩸 Stanch Bleeding' });
   if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: '🩼 Shake Off Slow' });
   if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: '🧪 Neutralize Acid' });
+  if (conds.has('burning'))     recoverable.push({ key: 'burning',     label: '🔥 Quench Flame' });
   // Resuscitate is only for a Toughness knockout — _checkDownedState (index.html)
   // sets unconscious AND dead together once Blood also maxes out (the real
   // death trigger, separate from Toughness), and this action only ever fixed

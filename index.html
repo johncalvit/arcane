@@ -6426,7 +6426,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261001a';
+const VERSION = 'v0.1.20261001b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7498,6 +7498,10 @@ const CONDITION_DEFS = [
     desc:'Reduced speed — from an injured leg (clear to heal) or a spell effect (shake off with a Power-based save, escalating each round like Stun).' },
   { key:'corroding',   label:'Corroding',   icon:'🧪', color:'#7ec850',
     desc:'Acid still eating at them — 1 Corrode damage each round. Shake off with a Toughness-based save, escalating each round like Stun.' },
+  { key:'burning',     label:'Burning',     icon:'🔥', color:'#ff6a3d',
+    desc:'On fire — 1 damage each round. Shake off with a Toughness-based save, escalating each round like Stun (Quench Flame), or clear the condition directly if doused/smothered.' },
+  { key:'regenerating',label:'Regenerating',icon:'💚', color:'#4fd67a',
+    desc:'Restores 1 Toughness and 1 Blood each round. Clear when the GM judges the effect has run its course.' },
   { key:'buffed',      label:'Buffed',      icon:'✨', color:'#c77dff',
     desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
   { key:'obscured',    label:'Obscured',    icon:'🌫', color:'#8899aa',
@@ -7556,7 +7560,7 @@ async function setCondition(tokenId, condition, active, opts) {
   // Clearing a visible condition also sweeps its hidden sub-markers, so e.g.
   // clearing Slow restores full speed and clearing Stun resets its save counter.
   if (!active) {
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', corroding: 'corrodesince:', burning: 'burnsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -7595,7 +7599,7 @@ async function setConditions(tokenId, changes) {
   for (const [condition, active] of changes) {
     if (active) { current.add(condition); continue; }
     current.delete(condition);
-    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
+    const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', corroding: 'corrodesince:', burning: 'burnsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
   const newConds = [...current];
@@ -8791,6 +8795,26 @@ const HIT_EFFECTS = [
     deathMsg: 'corroded away',
   },
   {
+    // On fire — same deal as Corroding (plain damage-over-time, only ever
+    // set directly, never rolled off a hit for now, so gate stays false to
+    // keep it out of _runHitEffects entirely). Shaken off the same
+    // escalating-% way as Stun (Quench Flame in the action dialog →
+    // atResolveRecovery), or doused by clearing the condition directly.
+    key: 'burning', label: 'Burning', icon: '🔥',
+    gate: () => false,
+    onTick: async ent => { await applyToughnessDamage(ent, 1); },
+    deathMsg: 'burned to death',
+  },
+  {
+    // Pure heal-over-time — the inverse of Corroding/Burning. Never kills
+    // (no deathMsg needed, _checkDownedState after a heal is just a no-op),
+    // and nothing clears it automatically; same manual-clear-when-the-GM-
+    // judges-it's-done convention as Buffed.
+    key: 'regenerating', label: 'Regenerating', icon: '💚',
+    gate: () => false,
+    onTick: async ent => { await applyRegenTick(ent, 1, 1); },
+  },
+  {
     key: 'held', label: 'Grabbed',
     // A landed Grab holds deterministically — no chance/save. The target can
     // spend an action to break free via an opposed Power + Coordination roll
@@ -9034,6 +9058,7 @@ function _recoverTarget(ent, tokenId, effectKey) {
     bleeding:  { since: 'bleedsince:',   stat: 'Toughness' },
     slowed:    { since: 'slowsince:',    stat: 'Power' },
     corroding: { since: 'corrodesince:', stat: 'Toughness' },
+    burning:   { since: 'burnsince:',    stat: 'Toughness' },
   }[effectKey];
   if (!cfg) return { pct: 0, rounds: 1 };
   const statVal = Math.max(1, Math.round(ent?.baseAttrs?.[cfg.stat] ?? ent?.attrs?.[cfg.stat] ?? 10));
@@ -9087,6 +9112,7 @@ async function atResolveRecovery(combatantId, effectKey) {
     bleeding:  { label: 'Stanch Bleeding' },
     slowed:    { label: 'Shake Off Slow' },
     corroding: { label: 'Neutralize Acid' },
+    burning:   { label: 'Quench Flame' },
   }[effectKey];
   if (!cfg) return;
   openRoller({
@@ -10223,6 +10249,7 @@ async function _applySpellCondition(tokenId, conditionKey) {
   if (condDef.key === 'bleeding')  changes.push(['bleedsince:' + _atSharedRound(), true]);
   if (condDef.key === 'stunned')   changes.push(['stunsince:' + _atSharedRound(), true]);
   if (condDef.key === 'corroding') changes.push(['corrodesince:' + _atSharedRound(), true]);
+  if (condDef.key === 'burning')   changes.push(['burnsince:' + _atSharedRound(), true]);
   if (condDef.key === 'slowed') {
     // 'slowed' only actually reduces speed via a legdmg: marker
     // (_damagedLegProportion counts these) — a spell-inflicted slow isn't
@@ -11035,6 +11062,16 @@ async function applyToughnessDamage(ent, amount) {
   let newTough = Math.max(0, (ent.damage.toughness || 0) + amount);
   let newBlood = ent.damage.blood || 0;
   if (newTough > tMax) { newBlood += newTough - tMax; newTough = tMax; }
+  await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: newTough, blood: newBlood }) });
+}
+
+// Regenerating's per-round heal — the inverse of applyToughnessDamage/
+// applyBloodLoss, but with neither of their overflow/pool-size logic: healing
+// only ever needs a floor at 0, never a ceiling check.
+async function applyRegenTick(ent, toughAmount, bloodAmount) {
+  if (!ent) return;
+  const newTough = Math.max(0, (ent.damage.toughness || 0) - toughAmount);
+  const newBlood = Math.max(0, (ent.damage.blood || 0) - bloodAmount);
   await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: newTough, blood: newBlood }) });
 }
 
@@ -19489,6 +19526,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20260930b"></script>
+<script src="panels.js?v=20261001a"></script>
 </body>
 </html>
