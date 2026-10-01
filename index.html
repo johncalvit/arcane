@@ -3617,6 +3617,11 @@ function _weaponLoadoutCatalog() {
   return out;
 }
 
+// Tracks the last value buildLoadoutSelects auto-filled into
+// #armorpiece-size, so it can tell "still whatever we defaulted it to" apart
+// from "the player typed something specific" — see that function's comment.
+let _lastArmorPieceSizeDefault = null;
+
 function buildLoadoutSelects() {
   const ws = document.getElementById('weapon-select');
   ws.innerHTML = '';
@@ -3653,7 +3658,22 @@ function buildLoadoutSelects() {
     });
   }
   const sizeInput = document.getElementById('armorpiece-size');
-  if (sizeInput && !sizeInput.value) sizeInput.value = calcAttributes()._targetAdj || 4;
+  if (sizeInput) {
+    const mySize = calcAttributes()._targetAdj || 4;
+    // Keep this in step with whichever character is actually loaded — but
+    // only auto-refresh it if it still holds whatever was last auto-filled
+    // (empty, or a previous character's own size), never overwriting a
+    // value the player deliberately typed in for a specific scavenged
+    // piece. Reported live: the old `!sizeInput.value` guard only ever set
+    // this ONCE (the first time this ran, often before any real character
+    // had loaded yet), then left it exactly that number forever afterward
+    // no matter which character got loaded later — same fix the Shop's own
+    // armor size already got (see _shopCharacterSize).
+    if (!sizeInput.value || parseFloat(sizeInput.value) === _lastArmorPieceSizeDefault) {
+      sizeInput.value = mySize;
+    }
+    _lastArmorPieceSizeDefault = mySize;
+  }
 }
 
 // Resolve an equipment/consumable line item to its record (weight etc.).
@@ -6406,7 +6426,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20260930e';
+const VERSION = 'v0.1.20261001a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
