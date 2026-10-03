@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003c';
+const VERSION = 'v0.1.20261003d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13154,6 +13154,7 @@ function subscribeMapRealtime() {
       mapIsDark = !!payload.dark;
       _updateMapLightingBtn();
       if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+      scheduleLights();
     })
     // GM-triggered (see resetFogOfWar) — wipes THIS client's own explored-
     // area memory so the next drawFog() rebuilds from scratch, unexplored
@@ -13310,6 +13311,7 @@ async function loadActiveMap(mapId) {
   mapIsDark = !!lightData?.dark;
   _updateMapLightingBtn();
   if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+  scheduleLights();
 
   placeholder.style.display = 'none';
   img.onload = () => {
@@ -13391,6 +13393,7 @@ async function toggleMapLighting() {
   mapIsDark = !mapIsDark;
   _updateMapLightingBtn();
   drawSentinelRanges();
+  scheduleLights();
   mapChannel?.send({ type: 'broadcast', event: 'map-lighting-sync', payload: { dark: mapIsDark } });
   const { error } = await sb.from('maps').update({ dark: mapIsDark }).eq('id', activeMapId);
   if (error) showToast('Lighting set locally, but not saved — ask the GM to run supabase-add-map-lighting.sql', 'error');
@@ -18808,10 +18811,11 @@ function _lightEmitters() {
 function drawLights() {
   const svg = document.getElementById('light-svg');
   if (!svg) return;
-  if (!mapScalePPF || mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; return; }
+  const dsvg = document.getElementById('dark-svg');
+  if (!mapScalePPF || mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; return; }
   svg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
   const segs = _fogOccluderSegments();
-  let defs = '', shapes = '';
+  let defs = '', shapes = '', holes = '', maskDefs = '';
   _lightEmitters().forEach((L, i) => {
     const cx = (L.x_pct / 100) * mapImgW, cy = (L.y_pct / 100) * mapImgH;
     const r = L.ft * mapScalePPF;
@@ -18822,9 +18826,25 @@ function drawLights() {
       <stop offset="0" stop-color="#ffd27a" stop-opacity="${mapIsDark ? 0.8 : 0.5}"/>
       <stop offset="0.55" stop-color="#ff9a3c" stop-opacity="${mapIsDark ? 0.4 : 0.25}"/>
       <stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>`;
-    shapes += `<polygon points="${fan.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}" fill="url(#lg${i})"/>`;
+    const pts = fan.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+    shapes += `<polygon points="${pts}" fill="url(#lg${i})"/>`;
+    // Dark-map hole: black-on-white mask, so overlapping lights add up naturally.
+    maskDefs += `<radialGradient id="dg${i}" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${r}">
+      <stop offset="0" stop-color="#000" stop-opacity="1"/>
+      <stop offset="0.6" stop-color="#000" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>`;
+    holes += `<polygon points="${pts}" fill="url(#dg${i})"/>`;
   });
   svg.innerHTML = `<defs>${defs}</defs>${shapes}`;
+  // Darkness: on a Dark map everything outside a lit circle is dim. Sits below
+  // the fog canvas and tokens' glow; GM sees through it more so they can still work.
+  if (dsvg) {
+    if (!mapIsDark) { dsvg.innerHTML = ''; return; }
+    dsvg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
+    dsvg.innerHTML = `<defs>${maskDefs}<mask id="dark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${mapImgW}" height="${mapImgH}">
+      <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/>${holes}</mask></defs>
+      <rect width="${mapImgW}" height="${mapImgH}" fill="#04040c" fill-opacity="${isGM() ? 0.68 : 0.95}" mask="url(#dark-mask)"/>`;
+  }
 }
 
 // Coalesces the many "something moved/changed" call sites into one redraw per frame.
@@ -19369,6 +19389,8 @@ async function _deleteMapPin(pinId) {
           <!-- Light sources (see drawLights) — below the fog canvas on purpose (z-index
                4 vs 5) so a player only ever sees glow in terrain they can actually see,
                never through fog; GM has no fog, so sees everything. -->
+          <svg id="dark-svg" xmlns="http://www.w3.org/2000/svg"
+               style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;"></svg>
           <svg id="light-svg" xmlns="http://www.w3.org/2000/svg"
                style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;mix-blend-mode:screen;"></svg>
           <canvas id="fog-canvas"
