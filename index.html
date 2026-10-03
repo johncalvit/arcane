@@ -7,6 +7,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.css">
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.js"></script>
+<!-- Archivo Narrow: fallback for map labels on machines without Arial Narrow -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@400;700&display=swap">
 <style>
   :root {
     --bg: #12100e;
@@ -463,17 +465,22 @@
   }
   /* Condition icons render as a leading span INSIDE .token-label (see
      _refreshTokenBadges) so they read before the name, not below it. */
+  /* Narrow face for everything drawn over the map, so more of a name fits
+     under a token (Arial Narrow where installed, else the web fallback). */
+  #map-viewport { --map-label-font: "Arial Narrow", "Archivo Narrow", "Liberation Sans Narrow", Arial, sans-serif; }
+  #map-viewport svg text { font-family: var(--map-label-font); }
   .token-label {
     position: absolute;
     top: 100%;
     left: 50%;
     transform: translateX(-50%);
     margin-top: 2px;
-    font-size: 9px;
+    font-family: var(--map-label-font, "Arial Narrow", "Archivo Narrow", Arial, sans-serif);
+    font-size: 10px;
     color: #fff;
     text-shadow: 0 0 3px #000, 0 0 6px #000;
     white-space: nowrap;
-    max-width: 72px;
+    max-width: 120px;
     text-align: center;
     line-height: 1.2;
     pointer-events: none;
@@ -499,7 +506,7 @@
   .map-token.token-shadow .token-ring .token-icon { display: none !important; }
   .map-token.token-shadow .token-ring::after { content: '?'; color: #9a9aaa; font-weight: bold; font-size: 1.1rem; }
   .map-token.token-shadow .token-label-text { font-size: 0; }
-  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 9px; font-style: italic; color: #b0b0c0; }
+  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 10px; font-style: italic; color: #b0b0c0; }
   .map-token.token-shadow .token-label-icons,
   .map-token.token-shadow .token-cond-overlay { display: none; }
 
@@ -6442,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003i';
+const VERSION = 'v0.1.20261003j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
