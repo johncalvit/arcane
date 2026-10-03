@@ -6449,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003l';
+const VERSION = 'v0.1.20261003m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -18931,11 +18931,11 @@ function _lightEmitters() {
 function drawLights() {
   const svg = document.getElementById('light-svg');
   if (!svg) return;
-  const dsvg = document.getElementById('dark-svg');
-  if (mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; _litShapes = []; _darkActive = false; return; }
+  if (mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; _litShapes = []; _darkActive = false; _paintDarkness([]); return; }
   svg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
   const segs = _fogOccluderSegments();
-  let defs = '', shapes = '', holes = '', maskDefs = '';
+  let defs = '', shapes = '';
+  const darkHoles = []; // what _paintDarkness cuts out of the dark map's darkness
   // Lit areas (rooms, outdoor patches): GM-drawn polygons, uniformly lit — no
   // radius, so they work on an uncalibrated map too.
   const areas = _litAreas();
@@ -18944,7 +18944,7 @@ function drawLights() {
     litPolys.push(w.points.map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH })));
     const pts =w.points.map(p => ((p.x_pct / 100) * mapImgW).toFixed(1) + ',' + ((p.y_pct / 100) * mapImgH).toFixed(1)).join(' ');
     shapes += `<polygon points="${pts}" fill="#ffc878" fill-opacity="${mapIsDark ? 0.16 : 0.08}"/>`;
-    holes += `<polygon points="${pts}" fill="#000"/>`;
+    darkHoles.push({ poly: litPolys[litPolys.length - 1] });
   });
   // Point lights need the map's feet-per-pixel scale for their radius.
   (mapScalePPF ? _lightEmitters() : []).forEach((L, i) => {
@@ -18960,12 +18960,7 @@ function drawLights() {
       <stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>`;
     const pts = fan.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
     shapes += `<polygon points="${pts}" fill="url(#lg${i})"/>`;
-    // Dark-map hole: black-on-white mask, so overlapping lights add up naturally.
-    maskDefs += `<radialGradient id="dg${i}" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${r}">
-      <stop offset="0" stop-color="#000" stop-opacity="1"/>
-      <stop offset="0.6" stop-color="#000" stop-opacity="0.9"/>
-      <stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>`;
-    holes += `<polygon points="${pts}" fill="url(#dg${i})"/>`;
+    darkHoles.push({ poly: fan, cx, cy, r });
   });
   // Remember what's lit so tokens standing in the dark can be hidden from players,
   // and re-run token visibility whenever that rule is (or just was) in force.
@@ -18991,15 +18986,59 @@ function drawLights() {
     clipAttr = ' clip-path="url(#vis-clip)"';
   }
   svg.innerHTML = `<defs>${defs}${clipDef}</defs><g${clipAttr}>${shapes}</g>`;
-  // Darkness: on a Dark map everything outside a lit circle is dim. Sits below
-  // the fog canvas and tokens' glow; GM sees through it more so they can still work.
-  if (dsvg) {
-    if (!mapIsDark || (!mapScalePPF && !areas.length)) { dsvg.innerHTML = ''; return; }
-    dsvg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
-    dsvg.innerHTML = `<defs>${maskDefs}<mask id="dark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${mapImgW}" height="${mapImgH}">
-      <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/><g${clipAttr}>${holes}</g></mask>${clipDef}</defs>
-      <rect width="${mapImgW}" height="${mapImgH}" fill="#04040c" fill-opacity="${isGM() ? 0.68 : 0.95}" mask="url(#dark-mask)"${clipAttr}/>`;
+  _paintDarkness(darkHoles);
+}
+
+// Darkness for a Dark map, painted on its own canvas (below the fog, above the
+// map): a near-opaque wash with every lit shape cut out of it. For players the
+// light cut-outs apply only inside their CURRENT line of sight (so lights
+// elsewhere don't leak), and ground they've already explored is only partly
+// darkened — a dim recollection instead of pitch black. The GM sees through
+// it more and has no fog/explored state.
+const DARK_WASH_RGB = '4,4,12';
+const DARK_ALPHA_PLAYER = 0.95, DARK_ALPHA_GM = 0.68;
+const DARK_ALPHA_REMEMBERED = 0.55; // explored ground, not lit right now
+function _paintDarkness(holes) {
+  const cv = document.getElementById('dark-canvas');
+  if (!cv) return;
+  const on = mapIsDark && mapImgW > 0 && mapImgH > 0 && (mapScalePPF || holes.length);
+  if (!on) { cv.style.display = 'none'; return; }
+  if (cv.width !== mapImgW || cv.height !== mapImgH) { cv.width = mapImgW; cv.height = mapImgH; }
+  cv.style.display = 'block';
+  const ctx = cv.getContext('2d');
+  const gm = isGM();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.globalAlpha = 1;
+  ctx.clearRect(0, 0, mapImgW, mapImgH);
+  ctx.fillStyle = `rgba(${DARK_WASH_RGB},${gm ? DARK_ALPHA_GM : DARK_ALPHA_PLAYER})`;
+  ctx.fillRect(0, 0, mapImgW, mapImgH);
+  ctx.globalCompositeOperation = 'destination-out';
+  // Explored ground: lift part of the darkness (alpha 0.95 -> ~0.55) wherever
+  // the player has been, whether or not it's in sight right now.
+  if (!gm && _fogExploredCanvas) {
+    ctx.globalAlpha = 1 - DARK_ALPHA_REMEMBERED / DARK_ALPHA_PLAYER;
+    ctx.drawImage(_fogExploredCanvas, 0, 0);
+    ctx.globalAlpha = 1;
   }
+  ctx.save();
+  if (!gm && _fogLastPoly.length > 2) {
+    ctx.beginPath();
+    ctx.moveTo(_fogLastPoly[0].x, _fogLastPoly[0].y);
+    for (let i = 1; i < _fogLastPoly.length; i++) ctx.lineTo(_fogLastPoly[i].x, _fogLastPoly[i].y);
+    ctx.closePath();
+    ctx.clip();
+  }
+  for (const h of holes) {
+    if (!h.poly || h.poly.length < 3) continue;
+    if (h.r) {
+      const g = ctx.createRadialGradient(h.cx, h.cy, 0, h.cx, h.cy, h.r);
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(0.6, 'rgba(0,0,0,0.9)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+    } else ctx.fillStyle = '#000'; // lit area: fully lit
+    _fogFillPolyPath(ctx, h.poly);
+  }
+  ctx.restore();
+  ctx.globalCompositeOperation = 'source-over';
 }
 
 // Coalesces the many "something moved/changed" call sites into one redraw per frame.
@@ -19614,8 +19653,8 @@ async function _deleteMapPin(pinId) {
           <!-- Light sources (see drawLights) — below the fog canvas on purpose (z-index
                4 vs 5) so a player only ever sees glow in terrain they can actually see,
                never through fog; GM has no fog, so sees everything. -->
-          <svg id="dark-svg" xmlns="http://www.w3.org/2000/svg"
-               style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:3;"></svg>
+          <canvas id="dark-canvas"
+               style="position:absolute;inset:0;pointer-events:none;display:none;z-index:3;"></canvas>
           <svg id="light-svg" xmlns="http://www.w3.org/2000/svg"
                style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;mix-blend-mode:screen;"></svg>
           <canvas id="fog-canvas"
