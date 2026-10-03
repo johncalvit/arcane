@@ -6449,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003j';
+const VERSION = 'v0.1.20261003k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17320,6 +17320,25 @@ function _fogGetSepiaPattern(ctx) {
 // together with _fogRevealedMapId, only when the map itself changes.
 let _fogExploredCanvas = null;
 let _fogScratchCanvas  = null;
+let _fogTmpCanvas      = null; // sight ∩ lit, built here then added to the explored mask
+let _fogLitCanvas      = null; // every lit shape unioned (filled one at a time, so overlaps never cancel)
+
+// Adds (current line of sight ∩ everything lit) to the explored mask.
+function _fogFillLitSight(ectx, poly) {
+  const lctx = _fogLitCanvas.getContext('2d');
+  lctx.globalCompositeOperation = 'source-over';
+  lctx.clearRect(0, 0, mapImgW, mapImgH);
+  lctx.fillStyle = '#fff';
+  for (const shape of _litShapes) if (shape.length > 2) _fogFillPolyPath(lctx, shape);
+  const tctx = _fogTmpCanvas.getContext('2d');
+  tctx.globalCompositeOperation = 'source-over';
+  tctx.clearRect(0, 0, mapImgW, mapImgH);
+  tctx.fillStyle = '#fff';
+  _fogFillPolyPath(tctx, poly);
+  tctx.globalCompositeOperation = 'destination-in';
+  tctx.drawImage(_fogLitCanvas, 0, 0);
+  ectx.drawImage(_fogTmpCanvas, 0, 0);
+}
 
 // Recomputed on: map/token/wall load, the viewer's own token moving (any
 // source — drag, Path, being carried, a GM repositioning them; see the
@@ -17345,7 +17364,7 @@ let _fogScratchCanvas  = null;
 // Tokens are the opposite of terrain: only zone 3 (current polygon) shows
 // them at all (_fogApplyAllTokenVisibility) — a monster that's moved out of
 // sight disappears, it doesn't linger as a stale memory the way terrain does.
-function drawFog() {
+function drawFog(fromLights) {
   const canvas = document.getElementById('fog-canvas');
   if (!canvas) return;
   // Only the specific "map's loaded but this player has no token on it"
@@ -17404,6 +17423,12 @@ function drawFog() {
     _fogScratchCanvas = document.createElement('canvas');
     _fogScratchCanvas.width  = mapImgW;
     _fogScratchCanvas.height = mapImgH;
+    _fogTmpCanvas = document.createElement('canvas');
+    _fogTmpCanvas.width  = mapImgW;
+    _fogTmpCanvas.height = mapImgH;
+    _fogLitCanvas = document.createElement('canvas');
+    _fogLitCanvas.width  = mapImgW;
+    _fogLitCanvas.height = mapImgH;
     _fogRevealedMapId = activeMapId;
   }
 
@@ -17411,12 +17436,16 @@ function drawFog() {
   const poly = _fogVisibilityPolygon(originX, originY);
   _fogLastPoly = poly;
 
-  // Union this frame's visible area into the persistent explored mask.
+  // Union this frame's visible area into the persistent explored mask. On a
+  // Dark map only ground that was actually LIT counts as seen — line of sight
+  // into unlit terrain shows nothing worth remembering (see _fogFillLitSight).
   if (poly.length) {
     const ectx = _fogExploredCanvas.getContext('2d');
     ectx.globalCompositeOperation = 'source-over';
     ectx.fillStyle = '#fff';
-    _fogFillPolyPath(ectx, poly);
+    const dark = mapIsDark && (mapScalePPF || _litAreas().length);
+    if (!dark) _fogFillPolyPath(ectx, poly);
+    else if (_litShapes.length) _fogFillLitSight(ectx, poly);
   }
 
   // "Stale" mask for THIS frame = explored MINUS current (a frame-by-frame
@@ -17464,7 +17493,7 @@ function drawFog() {
   canvas.style.display = 'block';
 
   _fogApplyAllTokenVisibility();
-  scheduleLights(); // walls may have changed too — lights are wall-trimmed
+  if (!fromLights) scheduleLights(); // walls may have changed too — lights are wall-trimmed
   // Keep Sentinel/Target/Vigilant range shapes in step with fog too (see
   // _fogEntityVisible) — otherwise a watcher revealed or hidden by the
   // viewer's own movement wouldn't update its range circle until something
@@ -18932,6 +18961,15 @@ function drawLights() {
   const wasDark = _darkActive;
   _darkActive = !!(mapIsDark && (mapScalePPF || areas.length));
   if (!isGM() && (_darkActive || wasDark)) _fogApplyAllTokenVisibility();
+  // What counts as "seen" feeds the explored-area memory (drawFog only banks
+  // lit ground on a Dark map), so when the lit shapes change, let the fog
+  // bank the newly lit part of the current sight. fromLights=true: no loop.
+  const litSig = litPolys.map(p => p.length + ':' + (p[0] ? Math.round(p[0].x) + ',' + Math.round(p[0].y) : '') +
+    ':' + (p[p.length >> 1] ? Math.round(p[p.length >> 1].x) + ',' + Math.round(p[p.length >> 1].y) : '')).join('|');
+  if (litSig !== _litSig) {
+    _litSig = litSig;
+    if (!isGM() && _darkActive) drawFog(true);
+  }
   // A player only sees light inside their CURRENT line of sight — lit spots in
   // explored-but-out-of-sight terrain would otherwise show through the fog's
   // sepia "remembered" layer. (GM has no fog, so _fogLastPoly is empty: no clip.)
@@ -18948,7 +18986,7 @@ function drawLights() {
     dsvg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
     dsvg.innerHTML = `<defs>${maskDefs}<mask id="dark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${mapImgW}" height="${mapImgH}">
       <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/><g${clipAttr}>${holes}</g></mask>${clipDef}</defs>
-      <rect width="${mapImgW}" height="${mapImgH}" fill="#04040c" fill-opacity="${isGM() ? 0.68 : 0.95}" mask="url(#dark-mask)"/>`;
+      <rect width="${mapImgW}" height="${mapImgH}" fill="#04040c" fill-opacity="${isGM() ? 0.68 : 0.95}" mask="url(#dark-mask)"${clipAttr}/>`;
   }
 }
 
@@ -18957,6 +18995,7 @@ function drawLights() {
 // this line has executed during boot — a let here would be a TDZ ReferenceError.
 var _lightRaf = 0;
 var _litShapes = [];     // px polygons currently lit (set by drawLights)
+var _litSig = '';        // change detector for _litShapes
 var _darkActive = false; // Dark map with something to light it by (set by drawLights)
 function scheduleLights() {
   if (_lightRaf) return;
