@@ -3513,7 +3513,7 @@ const DEFAULT_EQUIPMENT = [
   { name:"Bedroll",             wt:5,   price:300  },
   { name:"Blanket",             wt:3,   price:100  },
   { name:"Canteen (full)",      wt:2,   price:50   },
-  { name:"Candle (×10)",        wt:1,   price:20   },
+  { name:"Candle",              wt:0.1, price:2    },
   { name:"Chalk (×10)",         wt:0.5, price:10   },
   { name:"Climbing Gear",       wt:8,   price:500  },
   { name:"Crowbar",             wt:5,   price:200  },
@@ -3536,7 +3536,7 @@ const DEFAULT_EQUIPMENT = [
   { name:"Sack",                wt:0.5, price:10   },
   { name:"Shovel",              wt:8,   price:200  },
   { name:"Thieves' Tools",      wt:1,   price:500  },
-  { name:"Torch (×3)",          wt:3,   price:15   },
+  { name:"Torch",               wt:1,   price:5    },
   { name:"Waterskin",           wt:4,   price:50   },
   { name:"Writing Kit",         wt:1,   price:300  },
   { name:"Arrows (×20)",        wt:2,   price:100  },
@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003d';
+const VERSION = 'v0.1.20261003e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
