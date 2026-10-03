@@ -6449,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003k';
+const VERSION = 'v0.1.20261003l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17323,13 +17323,25 @@ let _fogScratchCanvas  = null;
 let _fogTmpCanvas      = null; // sight ∩ lit, built here then added to the explored mask
 let _fogLitCanvas      = null; // every lit shape unioned (filled one at a time, so overlaps never cancel)
 
-// Adds (current line of sight ∩ everything lit) to the explored mask.
-function _fogFillLitSight(ectx, poly) {
+// How far the viewer can make things out in the dark, in image px: their
+// Night Vision reach (same scale as _nightVisionReaches), never less than the
+// 5 ft "by touch" radius _tokenIsLit already grants.
+function _nightReachPx(viewer) {
+  if (!mapScalePPF) return 0;
+  const stat = Math.max(0, Math.min(100, getEntity(_refForToken(viewer))?.attrs?.NightVision || 0));
+  return Math.max(5, stat * VIGILANT_VISION_FT_PER_POINT) * mapScalePPF;
+}
+
+// Adds (current line of sight ∩ (everything lit ∪ the viewer's own night-vision
+// disc)) to the explored mask — ground walked through in the dark is remembered
+// too, but far-off darkness the viewer never got near is not.
+function _fogFillLitSight(ectx, poly, ox, oy, reachPx) {
   const lctx = _fogLitCanvas.getContext('2d');
   lctx.globalCompositeOperation = 'source-over';
   lctx.clearRect(0, 0, mapImgW, mapImgH);
   lctx.fillStyle = '#fff';
   for (const shape of _litShapes) if (shape.length > 2) _fogFillPolyPath(lctx, shape);
+  if (reachPx > 0) { lctx.beginPath(); lctx.arc(ox, oy, reachPx, 0, 2 * Math.PI); lctx.fill(); }
   const tctx = _fogTmpCanvas.getContext('2d');
   tctx.globalCompositeOperation = 'source-over';
   tctx.clearRect(0, 0, mapImgW, mapImgH);
@@ -17445,7 +17457,7 @@ function drawFog(fromLights) {
     ectx.fillStyle = '#fff';
     const dark = mapIsDark && (mapScalePPF || _litAreas().length);
     if (!dark) _fogFillPolyPath(ectx, poly);
-    else if (_litShapes.length) _fogFillLitSight(ectx, poly);
+    else _fogFillLitSight(ectx, poly, originX, originY, _nightReachPx(viewer));
   }
 
   // "Stale" mask for THIS frame = explored MINUS current (a frame-by-frame
