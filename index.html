@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003e';
+const VERSION = 'v0.1.20261003f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -18835,14 +18835,22 @@ function drawLights() {
       <stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>`;
     holes += `<polygon points="${pts}" fill="url(#dg${i})"/>`;
   });
-  svg.innerHTML = `<defs>${defs}</defs>${shapes}`;
+  // A player only sees light inside their CURRENT line of sight — lit spots in
+  // explored-but-out-of-sight terrain would otherwise show through the fog's
+  // sepia "remembered" layer. (GM has no fog, so _fogLastPoly is empty: no clip.)
+  let clipDef = '', clipAttr = '';
+  if (!isGM() && _fogLastPoly.length > 2) {
+    clipDef = `<clipPath id="vis-clip"><polygon points="${_fogLastPoly.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}"/></clipPath>`;
+    clipAttr = ' clip-path="url(#vis-clip)"';
+  }
+  svg.innerHTML = `<defs>${defs}${clipDef}</defs><g${clipAttr}>${shapes}</g>`;
   // Darkness: on a Dark map everything outside a lit circle is dim. Sits below
   // the fog canvas and tokens' glow; GM sees through it more so they can still work.
   if (dsvg) {
     if (!mapIsDark) { dsvg.innerHTML = ''; return; }
     dsvg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
     dsvg.innerHTML = `<defs>${maskDefs}<mask id="dark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${mapImgW}" height="${mapImgH}">
-      <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/>${holes}</mask></defs>
+      <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/><g${clipAttr}>${holes}</g></mask>${clipDef}</defs>
       <rect width="${mapImgW}" height="${mapImgH}" fill="#04040c" fill-opacity="${isGM() ? 0.68 : 0.95}" mask="url(#dark-mask)"/>`;
   }
 }
