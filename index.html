@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003f';
+const VERSION = 'v0.1.20261003g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13147,6 +13147,7 @@ function subscribeMapRealtime() {
       mapWalls = Array.isArray(payload.walls) ? payload.walls : [];
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
+      scheduleLights();
     })
     // The GM flipped the active map's Day/Dark lighting (see
     // toggleMapLighting) — every Vigilant cone depends on this, so redraw.
@@ -16079,7 +16080,11 @@ document.addEventListener('keydown', e => {
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pinMode)  { exitPinMode(); e.stopPropagation(); }
-    else if (lightMode) { exitLightMode(); e.stopPropagation(); }
+    else if (lightMode) {
+      if (_lightAreaPts.length) { _lightAreaPts = []; drawLightAreaPreview(); } // cancel the polygon in progress first
+      else exitLightMode();
+      e.stopPropagation();
+    }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
     else if (targetAimMode) { exitTargetAimMode(); e.stopPropagation(); }
   }
@@ -16935,6 +16940,7 @@ function _wallCommit(type, points) {
 
 async function saveMapWalls() {
   if (!activeMapId) return;
+  scheduleLights(); // lit areas live in this array too
   await sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId);
   // Walls had no live sync at all before fog of war needed one — other
   // clients only ever saw a change on their next loadMapWalls (a fresh map
@@ -16959,6 +16965,7 @@ async function loadMapWalls(mapId) {
     .map(w => w.blocksVision === undefined ? { ...w, blocksVision: true } : w);
   drawWalls();
   drawFog();
+  scheduleLights();
 }
 
 async function deleteWall(wallId) {
@@ -17425,6 +17432,7 @@ function drawWalls(mouseX, mouseY) {
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
+    if (w.type === 'litarea') return; // drawn by the Lights tool, not a wall
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
     // Index passed through so the GM can see, right on the map, which wall
     // is which — the Manage Walls list numbers rows the same way (#1, #2,
@@ -17540,11 +17548,14 @@ async function _openManageWallsModal() {
     const safeId = w.id.replace(/'/g, "\\'");
     const label = w.maxHp
       ? `#${i + 1} ${_paEsc(w.spellName || 'obstacle')} <span style="color:var(--text-dim);font-size:0.74rem;">❄ ${w.hp}/${w.maxHp} HP</span>`
+      : w.type === 'litarea' ? `#${i + 1} 💡 lit area`
       : `#${i + 1} ${_paEsc(w.type)}`;
     // Obstacles get a damage-entry control instead of the vision/movement
     // toggles — those are fixed (blocks both) for a spell-created barrier;
     // GM-drawn walls keep the toggles since those are the whole point there.
-    const controls = w.maxHp
+    const controls = w.type === 'litarea'
+      ? `<button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
+      : w.maxHp
       ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:Georgia,serif;font-size:0.78rem;">
          <button onclick="applyWallDamage('${safeId}', parseFloat(document.getElementById('wall-dmg-${safeId}').value) || 0)" style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;">Apply</button>
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;" title="Remove immediately">✕</button>`
@@ -17598,17 +17609,27 @@ initMapInteraction = function() {
     if (wallMode && _wallShape() === 'line') { e.preventDefault(); _wallCommitLine(); }
     // GM right-click on a placed light deletes it (lights are item tokens
     // whose name is in LIGHT_SOURCES; other tokens keep the normal menu).
-    if (isGM() && !pathMode) {
+    if (lightMode) e.preventDefault(); // right-click closes a lit-area polygon, no browser menu
+    if (isGM() && !pathMode && !lightMode && !wallMode) {
       const tokEl = e.target.closest?.('.map-token');
       const t = tokEl && mapTokens[tokEl.id.replace(/^token-/, '')];
       if (t && t.entity_type === 'item' && _lightEntryFor(t.label)) {
         e.preventDefault();
         if (confirm(`Delete this ${t.label} from the map?`)) removeToken(t.id);
+      } else if (!tokEl) {
+        // Right-click inside a lit area (and not on a token) offers to delete it.
+        const rect = vp.getBoundingClientRect();
+        const pt = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
+        const hit = _litAreas().find(w => _pointInPoly(pt.x_pct, pt.y_pct, w.points.map(p => ({ x: p.x_pct, y: p.y_pct }))));
+        if (hit) {
+          e.preventDefault();
+          if (confirm('Delete this lit area?')) { mapWalls = mapWalls.filter(w => w !== hit); saveMapWalls(); }
+        }
       }
     }
   });
 
-  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); targetAimMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
+  window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); targetAimMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); lightAreaMouseMove(e); pathMouseMove(e); });
   window.addEventListener('mouseup',   e => { calMouseUp(e);   measureMouseUp(e);   targetAimMouseUp(e); obstacleMouseUp(e); wallMouseUp(e); });
 };
 
@@ -18792,6 +18813,13 @@ function _lightFeetFor(name) { return _lightEntryFor(name)?.ft || 0; }
 // Campfires/braziers are scenery — not something a character can pick up and carry off.
 function _isFixedLight(name) { return !!_lightEntryFor(name)?.fixed; }
 
+// Lit areas live in the map's walls array (type 'litarea') so they persist and
+// live-sync with the existing walls save/broadcast — no schema change. They
+// never block vision or movement (see _litAreaCommit).
+function _litAreas() {
+  return mapWalls.filter(w => w.type === 'litarea' && (w.points || []).length >= 3);
+}
+
 function _lightEmitters() {
   const out = [];
   for (const t of Object.values(mapTokens)) {
@@ -18812,11 +18840,20 @@ function drawLights() {
   const svg = document.getElementById('light-svg');
   if (!svg) return;
   const dsvg = document.getElementById('dark-svg');
-  if (!mapScalePPF || mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; return; }
+  if (mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; return; }
   svg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
   const segs = _fogOccluderSegments();
   let defs = '', shapes = '', holes = '', maskDefs = '';
-  _lightEmitters().forEach((L, i) => {
+  // Lit areas (rooms, outdoor patches): GM-drawn polygons, uniformly lit — no
+  // radius, so they work on an uncalibrated map too.
+  const areas = _litAreas();
+  areas.forEach(w => {
+    const pts = w.points.map(p => ((p.x_pct / 100) * mapImgW).toFixed(1) + ',' + ((p.y_pct / 100) * mapImgH).toFixed(1)).join(' ');
+    shapes += `<polygon points="${pts}" fill="#ffc878" fill-opacity="${mapIsDark ? 0.16 : 0.08}"/>`;
+    holes += `<polygon points="${pts}" fill="#000"/>`;
+  });
+  // Point lights need the map's feet-per-pixel scale for their radius.
+  (mapScalePPF ? _lightEmitters() : []).forEach((L, i) => {
     const cx = (L.x_pct / 100) * mapImgW, cy = (L.y_pct / 100) * mapImgH;
     const r = L.ft * mapScalePPF;
     // Wall-trimmed like Sentinel/Vigilant shapes, so light doesn't pour through a wall.
@@ -18847,7 +18884,7 @@ function drawLights() {
   // Darkness: on a Dark map everything outside a lit circle is dim. Sits below
   // the fog canvas and tokens' glow; GM sees through it more so they can still work.
   if (dsvg) {
-    if (!mapIsDark) { dsvg.innerHTML = ''; return; }
+    if (!mapIsDark || (!mapScalePPF && !areas.length)) { dsvg.innerHTML = ''; return; }
     dsvg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
     dsvg.innerHTML = `<defs>${maskDefs}<mask id="dark-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="${mapImgW}" height="${mapImgH}">
       <rect width="${mapImgW}" height="${mapImgH}" fill="#fff"/><g${clipAttr}>${holes}</g></mask>${clipDef}</defs>
@@ -18874,8 +18911,9 @@ enterPlayMode = function() {
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="light-btn" onclick="toggleLightMode()">💡 Lights</button>
-       <select id="light-type-sel" class="btn-sm" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
+       <select id="light-type-sel" class="btn-sm" onchange="_lightAreaPts=[];drawLightAreaPreview();" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}. Lit Area: click corners, click the first corner / double-click / right-click to close." style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
          ${LIGHT_SOURCES.map(l => `<option value="${l.label}">${l.label} (${l.ft}ft)</option>`).join('')}
+         <option value="__area">▭ Lit Area (draw room/region)</option>
        </select>`);
   }
 };
@@ -18893,11 +18931,14 @@ function enterLightMode() {
   document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
   const btn = document.getElementById('light-btn');
   if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
-  showToast('Lights — click the map to place a light · Esc to stop');
+  showToast('Lights — click the map to place a light, or pick Lit Area to outline a room · Esc to stop');
+  drawLightAreaPreview();
 }
 
 function exitLightMode() {
   lightMode = false;
+  _lightAreaPts = [];
+  drawLightAreaPreview();
   document.getElementById('map-viewport')?.classList.remove('cal-mode');
   const btn = document.getElementById('light-btn');
   if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
@@ -18916,9 +18957,72 @@ function lightMouseDown(e) {
   if (!activeMapId) { showToast('Upload/select a map first.', 'error'); return true; }
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
-  const { x_pct, y_pct } = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  if (document.getElementById('light-type-sel')?.value === '__area') {
+    const first = _lightAreaPts[0];
+    if (e.button === 2 || (_lightAreaPts.length >= 3 && (e.detail === 2 || Math.hypot(x - first.x, y - first.y) < 10))) {
+      _litAreaCommit();
+    } else {
+      _lightAreaPts.push({ x, y });
+      drawLightAreaPreview(x, y);
+    }
+    return true;
+  }
+  const { x_pct, y_pct } = _wallVpToPct(x, y);
   _placeLightAt(x_pct, y_pct);
   return true;
+}
+
+// ── Lit areas: polygon drawing (viewport px while drawing, percent once saved) ──
+var _lightAreaPts = [];
+
+function _litAreaCommit() {
+  if (_lightAreaPts.length < 3) { _lightAreaPts = []; drawLightAreaPreview(); return; }
+  mapWalls.push({
+    id: 'wall-' + Date.now() + '-' + Math.round(Math.random() * 9999),
+    type: 'litarea',
+    points: _lightAreaPts.map(p => _wallVpToPct(p.x, p.y)),
+    blocksVision: false, blocksMovement: false,
+  });
+  _lightAreaPts = [];
+  saveMapWalls(); // also schedules a light redraw and broadcasts to players
+  drawLightAreaPreview();
+}
+
+function _pointInPoly(px, py, pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    if ((pts[i].y > py) !== (pts[j].y > py) &&
+        px < (pts[j].x - pts[i].x) * (py - pts[i].y) / (pts[j].y - pts[i].y) + pts[i].x) inside = !inside;
+  }
+  return inside;
+}
+
+// GM-only editing aid: outlines every lit area while the Lights tool is on,
+// plus the polygon being drawn. Lives in its own viewport-px svg (like wall-svg).
+function drawLightAreaPreview(mx, my) {
+  const svg = document.getElementById('lightarea-svg');
+  if (!svg) return;
+  svg.innerHTML = '';
+  if (!lightMode) return;
+  const ns = 'http://www.w3.org/2000/svg';
+  const add = (tag, attrs) => { const el = document.createElementNS(ns, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); svg.appendChild(el); };
+  _litAreas().forEach(w => {
+    add('polygon', { points: w.points.map(_wallPctToVp).map(p => `${p.x},${p.y}`).join(' '),
+      fill: 'rgba(255,200,120,0.12)', stroke: '#ffc878', 'stroke-width': 2 });
+  });
+  if (_lightAreaPts.length) {
+    const pts = mx != null ? [..._lightAreaPts, { x: mx, y: my }] : _lightAreaPts;
+    add('polyline', { points: pts.map(p => `${p.x},${p.y}`).join(' '), fill: 'rgba(255,200,120,0.1)',
+      stroke: '#4de0c0', 'stroke-width': 2, 'stroke-dasharray': '6,4' });
+    _lightAreaPts.forEach((p, i) => add('circle', { cx: p.x, cy: p.y, r: i === 0 ? 6 : 4, fill: '#4de0c0', stroke: '#000', 'stroke-width': 1 }));
+  }
+}
+
+function lightAreaMouseMove(e) {
+  if (!lightMode || !_lightAreaPts.length) return;
+  const rect = document.getElementById('map-viewport').getBoundingClientRect();
+  drawLightAreaPreview(e.clientX - rect.left, e.clientY - rect.top);
 }
 
 // A placed light is an ordinary ground item (same shape dropItemOnMap makes),
@@ -19464,6 +19568,9 @@ async function _deleteMapPin(pinId) {
         <!-- wall/obstacle drawing + display overlay (GM-only) -->
         <svg id="wall-svg" width="100%" height="100%"
              style="position:absolute;inset:0;pointer-events:none;display:none;z-index:23;overflow:visible;"></svg>
+        <!-- lit-area outlines + in-progress polygon (GM-only, Lights tool) -->
+        <svg id="lightarea-svg" width="100%" height="100%"
+             style="position:absolute;inset:0;pointer-events:none;z-index:23;overflow:visible;"></svg>
         <!-- map pin notes overlay (GM-only, see loadMapPins/drawPins — Phase 5).
              pointer-events:none at the container level, same as the other
              overlays — each pin's own <g> turns pointer-events back on so
