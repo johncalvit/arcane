@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003a';
+const VERSION = 'v0.1.20261003b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8153,6 +8153,7 @@ function backToMyCharacter() {
 
 // Re-render the left panel in place after any entity data change.
 function refreshUI() {
+  scheduleLights(); // a held item changing (picking up/dropping a Torch) moves a light with it
   if (_tokenInfoViewId && mapTokens[_tokenInfoViewId]) {
     showTokenInfo(_tokenInfoViewId);
   } else {
@@ -8585,6 +8586,7 @@ async function dropHeldItem(ref, side) {
 async function pickUpItem(itemTokenId, grabberRef) {
   const item = mapTokens[itemTokenId];
   if (!item || item.entity_type !== 'item') return;
+  if (_isFixedLight(item.label)) { showToast(`A ${item.label} can't be picked up.`, 'warn'); return; }
   const marker = (Array.isArray(item.conditions) ? item.conditions : []).find(c => c.startsWith('item:'));
   let payload = null; try { payload = marker ? JSON.parse(marker.slice(5)) : null; } catch (e) {}
   const name   = item.label || payload?.record?.name || 'item';
@@ -13799,6 +13801,7 @@ function renderAllTokens() {
       _refreshTokenBadges(t.id);
     }
   });
+  scheduleLights();
 }
 
 function upsertTokenElement(t) {
@@ -13825,6 +13828,7 @@ function upsertTokenElement(t) {
     canvas.insertAdjacentHTML('beforeend', tokenHtml(t));
     _refreshTokenBadges(t.id);
   }
+  scheduleLights();
 }
 
 // ── Load tokens for the active map ───────────────────────────────────────────
@@ -13970,6 +13974,7 @@ function onTokenMouseMove(e) {
     mapTokens[dragTokenId].y_pct = y_pct;
   }
   if (getConditions(dragTokenId).has('sentinel')) drawSentinelRanges();
+  scheduleLights();
 
   // broadcast to others (fast path)
   tokenChannel?.send({ type: 'broadcast', event: 'token-move',
@@ -15467,6 +15472,7 @@ async function _moveTokenTo(token, x_pct, y_pct) {
   const el = document.getElementById('token-' + token.id);
   if (el) { el.style.left = x_pct + '%'; el.style.top = y_pct + '%'; }
   token.x_pct = x_pct; token.y_pct = y_pct;
+  scheduleLights();
   tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: token.id, x_pct, y_pct } });
   await sb.from('map_tokens').update({ x_pct, y_pct }).eq('id', token.id);
   _moveGroupWith(token.id, x_pct - oldX, y_pct - oldY, true);
@@ -15766,6 +15772,7 @@ function subscribeTokenRealtime() {
       // monster being dragged across a wall's shadow should pop in/out of
       // sight as it moves, not just once the drag settles.
       if (typeof _fogApplyTokenVisibility === 'function') _fogApplyTokenVisibility(payload.id);
+      scheduleLights();
     })
     // DB changes: token added or removed
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'map_tokens',
@@ -15888,6 +15895,7 @@ function _removeTokenLocal(tokenId) {
   const idx = atCombatants.findIndex(c => c.id === combatantId);
   if (idx !== -1) { atCombatants.splice(idx, 1); renderAtList(); }
   refreshUI();
+  scheduleLights();
 }
 
 async function removeToken(tokenId) {
@@ -16068,6 +16076,7 @@ document.addEventListener('keydown', e => {
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pinMode)  { exitPinMode(); e.stopPropagation(); }
+    else if (lightMode) { exitLightMode(); e.stopPropagation(); }
     else if (pathMode) { exitPathMode(); e.stopPropagation(); }
     else if (targetAimMode) { exitTargetAimMode(); e.stopPropagation(); }
   }
@@ -16090,10 +16099,12 @@ exitPlayMode = function() {
   if (obstacleMode) exitObstacleCastMode();
   if (wallMode)     exitWallMode();
   if (pinMode)      exitPinMode();
+  if (lightMode)    exitLightMode();
   if (pathMode)     exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
   mapTokens    = {};
+  scheduleLights();
   dragTokenId  = null;
   document.querySelectorAll('.map-token').forEach(el => el.remove());
   // Deliberately NOT clearing the canvas or _fogRevealedMapId here — leaving
@@ -17392,6 +17403,7 @@ function drawFog() {
   canvas.style.display = 'block';
 
   _fogApplyAllTokenVisibility();
+  scheduleLights(); // walls may have changed too — lights are wall-trimmed
   // Keep Sentinel/Target/Vigilant range shapes in step with fog too (see
   // _fogEntityVisible) — otherwise a watcher revealed or hidden by the
   // viewer's own movement wouldn't update its range circle until something
@@ -17574,6 +17586,7 @@ initMapInteraction = function() {
     if (obstacleMouseDown(e))  { e.stopImmediatePropagation(); return; }
     if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
     if (pinMouseDown(e))       { e.stopImmediatePropagation(); return; }
+    if (lightMouseDown(e))     { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
   }, true);
 
@@ -18744,6 +18757,148 @@ function _renderCampaignNotesModal(docs, activeId) {
 let mapPins = [];
 let pinMode = false;
 
+// ═══ LIGHT SOURCES ═══════════════════════════════════════════════════════════
+// A light is just a radius around a point — no falloff modeling beyond a soft
+// glow, no darkness overlay. Two kinds, one rule: anything NAMED like a light
+// source lights a circle around itself. An item token on the ground (placed
+// by the GM's Lights tool, or dropped by a character) lights where it lies; a
+// character/creature HOLDING one in a hand lights around their own token, so
+// carrying a Torch just works through the normal loadout/hand selectors with
+// no separate "lit" state to track. First matching entry wins.
+const LIGHT_SOURCES = [
+  { re: /candle/i,            ft: 10, label: 'Candle' },
+  { re: /torch/i,             ft: 20, label: 'Torch' },
+  { re: /lantern/i,           ft: 20, label: 'Lantern' },
+  { re: /campfire|camp fire/i, ft: 30, label: 'Campfire', fixed: true },
+  { re: /brazier/i,           ft: 30, label: 'Brazier',  fixed: true },
+];
+function _lightEntryFor(name) {
+  return name ? LIGHT_SOURCES.find(l => l.re.test(name)) : null;
+}
+function _lightFeetFor(name) { return _lightEntryFor(name)?.ft || 0; }
+// Campfires/braziers are scenery — not something a character can pick up and carry off.
+function _isFixedLight(name) { return !!_lightEntryFor(name)?.fixed; }
+
+function _lightEmitters() {
+  const out = [];
+  for (const t of Object.values(mapTokens)) {
+    if (!t.visible && !isGM()) continue;
+    let ft = 0;
+    if (t.entity_type === 'item') {
+      ft = _lightFeetFor(t.label);
+    } else if (t.entity_type === 'character' || t.entity_type === 'creature') {
+      const held = getEntity(_refForToken(t))?.held || {};
+      ft = Math.max(_lightFeetFor(held.right), _lightFeetFor(held.left));
+    }
+    if (ft > 0) out.push({ x_pct: t.x_pct, y_pct: t.y_pct, ft });
+  }
+  return out;
+}
+
+function drawLights() {
+  const svg = document.getElementById('light-svg');
+  if (!svg) return;
+  if (!mapScalePPF || mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; return; }
+  svg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
+  const segs = _fogOccluderSegments();
+  let defs = '', shapes = '';
+  _lightEmitters().forEach((L, i) => {
+    const cx = (L.x_pct / 100) * mapImgW, cy = (L.y_pct / 100) * mapImgH;
+    const r = L.ft * mapScalePPF;
+    // Wall-trimmed like Sentinel/Vigilant shapes, so light doesn't pour through a wall.
+    const fan = _wallTrimmedFan(cx, cy, r, 0, 2 * Math.PI, segs);
+    if (!fan.length) return;
+    defs += `<radialGradient id="lg${i}" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${r}">
+      <stop offset="0" stop-color="#ffd27a" stop-opacity="${mapIsDark ? 0.8 : 0.5}"/>
+      <stop offset="0.55" stop-color="#ff9a3c" stop-opacity="${mapIsDark ? 0.4 : 0.25}"/>
+      <stop offset="1" stop-color="#ff7a1a" stop-opacity="0"/></radialGradient>`;
+    shapes += `<polygon points="${fan.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}" fill="url(#lg${i})"/>`;
+  });
+  svg.innerHTML = `<defs>${defs}</defs>${shapes}`;
+}
+
+// Coalesces the many "something moved/changed" call sites into one redraw per frame.
+// `var`, not `let`: refreshUI/_removeTokenLocal call this and can run before
+// this line has executed during boot — a let here would be a TDZ ReferenceError.
+var _lightRaf = 0;
+function scheduleLights() {
+  if (_lightRaf) return;
+  _lightRaf = requestAnimationFrame(() => { _lightRaf = 0; drawLights(); });
+}
+
+// ── Map Setup toolbar: Lights tool ───────────────────────────────────────────
+let lightMode = false;
+const _origEnterPlayModeLights = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModeLights();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-authoring');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" id="light-btn" onclick="toggleLightMode()">💡 Lights</button>
+       <select id="light-type-sel" class="btn-sm" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
+         ${LIGHT_SOURCES.map(l => `<option value="${l.label}">${l.label} (${l.ft}ft)</option>`).join('')}
+       </select>`);
+  }
+};
+
+function toggleLightMode() { lightMode ? exitLightMode() : enterLightMode(); }
+
+function enterLightMode() {
+  if (!isGM()) return;
+  lightMode = true;
+  if (calMode)     exitCalibrationMode();
+  if (measureMode) exitMeasureMode();
+  if (pathMode)    exitPathMode();
+  if (wallMode)    exitWallMode();
+  if (pinMode)     exitPinMode();
+  document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
+  const btn = document.getElementById('light-btn');
+  if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
+  showToast('Lights — click the map to place a light · Esc to stop');
+}
+
+function exitLightMode() {
+  lightMode = false;
+  document.getElementById('map-viewport')?.classList.remove('cal-mode');
+  const btn = document.getElementById('light-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+}
+
+// Any other map tool starting up takes over the cursor/clicks — turn this off
+// rather than leaving the button lit but inert.
+for (const fn of ['enterWallMode', 'enterPinMode', 'enterCalibrationMode', 'enterMeasureMode', 'enterPathMode']) {
+  const orig = window[fn];
+  if (typeof orig !== 'function') continue;
+  window[fn] = function() { if (lightMode) exitLightMode(); return orig.apply(this, arguments); };
+}
+
+function lightMouseDown(e) {
+  if (!lightMode) return false;
+  if (!activeMapId) { showToast('Upload/select a map first.', 'error'); return true; }
+  const vp   = document.getElementById('map-viewport');
+  const rect = vp.getBoundingClientRect();
+  const { x_pct, y_pct } = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
+  _placeLightAt(x_pct, y_pct);
+  return true;
+}
+
+// A placed light is an ordinary ground item (same shape dropItemOnMap makes),
+// so it moves/removes/lists exactly like any other item token — a Candle or
+// Torch can be picked up and carried, a Campfire/Brazier can't (see pickUpItem).
+async function _placeLightAt(x_pct, y_pct) {
+  const label = document.getElementById('light-type-sel')?.value || LIGHT_SOURCES[0].label;
+  const payload = { kind: 'equipment', record: { name: label, qty: 1, unitWt: 0 } };
+  const { data, error } = await sb.from('map_tokens').insert({
+    map_id: activeMapId, campaign_id: currentCampaignId,
+    entity_type: 'item', entity_id: (crypto.randomUUID ? crypto.randomUUID() : 'item-' + Date.now()),
+    label, x_pct, y_pct, conditions: ['item:' + JSON.stringify(payload)], visible: true,
+  }).select().single();
+  if (error) { _writeErrorToast(error, 'map_tokens (light)'); return; }
+  if (data) { mapTokens[data.id] = data; upsertTokenElement(data); if (isGM()) refreshTokenPanel(); }
+}
+// ═══ END LIGHT SOURCES ═══════════════════════════════════════════════════════
+
 // ── Map Setup toolbar: add the Pins tool ──────────────────────────────────
 const _origEnterPlayModePins = enterPlayMode;
 enterPlayMode = function() {
@@ -19201,6 +19356,11 @@ async function _deleteMapPin(pinId) {
                revealed with destination-out compositing and STAY revealed without
                redrawing from scratch every frame — an SVG would need real polygon
                union math to get the same persistent effect. -->
+          <!-- Light sources (see drawLights) — below the fog canvas on purpose (z-index
+               4 vs 5) so a player only ever sees glow in terrain they can actually see,
+               never through fog; GM has no fog, so sees everything. -->
+          <svg id="light-svg" xmlns="http://www.w3.org/2000/svg"
+               style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:4;mix-blend-mode:screen;"></svg>
           <canvas id="fog-canvas"
                style="position:absolute;inset:0;pointer-events:none;display:none;z-index:5;"></canvas>
         </div>
