@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003b';
+const VERSION = 'v0.1.20261003c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17593,6 +17593,16 @@ initMapInteraction = function() {
   vp.addEventListener('contextmenu', e => {
     if (pathMode) { e.preventDefault(); pathCommit(); }
     if (wallMode && _wallShape() === 'line') { e.preventDefault(); _wallCommitLine(); }
+    // GM right-click on a placed light deletes it (lights are item tokens
+    // whose name is in LIGHT_SOURCES; other tokens keep the normal menu).
+    if (isGM() && !pathMode) {
+      const tokEl = e.target.closest?.('.map-token');
+      const t = tokEl && mapTokens[tokEl.id.replace(/^token-/, '')];
+      if (t && t.entity_type === 'item' && _lightEntryFor(t.label)) {
+        e.preventDefault();
+        if (confirm(`Delete this ${t.label} from the map?`)) removeToken(t.id);
+      }
+    }
   });
 
   window.addEventListener('mousemove', e => { calMouseMove(e); measureMouseMove(e); aoeMouseMove(e); targetAimMouseMove(e); obstacleMouseMove(e); wallMouseMove(e); pathMouseMove(e); });
