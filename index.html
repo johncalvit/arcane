@@ -6432,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003g';
+const VERSION = 'v0.1.20261003h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17184,8 +17184,23 @@ function _fogEntityVisible(t) {
   if (isGM()) return true;
   const viewer = _fogViewerToken();
   if (!viewer) return false;
-  return t.id === viewer.id || !_fogLastPoly.length
+  if (t.id === viewer.id) return true;
+  // On a Dark map, something standing in unlit ground can't be seen even in
+  // plain line of sight (see _tokenIsLit / drawLights).
+  if (_darkActive && !_tokenIsLit(t, viewer)) return false;
+  return !_fogLastPoly.length
     || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
+}
+
+// Lit = inside a light's wall-trimmed circle or a lit area (cached by the last
+// drawLights), or close enough to the viewer to make out by touch (5 ft).
+function _tokenIsLit(t, viewer) {
+  const px = (t.x_pct / 100) * mapImgW, py = (t.y_pct / 100) * mapImgH;
+  if (mapScalePPF && viewer) {
+    const vx = (viewer.x_pct / 100) * mapImgW, vy = (viewer.y_pct / 100) * mapImgH;
+    if (Math.hypot(px - vx, py - vy) <= 5 * mapScalePPF) return true;
+  }
+  return _litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(px, py, poly));
 }
 
 function _fogApplyTokenVisibility(tokenId) {
@@ -18840,15 +18855,17 @@ function drawLights() {
   const svg = document.getElementById('light-svg');
   if (!svg) return;
   const dsvg = document.getElementById('dark-svg');
-  if (mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; return; }
+  if (mapImgW <= 0 || mapImgH <= 0) { svg.innerHTML = ''; if (dsvg) dsvg.innerHTML = ''; _litShapes = []; _darkActive = false; return; }
   svg.setAttribute('viewBox', `0 0 ${mapImgW} ${mapImgH}`);
   const segs = _fogOccluderSegments();
   let defs = '', shapes = '', holes = '', maskDefs = '';
   // Lit areas (rooms, outdoor patches): GM-drawn polygons, uniformly lit — no
   // radius, so they work on an uncalibrated map too.
   const areas = _litAreas();
+  const litPolys = []; // px polygons of everything lit, for _tokenIsLit
   areas.forEach(w => {
-    const pts = w.points.map(p => ((p.x_pct / 100) * mapImgW).toFixed(1) + ',' + ((p.y_pct / 100) * mapImgH).toFixed(1)).join(' ');
+    litPolys.push(w.points.map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH })));
+    const pts =w.points.map(p => ((p.x_pct / 100) * mapImgW).toFixed(1) + ',' + ((p.y_pct / 100) * mapImgH).toFixed(1)).join(' ');
     shapes += `<polygon points="${pts}" fill="#ffc878" fill-opacity="${mapIsDark ? 0.16 : 0.08}"/>`;
     holes += `<polygon points="${pts}" fill="#000"/>`;
   });
@@ -18859,6 +18876,7 @@ function drawLights() {
     // Wall-trimmed like Sentinel/Vigilant shapes, so light doesn't pour through a wall.
     const fan = _wallTrimmedFan(cx, cy, r, 0, 2 * Math.PI, segs);
     if (!fan.length) return;
+    litPolys.push(fan);
     defs += `<radialGradient id="lg${i}" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${r}">
       <stop offset="0" stop-color="#ffd27a" stop-opacity="${mapIsDark ? 0.8 : 0.5}"/>
       <stop offset="0.55" stop-color="#ff9a3c" stop-opacity="${mapIsDark ? 0.4 : 0.25}"/>
@@ -18872,6 +18890,12 @@ function drawLights() {
       <stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>`;
     holes += `<polygon points="${pts}" fill="url(#dg${i})"/>`;
   });
+  // Remember what's lit so tokens standing in the dark can be hidden from players,
+  // and re-run token visibility whenever that rule is (or just was) in force.
+  _litShapes = litPolys;
+  const wasDark = _darkActive;
+  _darkActive = !!(mapIsDark && (mapScalePPF || areas.length));
+  if (!isGM() && (_darkActive || wasDark)) _fogApplyAllTokenVisibility();
   // A player only sees light inside their CURRENT line of sight — lit spots in
   // explored-but-out-of-sight terrain would otherwise show through the fog's
   // sepia "remembered" layer. (GM has no fog, so _fogLastPoly is empty: no clip.)
@@ -18896,6 +18920,8 @@ function drawLights() {
 // `var`, not `let`: refreshUI/_removeTokenLocal call this and can run before
 // this line has executed during boot — a let here would be a TDZ ReferenceError.
 var _lightRaf = 0;
+var _litShapes = [];     // px polygons currently lit (set by drawLights)
+var _darkActive = false; // Dark map with something to light it by (set by drawLights)
 function scheduleLights() {
   if (_lightRaf) return;
   _lightRaf = requestAnimationFrame(() => { _lightRaf = 0; drawLights(); });
