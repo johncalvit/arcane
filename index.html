@@ -492,6 +492,16 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  /* Seen only by Night Vision (see _fogVisState): an unlit token on a Dark map
+     shows as a "?" silhouette labeled "Unknown" — no art, name or conditions. */
+  .map-token.token-shadow .token-ring { background: #0b0b10; border-color: #4a4a58; opacity: 0.8; }
+  .map-token.token-shadow .token-ring img,
+  .map-token.token-shadow .token-ring .token-icon { display: none !important; }
+  .map-token.token-shadow .token-ring::after { content: '?'; color: #9a9aaa; font-weight: bold; font-size: 1.1rem; }
+  .map-token.token-shadow .token-label-text { font-size: 0; }
+  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 9px; font-style: italic; color: #b0b0c0; }
+  .map-token.token-shadow .token-label-icons,
+  .map-token.token-shadow .token-cond-overlay { display: none; }
 
   /* token add list in GM panel */
   .token-add-row {
@@ -6432,7 +6442,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003h';
+const VERSION = 'v0.1.20261003i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13870,6 +13880,7 @@ function onTokenDblClick(e, tokenId) {
   e.stopPropagation();
   const t = mapTokens[tokenId];
   if (!t) return;
+  if (document.getElementById('token-' + tokenId)?.classList.contains('token-shadow')) return; // just a shape in the dark
   const combatantId = t.entity_type === 'character'
     ? 'char::' + t.entity_id : 'creature::' + t.id;
   const isActive = _atSharedActive()?.id === combatantId;
@@ -17181,15 +17192,32 @@ let _fogLastPoly = [];
 // player who couldn't otherwise see or know about it at all. The GM always
 // sees everything, same as the token itself.
 function _fogEntityVisible(t) {
-  if (isGM()) return true;
+  return _fogVisState(t) === 'full';
+}
+
+// 'full' (seen normally), 'shadow' (only a silhouette — see below), or 'none'.
+// On a Dark map something in unlit ground can't be seen even in plain line of
+// sight (see _tokenIsLit / drawLights) — unless the viewer's Night Vision
+// reaches it, which gives a shape but no detail. Only the token itself ever
+// shows as a shadow; range shapes etc. use _fogEntityVisible and stay hidden.
+function _fogVisState(t) {
+  if (isGM()) return 'full';
   const viewer = _fogViewerToken();
-  if (!viewer) return false;
-  if (t.id === viewer.id) return true;
-  // On a Dark map, something standing in unlit ground can't be seen even in
-  // plain line of sight (see _tokenIsLit / drawLights).
-  if (_darkActive && !_tokenIsLit(t, viewer)) return false;
-  return !_fogLastPoly.length
-    || _fogPointInPolygon((t.x_pct / 100) * mapImgW, (t.y_pct / 100) * mapImgH, _fogLastPoly);
+  if (!viewer) return 'none';
+  if (t.id === viewer.id) return 'full';
+  const px = (t.x_pct / 100) * mapImgW, py = (t.y_pct / 100) * mapImgH;
+  if (_fogLastPoly.length && !_fogPointInPolygon(px, py, _fogLastPoly)) return 'none';
+  if (!_darkActive || _tokenIsLit(t, viewer)) return 'full';
+  return _nightVisionReaches(px, py, viewer) ? 'shadow' : 'none';
+}
+
+// Night Vision (0-100 stat) scaled to feet the same way Vigilant's cone is.
+function _nightVisionReaches(px, py, viewer) {
+  if (!mapScalePPF) return false;
+  const ent = getEntity(_refForToken(viewer));
+  const stat = Math.max(0, Math.min(100, ent?.attrs?.NightVision || 0));
+  const vx = (viewer.x_pct / 100) * mapImgW, vy = (viewer.y_pct / 100) * mapImgH;
+  return Math.hypot(px - vx, py - vy) <= stat * VIGILANT_VISION_FT_PER_POINT * mapScalePPF;
 }
 
 // Lit = inside a light's wall-trimmed circle or a lit area (cached by the last
@@ -17214,8 +17242,9 @@ function _fogApplyTokenVisibility(tokenId) {
   // a player added mid-session could see every monster's position before
   // the GM had even placed their own token.
   if (!viewer) { el.style.display = 'none'; return; }
-  const visible = _fogEntityVisible(t);
-  el.style.display = visible ? '' : 'none';
+  const state = _fogVisState(t);
+  el.style.display = state === 'none' ? 'none' : '';
+  el.classList.toggle('token-shadow', state === 'shadow');
 }
 function _fogApplyAllTokenVisibility() {
   for (const id of Object.keys(mapTokens)) _fogApplyTokenVisibility(id);
@@ -17225,7 +17254,7 @@ function _fogApplyAllTokenVisibility() {
 function _fogShowAllTokens() {
   for (const id of Object.keys(mapTokens)) {
     const el = document.getElementById('token-' + id);
-    if (el) el.style.display = '';
+    if (el) { el.style.display = ''; el.classList.remove('token-shadow'); }
   }
 }
 // Fog fully blocked (a player with no viewer token yet) — the opposite of
