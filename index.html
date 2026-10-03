@@ -1482,6 +1482,10 @@
             <input type="text" id="mf-price" placeholder="0" title="100 pence = 1 Crown. Shared across every action row for this weapon name — the Shop uses whichever row it finds first, same as Weight already does.">
           </div>
           <div class="field">
+            <label>Quintessence</label>
+            <input type="text" id="mf-quintessence" placeholder="0" title="How magical this item is — the stronger the enchantment, the higher the number. A creature with Quintessence can perceive an enchanted item as if it were a light source. 0 = mundane. Per weapon, same as Weight/Price.">
+          </div>
+          <div class="field">
             <label>Natural Weapon Slot</label>
             <select id="mf-naturalslot">
               <option value="">— Held weapon (not natural) —</option>
@@ -1499,7 +1503,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Natural Slot</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Quint.</th><th>Natural Slot</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -4620,6 +4624,7 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-maxpowermod').value = row ? row.maxPowerMod : 0;
   document.getElementById('mf-wt').value          = row ? (row.wt || 0) : 0;
   document.getElementById('mf-price').value       = row ? (row.price || 0) : 0;
+  document.getElementById('mf-quintessence').value = row ? (row.quintessence || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
 }
 
@@ -4668,6 +4673,7 @@ function saveMeleeWeapon() {
     maxPowerMod: parseFloat(document.getElementById('mf-maxpowermod').value) || 0,
     wt: parseFloat(document.getElementById('mf-wt').value) || 0,
     price: parseInt(document.getElementById('mf-price').value, 10) || 0,
+    quintessence: parseFloat(document.getElementById('mf-quintessence').value) || 0,
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
   };
   if (editingMeleeIndex !== null) {
@@ -4708,7 +4714,7 @@ function buildMeleeWeaponsManagerTable() {
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
       : '—';
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${slotLabel}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${row.quintessence || 0}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
@@ -6426,7 +6432,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261001b';
+const VERSION = 'v0.1.20261003a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
