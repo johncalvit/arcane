@@ -6474,7 +6474,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261004d';
+const VERSION = 'v0.1.20261004e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14918,6 +14918,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
   const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
   const distFt = _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct);
+  const sneaking = getConditions(moverTok.id).has('infiltrating');
 
   const visionFt = _vigilantVisionRangeFt(watcherEnt);
   if (distFt <= visionFt) {
@@ -14926,9 +14927,13 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
     let diff = Math.abs(pointDeg - facingDeg);
     if (diff > 180) diff = 360 - diff;
     if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) {
+      // Not sneaking = not hiding: walking into the cone in plain view is
+      // simply seen. Sneakers still have to beat the watcher's sight chance.
+      if (!sneaking) return { detected: true, sense: 'sight' };
       if (Math.random() * 100 < _vigilantVisionStat(watcherEnt)) return { detected: true, sense: 'sight' };
     }
   }
+  if (!sneaking) return { detected: false, sense: null };
   // Hearing/smell are omnidirectional and ignore line of sight — this game
   // has no acoustic wall-blocking model, so sound and scent are treated as
   // carrying around corners freely, unlike vision.
@@ -15407,7 +15412,11 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
   // runs per segment would effectively re-roll the same single crossing
   // event up to 40 times.
   if (conds.has('vigilant')) {
-    if (!moverTok || !getConditions(moverTok.id).has('infiltrating')) return false;
+    if (!moverTok) return false;
+    // A mover who ISN'T sneaking can still be seen walking up in plain view,
+    // so sight applies to everyone; hearing/smell only matter for Infiltrators
+    // (they're what the noise/odor scores model).
+    const sneaking = getConditions(moverTok.id).has('infiltrating');
     const watcherEnt = getEntity(_refForToken(watcherTok));
     if (!watcherEnt) return false;
     const visionFt = _vigilantVisionRangeFt(watcherEnt);
@@ -15418,6 +15427,7 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
       if (diff > 180) diff = 360 - diff;
       if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) return true;
     }
+    if (!sneaking) return false;
     if (distFt <= VIGILANT_HEARING_RANGE_FT) return true;
     if (distFt <= VIGILANT_SMELL_RANGE_FT) return true;
   }
@@ -15502,8 +15512,6 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
-    else if (conds.has('vigilant') && !conds.has('sentinel') && !conds.has('target') && !getConditions(moverTok.id).has('infiltrating'))
-      why = `${moverTok.label} isn't Infiltrating — Vigilant only watches for sneaking movers (turn on Infiltrate for them to be spotted)`;
     else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/')}): SKIPPED — ${why}`); continue; }
     let hit = false;
@@ -15621,8 +15629,11 @@ function _maybeShowSentinelPrompt(payload) {
     background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:14px 20px;
     font-family:Georgia,serif;font-size:0.85rem;color:var(--text);text-align:center;
     box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
+  const moverSneaking = !!moverTok && getConditions(moverTok.id).has('infiltrating');
   const headline = isVigilant
-    ? `🦉 ${_paEsc(watcherTok.label)} spots ${_paEsc(moverName)} sneaking (by ${_paEsc(payload.vigilantSense)})!`
+    ? (moverSneaking
+      ? `🦉 ${_paEsc(watcherTok.label)} spots ${_paEsc(moverName)} sneaking (by ${_paEsc(payload.vigilantSense)})!`
+      : `🦉 ${_paEsc(watcherTok.label)} spots ${_paEsc(moverName)}!`)
     : `${isTargetAction ? '🎯' : '👁'} ${_paEsc(watcherTok.label)} — ${_paEsc(moverName)} entered ${isTargetAction ? 'the guarded sector' : 'melee range'}. Attack?`;
   overlay.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">${headline}</div>
     <div style="display:flex;gap:10px;justify-content:center;">
@@ -15669,8 +15680,11 @@ async function _vigilantCallOut(pending) {
   const watcherTok = _pathFindToken(pending.sentinelCid);
   const moverTok   = _pathFindToken(pending.moverCid);
   if (!watcherTok || !moverTok) return;
-  await setCondition(moverTok.id, 'infiltrating', false);
-  logCombat(`${watcherTok.label} spots ${moverTok.label} sneaking (by ${pending.vigilantSense}) and calls it out!`, 'roll');
+  const wasSneaking = getConditions(moverTok.id).has('infiltrating');
+  if (wasSneaking) await setCondition(moverTok.id, 'infiltrating', false);
+  logCombat(wasSneaking
+    ? `${watcherTok.label} spots ${moverTok.label} sneaking (by ${pending.vigilantSense}) and calls it out!`
+    : `${watcherTok.label} spots ${moverTok.label} and calls it out!`, 'roll');
 }
 
 // Reuses the exact same hit/defense/damage pipeline any other attack goes
