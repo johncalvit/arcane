@@ -6474,7 +6474,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261004c';
+const VERSION = 'v0.1.20261004d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7467,7 +7467,12 @@ function enterPlayMode() {
       <div class="tb-sep"></div>
       <span class="tb-label">GM:</span>
       <button class="btn-sm btn-text" onclick="triggerMapUpload()">⬆ Upload</button>`;
-    if (authoringToolbar) authoringToolbar.style.display = 'flex';
+    if (authoringToolbar) {
+      // Reset first: the tool buttons below are added by wrappers around this
+      // function, so re-entering Play Mode used to append a second copy of every one.
+      authoringToolbar.innerHTML = '<span class="tb-label">Map Setup:</span>';
+      authoringToolbar.style.display = 'flex';
+    }
     if (playerNotesBtn) playerNotesBtn.style.display = 'none';
     loadMapLibrary();
   } else {
@@ -15497,6 +15502,8 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
+    else if (conds.has('vigilant') && !conds.has('sentinel') && !conds.has('target') && !getConditions(moverTok.id).has('infiltrating'))
+      why = `${moverTok.label} isn't Infiltrating — Vigilant only watches for sneaking movers (turn on Infiltrate for them to be spotted)`;
     else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/')}): SKIPPED — ${why}`); continue; }
     let hit = false;
