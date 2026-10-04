@@ -6449,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261004a';
+const VERSION = 'v0.1.20261004b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15960,12 +15960,33 @@ function _foeIconHtml() {
   return `<img src="foe_icon.png" width="17" height="12" style="vertical-align:-2px;display:inline-block;">`;
 }
 
+// Filter for the "On Map" list: all / players (character tokens) / foes
+// (creatures flagged hostile — see _isTokenFoe) / items. Non-foe creatures
+// (allies, neutrals) only appear under All. Remembered per browser.
+var _onMapFilter = (() => { try { return localStorage.getItem('arcane_onmap_filter') || 'all'; } catch (e) { return 'all'; } })();
+var ON_MAP_FILTERS = [
+  { key: 'all',     label: 'All',     test: () => true },
+  { key: 'players', label: 'Players', test: t => t.entity_type === 'character' },
+  { key: 'foes',    label: 'Foes',    test: t => t.entity_type === 'creature' && _isTokenFoe(t) },
+  { key: 'items',   label: 'Items',   test: t => t.entity_type === 'item' },
+];
+function setOnMapFilter(key) {
+  _onMapFilter = key;
+  try { localStorage.setItem('arcane_onmap_filter', key); } catch (e) {}
+  renderOnMapTokens();
+}
+
 function renderOnMapTokens() {
   const el = document.getElementById('tokens-on-map');
   if (!el) return;
-  const list = Object.values(mapTokens);
+  const all = Object.values(mapTokens);
+  const filt = ON_MAP_FILTERS.find(f => f.key === _onMapFilter) || ON_MAP_FILTERS[0];
+  const bar = document.getElementById('on-map-filters');
+  if (bar) bar.innerHTML = ON_MAP_FILTERS.map(f =>
+    `<button class="filter-btn${f.key === filt.key ? ' active' : ''}" onclick="setOnMapFilter('${f.key}')">${f.label} (${all.filter(f.test).length})</button>`).join('');
+  const list = all.filter(filt.test);
   if (!list.length) {
-    el.innerHTML = '<div style="padding:6px 0;font-size:0.72rem;color:var(--text-dim);font-style:italic;">No tokens on map.</div>';
+    el.innerHTML = `<div style="padding:6px 0;font-size:0.72rem;color:var(--text-dim);font-style:italic;">${all.length ? 'None match this filter.' : 'No tokens on map.'}</div>`;
     return;
   }
   el.innerHTML = list.map(t => {
@@ -19827,6 +19848,7 @@ async function _deleteMapPin(pinId) {
       <div id="gm-tab-content-tokens" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
         <div style="padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;">
           <div style="font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">On Map</div>
+          <div class="skill-filter" id="on-map-filters" style="margin-bottom:6px;"></div>
           <div id="tokens-on-map" style="max-height:140px;overflow-y:auto;"></div>
         </div>
         <div class="skill-filter" id="tokens-char-filters" style="padding:8px 10px 0;flex-shrink:0;"></div>
