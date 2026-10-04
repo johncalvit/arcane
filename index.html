@@ -6449,7 +6449,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261003m';
+const VERSION = 'v0.1.20261004a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15986,9 +15986,16 @@ function renderOnMapTokens() {
     const foeBtn = (t.entity_type !== 'item')
       ? `<button class="btn-sm" onclick="toggleTokenFoe('${t.id}')" title="${isFoe ? 'Foe — hostile to the party. Click to mark as not a foe.' : 'Not currently a foe. Click to mark hostile to the party.'}" style="padding:2px 6px;${isFoe ? 'border-color:#e05050;opacity:1;' : 'opacity:0.4;'}">${_foeIconHtml()}</button>`
       : '';
+    // GM "View as": see the map (fog, light, darkness, Night Vision) from this
+    // token's point of view. Click again to go back to the GM view.
+    const povOn = _povTokenId === t.id;
+    const povBtn = (t.entity_type !== 'item')
+      ? `<button class="btn-sm" onclick="setPovToken(${povOn ? 'null' : `'${t.id}'`})" title="${povOn ? 'Viewing as this token — click to return to the GM view' : 'View the map as this token sees it'}" style="padding:2px 6px;${povOn ? 'color:var(--gold2);border-color:var(--gold);' : ''}">🔭</button>`
+      : '';
     return `<div class="token-on-map-row">
       <span class="t-dot" style="background:${dot};"></span>
       <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.label}</span>
+      ${povBtn}
       ${combatBtn}
       ${foeBtn}
       <button class="btn-sm" onclick="toggleTokenVisibility('${t.id}')" title="${t.visible ? 'Hide from players' : 'Show to players'}" style="padding:2px 6px;">${eye}</button>
@@ -17143,8 +17150,36 @@ function _fogVisibilityPolygon(originX, originY) {
 
 // The viewing player's own character token on the current map — fog is
 // always computed from THEIR vision only (no shared party sight for MVP).
+// GM "View as…": the GM picks any token on the map and the fog, light,
+// darkness, Night Vision and explored-memory code all run from THAT token's
+// point of view, exactly as it would for a player. `var` (not let) so the
+// light/fog code that runs during boot can read it safely.
+var _povTokenId = null;
+// True for the GM when they're seeing everything (no POV active, or the POV
+// token has since left the map) — the old "isGM() means no fog" meaning.
+function _gmSeesAll() {
+  return isGM() && !(_povTokenId && mapTokens[_povTokenId]);
+}
+function setPovToken(tokenId) {
+  if (!isGM()) return;
+  _povTokenId = tokenId && mapTokens[tokenId] ? tokenId : null;
+  drawFog();
+  scheduleLights();
+  renderOnMapTokens();
+  _updatePovBanner();
+}
+function _updatePovBanner() {
+  const el = document.getElementById('pov-banner');
+  if (!el) return;
+  const t = _povTokenId && mapTokens[_povTokenId];
+  if (!isGM() || !t) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.querySelector('.pov-name').textContent = t.label;
+}
+
 function _fogViewerToken() {
-  if (isGM() || !currentCharacterId) return null;
+  if (isGM()) return _gmSeesAll() ? null : mapTokens[_povTokenId];
+  if (!currentCharacterId) return null;
   return Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === currentCharacterId) || null;
 }
 
@@ -17208,7 +17243,7 @@ function _fogEntityVisible(t) {
 // reaches it, which gives a shape but no detail. Only the token itself ever
 // shows as a shadow; range shapes etc. use _fogEntityVisible and stay hidden.
 function _fogVisState(t) {
-  if (isGM()) return 'full';
+  if (_gmSeesAll()) return 'full';
   const viewer = _fogViewerToken();
   if (!viewer) return 'none';
   if (t.id === viewer.id) return 'full';
@@ -17239,7 +17274,7 @@ function _tokenIsLit(t, viewer) {
 }
 
 function _fogApplyTokenVisibility(tokenId) {
-  if (isGM()) return;
+  if (_gmSeesAll()) return;
   const t = mapTokens[tokenId];
   const el = document.getElementById('token-' + tokenId);
   if (!t || !el) return;
@@ -17386,8 +17421,9 @@ function drawFog(fromLights) {
   const noTokenBanner = document.getElementById('no-token-banner');
   if (noTokenBanner) noTokenBanner.style.display = 'none';
 
-  // The GM always sees everything — no fog to compute, same as before.
-  if (isGM()) {
+  // The GM always sees everything — no fog to compute, same as before —
+  // unless they've picked a token to view the map as (see setPovToken).
+  if (_gmSeesAll()) {
     canvas.style.display = 'none';
     _fogLastPoly = [];
     _fogShowAllTokens();
@@ -17426,7 +17462,10 @@ function drawFog(fromLights) {
     return;
   }
 
-  if (canvas.width !== mapImgW || canvas.height !== mapImgH || _fogRevealedMapId !== activeMapId) {
+  // Memory is per map AND per viewpoint: a GM switching POV tokens starts that
+  // token's memory fresh instead of inheriting the previous viewer's.
+  const fogKey = activeMapId + '|' + (isGM() ? _povTokenId : '');
+  if (canvas.width !== mapImgW || canvas.height !== mapImgH || _fogRevealedMapId !== fogKey) {
     canvas.width  = mapImgW;
     canvas.height = mapImgH;
     _fogExploredCanvas = document.createElement('canvas');
@@ -17441,7 +17480,7 @@ function drawFog(fromLights) {
     _fogLitCanvas = document.createElement('canvas');
     _fogLitCanvas.width  = mapImgW;
     _fogLitCanvas.height = mapImgH;
-    _fogRevealedMapId = activeMapId;
+    _fogRevealedMapId = fogKey;
   }
 
   const originX = (viewer.x_pct / 100) * mapImgW, originY = (viewer.y_pct / 100) * mapImgH;
@@ -18967,7 +19006,7 @@ function drawLights() {
   _litShapes = litPolys;
   const wasDark = _darkActive;
   _darkActive = !!(mapIsDark && (mapScalePPF || areas.length));
-  if (!isGM() && (_darkActive || wasDark)) _fogApplyAllTokenVisibility();
+  if (!_gmSeesAll() && (_darkActive || wasDark)) _fogApplyAllTokenVisibility();
   // What counts as "seen" feeds the explored-area memory (drawFog only banks
   // lit ground on a Dark map), so when the lit shapes change, let the fog
   // bank the newly lit part of the current sight. fromLights=true: no loop.
@@ -18975,13 +19014,13 @@ function drawLights() {
     ':' + (p[p.length >> 1] ? Math.round(p[p.length >> 1].x) + ',' + Math.round(p[p.length >> 1].y) : '')).join('|');
   if (litSig !== _litSig) {
     _litSig = litSig;
-    if (!isGM() && _darkActive) drawFog(true);
+    if (!_gmSeesAll() && _darkActive) drawFog(true);
   }
   // A player only sees light inside their CURRENT line of sight — lit spots in
   // explored-but-out-of-sight terrain would otherwise show through the fog's
   // sepia "remembered" layer. (GM has no fog, so _fogLastPoly is empty: no clip.)
   let clipDef = '', clipAttr = '';
-  if (!isGM() && _fogLastPoly.length > 2) {
+  if (!_gmSeesAll() && _fogLastPoly.length > 2) {
     clipDef = `<clipPath id="vis-clip"><polygon points="${_fogLastPoly.map(p => p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ')}"/></clipPath>`;
     clipAttr = ' clip-path="url(#vis-clip)"';
   }
@@ -19006,7 +19045,7 @@ function _paintDarkness(holes) {
   if (cv.width !== mapImgW || cv.height !== mapImgH) { cv.width = mapImgW; cv.height = mapImgH; }
   cv.style.display = 'block';
   const ctx = cv.getContext('2d');
-  const gm = isGM();
+  const gm = _gmSeesAll();
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = 1;
   ctx.clearRect(0, 0, mapImgW, mapImgH);
@@ -19635,6 +19674,11 @@ async function _deleteMapPin(pinId) {
         <span class="tb-label">Map Setup:</span>
       </div>
       <div class="map-viewport" id="map-viewport">
+        <!-- GM "View as…" indicator (see setPovToken) -->
+        <div id="pov-banner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:40;align-items:center;gap:10px;padding:5px 12px;border-radius:14px;background:rgba(18,16,14,0.92);border:1px solid var(--gold);color:var(--gold2);font-size:0.78rem;font-family:Georgia,serif;">
+          <span>🔭 Viewing as <b class="pov-name"></b></span>
+          <button class="btn-sm" onclick="setPovToken(null)" style="padding:1px 8px;">Exit</button>
+        </div>
         <div class="map-canvas" id="map-canvas">
           <img id="map-img" src="" alt="" style="display:none;" draggable="false">
           <!-- Fog of war (see drawFog) — a CHILD of map-canvas, not a viewport-level
