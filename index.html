@@ -4874,6 +4874,28 @@ const DEFAULT_SPELLS = [
     damageStat:"", damageCategory:"", damageMax:6, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"Quintessence",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A narrow, needle-thin lance of raw quintessence streaks out in a straight line, unraveling the magical reserves of anyone it passes through. Everyone in the 40-foot line who fails a Power+Speed+Coordination save loses up to 6 Quintessence — a real threat to other casters, and no threat at all to a target with none to lose." },
+  // Light spells: Self-cast, sets a condition that makes the caster's token
+  // emit light (see LIGHT_CONDITIONS / _lightEmitters) — the light travels with
+  // them like a carried torch. Not maintained, so no per-round drain; the GM
+  // clears the condition when it should end (same convention as Misted Form).
+  { name:"Glow", range:"Self", castingTime:1, cost:1, maintained:false,
+    difficultyStat:"Logic", difficultyValue:10, magicClass:"Arcane", targetType:"Self",
+    aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"glow", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"The caster's hands and talisman give off a soft, steady glow, lighting a 5-foot radius around them. The light moves with the caster. The GM clears Glow when it should fade." },
+  { name:"Mage Light", range:"Self", castingTime:1, cost:3, maintained:false,
+    difficultyStat:"Logic", difficultyValue:12, magicClass:"Arcane", targetType:"Self",
+    aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"magelight", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A bright orb of light hovers over the caster, lighting a 15-foot radius around them. The light moves with the caster. The GM clears Mage Light when it should fade." },
+  { name:"Mage Sun", range:"Self", castingTime:2, cost:9, maintained:false,
+    difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Self",
+    aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
+    damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"magesun", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"A small, brilliant sun blazes into being above the caster, flooding a 40-foot radius with daylight-bright light. The light moves with the caster. The GM clears Mage Sun when it should fade." },
 ];
 let SPELLS = [...DEFAULT_SPELLS];
 let editingSpellIndex = null;
@@ -5541,6 +5563,9 @@ function fillInDefaultPrices() {
   }
   for (const def of DEFAULT_CONSUMABLES) {
     if (!CONSUMABLES.some(c => c.name === def.name)) { CONSUMABLES.push({ ...def }); added++; }
+  }
+  for (const def of DEFAULT_SPELLS) {
+    if (!SPELLS.some(s => s.name === def.name)) { SPELLS.push({ ...def }); added++; }
   }
   writeConfigToDisk();
   buildMeleeWeaponsManagerTable();
@@ -6449,7 +6474,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261004b';
+const VERSION = 'v0.1.20261004c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7529,6 +7554,13 @@ const CONDITION_DEFS = [
     desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
   { key:'obscured',    label:'Obscured',    icon:'🌫', color:'#8899aa',
     desc:'Hard to see — darkness, foliage, mist, a Misted Form spell. Attacks against this target are 50% less likely to hit. Clear when the GM judges the concealment has ended.' },
+  // Light spells — each makes this token emit light (see LIGHT_CONDITIONS).
+  { key:'glow',        label:'Glow',        icon:'💡', color:'#ffd27a',
+    desc:'Lighting a 5-foot radius around this token (Glow spell). The light moves with it. Clear when the GM judges the spell has faded.' },
+  { key:'magelight',   label:'Mage Light',  icon:'🔆', color:'#ffd27a',
+    desc:'Lighting a 15-foot radius around this token (Mage Light spell). The light moves with it. Clear when the GM judges the spell has faded.' },
+  { key:'magesun',     label:'Mage Sun',    icon:'☀️', color:'#ffe9a8',
+    desc:'Lighting a 40-foot radius around this token (Mage Sun spell). The light moves with it. Clear when the GM judges the spell has faded.' },
 ];
 
 function getConditions(tokenId) {
@@ -7721,6 +7753,7 @@ function _refreshTokenBadges(tokenId) {
   if (!el) return;
   el.classList.toggle('aoe-flagged', typeof aoeFlaggedIds !== 'undefined' && aoeFlaggedIds.has(tokenId));
   if (typeof _fogApplyTokenVisibility === 'function') _fogApplyTokenVisibility(tokenId);
+  scheduleLights(); // a light-spell condition may have just been added or cleared
   el.querySelectorAll('.token-cond-overlay').forEach(b => b.remove());
   const conds = getConditions(tokenId);
   if (!conds.size) { el.querySelector('.token-label-icons')?.remove(); return; }
@@ -18958,6 +18991,10 @@ const LIGHT_SOURCES = [
   { re: /campfire|camp fire/i, ft: 30, label: 'Campfire', fixed: true },
   { re: /brazier/i,           ft: 30, label: 'Brazier',  fixed: true },
 ];
+// Light spells (see DEFAULT_SPELLS): the condition each sets → light radius in
+// feet. A character/creature token with one emits light like a carried torch.
+const LIGHT_CONDITIONS = { glow: 5, magelight: 15, magesun: 40 };
+
 function _lightEntryFor(name) {
   return name ? LIGHT_SOURCES.find(l => l.re.test(name)) : null;
 }
@@ -18982,6 +19019,8 @@ function _lightEmitters() {
     } else if (t.entity_type === 'character' || t.entity_type === 'creature') {
       const held = getEntity(_refForToken(t))?.held || {};
       ft = Math.max(_lightFeetFor(held.right), _lightFeetFor(held.left));
+      const conds = getConditions(t.id);
+      for (const k in LIGHT_CONDITIONS) if (conds.has(k)) ft = Math.max(ft, LIGHT_CONDITIONS[k]);
     }
     if (ft > 0) out.push({ x_pct: t.x_pct, y_pct: t.y_pct, ft });
   }
