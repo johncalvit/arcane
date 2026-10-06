@@ -2356,8 +2356,11 @@ function recalc() {
 
 function getCarriedWeight(attrs) {
   let wW = 0, wE = 0;
-  document.querySelectorAll('#weapon-list tr').forEach(tr => { wW += parseFloat(tr.dataset.wt||0); });
-  document.querySelectorAll('#equip-list tr').forEach(tr => { wE += parseFloat(tr.dataset.wt||0); });
+  // `|| 0` AFTER parseFloat: a row whose weight was saved as null/undefined has
+  // the string "null"/"undefined" in its dataset, which is truthy, so the old
+  // parseFloat(dataset.wt||0) turned one bad row into NaN for the whole total.
+  document.querySelectorAll('#weapon-list tr').forEach(tr => { wW += parseFloat(tr.dataset.wt) || 0; });
+  document.querySelectorAll('#equip-list tr').forEach(tr => { wE += parseFloat(tr.dataset.wt) || 0; });
   const wA = calcArmorWeight(attrs).total;
   return { wW, wE, wA, total: attrs ? attrs._weight + wW + wE + wA : 0 };
 }
@@ -3712,8 +3715,9 @@ function addWeapon() {
     const w = catalog.find(x=>x.name===name);
     if (!w) continue;
     const tr = document.createElement('tr');
-    tr.dataset.wt = w.wt;
-    tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+    const wt = Number(w.wt) || 0;
+    tr.dataset.wt = wt;
+    tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
     tbody.appendChild(tr);
   }
   select.selectedIndex = -1;
@@ -3792,9 +3796,10 @@ function addEquip() {
     const e = _lookupEquipItem(name);
     if (!e) continue;
     const tr = document.createElement('tr');
-    const total = e.wt * qty;
+    const unitWt = Number(e.wt) || 0; // a catalog item saved without a weight counts as 0, not NaN
+    const total = unitWt * qty;
     tr.dataset.wt = total;
-    tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${e.wt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+    tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
     tbody.appendChild(tr);
   }
   select.selectedIndex = -1;
@@ -6051,13 +6056,13 @@ function gatherCharacterData() {
   const weapons = [...document.querySelectorAll('#weapon-list tr')].map(tr => ({
     name:   tr.cells[0].textContent,
     damage: tr.cells[1].textContent,
-    wt:     parseFloat(tr.dataset.wt),
+    wt:     parseFloat(tr.dataset.wt) || 0, // never persist NaN (JSON turns it into null)
     reach:  tr.cells[3].textContent,
   }));
   const equipment = [...document.querySelectorAll('#equip-list tr')].map(tr => ({
     name: tr.cells[0].textContent,
-    qty:  parseInt(tr.cells[1].textContent),
-    unitWt: parseFloat(tr.cells[2].textContent),
+    qty:  parseInt(tr.cells[1].textContent) || 1,
+    unitWt: parseFloat(tr.cells[2].textContent) || 0,
   }));
   return {
     _version: 1,
@@ -6474,7 +6479,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261004e';
+const VERSION = 'v0.1.20261005a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7261,8 +7266,9 @@ function applyCharacterData(data) {
     document.getElementById('weapon-list').innerHTML = '';
     data.weapons.forEach(w => {
       const tr = document.createElement('tr');
-      tr.dataset.wt = w.wt;
-      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      const wt = Number(w.wt) || 0;
+      tr.dataset.wt = wt;
+      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
       document.getElementById('weapon-list').appendChild(tr);
     });
   }
@@ -7271,10 +7277,11 @@ function applyCharacterData(data) {
   if (data.equipment) {
     document.getElementById('equip-list').innerHTML = '';
     data.equipment.forEach(eq => {
-      const total = eq.unitWt * eq.qty;
+      const unitWt = Number(eq.unitWt) || 0, qty = Number(eq.qty) || 1;
+      const total = unitWt * qty;
       const tr = document.createElement('tr');
       tr.dataset.wt = total;
-      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      tr.innerHTML = `<td>${eq.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
       document.getElementById('equip-list').appendChild(tr);
     });
   }
@@ -8590,8 +8597,9 @@ function _rebuildBuilderLoadout(row) {
     wl.innerHTML = '';
     (row.weapons || []).forEach(w => {
       const tr = document.createElement('tr');
-      tr.dataset.wt = w.wt;
-      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${w.wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      const wt = Number(w.wt) || 0;
+      tr.dataset.wt = wt;
+      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
       wl.appendChild(tr);
     });
   }
@@ -8599,10 +8607,11 @@ function _rebuildBuilderLoadout(row) {
   if (eqEl) {
     eqEl.innerHTML = '';
     (row.equipment || []).forEach(eq => {
-      const total = (eq.unitWt || 0) * (eq.qty || 1);
+      const unitWt = Number(eq.unitWt) || 0, qty = Number(eq.qty) || 1;
+      const total = unitWt * qty;
       const tr = document.createElement('tr');
       tr.dataset.wt = total;
-      tr.innerHTML = `<td>${eq.name}</td><td>${eq.qty}</td><td>${eq.unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
+      tr.innerHTML = `<td>${eq.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
       eqEl.appendChild(tr);
     });
   }
