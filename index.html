@@ -6479,7 +6479,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261005a';
+const VERSION = 'v0.1.20261006a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11997,7 +11997,16 @@ function _atUpdateBlink() {
   if (tokenId) {
     const el = document.getElementById('token-' + tokenId);
     if (el) { el.classList.add('token-blink'); _atBlinkTokenId = tokenId; }
-    _panToToken(tokenId);
+    // Only pan to someone this viewer can actually see: panning to a foe taking
+    // its turn in the dark would give away exactly where it is. Otherwise keep
+    // the player's view on their own character (no change if they have none).
+    const t = mapTokens[tokenId];
+    const hiddenFromMe = !!t && ((!t.visible && !isGM()) || _fogVisState(t) === 'none');
+    if (!hiddenFromMe) _panToToken(tokenId);
+    else {
+      const own = _fogViewerToken();
+      if (own) _panToToken(own.id);
+    }
   }
 }
 
