@@ -6479,7 +6479,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261006a';
+const VERSION = 'v0.1.20261006b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11982,6 +11982,23 @@ function _atFindTokenId(combatantId) {
     if (type === 'creature' && t.id === id) return t.id;
   }
   return null;
+}
+
+// True when the active combatant's token isn't fully visible to THIS player —
+// GM-hidden, out of sight, standing in the dark, or only a shadow — in which
+// case the Active banner and the shared character panel must not name or show
+// them (see _paActiveBanner / renderPlayPanel). Never true for the GM or for
+// the player's own character; a combatant with no token on this map is shown
+// as before.
+function _atActiveObscured(ac) {
+  if (!ac || _gmSeesAll()) return false;
+  const tokenId = _atFindTokenId(ac.id);
+  const t = tokenId && mapTokens[tokenId];
+  if (!t) return false;
+  const own = _fogViewerToken();
+  if (own && own.id === t.id) return false;
+  if (!t.visible && !isGM()) return true;
+  return _fogVisState(t) !== 'full';
 }
 
 function _atUpdateBlink() {

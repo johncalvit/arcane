@@ -445,6 +445,19 @@ function _paActiveBanner() {
   if (!_atIsCombatActive()) return '';
   const ac = _atSharedActive();
   if (!ac) return '';
+  // A combatant this player can't see: no name, portrait, actions or sheet.
+  if (typeof _atActiveObscured === 'function' && _atActiveObscured(ac)) {
+    return `
+    <div style="background:rgba(201,168,76,0.08);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:var(--text-dim);flex-shrink:0;">?</div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;">Active — Round ${_atSharedRound()}</div>
+          <div style="font-size:0.9rem;color:var(--text-dim);font-style:italic;">Something stirs…</div>
+        </div>
+      </div>
+    </div>`;
+  }
   const acEnt = getEntity(ac.id);
   const acAvatar = acEnt ? resolveAvatarUrl(acEnt.avatarUrl) : (ac.avatar || '');
   const acImg = acAvatar
@@ -518,6 +531,12 @@ function renderPlayPanel(el) {
   if (_atIsCombatActive()) {
     const ac = _atSharedActive();
     if (ac) {
+      // Hidden foe's turn: blank the panel instead of showing its sheet.
+      if (typeof _atActiveObscured === 'function' && _atActiveObscured(ac)) {
+        el.innerHTML = `<div style="color:var(--text-dim);font-size:0.85rem;font-style:italic;text-align:center;padding:24px 8px;">
+          Something moves in the darkness…</div>`;
+        return;
+      }
       const ent = getEntity(ac.id);
       if (ent) {
         renderEntityPanel(ac.id, { container: el, header: 'mini' });
