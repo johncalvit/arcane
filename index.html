@@ -3361,7 +3361,9 @@ function positionSkillForm(index) {
 
   if (index !== null) {
     const tbody = document.getElementById('skillmgr-list');
-    const targetRow = tbody.rows[index];
+    // data-idx, not rows[index]: with a type filter on, the table shows only
+    // some skills, so a SKILLS index is no longer the same as a row position.
+    const targetRow = tbody.querySelector(`tr[data-idx="${index}"]`) || tbody.rows[index];
     const row = document.createElement('tr');
     row.id = 'skill-form-row';
     const cell = document.createElement('td');
@@ -3374,12 +3376,10 @@ function positionSkillForm(index) {
   }
 }
 
-function openSkillForm(index) {
-  editingSkillIndex = index;
-  positionSkillForm(index);
-  buildSkillFormAttrOptions();
-  const skill = index !== null ? SKILLS[index] : null;
-  document.getElementById('skill-form-title').textContent = skill ? 'Edit Skill' : 'New Skill';
+// Shared by Add/Edit (openSkillForm) and Copy (copySkill): fills the form from a
+// skill (or blanks); whether Save overwrites a row or adds one is decided by
+// editingSkillIndex, which the caller sets.
+function _fillSkillForm(skill) {
   document.getElementById('sf-name').value   = skill ? skill.name : '';
   document.getElementById('sf-type').value   = skill ? skill.type : '';
   document.getElementById('sf-cost').value   = skill ? skillCost(skill) : 3;
@@ -3390,7 +3390,37 @@ function openSkillForm(index) {
   document.querySelectorAll('#sf-success-attrs input[type="number"]').forEach(inp => {
     inp.value = counts[inp.dataset.attr] || 0;
   });
+}
+
+function openSkillForm(index) {
+  editingSkillIndex = index;
+  positionSkillForm(index);
+  buildSkillFormAttrOptions();
+  const skill = index !== null ? SKILLS[index] : null;
+  document.getElementById('skill-form-title').textContent = skill ? 'Edit Skill' : 'New Skill';
+  _fillSkillForm(skill);
   document.getElementById('skill-form').style.display = 'block';
+}
+
+// Duplicate a skill into the form as a brand-new entry (editingSkillIndex stays
+// null, so Save adds rather than overwrites) — handy for a family of similar
+// skills (a new language, a craft variant) without retyping the cost,
+// requirement and success attributes. The name gets " (Copy)" appended so it
+// doesn't collide with the original (skill points are tracked by name).
+function copySkill(index) {
+  const src = SKILLS[index];
+  if (!src) return;
+  editingSkillIndex = null;
+  positionSkillForm(index);
+  buildSkillFormAttrOptions();
+  document.getElementById('skill-form-title').textContent = 'Copy Skill';
+  _fillSkillForm(src);
+  const nameEl = document.getElementById('sf-name');
+  let name = src.name + ' (Copy)', n = 2;
+  while (SKILLS.some(s => s.name.toLowerCase() === name.toLowerCase())) name = `${src.name} (Copy ${n++})`;
+  nameEl.value = name;
+  document.getElementById('skill-form').style.display = 'block';
+  nameEl.focus(); nameEl.select();
 }
 
 function closeSkillForm() {
@@ -3402,6 +3432,11 @@ function closeSkillForm() {
 function saveSkill() {
   const name = document.getElementById('sf-name').value.trim();
   if (!name) { alert('Skill name is required.'); return; }
+  // Skill points are stored by name, so two skills can't share one.
+  if (SKILLS.some((s, i) => i !== editingSkillIndex && s.name.toLowerCase() === name.toLowerCase())) {
+    alert(`A skill named "${name}" already exists — give this one a different name.`);
+    return;
+  }
   const type = document.getElementById('sf-type').value.trim() || 'Custom';
   const cost = parseInt(document.getElementById('sf-cost').value) || 3;
   const reqAttr = document.getElementById('sf-reqattr').value;
@@ -3471,11 +3506,13 @@ function buildSkillManagerTable() {
       ? Object.entries(counts).map(([k,n]) => `${(ATTRIBUTES.find(a=>a.key===k)||{}).label || k}${n>1 ? ' ×'+n : ''}`).join(', ')
       : '—';
     const tr = document.createElement('tr');
+    tr.dataset.idx = i;
     const nameCell = s.description
       ? `<td title="${s.description.replace(/"/g,'&quot;')}" style="cursor:help;border-bottom:1px dotted var(--text-dim);">${s.name}</td>`
       : `<td>${s.name}</td>`;
     tr.innerHTML = `${nameCell}<td>${s.type}</td><td>${skillCost(s)}</td><td>${reqLabel}${s.reqVal ? ' '+s.reqVal+'+' : ''}</td><td>${successLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSkillForm(${i})">Edit</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copySkill(${i})" title="Duplicate this skill into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteSkill(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
@@ -6490,7 +6527,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261007a';
+const VERSION = 'v0.1.20261007b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
