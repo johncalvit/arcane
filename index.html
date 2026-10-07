@@ -6479,7 +6479,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261006b';
+const VERSION = 'v0.1.20261006c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14070,6 +14070,7 @@ function onTokenMouseMove(e) {
   }
   if (getConditions(dragTokenId).has('sentinel')) drawSentinelRanges();
   scheduleLights();
+  _dragMoveIndicator(dragTokenId, x_pct, y_pct);
 
   // broadcast to others (fast path)
   tokenChannel?.send({ type: 'broadcast', event: 'token-move',
@@ -14105,6 +14106,7 @@ async function onTokenMouseUp(e) {
   if (!el) { dragTokenId = null; return; }
 
   el.classList.remove('dragging');
+  _clearDragMoveIndicator();
 
   if (!_tokenDragMoved) {
     dragTokenId = null;
@@ -16686,16 +16688,76 @@ function _pathPointAtDistance(pts, targetDist) {
   return null;
 }
 
-function pathRenderSvg(mouseX, mouseY) {
+// How far along a combatant's round of movement a total distance is. A full
+// round of movement is Speed × 3 ft (a round is 3 s); half of that is the
+// threshold for the half-move actions (see the half-movement ring below).
+//   green  — at or under half move
+//   yellow — past half, up to and including full move
+//   red    — over full move
+// `bang` is true once full move is reached (a half-foot of slack so landing
+// "exactly" on it, which a mouse never does, still counts). Movement already
+// spent this round (the Move slot) counts toward the total, matching how
+// _commitMoveSlot adds a second move onto the first.
+function _moveTier(segmentFeet, combId) {
+  const spd = pathGetSpeed(combId);
+  const c = combId ? atCombatants.find(x => x.id === combId) : null;
+  const prior = (c && c.slots && c.slots.move && c.slots.move.startRound === atRound) ? (c.slots.move.feet || 0) : 0;
+  const total = segmentFeet + prior;
+  const half = spd * 1.5, full = spd * 3;
+  const level = total <= half ? 0 : total <= full + 0.5 ? 1 : 2;
+  const palette = [
+    { color: '#4de080', dim: 'rgba(77,224,128,0.5)' },
+    { color: '#f0d080', dim: 'rgba(240,208,128,0.5)' },
+    { color: '#e06060', dim: 'rgba(224,96,96,0.5)' },
+  ][level];
+  return { ...palette, level, bang: total >= full - 0.5, total, prior, spd, half, full };
+}
+
+// Live movement indicator while dragging the ACTIVE combatant's token during
+// combat (a player's own turn, or the GM moving the active creature) — the
+// same coloured line + distance label Path mode shows, from where the drag
+// started to where the token is now.
+function _dragMoveIndicator(tokenId, x_pct, y_pct) {
+  if (pathMode || !_atIsCombatActive() || _dragStartXPct == null) return;
+  const t = mapTokens[tokenId];
+  if (!t) return;
+  const combId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+  if (_atSharedActive()?.id !== combId) return;
+  const svg = document.getElementById('path-svg');
+  if (!svg) return;
+  const toVp = (xp, yp) => ({ x: (xp / 100) * mapImgW * mapScale + mapOffsetX, y: (yp / 100) * mapImgH * mapScale + mapOffsetY });
+  svg.style.display = 'block';
+  pathRenderSvg(null, null, { points: [toVp(_dragStartXPct, _dragStartYPct), toVp(x_pct, y_pct)], combId });
+}
+function _clearDragMoveIndicator() {
+  if (pathMode) return; // Path mode owns the svg while it's active
+  const svg = document.getElementById('path-svg');
+  if (svg) { svg.innerHTML = ''; svg.style.display = 'none'; }
+}
+
+// override ({points, combId}) lets a direct token drag use the same indicator
+// without being in Path mode (see onTokenMouseMove).
+function pathRenderSvg(mouseX, mouseY, override) {
   const svg = document.getElementById('path-svg');
   if (!svg) return;
   svg.innerHTML = '';
 
-  const pts = mouseX != null ? [...pathPoints, {x: mouseX, y: mouseY}] : pathPoints;
+  const basePts = override ? override.points : pathPoints;
+  const cid = override ? override.combId : pathCharId;
+  const pts = mouseX != null ? [...basePts, {x: mouseX, y: mouseY}] : basePts;
   if (pts.length < 1) return;
 
-  const color  = '#4de080';
-  const dimClr = 'rgba(77,224,128,0.5)';
+  // Measure first so the whole indicator (line, dots, label) can take the colour.
+  let feetNow = null;
+  if (pts.length >= 2 && mapScalePPF > 0) {
+    let d = 0;
+    for (let i = 1; i < pts.length; i++) d += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+    feetNow = (d / mapScale) / mapScalePPF;
+  }
+  // Tiered colours only for a real combatant's move; a free Path outside combat keeps plain green.
+  const tier = (cid && feetNow != null) ? _moveTier(feetNow, cid) : null;
+  const color  = tier ? tier.color : '#4de080';
+  const dimClr = tier ? tier.dim : 'rgba(77,224,128,0.5)';
 
   // Polyline
   if (pts.length >= 2) {
@@ -16710,7 +16772,7 @@ function pathRenderSvg(mouseX, mouseY) {
   }
 
   // Waypoint dots
-  pathPoints.forEach((p, i) => {
+  basePts.forEach((p, i) => {
     const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
     c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
     c.setAttribute('r', i === 0 ? 6 : 4);
@@ -16720,7 +16782,7 @@ function pathRenderSvg(mouseX, mouseY) {
   });
 
   // Ghost dot at mouse
-  if (mouseX != null && pathPoints.length >= 1) {
+  if (mouseX != null && basePts.length >= 1) {
     const g = document.createElementNS('http://www.w3.org/2000/svg','circle');
     g.setAttribute('cx', mouseX); g.setAttribute('cy', mouseY);
     g.setAttribute('r', 4); g.setAttribute('fill', dimClr);
@@ -16730,40 +16792,40 @@ function pathRenderSvg(mouseX, mouseY) {
 
   // Distance + time label near last point
   const lastPt = pts[pts.length - 1];
-  const allPts = mouseX != null ? pts : pathPoints;
+  const allPts = pts;
   if (allPts.length >= 2 && mapScalePPF > 0) {
-    let dist = 0;
-    for (let i = 1; i < allPts.length; i++)
-      dist += Math.hypot(allPts[i].x - allPts[i-1].x, allPts[i].y - allPts[i-1].y);
-    const feet = (dist / mapScale) / mapScalePPF;
-    const spd  = pathGetSpeed();
+    const feet = feetNow;
+    const spd  = tier ? tier.spd : pathGetSpeed(cid);
     const secs = feet / spd;
     const secRound = Math.round(secs * 10) / 10;
-    const timeStr  = secRound <= 3 ? secRound + 's' : secRound + 's ⚠';
 
-    // Half-movement marker — Sentinel/Evade/Go Prone/Load/a Ranged Attack/
-    // Cast/Target all allow up to half a round's movement before picking
-    // one (see the design discussion); a soft warning past that, same
-    // orange (#c97040) the action dialog's own movement bar already uses,
-    // not a hard stop. A ring on the path itself shows WHERE that happened,
-    // since the dialog's own bar only shows the final total.
-    const halfBudgetFt = spd * 1.5; // half of a full round's speed*3 ft
-    const pastHalf = feet >= halfBudgetFt;
-    if (pastHalf) {
-      const halfPx = halfBudgetFt * mapScalePPF * mapScale;
-      const markerPt = _pathPointAtDistance(allPts, halfPx);
-      if (markerPt) {
-        const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        ring.setAttribute('cx', markerPt.x); ring.setAttribute('cy', markerPt.y);
-        ring.setAttribute('r', 7);
-        ring.setAttribute('fill', 'none');
-        ring.setAttribute('stroke', '#c97040');
-        ring.setAttribute('stroke-width', '2');
-        svg.appendChild(ring);
+    let fillClr, label;
+    if (tier) {
+      // Half-move ring: marks WHERE on the path half a round's movement was
+      // used (Sentinel/Evade/Go Prone/Load/Ranged Attack/Cast/Target all allow
+      // up to half a round before picking one). Placed relative to this
+      // segment, so any movement already spent this round shifts it earlier.
+      if (tier.level >= 1) {
+        const halfPx = Math.max(0, tier.half - tier.prior) * mapScalePPF * mapScale;
+        const markerPt = _pathPointAtDistance(allPts, halfPx);
+        if (markerPt) {
+          const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          ring.setAttribute('cx', markerPt.x); ring.setAttribute('cy', markerPt.y);
+          ring.setAttribute('r', 7);
+          ring.setAttribute('fill', 'none');
+          ring.setAttribute('stroke', '#f0d080');
+          ring.setAttribute('stroke-width', '2');
+          svg.appendChild(ring);
+        }
       }
+      fillClr = tier.color;
+      const note = tier.level === 2 ? ' · over full move' : tier.level === 1 ? ' · past half move' : '';
+      const priorNote = tier.prior > 0 ? ` (${Math.round(tier.total)} ft this round)` : '';
+      label = `${Math.round(feet)} ft · ${secRound}s${priorNote}${note}${tier.bang ? ' !' : ''}`;
+    } else {
+      fillClr = '#4de080';
+      label = `${Math.round(feet)} ft · ${secRound <= 3 ? secRound + 's' : secRound + 's ⚠'}`;
     }
-    const fillClr = pastHalf ? '#c97040' : secs <= 2 ? '#4de080' : secs <= 4 ? '#f0d080' : '#e06060';
-    const label = `${Math.round(feet)} ft · ${timeStr}${pastHalf ? ' · past half move' : ''}`;
 
     const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
     const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
