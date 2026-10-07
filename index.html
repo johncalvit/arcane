@@ -993,6 +993,8 @@
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
       <input type="file" id="import-config-file" accept=".json" style="display:none" onchange="importConfig(this)">
+      <button id="core-rules-btn" class="nav-btn" onclick="checkCoreRulesUpdate(true)" title="Review and merge the latest published Core Rules into this campaign's config">📚 Core Rules</button>
+      <button id="core-publish-btn" class="nav-btn" onclick="publishCoreRules()" style="display:none; color:var(--gold2);" title="Publish your current config as the next numbered Core Rules version for every campaign's GM to review">📣 Publish Core Rules</button>
       <button id="save-owner-default-btn" class="nav-btn" onclick="saveAsOwnerDefault()" style="display:none; color:var(--gold2);">⭐ Save as Default Config</button>
       <button class="nav-btn" onclick="document.getElementById('modal-reset-defaults').style.display='flex'" style="color:#c08080;">↺ Reset to Defaults</button>
       <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;"></div>
@@ -6503,6 +6505,9 @@ function gatherConfigData() {
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
+    // Which published Core Rules version this campaign's config has been merged
+    // up to (0 = never) — see the CORE RULES block.
+    coreRulesVersion: _coreAppliedVersion,
   };
 }
 
@@ -6527,7 +6532,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261007b';
+const VERSION = 'v0.1.20261007c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7006,6 +7011,7 @@ async function selectCampaign(id, name, gmId) {
   const inviteResult = document.getElementById('landing-invite-result');
   if (inviteResult) inviteResult.style.display = 'none';
   await loadConfigFromSupabase();
+  if (userIsGm) checkCoreRulesUpdate(); // background: updates the 📚 button, nudges once if an update is waiting
   document.querySelectorAll('.landing-campaign-item').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === id);
   });
@@ -7041,6 +7047,8 @@ function isConfigOwner() {
 function updateOwnerButtonVisibility() {
   const btn = document.getElementById('save-owner-default-btn');
   if (btn) btn.style.display = isConfigOwner() ? '' : 'none';
+  const pubBtn = document.getElementById('core-publish-btn');
+  if (pubBtn) pubBtn.style.display = isConfigOwner() ? '' : 'none';
   const tmplRow = document.getElementById('is-template-row');
   if (tmplRow) tmplRow.style.display = currentUser ? 'flex' : 'none';
 }
@@ -7162,6 +7170,248 @@ async function loadConfigFromSupabase() {
   setConfigStatus('Default configuration created.', true);
 }
 
+// ═══ CORE RULES ══════════════════════════════════════════════════════════════
+// A numbered, published copy of the game config. The config owner publishes a
+// new version (📣 Publish Core Rules); every campaign GM sees "update
+// available" (📚 Core Rules) and can review + MERGE it into their own
+// campaign's config. Pull, not push: a campaign's config is only writable by
+// its own GM (see supabase-game-configs-rls.sql), and a merge should never
+// silently overwrite someone's house rules. Needs supabase-core-rules.sql.
+//
+// Merge rules: anything NEW in Core Rules is offered for adding; anything that
+// differs from the campaign's own copy is offered as a change (the GM can untick
+// ones they customised on purpose); items that exist only in the campaign are
+// never touched. The version a campaign has merged up to lives in its own config
+// (coreRulesVersion) so it travels with the config.
+// `var`s, not let, so gatherConfigData/applyConfigData can read them at any time.
+var _coreAppliedVersion = 0;
+var _coreLatest = null; // {id, version, notes, published_at, published_by} of the newest published version, once checked
+
+const CORE_SECTIONS = [
+  { key: 'skills',        label: 'Skills',                kind: 'list', id: s => s.name },
+  { key: 'spells',        label: 'Spells',                kind: 'list', id: s => s.name },
+  { key: 'meleeWeapons',  label: 'Melee weapon actions',  kind: 'list', id: r => `${r.weapon} — ${r.action}` },
+  { key: 'rangedWeapons', label: 'Ranged weapon actions', kind: 'list', id: r => `${r.weapon} — ${r.action}` },
+  { key: 'weapons',       label: 'Weapons',               kind: 'list', id: w => w.name },
+  { key: 'equipment',     label: 'Equipment',             kind: 'list', id: e => e.name },
+  { key: 'consumables',   label: 'Consumables',           kind: 'list', id: c => c.name },
+  { key: 'armorPieces',   label: 'Armor pieces',          kind: 'list', id: p => p.name },
+  { key: 'armorTypes',    label: 'Armor materials',       kind: 'map' },
+  { key: 'armorAreaWeights', label: 'Armor area weights', kind: 'map' },
+  { key: 'species',       label: 'Species',               kind: 'map' },
+  { key: 'sexes',         label: 'Sexes',                 kind: 'map' },
+  { key: 'ages',          label: 'Ages',                  kind: 'map' },
+  { key: 'heights',       label: 'Heights',               kind: 'map' },
+  { key: 'builds',        label: 'Builds',                kind: 'map' },
+  { key: 'socials',       label: 'Social dispositions',   kind: 'map' },
+  { key: 'mentals',       label: 'Mental dispositions',   kind: 'map' },
+  { key: 'economy',       label: 'Economy settings',      kind: 'scalars', keys: ['startingCrowns', 'nobleWealthMult', 'urchinWealthMult'] },
+];
+
+function _coreStable(x) {
+  if (Array.isArray(x)) return '[' + x.map(_coreStable).join(',') + ']';
+  if (x && typeof x === 'object') return '{' + Object.keys(x).sort().map(k => JSON.stringify(k) + ':' + _coreStable(x[k])).join(',') + '}';
+  return JSON.stringify(x);
+}
+function _coreSame(a, b) { return _coreStable(a) === _coreStable(b); }
+function _coreClone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
+
+// What changed between two items, for display: "cost 4→5, req Logic 5+→Logic 6+".
+function _coreFieldDiff(l, c) {
+  if (!l || !c || typeof l !== 'object' || typeof c !== 'object') return '';
+  const short = v => { const s = typeof v === 'string' ? v : JSON.stringify(v); return s === undefined ? '—' : (s.length > 22 ? s.slice(0, 21) + '…' : s); };
+  const keys = [...new Set([...Object.keys(l), ...Object.keys(c)])].filter(k => !_coreSame(l[k], c[k]));
+  const shown = keys.slice(0, 3).map(k => `${k} ${short(l[k])}→${short(c[k])}`);
+  return shown.join(', ') + (keys.length > 3 ? `, +${keys.length - 3} more` : '');
+}
+
+// Every difference between a campaign config (local) and a Core Rules config:
+// [{sec, id, type: 'new'|'changed', item, detail}]. Items only the campaign has are not listed.
+function _coreDiff(local, core) {
+  const out = [];
+  for (const sec of CORE_SECTIONS) {
+    if (sec.kind === 'list') {
+      const mine = new Map((local[sec.key] || []).map(x => [sec.id(x), x]));
+      for (const c of (core[sec.key] || [])) {
+        const id = sec.id(c), l = mine.get(id);
+        if (!l) out.push({ sec: sec.key, id, type: 'new', item: c, detail: '' });
+        else if (!_coreSame(l, c)) out.push({ sec: sec.key, id, type: 'changed', item: c, detail: _coreFieldDiff(l, c) });
+      }
+    } else if (sec.kind === 'map') {
+      const mine = local[sec.key] || {};
+      for (const [id, c] of Object.entries(core[sec.key] || {})) {
+        if (!(id in mine)) out.push({ sec: sec.key, id, type: 'new', item: c, detail: '' });
+        else if (!_coreSame(mine[id], c)) out.push({ sec: sec.key, id, type: 'changed', item: c, detail: _coreFieldDiff(mine[id], c) });
+      }
+    } else {
+      for (const k of sec.keys) {
+        if (core[k] !== undefined && !_coreSame(local[k], core[k]))
+          out.push({ sec: sec.key, id: k, type: 'changed', item: core[k], detail: `${local[k]}→${core[k]}` });
+      }
+    }
+  }
+  return out;
+}
+
+// The merged config: a copy of the campaign's own with the picked diffs applied.
+function _coreBuildMerged(local, diffs, picked, version) {
+  const out = _coreClone(local);
+  for (const d of diffs) {
+    if (!picked.has(d.sec + '|' + d.id)) continue;
+    const sec = CORE_SECTIONS.find(s => s.key === d.sec);
+    if (sec.kind === 'list') {
+      out[d.sec] = out[d.sec] || [];
+      if (d.type === 'new') out[d.sec].push(_coreClone(d.item));
+      else { const i = out[d.sec].findIndex(x => sec.id(x) === d.id); if (i >= 0) out[d.sec][i] = _coreClone(d.item); else out[d.sec].push(_coreClone(d.item)); }
+    } else if (sec.kind === 'map') {
+      out[d.sec] = out[d.sec] || {};
+      out[d.sec][d.id] = _coreClone(d.item);
+    } else {
+      out[d.id] = d.item;
+    }
+  }
+  out.coreRulesVersion = version;
+  return out;
+}
+
+function _refreshCoreRulesButton() {
+  const btn = document.getElementById('core-rules-btn');
+  if (!btn) return;
+  const newer = _coreLatest && _coreLatest.version > _coreAppliedVersion;
+  btn.textContent = newer ? `📚 Core Rules — v${_coreLatest.version} available` : `📚 Core Rules${_coreAppliedVersion ? ' (v' + _coreAppliedVersion + ')' : ''}`;
+  btn.style.color = newer ? 'var(--gold2)' : '';
+  btn.style.fontWeight = newer ? 'bold' : '';
+}
+
+// Looks up the newest published version. Background call (no arg) just updates
+// the button and nudges once with a toast; manual=true (the button) opens the
+// review dialog, or says you're up to date.
+async function checkCoreRulesUpdate(manual) {
+  if (!isGM()) return null;
+  const { data, error } = await sb.from('core_rules').select('id, version, notes, published_at, published_by')
+    .order('version', { ascending: false }).limit(1);
+  if (error) {
+    if (manual) showToast('Core Rules aren\'t set up yet — run supabase-core-rules.sql in Supabase.', 'warn');
+    return null; // table missing / not readable: stay quiet in the background
+  }
+  _coreLatest = (data && data[0]) || null;
+  _refreshCoreRulesButton();
+  const newer = _coreLatest && _coreLatest.version > _coreAppliedVersion;
+  if (manual) {
+    if (!_coreLatest) showToast('No Core Rules have been published yet.', 'warn');
+    else if (newer) openCoreUpdateDialog();
+    else showToast(`This campaign is up to date with Core Rules v${_coreAppliedVersion}.`, 'good');
+  } else if (newer) {
+    let skipped = 0;
+    try { skipped = Number(localStorage.getItem('arcane-core-skip-' + currentCampaignId)) || 0; } catch (e) {}
+    if (_coreLatest.version > skipped) showToast(`Core Rules v${_coreLatest.version} available — GM Config → 📚 Core Rules.`);
+  }
+  return _coreLatest;
+}
+
+async function publishCoreRules() {
+  if (!isConfigOwner()) { setConfigStatus('Only the config owner can publish Core Rules.', false); return; }
+  const notes = prompt('Publish your current config as the next Core Rules version.\n\nWhat changed? (shown to GMs in the update dialog)');
+  if (notes === null) return;
+  const { data: latest, error: e1 } = await sb.from('core_rules').select('version').order('version', { ascending: false }).limit(1);
+  if (e1) { alert('Core Rules aren\'t set up yet — run supabase-core-rules.sql in the Supabase SQL editor first.\n\n' + e1.message); return; }
+  const version = ((latest && latest[0] && latest[0].version) || 0) + 1;
+  const config = { ...gatherConfigData(), coreRulesVersion: version };
+  const { error } = await sb.from('core_rules').insert({ version, config, notes: notes.trim(), published_by: currentUser.id });
+  if (error) {
+    alert('Could not publish Core Rules: ' + error.message +
+      '\n\nIf this is a permissions error, add your account as a publisher by running this in the Supabase SQL editor:\n\n' +
+      `insert into public.core_rules_owners (user_id) values ('${currentUser.id}');`);
+    return;
+  }
+  // This campaign IS the source of that version, so it's already up to date with it.
+  _coreAppliedVersion = version;
+  _coreLatest = { version, notes: notes.trim(), published_by: currentUser.id };
+  await writeConfigToSupabase();
+  _refreshCoreRulesButton();
+  setConfigStatus(`Published Core Rules v${version}.`, true);
+  showToast(`Core Rules v${version} published.`, 'good');
+}
+
+async function openCoreUpdateDialog() {
+  if (!isGM() || !_coreLatest) return;
+  const { data, error } = await sb.from('core_rules').select('version, config, notes, published_at').eq('version', _coreLatest.version).single();
+  if (error || !data) { showToast('Could not load Core Rules v' + _coreLatest.version, 'error'); return; }
+  const local = gatherConfigData();
+  const diffs = _coreDiff(local, data.config || {});
+  if (!diffs.length) {
+    // Nothing to merge — just record that this campaign is level with this version.
+    _coreAppliedVersion = data.version;
+    await writeConfigToSupabase();
+    _refreshCoreRulesButton();
+    showToast(`Already matches Core Rules v${data.version}.`, 'good');
+    return;
+  }
+  document.getElementById('core-update-modal')?.remove();
+  const picked = new Set(diffs.map(d => d.sec + '|' + d.id));
+  const overlay = document.createElement('div');
+  overlay.id = 'core-update-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:3500;display:flex;align-items:center;justify-content:center;';
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:min(640px,94vw);max-height:84vh;display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;color:var(--text);';
+  const when = data.published_at ? new Date(data.published_at).toLocaleDateString() : '';
+  card.innerHTML = `
+    <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);">📚 Core Rules v${data.version} <span style="font-weight:normal;font-size:0.75rem;color:var(--text-dim);">${when} · this campaign is on v${_coreAppliedVersion || '—'}</span></div>
+    ${data.notes ? `<div style="font-size:0.82rem;color:var(--text-dim);font-style:italic;white-space:pre-wrap;">${_paEsc(data.notes)}</div>` : ''}
+    <div style="font-size:0.74rem;color:var(--text-dim);">Ticked items are added or updated. Items only this campaign has are never touched — untick a change if you customised that item on purpose.</div>
+    <div style="display:flex;gap:8px;"><button class="btn-sm btn-text" id="core-all">Select all</button><button class="btn-sm btn-text" id="core-none">Select none</button><span id="core-count" style="margin-left:auto;font-size:0.74rem;color:var(--text-dim);align-self:center;"></span></div>
+    <div id="core-list" style="overflow-y:auto;border:1px solid var(--border);border-radius:5px;padding:6px 10px;flex:1;min-height:120px;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn-sm btn-text" id="core-cancel">Not now</button>
+      <button class="btn-sm btn-text" id="core-skip" title="Don't remind me about this version">Skip v${data.version}</button>
+      <button class="btn" id="core-apply" style="padding:6px 16px;">Apply selected</button>
+    </div>`;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  const listEl = card.querySelector('#core-list');
+  const countEl = card.querySelector('#core-count');
+  const updateCount = () => { countEl.textContent = `${picked.size} of ${diffs.length} selected`; card.querySelector('#core-apply').disabled = !picked.size; };
+  for (const sec of CORE_SECTIONS) {
+    const mine = diffs.filter(d => d.sec === sec.key);
+    if (!mine.length) continue;
+    const nNew = mine.filter(d => d.type === 'new').length, nChg = mine.length - nNew;
+    const head = document.createElement('div');
+    head.style.cssText = 'margin:8px 0 3px;font-size:0.78rem;color:var(--gold2);font-weight:bold;';
+    head.textContent = `${sec.label} — ${[nNew && nNew + ' new', nChg && nChg + ' changed'].filter(Boolean).join(', ')}`;
+    listEl.appendChild(head);
+    for (const d of mine) {
+      const key = d.sec + '|' + d.id;
+      const row = document.createElement('label');
+      row.style.cssText = 'display:flex;gap:8px;align-items:baseline;font-size:0.8rem;padding:2px 0;cursor:pointer;';
+      row.innerHTML = `<input type="checkbox" checked><span><span style="color:${d.type === 'new' ? '#7fd88a' : '#f0d080'};font-size:0.7rem;">${d.type === 'new' ? 'NEW' : 'CHANGED'}</span> ${_paEsc(d.id)}${d.detail ? ` <span style="color:var(--text-dim);font-size:0.72rem;">(${_paEsc(d.detail)})</span>` : ''}</span>`;
+      row.querySelector('input').onchange = e => { e.target.checked ? picked.add(key) : picked.delete(key); updateCount(); };
+      listEl.appendChild(row);
+    }
+  }
+  const setAll = on => { listEl.querySelectorAll('input').forEach(i => { i.checked = on; }); if (on) diffs.forEach(d => picked.add(d.sec + '|' + d.id)); else picked.clear(); updateCount(); };
+  card.querySelector('#core-all').onclick  = () => setAll(true);
+  card.querySelector('#core-none').onclick = () => setAll(false);
+  card.querySelector('#core-cancel').onclick = () => overlay.remove();
+  card.querySelector('#core-skip').onclick = () => {
+    try { localStorage.setItem('arcane-core-skip-' + currentCampaignId, String(data.version)); } catch (e) {}
+    overlay.remove();
+    showToast(`Skipping Core Rules v${data.version} — it stays available under 📚 Core Rules.`);
+  };
+  card.querySelector('#core-apply').onclick = async () => {
+    const merged = _coreBuildMerged(local, diffs, picked, data.version);
+    overlay.remove();
+    applyConfigData(merged);
+    buildSpeciesManagerTable?.();
+    const { error: werr } = await writeConfigToSupabase();
+    if (werr) setConfigStatus('Merged locally but save failed: ' + werr.message, false);
+    else setConfigStatus(`Merged ${picked.size} item(s) from Core Rules v${data.version}.`, true);
+    showToast(`Merged ${picked.size} item(s) from Core Rules v${data.version}.`, 'good');
+  };
+  updateCount();
+}
+// ═══ END CORE RULES ══════════════════════════════════════════════════════════
+
 // Apply a full config object wholesale — no partial loading, no per-key guards.
 // Missing keys fall back to defaults so the app is never partially populated.
 function applyConfigData(data) {
@@ -7194,8 +7444,10 @@ function applyConfigData(data) {
   STARTING_CROWNS    = data.startingCrowns    ?? 5;
   NOBLE_WEALTH_MULT  = data.nobleWealthMult   ?? 4;
   URCHIN_WEALTH_MULT = data.urchinWealthMult  ?? 0.2;
+  _coreAppliedVersion = Number(data.coreRulesVersion) || 0;
   migrateSkills();
   rebuildAllConfigUI();
+  if (typeof _refreshCoreRulesButton === 'function') _refreshCoreRulesButton();
 }
 
 function rebuildAllConfigUI() {
