@@ -273,6 +273,19 @@ function _paSecArmor(ent) {
   return _paSection('Armor', rows);
 }
 
+// Native language — characters only (creatures don't have one unless the GM
+// set stats.Language on a template). The own sheet reads the live Traits
+// dropdown so an unsaved change shows immediately; everyone else's comes from
+// their saved stats.Language, defaulting to Realm like the dropdown does.
+function _paSecLanguage(ent, isOwnSheet) {
+  const saved = ent?.stats?.Language;
+  if (ent?.type !== 'char' && !saved) return '';
+  const live = isOwnSheet ? document.getElementById('sel-language')?.value : null;
+  const lang = live || saved || 'Realm';
+  return _paSection('Language',
+    `<div class="ps-stat-row"><span class="ps-stat-label">Native</span><span class="ps-stat-val" style="font-size:0.78rem;">${_paEsc(lang)}</span></div>`);
+}
+
 function _paSecSkills(skills, attrs) {
   const invested = Object.entries(skills || {}).filter(([, pts]) => pts > 0);
   const content = invested.length
@@ -432,6 +445,7 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecStats(attrs, ent.baseAttrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
+    ${_paSecLanguage(ent, isOwnSheet)}
     ${_paSecSkills(skills, attrs)}
     ${_paSecSpellBook(ent)}
     ${_paSecNotes(ent)}`;

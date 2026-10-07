@@ -1090,6 +1090,12 @@
           <label>Mental Disposition</label>
           <select id="sel-mental" onchange="recalc()"></select>
         </div>
+        <div class="field field-inline">
+          <label>Native Language</label>
+          <select id="sel-language" onchange="recalc()" title="The language this character grew up speaking. Other languages are learned as skills.">
+            <option selected>Realm</option><option>Barbaric</option><option>New World</option><option>Demonic</option><option>Sublime</option><option>Ancients</option><option>Underdweller</option>
+          </select>
+        </div>
         </div><!-- end grid-2 -->
         </div><!-- end right column -->
       </div><!-- end avatar+fields grid -->
@@ -1917,6 +1923,7 @@
           <div class="ps-row"><span class="ps-label">Body Type</span><span class="ps-val" id="ps-bodytype">—</span></div>
           <div class="ps-row"><span class="ps-label">Sex</span><span class="ps-val" id="ps-gender">—</span></div>
           <div class="ps-row"><span class="ps-label">Age</span><span class="ps-val" id="ps-age">—</span></div>
+          <div class="ps-row"><span class="ps-label">Native Language</span><span class="ps-val" id="ps-language">—</span></div>
         </div>
         <div class="ps-block">
           <h4>Physical</h4>
@@ -2426,6 +2433,7 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-bodytype').textContent = document.getElementById('sel-bodytype').value;
   document.getElementById('ps-gender').textContent = document.getElementById('sel-gender').value;
   document.getElementById('ps-age').textContent    = document.getElementById('sel-age').value;
+  document.getElementById('ps-language').textContent = document.getElementById('sel-language')?.value || 'Realm';
   document.getElementById('ps-height').textContent = inchesToFeetStr(attrs._heightInches);
   document.getElementById('ps-weight').textContent = Math.round(attrs._weight)+' lbs';
   const { total: carriedTotal } = getCarriedWeight(attrs);
@@ -6075,6 +6083,7 @@ function gatherCharacterData() {
     build:   document.getElementById('sel-build').value,
     social:  document.getElementById('sel-social').value,
     mental:  document.getElementById('sel-mental').value,
+    language: document.getElementById('sel-language')?.value || 'Realm',
     level:   characterLevel,
     xp:      characterXP,
     pence:   characterPence,
@@ -6151,7 +6160,7 @@ async function saveCharacter() {
     social:      data.social || '',
     mental:      data.mental || '',
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
-                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped },
+                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language },
     notes:       data.notes || '',
     features:    data.features,
     skills:      data.skills,
@@ -6386,6 +6395,8 @@ function _doNewCharacter() {
   characterPence = 0; // real starting amount is derived at this character's first save — see saveCharacter
   updatePurseDisplay();
   characterKnownSpells = [];
+  const newLangSel = document.getElementById('sel-language');
+  if (newLangSel) newLangSel.value = 'Realm';
   const newXpDisplay = document.getElementById('char-xp-display');
   if (newXpDisplay) newXpDisplay.textContent = '0';
   _refreshLevelFromXp(); // also sets characterLevel, the Level display, and rebuilds stat rows
@@ -6479,7 +6490,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261006c';
+const VERSION = 'v0.1.20261007a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7207,6 +7218,13 @@ function applyCharacterData(data) {
   if (data.build)  document.getElementById('sel-build').value  = data.build;
   if (data.social) document.getElementById('sel-social').value = data.social;
   if (data.mental) document.getElementById('sel-mental').value = data.mental;
+  // Native language — stats.Language piggyback for saved characters, a plain
+  // `language` key for exported files; anything older (or unrecognised) is Realm.
+  const langSel = document.getElementById('sel-language');
+  if (langSel) {
+    const lang = data.language || data.stats?.Language;
+    langSel.value = [...langSel.options].some(o => o.value === lang) ? lang : 'Realm';
+  }
 
   // XP — read-only display of whatever the GM's Finish Combat flow has
   // awarded so far (see _awardXpToCharacter); same stats.XP piggyback, no
