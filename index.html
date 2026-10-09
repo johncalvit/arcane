@@ -6566,7 +6566,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261009a';
+const VERSION = 'v0.1.20261009b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11210,8 +11210,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     rangeIncrements = Math.round(distanceFt / rangeFt);
     rangePenalty = rangeIncrements;
   }
-  const adjustedHit = hitValue != null ? Math.max(0, hitValue - rangePenalty) : null;
-
+  // Size first, then range (the modal subtracts rangePenalty) — see attackTokenClick.
   let targetAdj = 5;
   if (targetToken.entity_type === 'character' && playCharCache[targetToken.entity_id]) {
     targetAdj = calcTargetAdjFromRow(playCharCache[targetToken.entity_id]);
@@ -11220,7 +11219,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     targetAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
   }
   const targetObscured = getConditions(targetToken.id).has('obscured');
-  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) : null;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj * (targetObscured ? 0.5 : 1) : null;
   // Clamp to castThreshold BEFORE defense/called-shot reduce it further below
   // (those still apply on top, same as any other attack) — see the function
   // comment for why the clamp exists at all.
@@ -11260,7 +11259,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
       tgtImgY:    (targetToken.y_pct / 100) * mapImgH,
       tgtTokenId: targetToken.id,
       atkTokenId: casterToken.id,
-      adjustedHit,
+      hitValue, rangePenalty, // stray chance = hit × the stray target's size, then − range
       rangeFt,
       weaponRow:   damageContext.weaponRow,
       atkPower,
@@ -11270,14 +11269,12 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
   }
 
   const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
-  const subtitle = hitValue != null
-    ? (rangeIncrements > 0
-        ? `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}`
-        : `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}`)
-    : '';
+  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${obscuredNote}` : '';
+  const rangeNote = rangeIncrements > 0 ? `${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away` : '';
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
+    rangePenalty, rangeNote,
     actionLabel: spell.name, defenseOptions, strayContext, damageContext,
     // The roller's own hit/miss/damage/stray handling already covers
     // everything the hit threshold decides; this only adds the spell-
@@ -12754,7 +12751,13 @@ async function _acSetHand(entityType, entityId, side, value) {
 
 // ── Slot-machine roller ───────────────────────────────────────────────────────
 // ── Called-shot picker ────────────────────────────────────────────────────────
-function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext, onComplete }) {
+// Hit chance order: baseThreshold is the SIZE-adjusted chance (hit × target
+// size, plus obscured/prone multipliers); a called shot's part size scales it
+// further; and only THEN is the range penalty (rangePenalty points) subtracted.
+// So distance costs every target the same number of points, and a big target
+// — starting with far more of them — stays hittable at range where a small one
+// isn't. rangeNote is the human-readable "N inc × Xft, Yft away" for the roller.
+function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext, onComplete, rangePenalty = 0, rangeNote = '' }) {
   const locData = getHitLocData(bodyType);
   // Roll-under d100 → chance to hit, clamped to the crit floor/ceiling (n≤5
   // always hits, n≥96 always misses). This is the no-defense hit chance.
@@ -12789,12 +12792,13 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   function pickPart(partKey) {
     overlay.remove();
     const part = partKey ? locData.parts[partKey] : null;
-    const locThreshold = (baseThreshold != null && part)
+    const sizedThreshold = (baseThreshold != null && part)
       ? Math.max(1, Math.round(baseThreshold * part.sizeFactor))
       : baseThreshold;
-    const locSubtitle = part
-      ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor}) = ${locThreshold}`
-      : baseSubtitle;
+    const locThreshold = sizedThreshold != null ? Math.max(0, sizedThreshold - rangePenalty) : null;
+    const locSubtitle = (part ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor})` : baseSubtitle)
+      + (rangePenalty ? ` − ${rangePenalty} range (${rangeNote})` : '')
+      + ((part || rangePenalty) ? ` = ${locThreshold}` : '');
     const targetTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
     const locCtx = { bodyType, partKey: partKey || null };
 
@@ -12824,7 +12828,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 
   // Regular attack button (torso/default, no size penalty)
   const regBtn = document.createElement('button');
-  const regPct = _hitPct(baseThreshold);
+  const regPct = _hitPct(baseThreshold != null ? Math.max(0, baseThreshold - rangePenalty) : null);
   regBtn.textContent = regPct != null ? `⚔ Regular Attack (Torso) — ${regPct}%` : '⚔ Regular Attack (Torso)';
   regBtn.style.cssText = `width:100%;padding:8px 12px;border-radius:5px;cursor:pointer;
     font-family:Georgia,serif;font-size:0.82rem;
@@ -12842,7 +12846,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   for (const [key, part] of Object.entries(locData.parts)) {
     if (key === locData.defaultPart) continue; // torso = regular attack
     const btn = document.createElement('button');
-    const hitPct = _hitPct(baseThreshold != null ? baseThreshold * part.sizeFactor : null);
+    const hitPct = _hitPct(baseThreshold != null ? Math.max(0, baseThreshold * part.sizeFactor - rangePenalty) : null);
     btn.textContent = hitPct != null ? `${part.label} — ${hitPct}%` : part.label;
     btn.title = `${Math.round(part.sizeFactor * 100)}% of body size${hitPct != null ? ` · ~${hitPct}% to hit, no defense` : ''}`;
     btn.style.cssText = `padding:6px 14px;border-radius:5px;cursor:pointer;
@@ -13416,7 +13420,7 @@ function _triggerStrayShot(roll, threshold, ctx) {
     : `${divergeDeg}° to the ${side === -1 ? 'left' : 'right'}`;
 
   let strayThreshold = null;
-  if (ctx.adjustedHit != null) {
+  if (ctx.hitValue != null) {
     let strayAdj = 5;
     if (strayTarget.entity_type === 'character' && playCharCache[strayTarget.entity_id]) {
       strayAdj = calcTargetAdjFromRow(playCharCache[strayTarget.entity_id]);
@@ -13424,7 +13428,8 @@ function _triggerStrayShot(roll, threshold, ctx) {
       const race = RACE_DATA[strayTarget.species] || {};
       strayAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
     }
-    strayThreshold = Math.round(ctx.adjustedHit * strayAdj);
+    // Size first, then the original shot's range penalty — same order as the main shot.
+    strayThreshold = Math.max(0, Math.round(ctx.hitValue * strayAdj) - (ctx.rangePenalty || 0));
   }
 
   // Damage/location context for the stray target — same weapon/attacker as
@@ -14842,7 +14847,11 @@ function attackTokenClick(tokenId) {
     }
   }
 
-  const adjustedHit = hitValue != null ? Math.max(0, hitValue - rangePenalty) : null;
+  // Order matters: target size is applied FIRST, then the range penalty is
+  // subtracted from the size-adjusted chance (see _openCalledShotModal, which
+  // also puts the called-shot part size before range) — so range costs every
+  // target the same number of points, and a big target, starting from far
+  // more of them, stays easy to hit at distance where a small one doesn't.
 
   // ── Target size ───────────────────────────────────────────────────────────
   let targetAdj = 5; // default
@@ -14865,8 +14874,8 @@ function attackTokenClick(tokenId) {
   // so this doubling only applies to melee attacks.
   const targetIsProne  = getConditions(target.id).has('prone');
   const proneMeleeMult = (targetIsProne && !attackIsRanged) ? 2 : 1;
-  const rawThreshold = adjustedHit != null ? adjustedHit * targetAdj * (targetObscured ? 0.5 : 1) * proneMeleeMult : null;
-  const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj * (targetObscured ? 0.5 : 1) * proneMeleeMult : null;
+  const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null; // before range — the modal subtracts it
 
   // ── Log action to tracker ─────────────────────────────────────────────────
   // Charges the hand actually holding the weapon (not always 'right' — that
@@ -14908,7 +14917,7 @@ function attackTokenClick(tokenId) {
         tgtImgY:    (target.y_pct  / 100) * mapImgH,
         tgtTokenId: target.id,
         atkTokenId: atkToken.id,
-        adjustedHit,
+        hitValue, rangePenalty, // stray chance = hit × the stray target's size, then − range (same order as the main shot)
         rangeFt:    attackRangeFt,
         // Carried through to _triggerStrayShot/_showStrayPrompt so a
         // successful stray-hit roll can actually apply damage — same
@@ -14937,16 +14946,12 @@ function attackTokenClick(tokenId) {
   // ── Open called-shot picker, then hit roller ─────────────────────────────
   const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
   const proneNote     = proneMeleeMult > 1 ? ' × 2 (prone target)' : '';
-  let subtitle = '';
-  if (hitValue != null) {
-    if (attackIsRanged && rangeIncrements > 0) {
-      subtitle = `HIT ${hitValue} − ${rangePenalty} (${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away) = ${adjustedHit} × Size ${targetAdj}${obscuredNote}${proneNote}`;
-    } else {
-      subtitle = `HIT ${adjustedHit} × Size ${targetAdj}${obscuredNote}${proneNote}`;
-    }
-  }
+  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${obscuredNote}${proneNote}` : '';
+  const rangeNote = (attackIsRanged && rangeIncrements > 0)
+    ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away` : '';
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
+    rangePenalty, rangeNote,
     actionLabel, defenseOptions, strayContext, damageContext, onComplete: onThrowRolled,
   });
   return true;
