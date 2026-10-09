@@ -6566,7 +6566,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261008b';
+const VERSION = 'v0.1.20261009a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8907,11 +8907,12 @@ function _extractItemFromInventory(row, name) {
   // Not tracked in an inventory array (e.g. a creature's weapon) — just the name.
   return { kind: _lookupItemKind(name), record: { name }, weapons: row.weapons, equipment: row.equipment };
 }
-// Place an item token 1–4 ft from the dropper in a random direction.
-async function dropItemOnMap(dropperTokenId, itemName, payload) {
+// Place an item token 1–4 ft from the dropper in a random direction — or, when
+// `maxFt` is given (thrown weapons), anywhere from 0 to maxFt away.
+async function dropItemOnMap(dropperTokenId, itemName, payload, maxFt) {
   const dropper = mapTokens[dropperTokenId];
   if (!dropper) return;
-  const distFt = 1 + Math.random() * 3;          // 1–4 ft
+  const distFt = maxFt != null ? Math.random() * Math.max(0, maxFt) : 1 + Math.random() * 3;
   const angle  = Math.random() * Math.PI * 2;
   let nx = dropper.x_pct, ny = dropper.y_pct;
   if (mapScalePPF > 0 && mapImgW && mapImgH) {
@@ -8976,7 +8977,18 @@ async function _throwWeaponLands(attackerCombatantId, weaponName, targetTokenId)
   const ref = attackerCombatantId; // combatant ids are valid entity refs
   const side = _handHoldingWeapon(attackerCombatantId, weaponName);
   if (!side) return; // not actually held (e.g. already dropped) — nothing to land
-  await dropHeldItem(ref, side, targetTokenId);
+  // It lands in a random direction up to 30% of the throw distance from the
+  // target (a 20 ft throw can land up to 6 ft off) — so it isn't always right
+  // underfoot. Without a calibrated map there's no distance, so it falls back
+  // to the usual 1–4 ft scatter.
+  const THROW_SCATTER_FRACTION = 0.3;
+  let scatterMaxFt;
+  const atkTok = _pathFindToken(attackerCombatantId), tgtTok = mapTokens[targetTokenId];
+  if (atkTok && tgtTok) {
+    const d = _pctDistFt(atkTok.x_pct, atkTok.y_pct, tgtTok.x_pct, tgtTok.y_pct);
+    if (d != null) scatterMaxFt = d * THROW_SCATTER_FRACTION;
+  }
+  await dropHeldItem(ref, side, targetTokenId, scatterMaxFt);
   // Held in both hands (one weapon, two-handed) and no second copy left → the
   // other hand is empty now too.
   const ent = getEntity(ref);
@@ -8994,7 +9006,7 @@ async function _throwWeaponLands(attackerCombatantId, weaponName, targetTokenId)
 // Drop whatever `side` holds onto the ground (removes it from inventory too).
 // `nearTokenId` (optional) drops it beside that token instead of the holder —
 // used for thrown weapons landing by their target.
-async function dropHeldItem(ref, side, nearTokenId) {
+async function dropHeldItem(ref, side, nearTokenId, scatterMaxFt) {
   const ent = getEntity(ref);
   const name = ent?.held?.[side];
   if (!name) return;
@@ -9011,7 +9023,7 @@ async function dropHeldItem(ref, side, nearTokenId) {
   await updateEntity(ref, patch);
   _syncOwnBuilder(ref);
   const tok = nearTokenId ? (mapTokens[nearTokenId] || _entityToken(ref)) : _entityToken(ref);
-  if (tok) await dropItemOnMap(tok.id, name, payload);
+  if (tok) await dropItemOnMap(tok.id, name, payload, nearTokenId ? scatterMaxFt : undefined);
   showToast(nearTokenId ? `${name} lands near ${tok?.label || 'the target'}` : 'Dropped ' + name);
 }
 // `grabberRef` (character OR creature) grabs the ground item into a free hand.
