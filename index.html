@@ -6566,7 +6566,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261009b';
+const VERSION = 'v0.1.20261009c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9658,15 +9658,13 @@ function _openSpellPickerModal(combatantId) {
       <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}% rd1 · ${costLabel}</span>`;
     row.onclick = async () => {
       if (notBuilt) return;
-      // Beginning a cast is a full-round commitment — same "ends your round"
-      // confirm every other round-ending action gets, and the same
-      // auto-advance once it's actually set (no separate Done click).
-      const ok = await styledConfirm('Selecting this action will end your round.');
-      if (!ok) return;
+      // Picking a spell only BEGINS the cast (its windup) and goes back to the
+      // action selector, where the caster can Release it right away (an easy
+      // spell), keep concentrating for better odds (Done), move first, or
+      // cancel. Releasing is what ends the round (see atCompleteCast).
       overlay.remove();
       await atCastSpell(combatantId, spell.name);
-      atCloseModal();
-      atAcceptAction(combatantId);
+      atOpenActionDialog(combatantId);
     };
     card.appendChild(row);
   });
@@ -9760,7 +9758,9 @@ async function atCastSpell(casterCid, spellName) {
   const c = atCombatants.find(x => x.id === casterCid);
   if (!c) return;
   if (!c.slots) c.slots = _newSlots();
-  for (const k of Object.keys(c.slots)) c.slots[k] = null;
+  // Clear everything EXCEPT this round's movement — a caster who already moved
+  // (or will, before releasing) keeps that bookkeeping.
+  for (const k of Object.keys(c.slots)) if (k !== 'move') c.slots[k] = null;
   // _atSharedRound(), not bare atRound — atRound only ever advances on the
   // GM's own client (atNext's atRound++); a player's local atRound just sits
   // frozen, which made every round of windup on a player-controlled caster
@@ -9789,14 +9789,20 @@ async function atCompleteCast(casterCid, spellName) {
   const startRound = c?.slots?.full?.startRound;
   const nowRound = _atSharedRound();
   _castPendingRounds = Math.max(1, nowRound - (startRound != null ? startRound : nowRound) + 1);
-  if (c?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
+  // The windup slot is deliberately NOT cleared here any more: it's cleared once
+  // the cast is actually committed (start of _resolveSpellCast), so pressing Esc
+  // while choosing a target can step back to the action selector with the spell
+  // still forming (see _returnToActionsAfterCastEsc).
   const spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
+  // Releasing ends the caster's round once the cast resolves (auto-advance, same
+  // as the other round-ending actions) — Esc during targeting undoes this.
+  _dlgReopenId = casterCid;
+  _dlgRoundEndPendingId = casterCid;
   if (spell.targetType === 'Self') {
     await _resolveSpellCast(casterCid, spellName, casterCid);
     return;
   }
-  _dlgReopenId = casterCid;
   atCloseModal();
   if (spell.targetType === 'Area') {
     if (spell.spellType === 'Creation') { enterObstacleCastMode(casterCid, spell); return; }
@@ -11101,6 +11107,11 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   if (!spell) return;
   const casterEnt = getEntity(casterCid);
   if (!casterEnt) { showToast('Could not load caster.', 'error'); return; }
+
+  // The cast is committed now (target chosen) — the windup is spent. Until here
+  // it stayed in place so Esc could back out of targeting.
+  const _wc = atCombatants.find(x => x.id === casterCid);
+  if (_wc?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
 
   const roundsWaited = _castPendingRounds;
   const castThreshold = _spellSuccessRoll(casterEnt, spell, roundsWaited);
@@ -16596,19 +16607,28 @@ function renderTokensCharList() {
 // Extend the existing window mousemove / mouseup listeners
 document.addEventListener('mousemove', onTokenMouseMove);
 document.addEventListener('mouseup',   onTokenMouseUp);
+// Esc while choosing a SPELL's target/area steps back to the action selector
+// with the cast still forming (its windup was never cleared — see atCompleteCast),
+// so the caster can look over the effect area, move, and then release or wait.
+function _returnToActionsAfterCastEsc() {
+  if (typeof _dlgRoundEndPendingId !== 'undefined') _dlgRoundEndPendingId = null; // not released yet — don't auto-end the round
+  if (typeof _dlgMaybeReopen === 'function') _dlgMaybeReopen();
+}
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     if (attackMode) {
+      const wasCast = attackActionLabel === 'Cast'; // an Individual-target spell
       exitAttackMode(); e.stopPropagation();
-      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null; // manual abort — don't reopen later
+      if (wasCast) _returnToActionsAfterCastEsc();
+      else if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null; // manual abort — don't reopen later
     }
     else if (aoeMode) {
       exitAoeCastMode(); e.stopPropagation();
-      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
+      _returnToActionsAfterCastEsc();
     }
     else if (obstacleMode) {
       exitObstacleCastMode(); e.stopPropagation();
-      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = null;
+      _returnToActionsAfterCastEsc();
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pinMode)  { exitPinMode(); e.stopPropagation(); }
