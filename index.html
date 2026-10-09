@@ -2616,7 +2616,8 @@ function getActionsForItem(itemName) {
   const actions = [...meleeActions, ...rangedActions];
   // If the same weapon (by normalized name) appears on both lists, it can
   // also be thrown — add that as an extra action alongside its other actions.
-  if (meleeActions.length && rangedActions.length && !actions.includes('Throw')) {
+  // (Skipped when the weapon already has its own "Throw (...)" ranged action.)
+  if (meleeActions.length && rangedActions.length && !actions.some(a => /^Throw\b/i.test(a))) {
     actions.push('Throw');
   }
   return [...new Set(actions)];
@@ -3676,6 +3677,10 @@ function _weaponLoadoutCatalog() {
   const out = [];
   for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
     if (seen.has(r.weapon) || r.naturalSlot) continue; // natural weapons aren't carried
+    // "Knife (Thrown)" etc. are just the throw action of the plain melee weapon —
+    // holding the Knife offers it (see normalizeWeaponName) — so they aren't a
+    // separate item to buy or carry when that melee weapon exists.
+    if (/\(Thrown\)\s*$/i.test(r.weapon) && MELEE_WEAPONS.some(m => !m.naturalSlot && m.weapon === normalizeWeaponName(r.weapon))) continue;
     seen.add(r.weapon);
     out.push({
       name: r.weapon,
@@ -4800,6 +4805,29 @@ const DEFAULT_RANGED_WEAPON_PRICES = {
   "Crossbow, Heavy": 3500, "Crossbow, Light": 2000, "Dart": 100, "Javelin": 300,
   "Sling Pellet": 100, "Sling Stone": 100, "Spear, Short/Long": 600,
 };
+// A ranged row is a THROW of a melee weapon when it has no reload count and a
+// melee weapon with the same (normalized) name exists — Javelin, Hatchet, Club,
+// Knife. Those must be named "Throw (<damage type>)" so they never collide with
+// the melee action of the same name (the attack flow finds its row by weapon +
+// action). Configs saved before that convention get their thrown rows renamed
+// here, and any default thrown row the config doesn't have yet (the Knife) is
+// added; idempotent, so it's safe on every config load.
+function _migrateThrownWeapons() {
+  const meleeNames = new Set(MELEE_WEAPONS.filter(m => !m.naturalSlot).map(m => normalizeWeaponName(m.weapon)));
+  for (const r of RANGED_WEAPONS) {
+    if (typeof r.reload === 'number' && r.reload > 0) continue; // bows etc. — loaded, not thrown
+    if (!meleeNames.has(normalizeWeaponName(r.weapon))) continue; // Dart: ranged-only
+    if (/^Throw\b/i.test(r.action)) continue;
+    r.action = `Throw (${r.action})`;
+  }
+  const haveThrow = new Set(RANGED_WEAPONS.map(r => normalizeWeaponName(r.weapon)));
+  for (const d of DEFAULT_RANGED_WEAPONS) {
+    if (!/^Throw\b/i.test(d.action)) continue;
+    const base = normalizeWeaponName(d.weapon);
+    if (meleeNames.has(base) && !haveThrow.has(base)) { RANGED_WEAPONS.push({ ...d }); haveThrow.add(base); }
+  }
+}
+
 // Same flat weapon+action structure as melee weapons, but with a range
 // increment / max range instead of reach. Config-driven, with a built-in
 // fallback transcribed from "Arcane Ranged Weapons.csv" so it's never empty.
@@ -4809,15 +4837,21 @@ const DEFAULT_RANGED_WEAPONS = [
   { weapon:"Bow, Hunting",          action:"Stab",  rangeIncrement:10, maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:12, damageMax:7,  maxPowerMod:0.8 },
   { weapon:"Bow, Light",            action:"Stab",  rangeIncrement:8,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.6 },
   { weapon:"Bow, War",              action:"Stab",  rangeIncrement:12, maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:16, damageMax:9,  maxPowerMod:0.9 },
-  { weapon:"Club (Thrown)",         action:"Smash", rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:7,  damageMax:4,  maxPowerMod:0.5 },
-  { weapon:"Axe, Hatchet (Thrown)", action:"Stab",  rangeIncrement:2,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:9,  damageMax:6,  maxPowerMod:0.7 },
+  // Thrown versions of melee weapons. The action is "Throw (<damage type>)" — it
+  // must be distinct from the melee action of the same weapon (the attack flow
+  // finds its row by weapon + action name), and the damage-type word keeps
+  // getAttackCategory working. Holding the plain melee weapon offers these
+  // alongside its melee actions (names match via normalizeWeaponName).
+  { weapon:"Club (Thrown)",         action:"Throw (Smash)", rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:7,  damageMax:4,  maxPowerMod:0.5 },
+  { weapon:"Axe, Hatchet (Thrown)", action:"Throw (Stab)",  rangeIncrement:2,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:9,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Knife (Thrown)",        action:"Throw (Stab)",  rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:4,  damageMax:3,  maxPowerMod:0.3 },
   { weapon:"Crossbow, Hand",        action:"Stab",  rangeIncrement:4,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:8,  damageMax:4,  maxPowerMod:0.5 },
   { weapon:"Crossbow, Heavy",       action:"Stab",  rangeIncrement:15, maxRange:null, reload:3,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:10, maxPowerMod:0.6 },
   { weapon:"Crossbow, Light",       action:"Stab",  rangeIncrement:12, maxRange:null, reload:2,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:10, damageMax:8,  maxPowerMod:0.5 },
   { weapon:"Dart",                  action:"Stab",  rangeIncrement:3,  maxRange:null, reload:'N/A', hitFormula:"Manual Dexterity * 2",                      material:"", minStr:6,  damageMax:2,  maxPowerMod:0.2 },
   { weapon:"Sling Pellet",          action:"Smash", rangeIncrement:4,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:6,  maxPowerMod:0.6 },
   { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
-  { weapon:"Javelin",               action:"Stab",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
+  { weapon:"Javelin",               action:"Throw (Stab)",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
   { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
 ].map(r => ({ ...r, price: DEFAULT_RANGED_WEAPON_PRICES[r.weapon] || 0 }));
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
@@ -6532,7 +6566,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261007c';
+const VERSION = 'v0.1.20261008a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7436,6 +7470,7 @@ function applyConfigData(data) {
       r.reload = d ? d.reload : 'N/A';
     }
   });
+  _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
@@ -8694,6 +8729,7 @@ function _staminaCostForLabel(label) {
   if (action === 'Evade' || action === 'Sprint' || action === 'Charge') return 2;
   if (/^(Move|Retreat|Block|Parry)$/.test(action)) return 1;
   if (/^(Swing|Thrust|Slash|Stab|Chop|Smash|Sweep|Bash|Punch|Grab|Push|Grapple|Fire|Throw|Aim)$/.test(action)) return 1;
+  if (/^Throw \(.+\)$/.test(action)) return 1; // a thrown weapon: "Throw (Stab)", "Throw (Smash)", ...
   return 0;
 }
 
