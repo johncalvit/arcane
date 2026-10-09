@@ -1432,6 +1432,10 @@
             <input type="text" id="apf-hearingmod" placeholder="0" title="Applied to the wearer's Hearing while equipped.">
           </div>
           <div class="field">
+            <label>Arcane Impedance</label>
+            <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling.">
+          </div>
+          <div class="field">
             <label>Price per Modifier (Crowns)</label>
             <input type="text" id="apf-costpermod" placeholder="e.g. 4" title="In Crowns, not pence — an owned instance's actual price is area weight × its own size × this (e.g. a Kettle Hat at 4cr/mod, bought at size 5, costs 20cr). This IS what the Shop charges.">
           </div>
@@ -1443,7 +1447,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th>Price/Mod</th><th></th></tr></thead>
+        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th title="Per point of piece size; lowers the wearer's max casting success">Impedance</th><th>Price/Mod</th><th></th></tr></thead>
         <tbody id="armorpiecemgr-list"></tbody>
       </table>
     </div>
@@ -3815,6 +3819,7 @@ function addArmorPiece() {
   tr.dataset.noise = piece.noise || 0;
   tr.dataset.visionmod = piece.visionMod || 0;
   tr.dataset.hearingmod = piece.hearingMod || 0;
+  tr.dataset.impedance = piece.impedance || 0; // frozen with the instance, like noise/vision/hearing
   tr.dataset.weight = weight;
   tr.dataset.cost = cost;
   tr.innerHTML = `<td>${_paEsc(piece.name)}</td><td>${piece.slot ? _paEsc(piece.slot) : 'any'}</td><td>${_paEsc(piece.material)}</td><td>${size}</td><td>${Math.round(weight * 10) / 10}</td><td>${formatMoney(cost)}</td>
@@ -3834,6 +3839,7 @@ function _ownedArmorPieces() {
     material: tr.dataset.material, size: parseFloat(tr.dataset.size) || 0,
     gap: parseFloat(tr.dataset.gap) || 0, noise: parseFloat(tr.dataset.noise) || 0,
     visionMod: parseFloat(tr.dataset.visionmod) || 0, hearingMod: parseFloat(tr.dataset.hearingmod) || 0,
+    impedance: parseFloat(tr.dataset.impedance) || 0,
     weight: parseFloat(tr.dataset.weight) || 0, cost: parseFloat(tr.dataset.cost) || 0,
   }));
 }
@@ -4352,7 +4358,7 @@ function positionArmorPieceForm(index) {
     const row = document.createElement('tr');
     row.id = 'armorpiece-form-row';
     const cell = document.createElement('td');
-    cell.colSpan = 9;
+    cell.colSpan = 10;
     row.appendChild(cell);
     if (targetRow) targetRow.after(row); else tbody.appendChild(row);
     cell.appendChild(form);
@@ -4382,6 +4388,7 @@ function _fillArmorPieceForm(row) {
   document.getElementById('apf-noise').value      = row ? (row.noise || 0) : 0;
   document.getElementById('apf-visionmod').value  = row ? (row.visionMod || 0) : 0;
   document.getElementById('apf-hearingmod').value = row ? (row.hearingMod || 0) : 0;
+  document.getElementById('apf-impedance').value  = row ? (row.impedance || 0) : 0;
   document.getElementById('apf-costpermod').value = row ? (row.costPerMod || 0) : 0;
 }
 
@@ -4449,6 +4456,7 @@ function saveArmorPiece() {
     noise: parseFloat(document.getElementById('apf-noise').value) || 0,
     visionMod: parseFloat(document.getElementById('apf-visionmod').value) || 0,
     hearingMod: parseFloat(document.getElementById('apf-hearingmod').value) || 0,
+    impedance: parseFloat(document.getElementById('apf-impedance').value) || 0,
     costPerMod: parseFloat(document.getElementById('apf-costpermod').value) || 0,
   };
   if (editingArmorPieceIndex !== null) ARMOR_PIECES[editingArmorPieceIndex] = row;
@@ -4478,7 +4486,7 @@ function buildArmorPieceManagerTable() {
   ARMOR_PIECES.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
-      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.costPerMod || 0}cr</td>
+      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.impedance || 0}</td><td>${p.costPerMod || 0}cr</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPieceAsSuit(${i})" title="Add a matching piece for every other slot (named e.g. &quot;${p.name} (R Arm)&quot;)">Copy As Suit</button>
@@ -6566,7 +6574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261009c';
+const VERSION = 'v0.1.20261010a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7646,6 +7654,7 @@ function applyCharacterData(data) {
       tr.dataset.id = o.id; tr.dataset.name = o.name; tr.dataset.slot = o.slot || '';
       tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
       tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
+      tr.dataset.impedance = o.impedance || 0;
       tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
       tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight||0) * 10) / 10}</td><td>${formatMoney(o.cost)}</td>
         <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
@@ -8349,10 +8358,13 @@ function getEntity(ref) {
   // visionMod/hearingMod (see Game Config → Armor Pieces) are affected.
   const armorOwned = Array.isArray(row.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
   const armorEquipped = row.stats?.ArmorEquipped || {};
-  let visionPct = 0, hearingPct = 0, armorNoise = 0;
+  let visionPct = 0, hearingPct = 0, armorNoise = 0, arcaneImpedance = 0;
   for (const slotKey of Object.keys(armorEquipped)) {
     const inst = armorOwned.find(o => o.id === armorEquipped[slotKey]);
     if (!inst) continue;
+    // Arcane Impedance: each worn piece costs impedance × ITS size, in % off the
+    // wearer's maximum casting success (see _spellSuccessCap); pieces sum.
+    arcaneImpedance += (inst.impedance || 0) * (inst.size || 0);
     visionPct += inst.visionMod || 0;
     hearingPct += inst.hearingMod || 0;
     armorNoise += inst.noise || 0; // see Vigilant/Infiltrate's _infiltratorNoiseScore
@@ -8388,7 +8400,7 @@ function getEntity(ref) {
     carriedWeight,
     held:      Object.assign(_speciesNaturalDefaults(row.species), row.held_items || {}),
     armor:     row.armor || {},
-    armorOwned, armorEquipped, armorNoise,
+    armorOwned, armorEquipped, armorNoise, arcaneImpedance,
     damage:    row.damage || { toughness: 0, stamina: 0, blood: 0, quintessence: 0 },
     skills:    row.skills || {},
     stats:     row.stats || {},
@@ -9488,7 +9500,15 @@ function _spellRawAccum(ent, spell, roundsWaited) {
 // puncher's chance, however remote) regardless of how negative the raw
 // accumulation has gotten.
 function _spellSuccessRoll(ent, spell, roundsWaited) {
-  return Math.max(1, Math.min(95, Math.round(_spellRawAccum(ent, spell, roundsWaited))));
+  return Math.max(1, Math.min(_spellSuccessCap(ent), Math.round(_spellRawAccum(ent, spell, roundsWaited))));
+}
+
+// The ceiling on casting success: 95, lowered by the wearer's total Arcane
+// Impedance (each worn armor piece's impedance × its size — see getEntity's
+// arcaneImpedance). Heavy armor doesn't change how fast a spell builds, it
+// limits how good it can ever get. Never below the 1% floor above.
+function _spellSuccessCap(ent) {
+  return Math.max(1, 95 - Math.round(ent?.arcaneImpedance || 0));
 }
 
 // Shared target-% calc for a recovery save — used both to actually open the
@@ -9652,8 +9672,9 @@ function _openSpellPickerModal(combatantId) {
       background:${notBuilt ? 'var(--bg3)' : 'rgba(201,168,76,0.10)'};
       color:${notBuilt ? 'var(--text-dim)' : 'var(--text)'};
       cursor:${notBuilt ? 'not-allowed' : 'pointer'};opacity:${notBuilt ? '0.5' : '1'};`;
+    const capNote = _spellSuccessCap(ent) < 95 ? ` · armor caps casting at ${_spellSuccessCap(ent)}%` : '';
     row.title = notBuilt ? `${spell.targetType}-target spells aren't built yet`
-                          : `${spell.range} · ${spell.difficultyStat} ${spell.difficultyValue} · builds ~${Math.round(_spellPerRoundBonus(ent, spell))}%/round the longer you concentrate`;
+                          : `${spell.range} · ${spell.difficultyStat} ${spell.difficultyValue} · builds ~${Math.round(_spellPerRoundBonus(ent, spell))}%/round the longer you concentrate${capNote}`;
     row.innerHTML = `<span>${_paEsc(spell.name)} <span style="font-size:0.68rem;color:var(--text-dim);">(${spell.magicClass} · ${spell.targetType})</span></span>
       <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}% rd1 · ${costLabel}</span>`;
     row.onclick = async () => {

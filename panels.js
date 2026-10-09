@@ -270,7 +270,12 @@ function _paSecArmor(ent) {
     const label = inst ? inst.name : (armor[s.key] || 'None');
     return `<div class="ps-stat-row"><span class="ps-stat-label">${_paEsc(s.label)}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(label)}</span></div>`;
   }).join('');
-  return _paSection('Armor', rows);
+  // Arcane Impedance: worn armor lowers the ceiling on casting success.
+  const imp = Math.round(ent.arcaneImpedance || 0);
+  const impRow = imp > 0
+    ? `<div class="ps-stat-row" title="Each worn piece's Arcane Impedance × its size, summed; subtracted from the 95% maximum casting success."><span class="ps-stat-label">Arcane Impedance</span><span class="ps-stat-val" style="font-size:0.72rem;">−${imp}% · casting max ${Math.max(1, 95 - imp)}%</span></div>`
+    : '';
+  return _paSection('Armor', rows + impRow);
 }
 
 // Native language — characters only (creatures don't have one unless the GM
