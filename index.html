@@ -6566,7 +6566,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261008a';
+const VERSION = 'v0.1.20261008b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8967,8 +8967,34 @@ function _syncOwnBuilder(ref) {
   if (typeof recalc === 'function') recalc();
 }
 
+// A thrown weapon leaves the thrower's hand and inventory and lands near the
+// TARGET (1–4 ft, same scatter as any drop), where it can be picked up again —
+// by anyone, including whoever it was thrown at. Called once the throw's hit
+// roll completes, hit or miss. A single weapon held two-handed has its other
+// hand cleared too if that was the last copy.
+async function _throwWeaponLands(attackerCombatantId, weaponName, targetTokenId) {
+  const ref = attackerCombatantId; // combatant ids are valid entity refs
+  const side = _handHoldingWeapon(attackerCombatantId, weaponName);
+  if (!side) return; // not actually held (e.g. already dropped) — nothing to land
+  await dropHeldItem(ref, side, targetTokenId);
+  // Held in both hands (one weapon, two-handed) and no second copy left → the
+  // other hand is empty now too.
+  const ent = getEntity(ref);
+  const other = side === 'right' ? 'left' : 'right';
+  if (ent?.held?.[other] === weaponName) {
+    const row = _entityCacheRow(ref);
+    const stillOwned = row && ((row.weapons || []).some(w => w.name === weaponName) || (row.equipment || []).some(e => e.name === weaponName));
+    if (!stillOwned) {
+      await updateEntity(ref, { held_items: Object.assign({}, ent.held, { [other]: null }) });
+      _syncOwnBuilder(ref);
+    }
+  }
+}
+
 // Drop whatever `side` holds onto the ground (removes it from inventory too).
-async function dropHeldItem(ref, side) {
+// `nearTokenId` (optional) drops it beside that token instead of the holder —
+// used for thrown weapons landing by their target.
+async function dropHeldItem(ref, side, nearTokenId) {
   const ent = getEntity(ref);
   const name = ent?.held?.[side];
   if (!name) return;
@@ -8984,9 +9010,9 @@ async function dropHeldItem(ref, side) {
   }
   await updateEntity(ref, patch);
   _syncOwnBuilder(ref);
-  const tok = _entityToken(ref);
+  const tok = nearTokenId ? (mapTokens[nearTokenId] || _entityToken(ref)) : _entityToken(ref);
   if (tok) await dropItemOnMap(tok.id, name, payload);
-  showToast('Dropped ' + name);
+  showToast(nearTokenId ? `${name} lands near ${tok?.label || 'the target'}` : 'Dropped ' + name);
 }
 // `grabberRef` (character OR creature) grabs the ground item into a free hand.
 // Characters also stash it in their inventory array; creatures just hold it.
@@ -14883,6 +14909,15 @@ function attackTokenClick(tokenId) {
     }
   }
 
+  // A thrown weapon (a "Throw (...)" action, or any ranged weapon with no reload
+  // like the Dart) leaves the thrower's hand and lands by the target once the
+  // hit roll completes — see _throwWeaponLands. Captured now: exitAttackMode()
+  // clears the attack state. onComplete runs only for the roller, only if the
+  // roll actually happens (cancelling keeps the weapon), hit or miss.
+  const thrownWeapon = (wasRanged && attackWeaponName && (/^Throw\b/i.test(attackActionLabel || '') || attackWeaponRow?.reload === 'N/A')) ? attackWeaponName : null;
+  const throwerCid = attackCombatantId, throwTargetId = target.id;
+  const onThrowRolled = thrownWeapon ? () => { _throwWeaponLands(throwerCid, thrownWeapon, throwTargetId); } : undefined;
+
   exitAttackMode();
 
   const { defenseOptions, targetBodyType } = _buildDefenseOptions(target, wasRanged, rawThreshold);
@@ -14900,7 +14935,7 @@ function attackTokenClick(tokenId) {
   }
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
-    actionLabel, defenseOptions, strayContext, damageContext,
+    actionLabel, defenseOptions, strayContext, damageContext, onComplete: onThrowRolled,
   });
   return true;
 }
