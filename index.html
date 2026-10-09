@@ -2535,7 +2535,15 @@ function updatePlaysheet(attrs) {
   const armorTotalRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;">
       <span>Total Armor Weight</span><span style="color:var(--gold2);">${Math.round(armorWeights.total)} lbs</span>
     </div>`;
-  document.getElementById('ps-armor').innerHTML = armorRows + armorTotalRow;
+  // Total Arcane Armor Impedance: sum of each worn piece's impedance × its size
+  // (see getEntity's arcaneImpedance for the saved-data twin). Shown in percent,
+  // with the resulting ceiling on casting success.
+  const arcaneImpedance = _equippedArcaneImpedance();
+  const impShown = Math.round(arcaneImpedance * 10) / 10;
+  const impedanceRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;" title="Each worn piece's Arcane Impedance × its size, summed. Subtracted from the 95% maximum casting success.">
+      <span>Total Arcane Armor Impedance</span><span style="color:var(--gold2);">${impShown}%${arcaneImpedance > 0 ? ` <span style="font-weight:normal;color:var(--text-dim);">· casting max ${Math.max(1, 95 - Math.round(arcaneImpedance))}%</span>` : ''}</span>
+    </div>`;
+  document.getElementById('ps-armor').innerHTML = armorRows + armorTotalRow + impedanceRow;
 
   // Held items (right/left hand)
   buildHandSelectors();
@@ -4165,6 +4173,13 @@ function _equippedArmorInstances() {
     if (inst) result[slot] = inst;
   }
   return result;
+}
+
+// Total Arcane Impedance of what the builder's character has equipped RIGHT NOW
+// (live Loadout-tab state): each piece's impedance × its own size, summed.
+function _equippedArcaneImpedance() {
+  return Object.values(_equippedArmorInstances())
+    .reduce((sum, inst) => sum + (inst.impedance || 0) * (inst.size || 0), 0);
 }
 
 function getArmorSelections() {
@@ -6574,7 +6589,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261010a';
+const VERSION = 'v0.1.20261010b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
