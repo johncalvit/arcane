@@ -4175,11 +4175,22 @@ function _equippedArmorInstances() {
   return result;
 }
 
+// A worn piece's Impedance FACTOR. It's a property of the piece TYPE, so it's read
+// from the template's current value by name — a GM raising or lowering it applies
+// to every copy already owned, with each copy's own size still setting how much
+// it costs. (An owned instance does carry a frozen copy, used only as a fallback
+// when the template is gone or predates the field.)
+function _pieceImpedance(inst) {
+  const tpl = ARMOR_PIECES.find(p => p.name === inst.name);
+  if (tpl && tpl.impedance !== undefined) return Number(tpl.impedance) || 0;
+  return Number(inst.impedance) || 0;
+}
+
 // Total Arcane Impedance of what the builder's character has equipped RIGHT NOW
 // (live Loadout-tab state): each piece's impedance × its own size, summed.
 function _equippedArcaneImpedance() {
   return Object.values(_equippedArmorInstances())
-    .reduce((sum, inst) => sum + (inst.impedance || 0) * (inst.size || 0), 0);
+    .reduce((sum, inst) => sum + _pieceImpedance(inst) * (inst.size || 0), 0);
 }
 
 function getArmorSelections() {
@@ -6589,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261010b';
+const VERSION = 'v0.1.20261010c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8379,7 +8390,7 @@ function getEntity(ref) {
     if (!inst) continue;
     // Arcane Impedance: each worn piece costs impedance × ITS size, in % off the
     // wearer's maximum casting success (see _spellSuccessCap); pieces sum.
-    arcaneImpedance += (inst.impedance || 0) * (inst.size || 0);
+    arcaneImpedance += _pieceImpedance(inst) * (inst.size || 0);
     visionPct += inst.visionMod || 0;
     hearingPct += inst.hearingMod || 0;
     armorNoise += inst.noise || 0; // see Vigilant/Infiltrate's _infiltratorNoiseScore
@@ -9524,6 +9535,11 @@ function _spellSuccessRoll(ent, spell, roundsWaited) {
 // limits how good it can ever get. Never below the 1% floor above.
 function _spellSuccessCap(ent) {
   return Math.max(1, 95 - Math.round(ent?.arcaneImpedance || 0));
+}
+// " · armor caps casting at N% (Arcane Impedance −M)" for roll subtitles, or '' when unarmored.
+function _impedanceNote(ent) {
+  const imp = Math.round(ent?.arcaneImpedance || 0);
+  return imp > 0 ? ` · armor caps casting at ${_spellSuccessCap(ent)}% (Arcane Impedance −${imp})` : '';
 }
 
 // Shared target-% calc for a recovery save — used both to actually open the
@@ -11024,7 +11040,19 @@ function _paidCostNote(paid) {
 // overrides their radius, and Blast's damage cap, to match THIS mishap).
 // If either name isn't configured, that band's effect is skipped with a
 // note instead of guessing at numbers nobody set.
+// A failed cast's own roller is still on screen (result + Close) when this is
+// called — opening the miscast roller right away replaced it before the player
+// could read the outcome. So wait until that roller is closed, THEN open the
+// miscast roll (which, like any roll, waits for a click to stop it).
 async function _resolveSpellMiscast(casterEnt, spell) {
+  if (typeof _roller !== 'undefined' && _roller && !_roller.mirror) {
+    return new Promise(resolve => {
+      _rollerCloseCbs.push(() => { _resolveSpellMiscastNow(casterEnt, spell).then(resolve, resolve); });
+    });
+  }
+  return _resolveSpellMiscastNow(casterEnt, spell);
+}
+async function _resolveSpellMiscastNow(casterEnt, spell) {
   const cost = spell.cost || 0;
   const modifier = _spellMiscastModifier(casterEnt, spell);
   const modLabel = modifier ? ` (+${modifier} deficiency)` : '';
@@ -11179,7 +11207,7 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
 
   openRoller({
     label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus`,
+    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus${_impedanceNote(casterEnt)}`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= castThreshold);
 
@@ -11321,7 +11349,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
-    rangePenalty, rangeNote,
+    rangePenalty, rangeNote, extraNote: _impedanceNote(casterEnt),
     actionLabel: spell.name, defenseOptions, strayContext, damageContext,
     // The roller's own hit/miss/damage/stray handling already covers
     // everything the hit threshold decides; this only adds the spell-
@@ -12804,7 +12832,7 @@ async function _acSetHand(entityType, entityId, side, value) {
 // So distance costs every target the same number of points, and a big target
 // — starting with far more of them — stays hittable at range where a small one
 // isn't. rangeNote is the human-readable "N inc × Xft, Yft away" for the roller.
-function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext, onComplete, rangePenalty = 0, rangeNote = '' }) {
+function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLabel, defenseOptions, strayContext, damageContext, onComplete, rangePenalty = 0, rangeNote = '', extraNote = '' }) {
   const locData = getHitLocData(bodyType);
   // Roll-under d100 → chance to hit, clamped to the crit floor/ceiling (n≤5
   // always hits, n≥96 always misses). This is the no-defense hit chance.
@@ -12845,7 +12873,8 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     const locThreshold = sizedThreshold != null ? Math.max(0, sizedThreshold - rangePenalty) : null;
     const locSubtitle = (part ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor})` : baseSubtitle)
       + (rangePenalty ? ` − ${rangePenalty} range (${rangeNote})` : '')
-      + ((part || rangePenalty) ? ` = ${locThreshold}` : '');
+      + ((part || rangePenalty) ? ` = ${locThreshold}` : '')
+      + extraNote;
     const targetTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
     const locCtx = { bodyType, partKey: partKey || null };
 
@@ -13337,6 +13366,10 @@ function _rollerShowResult() {
   if (_roller.onComplete) _roller.onComplete(_roller.finalNum);
 }
 
+// Things to run once the current roller is dismissed (e.g. a failed cast's
+// miscast roll — see _resolveSpellMiscast). `var` so it exists before any use.
+var _rollerCloseCbs = [];
+
 function closeRoller() {
   const wasMirror = _roller && _roller.mirror;
   clearTimeout(_roller?.timeoutId);
@@ -13345,6 +13378,10 @@ function closeRoller() {
   document.getElementById('roller-cancel').style.display = 'none';
   clearStrayRay(true);
   if (!wasMirror) _rollerBroadcast('roller-close'); // dismiss everyone's mirror
+  if (!wasMirror) {
+    const cbs = _rollerCloseCbs.splice(0);
+    for (const fn of cbs) { try { fn(); } catch (e) { console.error(e); } }
+  }
 }
 
 // Abort a roll before it lands: closes without running onComplete, so no roll
