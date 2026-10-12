@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261010c';
+const VERSION = 'v0.1.20261012a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -19651,7 +19651,13 @@ function drawLights() {
     shapes += `<polygon points="${pts}" fill="#ffc878" fill-opacity="${mapIsDark ? 0.16 : 0.08}"/>`;
     darkHoles.push({ poly: litPolys[litPolys.length - 1] });
   });
-  // Point lights need the map's feet-per-pixel scale for their radius.
+  // Point lights need the map's feet-per-pixel scale for their radius. Without
+  // it they can't be drawn at all — which used to fail silently, so tell the GM
+  // (once per map) when something on the map would be emitting light.
+  if (!mapScalePPF && isGM() && _lightScaleWarnedMap !== activeMapId && _lightEmitters().length) {
+    _lightScaleWarnedMap = activeMapId;
+    showToast('Torches and light spells need a calibrated map to shed light — use Calibrate in Map Setup. (Lit Areas work without it.)', 'warn');
+  }
   (mapScalePPF ? _lightEmitters() : []).forEach((L, i) => {
     const cx = (L.x_pct / 100) * mapImgW, cy = (L.y_pct / 100) * mapImgH;
     const r = L.ft * mapScalePPF;
@@ -19752,6 +19758,7 @@ function _paintDarkness(holes) {
 var _lightRaf = 0;
 var _litShapes = [];     // px polygons currently lit (set by drawLights)
 var _litSig = '';        // change detector for _litShapes
+var _lightScaleWarnedMap = null; // map id we've already warned "needs calibration" about
 var _darkActive = false; // Dark map with something to light it by (set by drawLights)
 function scheduleLights() {
   if (_lightRaf) return;
@@ -19788,7 +19795,9 @@ function enterLightMode() {
   document.getElementById('map-viewport').classList.add('cal-mode'); // reuse crosshair cursor
   const btn = document.getElementById('light-btn');
   if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
-  showToast('Lights — click the map to place a light, or pick Lit Area to outline a room · Esc to stop');
+  showToast(mapScalePPF
+    ? 'Lights — click the map to place a light, or pick Lit Area to outline a room · Esc to stop'
+    : 'This map isn\'t calibrated yet, so placed lights won\'t shed light (Lit Areas will) — use Calibrate first.', mapScalePPF ? undefined : 'warn');
   drawLightAreaPreview();
 }
 
