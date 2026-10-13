@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261012a';
+const VERSION = 'v0.1.20261012b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14687,6 +14687,21 @@ async function onTokenMouseUp(e) {
 }
 
 // ── Campaign character cache ──────────────────────────────────────────────────
+// A realtime UPDATE's `new` row can be MISSING columns: Postgres doesn't send
+// large out-of-line (TOASTed) values, like a big `stats` JSON, when that column
+// wasn't what changed. Replacing the cached row with it wiped those columns —
+// e.g. a character's raw stats, so every derived stat read 0 on the GM's screen
+// (the player's own sheet is built locally and looked fine) after any small
+// update like damage or a held item. So merge into the existing row instead:
+// whatever the update carries wins, anything it omits is kept. The memoized
+// _attrs is dropped so attributes recompute from the merged data.
+function _mergeRealtimeRow(cache, row) {
+  const merged = Object.assign({}, cache[row.id] || {}, row);
+  delete merged._attrs;
+  cache[row.id] = merged;
+  return merged;
+}
+
 let playCharCache = {}; // entity_id → full row
 
 async function loadPlayCharCache() {
@@ -16412,12 +16427,12 @@ function subscribeTokenRealtime() {
     // session_creatures to be in the supabase_realtime publication.
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'characters',
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
-      playCharCache[row.id] = row;
+      _mergeRealtimeRow(playCharCache, row);
       refreshUI();
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'session_creatures',
         filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: row }) => {
-      sessionCreatureCache[row.id] = row;
+      _mergeRealtimeRow(sessionCreatureCache, row);
       refreshUI();
     })
     // New entities created after this client loaded (a player makes a new
