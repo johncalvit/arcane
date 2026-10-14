@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261012b';
+const VERSION = 'v0.1.20261013a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17924,8 +17924,33 @@ function _fogVisState(t) {
   if (t.id === viewer.id) return 'full';
   const px = (t.x_pct / 100) * mapImgW, py = (t.y_pct / 100) * mapImgH;
   if (_fogLastPoly.length && !_fogPointInPolygon(px, py, _fogLastPoly)) return 'none';
-  if (!_darkActive || _tokenIsLit(t, viewer)) return 'full';
-  return _nightVisionReaches(px, py, viewer) ? 'shadow' : 'none';
+  if (!_darkActive) return 'full';
+  // Close enough to touch: within TOUCH_REVEAL_FT of the other token's EDGE
+  // (edge to edge, not centre to centre) you simply see it for what it is —
+  // a reward for getting that close — and it stays revealed for this viewer
+  // after they step back, so an unlit monster doesn't turn back into a "?".
+  const revealedKey = viewer.id + '|' + activeMapId;
+  const revealed = _revealedTokens[revealedKey] || (_revealedTokens[revealedKey] = new Set());
+  if (_withinTouchOf(t, viewer)) { revealed.add(t.id); return 'full'; }
+  if (_tokenIsLit(t, viewer)) return 'full';
+  // Out of the light but inside Night Vision reach: a shadow — unless this
+  // viewer already got close enough to know what it is.
+  if (_nightVisionReaches(px, py, viewer)) return revealed.has(t.id) ? 'full' : 'shadow';
+  return 'none';
+}
+
+// How close, edge to edge, a token must be to a viewer on a Dark map to be seen
+// for what it is even in the unlit dark.
+const TOUCH_REVEAL_FT = 5;
+// Tokens a viewer has gotten close enough to identify: 'viewerId|mapId' → Set of
+// token ids. In memory only (cleared by a reload), like the explored-area memory.
+var _revealedTokens = {};
+
+function _withinTouchOf(t, viewer) {
+  if (!mapScalePPF) return false;
+  const dx = ((t.x_pct - viewer.x_pct) / 100) * mapImgW, dy = ((t.y_pct - viewer.y_pct) / 100) * mapImgH;
+  const edgeGapPx = Math.hypot(dx, dy) - getTokenSize(t) / 2 - getTokenSize(viewer) / 2;
+  return edgeGapPx / mapScalePPF <= TOUCH_REVEAL_FT;
 }
 
 // Night Vision (0-100 stat) scaled to feet the same way Vigilant's cone is.
@@ -17938,13 +17963,9 @@ function _nightVisionReaches(px, py, viewer) {
 }
 
 // Lit = inside a light's wall-trimmed circle or a lit area (cached by the last
-// drawLights), or close enough to the viewer to make out by touch (5 ft).
+// drawLights). (Being within touching distance is handled in _fogVisState.)
 function _tokenIsLit(t, viewer) {
   const px = (t.x_pct / 100) * mapImgW, py = (t.y_pct / 100) * mapImgH;
-  if (mapScalePPF && viewer) {
-    const vx = (viewer.x_pct / 100) * mapImgW, vy = (viewer.y_pct / 100) * mapImgH;
-    if (Math.hypot(px - vx, py - vy) <= 5 * mapScalePPF) return true;
-  }
   return _litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(px, py, poly));
 }
 
