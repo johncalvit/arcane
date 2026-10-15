@@ -1433,7 +1433,7 @@
           </div>
           <div class="field">
             <label>Arcane Impedance</label>
-            <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling.">
+            <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling. Applies to every kind of spell except Deific — a prayer asks for the effect rather than casting it.">
           </div>
           <div class="field">
             <label>Price per Modifier (Crowns)</label>
@@ -2540,7 +2540,7 @@ function updatePlaysheet(attrs) {
   // with the resulting ceiling on casting success.
   const arcaneImpedance = _equippedArcaneImpedance();
   const impShown = Math.round(arcaneImpedance * 10) / 10;
-  const impedanceRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;" title="Each worn piece's Arcane Impedance × its size, summed. Subtracted from the 95% maximum casting success.">
+  const impedanceRow = `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:0.85rem;font-weight:bold;" title="Each worn piece's Arcane Impedance × its size, summed. Subtracted from the 95% maximum casting success of every spell except Deific prayers.">
       <span>Total Arcane Armor Impedance</span><span style="color:var(--gold2);">${impShown}%${arcaneImpedance > 0 ? ` <span style="font-weight:normal;color:var(--text-dim);">· casting max ${Math.max(1, 95 - Math.round(arcaneImpedance))}%</span>` : ''}</span>
     </div>`;
   document.getElementById('ps-armor').innerHTML = armorRows + armorTotalRow + impedanceRow;
@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261015b';
+const VERSION = 'v0.1.20261015c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9534,20 +9534,29 @@ function _spellRawAccum(ent, spell, roundsWaited) {
 // puncher's chance, however remote) regardless of how negative the raw
 // accumulation has gotten.
 function _spellSuccessRoll(ent, spell, roundsWaited) {
-  return Math.max(1, Math.min(_spellSuccessCap(ent), Math.round(_spellRawAccum(ent, spell, roundsWaited))));
+  return Math.max(1, Math.min(_spellSuccessCap(ent, spell), Math.round(_spellRawAccum(ent, spell, roundsWaited))));
 }
 
 // The ceiling on casting success: 95, lowered by the wearer's total Arcane
 // Impedance (each worn armor piece's impedance × its size — see getEntity's
 // arcaneImpedance). Heavy armor doesn't change how fast a spell builds, it
 // limits how good it can ever get. Never below the 1% floor above.
-function _spellSuccessCap(ent) {
+// Deific spells are exempt: a prayer asks for the effect rather than casting
+// it, so armor doesn't get in the way (see _impedanceApplies).
+function _spellSuccessCap(ent, spell) {
+  if (!_impedanceApplies(spell)) return 95;
   return Math.max(1, 95 - Math.round(ent?.arcaneImpedance || 0));
 }
-// " · armor caps casting at N% (Arcane Impedance −M)" for roll subtitles, or '' when unarmored.
-function _impedanceNote(ent) {
+// Arcane Impedance hinders every class of spell except Deific. With no spell
+// given (a general "what does my armor do" display) it applies.
+function _impedanceApplies(spell) {
+  return !spell || spell.magicClass !== 'Deific';
+}
+// " · armor caps casting at N% (Arcane Impedance −M)" for roll subtitles, or ''
+// when unarmored or the spell is a Deific prayer.
+function _impedanceNote(ent, spell) {
   const imp = Math.round(ent?.arcaneImpedance || 0);
-  return imp > 0 ? ` · armor caps casting at ${_spellSuccessCap(ent)}% (Arcane Impedance −${imp})` : '';
+  return (imp > 0 && _impedanceApplies(spell)) ? ` · armor caps casting at ${_spellSuccessCap(ent, spell)}% (Arcane Impedance −${imp})` : '';
 }
 
 // Shared target-% calc for a recovery save — used both to actually open the
@@ -9711,7 +9720,7 @@ function _openSpellPickerModal(combatantId) {
       background:${notBuilt ? 'var(--bg3)' : 'rgba(201,168,76,0.10)'};
       color:${notBuilt ? 'var(--text-dim)' : 'var(--text)'};
       cursor:${notBuilt ? 'not-allowed' : 'pointer'};opacity:${notBuilt ? '0.5' : '1'};`;
-    const capNote = _spellSuccessCap(ent) < 95 ? ` · armor caps casting at ${_spellSuccessCap(ent)}%` : '';
+    const capNote = _spellSuccessCap(ent, spell) < 95 ? ` · armor caps casting at ${_spellSuccessCap(ent, spell)}%` : '';
     row.title = notBuilt ? `${spell.targetType}-target spells aren't built yet`
                           : `${spell.range} · ${spell.difficultyStat} ${spell.difficultyValue} · builds ~${Math.round(_spellPerRoundBonus(ent, spell))}%/round the longer you concentrate${capNote}`;
     row.innerHTML = `<span>${_paEsc(spell.name)} <span style="font-size:0.68rem;color:var(--text-dim);">(${spell.magicClass} · ${spell.targetType})</span></span>
@@ -11215,7 +11224,7 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
 
   openRoller({
     label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus${_impedanceNote(casterEnt)}`,
+    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus${_impedanceNote(casterEnt, spell)}`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= castThreshold);
 
@@ -11358,7 +11367,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
-    rangePenalty, rangeNote, extraNote: _impedanceNote(casterEnt),
+    rangePenalty, rangeNote, extraNote: _impedanceNote(casterEnt, spell),
     actionLabel: spell.name, defenseOptions, strayContext, damageContext,
     // The roller's own hit/miss/damage/stray handling already covers
     // everything the hit threshold decides; this only adds the spell-
