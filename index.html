@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261013a';
+const VERSION = 'v0.1.20261015a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7869,7 +7869,15 @@ function enterPlayMode() {
 
   renderPlayCharacter();
   renderCombatLog();
-  loadPlayCharCache();
+  // A player who plays in this campaign with a character loaded brings it into the
+  // campaign: ensure its join-table link (idempotent) so the GM's lists include it,
+  // even if it was built and last saved in the player's own Home campaign. Then
+  // load the cache — chained so the link exists first.
+  if (!isGM() && currentCharacterId && currentCampaignId) {
+    _ensureCampaignLink(currentCharacterId, currentCampaignId).finally(loadPlayCharCache);
+  } else {
+    loadPlayCharCache();
+  }
   subscribeMapRealtime();
   loadActiveMap(activeMapId);
   initMapInteraction();
@@ -13796,6 +13804,10 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'token-request' }, ({ payload }) => {
       if (!isGM() || !payload?.name) return;
       showToast(`🙋 ${payload.name} has no token on this map — asking to be added. See the Tokens tab.`);
+      // The Characters list is only loaded when the tab opens, so a character the
+      // player saved/joined since then wasn't in it. Reload the data cache and the
+      // list now so the character is there to "+ Add" when the GM looks.
+      refreshTokensCharacters();
     })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
@@ -16628,7 +16640,16 @@ function buildTokensCharFilters() {
   ];
   el.innerHTML = opts.map(o =>
     `<button class="filter-btn${o.key === tokensCharFilter ? ' active' : ''}" onclick="setTokensCharFilter('${o.key}')">${o.label}</button>`
-  ).join('');
+  ).join('') +
+    `<button class="filter-btn" onclick="refreshTokensCharacters()" title="Reload the list — picks up a player's newly saved or newly joined character">↻</button>`;
+}
+
+// Manual / automatic reload of the campaign's characters: the GM's data cache
+// first (so a just-joined character's sheet resolves), then the Tokens list.
+async function refreshTokensCharacters() {
+  await loadPlayCharCache();
+  await loadCampaignCharactersForTokens();
+  refreshUI();
 }
 
 function setTokensCharFilter(filter) {
@@ -16643,12 +16664,25 @@ async function loadCampaignCharactersForTokens() {
   if (!el || !currentCampaignId) return;
   el.innerHTML = '<div style="padding:8px 10px;font-size:0.72rem;color:var(--text-dim);">Loading…</div>';
 
-  const { data: chars } = await sb.from('characters')
-    .select('id, name, species, avatar_url, user_id')
-    .eq('campaign_id', currentCampaignId)
-    .order('name');
+  // Same membership rule as loadPlayCharCache: a character belongs to this
+  // campaign if it's LINKED to it (campaign_characters — how a player's existing
+  // character joins) OR its home campaign_id is this one. This list used to check
+  // only campaign_id, so a character that had merely been linked in was playable
+  // (it was in the GM's cache) but never offered here to add as a token.
+  const cols = 'id, name, species, avatar_url, user_id';
+  const { data: links } = await sb.from('campaign_characters')
+    .select('character_id').eq('campaign_id', currentCampaignId);
+  const linkedIds = (links || []).map(l => l.character_id);
+  const chars = [];
+  if (linkedIds.length) {
+    const { data } = await sb.from('characters').select(cols).in('id', linkedIds);
+    (data || []).forEach(r => chars.push(r));
+  }
+  const { data: byCamp } = await sb.from('characters').select(cols).eq('campaign_id', currentCampaignId);
+  (byCamp || []).forEach(r => { if (!chars.some(x => x.id === r.id)) chars.push(r); });
+  chars.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-  _tokensCharsCache = chars || [];
+  _tokensCharsCache = chars;
   buildTokensCharFilters();
   renderTokensCharList();
 }
@@ -17869,6 +17903,11 @@ async function _requestMapToken() {
   if (isGM() || !currentCharacterId) return;
   const btn = document.getElementById('no-token-request-btn');
   const name = playCharCache[currentCharacterId]?.name || document.getElementById('char-name')?.value || 'A player';
+  // Make sure this character is actually part of THIS campaign (a link row) before
+  // asking — a character built in the player's own Home campaign and never saved
+  // since joining this one has no link, so the GM's lists couldn't see it at all.
+  // Idempotent; awaited so the GM's reload on receiving the request finds it.
+  await _ensureCampaignLink(currentCharacterId, currentCampaignId);
   mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name } });
   logCombat(`🙋 ${name} has no token on this map and is requesting to be added.`, 'roll');
   showToast('Request sent to the GM.');
