@@ -4939,7 +4939,7 @@ const DEFAULT_SPELLS = [
     aoeShape:"", aoeSize:"", spellType:"Buff/Debuff",
     damageStat:"", damageCategory:"", damageMax:0, hitFormula:"", saveFormula:"",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"obscured", secondaryChance:0, drainAttribute:"", obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
-    description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — attackers' to-hit chance against the recipient is halved. The GM clears Obscured when the mist fades." },
+    description:"On touching the individual with the quintessence pattern, the recipient becomes misty and blurred, making accurate attack difficult. Applies Obscured — ranged attacks against the recipient suffer double their range penalty. The GM clears Obscured when the mist fades." },
   { name:"Ice Shield", range:"10 feet", castingTime:0, cost:4, maintained:true,
     difficultyStat:"Logic", difficultyValue:16, magicClass:"Arcane", targetType:"Area",
     aoeShape:"Line", aoeSize:"10 ft long, 1 ft wide", spellType:"Creation",
@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261015a';
+const VERSION = 'v0.1.20261015b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7950,7 +7950,7 @@ const CONDITION_DEFS = [
   { key:'buffed',      label:'Buffed',      icon:'✨', color:'#c77dff',
     desc:'Under a timed potion effect. Clear when the GM judges the duration has elapsed.' },
   { key:'obscured',    label:'Obscured',    icon:'🌫', color:'#8899aa',
-    desc:'Hard to see — darkness, foliage, mist, a Misted Form spell. Attacks against this target are 50% less likely to hit. Clear when the GM judges the concealment has ended.' },
+    desc:'Hard to see — mist, foliage, a Misted Form spell. Doubles the range penalty of ranged attacks against this target (no effect on melee). Anyone standing in darkness on a Dark map is treated as Obscured automatically. Clear when the GM judges the concealment has ended.' },
   // Light spells — each makes this token emit light (see LIGHT_CONDITIONS).
   { key:'glow',        label:'Glow',        icon:'💡', color:'#ffd27a',
     desc:'Lighting a 5-foot radius around this token (Glow spell). The light moves with it. Clear when the GM judges the spell has faded.' },
@@ -11293,6 +11293,9 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     rangeIncrements = Math.round(distanceFt / rangeFt);
     rangePenalty = rangeIncrements;
   }
+  // Obscured (condition or darkness) doubles the range penalty — see attackTokenClick.
+  const targetObscured = _isTokenObscured(targetToken);
+  if (targetObscured) rangePenalty *= 2;
   // Size first, then range (the modal subtracts rangePenalty) — see attackTokenClick.
   let targetAdj = 5;
   if (targetToken.entity_type === 'character' && playCharCache[targetToken.entity_id]) {
@@ -11301,8 +11304,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     const race = RACE_DATA[targetToken.species] || {};
     targetAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
   }
-  const targetObscured = getConditions(targetToken.id).has('obscured');
-  const rawThreshold = hitValue != null ? hitValue * targetAdj * (targetObscured ? 0.5 : 1) : null;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj : null;
   // Clamp to castThreshold BEFORE defense/called-shot reduce it further below
   // (those still apply on top, same as any other attack) — see the function
   // comment for why the clamp exists at all.
@@ -11351,9 +11353,8 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     };
   }
 
-  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
-  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${obscuredNote}` : '';
-  const rangeNote = rangeIncrements > 0 ? `${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away` : '';
+  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}` : '';
+  const rangeNote = rangeIncrements > 0 ? `${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}` : '';
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
@@ -14957,6 +14958,11 @@ function attackTokenClick(tokenId) {
       rangePenalty    = rangeIncrements; // −1 per increment
     }
   }
+  // Obscured (the condition, or standing in darkness — see _isTokenObscured)
+  // doubles the range penalty. It no longer halves the hit chance, so it has no
+  // effect on a melee attack (no range penalty to double).
+  const targetObscured = _isTokenObscured(target);
+  if (targetObscured) rangePenalty *= 2;
 
   // Order matters: target size is applied FIRST, then the range penalty is
   // subtracted from the size-adjusted chance (see _openCalledShotModal, which
@@ -14974,18 +14980,13 @@ function attackTokenClick(tokenId) {
   }
 
   // ── Hit threshold ─────────────────────────────────────────────────────────
-  // Obscured (Misted Form, darkness, foliage, etc.) halves the attacker's
-  // effective hit chance against this specific target — applied here, before
-  // the called-shot part-size multiplier, so it holds regardless of which
-  // body part gets targeted.
-  const targetObscured = getConditions(target.id).has('obscured');
   // A prone target is an easy mark for anyone standing over them, but no
   // easier to hit at range than lying flat already makes them (that's what
   // the Go-Prone ranged defense option's size reduction already covers) —
   // so this doubling only applies to melee attacks.
   const targetIsProne  = getConditions(target.id).has('prone');
   const proneMeleeMult = (targetIsProne && !attackIsRanged) ? 2 : 1;
-  const rawThreshold = hitValue != null ? hitValue * targetAdj * (targetObscured ? 0.5 : 1) * proneMeleeMult : null;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null; // before range — the modal subtracts it
 
   // ── Log action to tracker ─────────────────────────────────────────────────
@@ -15055,11 +15056,10 @@ function attackTokenClick(tokenId) {
   const { defenseOptions, targetBodyType } = _buildDefenseOptions(target, wasRanged, rawThreshold);
 
   // ── Open called-shot picker, then hit roller ─────────────────────────────
-  const obscuredNote = targetObscured ? ' × 0.5 (obscured)' : '';
   const proneNote     = proneMeleeMult > 1 ? ' × 2 (prone target)' : '';
-  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${obscuredNote}${proneNote}` : '';
+  const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${proneNote}` : '';
   const rangeNote = (attackIsRanged && rangeIncrements > 0)
-    ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away` : '';
+    ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}` : '';
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
     rangePenalty, rangeNote,
@@ -17999,6 +17999,18 @@ function _nightVisionReaches(px, py, viewer) {
   const stat = Math.max(0, Math.min(100, ent?.attrs?.NightVision || 0));
   const vx = (viewer.x_pct / 100) * mapImgW, vy = (viewer.y_pct / 100) * mapImgH;
   return Math.hypot(px - vx, py - vy) <= stat * VIGILANT_VISION_FT_PER_POINT * mapScalePPF;
+}
+
+// Obscured = hard to see, for the purpose of being shot at: the Obscured
+// condition (mist, foliage, Misted Form…) OR simply standing in darkness on a
+// Dark map — outside every light and lit area. Its effect is to double the
+// range penalty of ranged attacks against the target (see attackTokenClick /
+// _resolveSpellAttack); darkness is computed, not a badge, so it needs no
+// bookkeeping as lights move or tokens walk in and out of them.
+function _isTokenObscured(tok) {
+  if (!tok) return false;
+  if (getConditions(tok.id).has('obscured')) return true;
+  return !!_darkActive && !_tokenIsLit(tok, null);
 }
 
 // Lit = inside a light's wall-trimmed circle or a lit area (cached by the last
