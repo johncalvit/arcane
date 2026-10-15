@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261015c';
+const VERSION = 'v0.1.20261016a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9881,6 +9881,15 @@ async function atCompleteCast(casterCid, spellName) {
   enterAttackMode(casterCid, spell.name, 'Cast', _spellIsRanged(spell), _parseSpellRangeFt(spell.range));
 }
 
+// Range increment for an attack SPELL's to-hit penalty, in feet: the caster's
+// (Manual Dexterity + Day Vision) / 10. An average caster comes out near 2 ft,
+// i.e. -1 to hit per ~2 ft of distance. (Weapons keep their own per-weapon
+// increment; the spell's printed range stays a placement limit for area spells.)
+function _spellRangeIncrementFt(ent) {
+  const a = ent?.attrs || {};
+  return Math.max(0.1, ((a.ManualDex || 0) + (a.DayVision || 0)) / 10);
+}
+
 // "15 feet" → 15; "Touch" or anything unparseable → 5 (adjacent).
 function _parseSpellRangeFt(rangeStr) {
   const m = /(\d+(?:\.\d+)?)/.exec(rangeStr || '');
@@ -11294,12 +11303,15 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
   const hitValue = calcHitValue(spell.hitFormula, casterEnt.attrs);
 
   const rangeFt = _parseSpellRangeFt(spell.range);
+  // The distance that costs 1 point comes from the CASTER, not the spell's printed
+  // range: (Manual Dexterity + Day Vision) / 10 — about 2 ft for an average caster.
+  const incrementFt = _spellRangeIncrementFt(casterEnt);
   let rangePenalty = 0, distanceFt = 0, rangeIncrements = 0;
-  if (casterToken && mapScalePPF > 0 && rangeFt > 0) {
+  if (casterToken && mapScalePPF > 0 && incrementFt > 0) {
     const aX = (casterToken.x_pct / 100) * mapImgW, aY = (casterToken.y_pct / 100) * mapImgH;
     const tX = (targetToken.x_pct / 100) * mapImgW, tY = (targetToken.y_pct / 100) * mapImgH;
     distanceFt = Math.hypot(tX - aX, tY - aY) / mapScalePPF;
-    rangeIncrements = Math.round(distanceFt / rangeFt);
+    rangeIncrements = Math.round(distanceFt / incrementFt);
     rangePenalty = rangeIncrements;
   }
   // Obscured (condition or darkness) doubles the range penalty — see attackTokenClick.
@@ -11363,7 +11375,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
   }
 
   const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}` : '';
-  const rangeNote = rangeIncrements > 0 ? `${rangeIncrements} inc × ${rangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}` : '';
+  const rangeNote = rangeIncrements > 0 ? `${rangeIncrements} inc × ${Math.round(incrementFt * 10) / 10}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}` : '';
 
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
