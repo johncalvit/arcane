@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261017a';
+const VERSION = 'v0.1.20261017b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13737,6 +13737,7 @@ function subscribeMapRealtime() {
     // depends on current wall geometry.
     .on('broadcast', { event: 'walls-sync' }, ({ payload }) => {
       mapWalls = Array.isArray(payload.walls) ? payload.walls : [];
+      _wallsReadyMapId = activeMapId; // a walls-sync carries the full list
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
       scheduleLights();
@@ -17733,8 +17734,16 @@ async function saveMapWalls() {
   mapChannel?.send({ type: 'broadcast', event: 'walls-sync', payload: { walls: mapWalls } });
 }
 
+// The map whose walls have actually been loaded. drawFog needs the real walls to
+// know what a player can see: loadMapTokens redraws the fog BEFORE loadMapWalls
+// runs, and with no walls loaded everything is "in line of sight" — which got the
+// whole map banked into the player's explored memory (never shrinks) on every load.
+// So until this matches the active map, a player's fog stays solid black.
+var _wallsReadyMapId = null;
+
 async function loadMapWalls(mapId) {
   mapWalls = [];
+  _wallsReadyMapId = null;
   if (!mapId) { drawWalls(); drawFog(); return; }
   const { data } = await sb.from('maps').select('walls').eq('id', mapId).single();
   // Backfill blocksVision:true for any wall saved before that flag actually
@@ -17747,6 +17756,7 @@ async function loadMapWalls(mapId) {
   // old wall missing the field should behave the same way, not the opposite.
   mapWalls = (Array.isArray(data?.walls) ? data.walls : [])
     .map(w => w.blocksVision === undefined ? { ...w, blocksVision: true } : w);
+  _wallsReadyMapId = mapId; // the walls (possibly none) are in — fog can now be trusted
   drawWalls();
   drawFog();
   scheduleLights();
@@ -18229,7 +18239,11 @@ function drawFog(fromLights) {
 
   const viewer = _fogViewerToken();
   const mapNotLoadedYet = mapImgW <= 0 || mapImgH <= 0;
-  if (!viewer || mapNotLoadedYet) {
+  // The map's walls haven't loaded yet (see _wallsReadyMapId): line of sight can't
+  // be computed, and drawing with no walls would bank the ENTIRE map as explored.
+  // Same solid black as "no viewpoint yet" until they arrive and redraw this.
+  const wallsNotReady = _wallsReadyMapId !== activeMapId;
+  if (!viewer || mapNotLoadedYet || wallsNotReady) {
     // A player with no token on this map yet (not placed, mid-join, or on
     // a different map) must NOT get a free look at it — block everything
     // instead of showing everything. This used to fall through to the same
