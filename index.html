@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261016b';
+const VERSION = 'v0.1.20261017a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13920,6 +13920,14 @@ async function loadActiveMap(mapId) {
     canvas.style.height = mapImgH + 'px';
     // double rAF: let the browser apply the new canvas size before reading viewport dims
     requestAnimationFrame(() => requestAnimationFrame(mapFit));
+    // Fog and lighting are sized from mapImgW/H, which were still 0 whenever they
+    // last ran during loading (drawFog hides the fog layer and bails while the map
+    // size is unknown) — so until something else triggered a redraw, a player's
+    // first view of the map showed all of it, unexplored parts included. Now that
+    // the size is known, draw them.
+    if (typeof drawFog === 'function') drawFog();
+    scheduleLights();
+    if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
   };
   img.onerror = () => {
     placeholder.style.display = 'flex';
