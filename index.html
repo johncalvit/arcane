@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261017b';
+const VERSION = 'v0.1.20261017c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13526,7 +13526,12 @@ function _triggerStrayShot(roll, threshold, ctx) {
     payload: { oImgX: ctx.atkImgX, oImgY: ctx.atkImgY, endImgX, endImgY }
   });
 
-  const exclude = new Set([ctx.atkTokenId]);
+  // The ORIGINAL target is excluded as well as the attacker: a shot that veers a
+  // few degrees off still passes through the target's own footprint, which used to
+  // make "the first token in the path" the very creature that was just missed —
+  // handing the attacker a free second roll at the same target. A stray shot is for
+  // SOMEONE ELSE who happens to be in the way; if no one is, it simply misses.
+  const exclude = new Set([ctx.atkTokenId, ctx.tgtTokenId]);
   const hits    = getTokensInPath(ctx.atkImgX, ctx.atkImgY, newBearing, mapDiag, exclude);
   if (!hits.length) return;
 
