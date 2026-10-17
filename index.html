@@ -6600,7 +6600,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261016a';
+const VERSION = 'v0.1.20261016b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9884,7 +9884,9 @@ async function atCompleteCast(casterCid, spellName) {
 // Range increment for an attack SPELL's to-hit penalty, in feet: the caster's
 // (Manual Dexterity + Day Vision) / 10. An average caster comes out near 2 ft,
 // i.e. -1 to hit per ~2 ft of distance. (Weapons keep their own per-weapon
-// increment; the spell's printed range stays a placement limit for area spells.)
+// increment; the spell's printed range is its maximum reach — enforced when
+// targeting, see attackTokenClick's Cast branch — and the placement limit for
+// area spells.)
 function _spellRangeIncrementFt(ent) {
   const a = ent?.attrs || {};
   return Math.max(0.1, ((a.ManualDex || 0) + (a.DayVision || 0)) / 10);
@@ -14808,7 +14810,9 @@ function exitAttackMode() {
 
 function drawRangeCircle() {
   if (!attackCombatantId || mapScalePPF <= 0) return;
-  if (attackIsRanged) return; // no range circle for ranged weapons
+  // No range circle for ranged WEAPONS (they just take a per-increment penalty) —
+  // but a spell's range is a hard maximum reach, so show it for casts.
+  if (attackIsRanged && attackActionLabel !== 'Cast') return;
   const token = _pathFindToken(attackCombatantId);
   if (!token) return;
 
@@ -14903,6 +14907,23 @@ function attackTokenClick(tokenId) {
   // since a caster touching themselves is a normal thing to do.
   if (attackActionLabel === 'Cast') {
     const spellName = attackWeaponName, casterCid = attackCombatantId;
+    // The spell's printed range is its MAXIMUM reach — the magic only goes so
+    // far (separate from the to-hit penalty, which comes from the caster; see
+    // _spellRangeIncrementFt). Same measure as the ring drawn while aiming:
+    // from the caster's edge to the target's centre. Stays in targeting so
+    // another target can be picked; self-targeting is always in range.
+    const castSpell = SPELLS.find(s => s.name === spellName);
+    const casterTokForRange = _pathFindToken(casterCid);
+    if (castSpell && casterTokForRange && mapScalePPF > 0 && target.id !== casterTokForRange.id) {
+      const maxFt = _parseSpellRangeFt(castSpell.range);
+      const dx = ((target.x_pct - casterTokForRange.x_pct) / 100) * mapImgW;
+      const dy = ((target.y_pct - casterTokForRange.y_pct) / 100) * mapImgH;
+      const reachFt = (Math.hypot(dx, dy) - getTokenSize(casterTokForRange) / 2) / mapScalePPF;
+      if (reachFt > maxFt) {
+        showToast(`Out of range (${Math.round(reachFt)} ft, max ${maxFt} ft).`, 'warn');
+        return true;
+      }
+    }
     exitAttackMode();
     _resolveSpellCast(casterCid, spellName, _tokenCid(target));
     return true;
