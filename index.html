@@ -1511,6 +1511,11 @@
             <input type="text" id="mf-price" placeholder="0" title="100 pence = 1 Crown. Shared across every action row for this weapon name — the Shop uses whichever row it finds first, same as Weight already does.">
           </div>
           <div class="field">
+            <label>Weapon Type</label>
+            <input type="text" id="mf-weapontype" list="weapon-type-list" placeholder="e.g. Axe, Hammer, Longsword" title="The family this weapon belongs to — the basis for techniques learned when leveling up. Per weapon: saving it gives every action row of this weapon (and its thrown version) the same type. Type your own, or pick a suggestion.">
+            <datalist id="weapon-type-list"></datalist>
+          </div>
+          <div class="field">
             <label>Quintessence</label>
             <input type="text" id="mf-quintessence" placeholder="0" title="How magical this item is — the stronger the enchantment, the higher the number. A creature with Quintessence can perceive an enchanted item as if it were a light source. 0 = mundane. Per weapon, same as Weight/Price.">
           </div>
@@ -1532,7 +1537,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Quint.</th><th>Natural Slot</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Type</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Quint.</th><th>Natural Slot</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -1598,6 +1603,10 @@
             <label>Price (pence)</label>
             <input type="text" id="rf-price" placeholder="0" title="100 pence = 1 Crown. Shared across every action row for this weapon name — the Shop uses whichever row it finds first, same as Weight already does.">
           </div>
+          <div class="field">
+            <label>Weapon Type</label>
+            <input type="text" id="rf-weapontype" list="weapon-type-list" placeholder="e.g. Bow, Crossbow, Sling" title="The family this weapon belongs to — the basis for techniques learned when leveling up. Per weapon: saving it gives every action row of this weapon (and its melee version, for a thrown weapon) the same type. Type your own, or pick a suggestion.">
+          </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveRangedWeapon()">Save Action</button>
@@ -1606,7 +1615,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Type</th><th>Action</th><th>Range Inc.</th><th>Max Range</th><th>Reload</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th></th></tr></thead>
         <tbody id="rangedmgr-list"></tbody>
       </table>
     </div>
@@ -4529,6 +4538,75 @@ function buildArmorPieceManagerTable() {
 // comment). Natural weapons (naturalSlot set) and Bare Handed are never
 // purchasable, so they're simply absent here and stay priced at 0. GM-
 // editable afterward like everything else — these are just a starting point.
+// Weapon TYPE — the family a weapon belongs to (Axe, Hammer, Club, Short Sword,
+// Longsword, Bow...). It's the basis for the techniques a character can learn as
+// they level up (a technique is learned for a TYPE, not one specific weapon).
+// One type per weapon NAME, shared by all its action rows, same as price. Free text
+// in the managers (the form suggests the types already in use), so a GM can invent
+// their own; these are only the starting assignments. Thrown variants like
+// "Knife (Thrown)" share their base weapon's type (see _defaultWeaponType).
+const DEFAULT_WEAPON_TYPES = {
+  "Axe, Hatchet": "Axe", "Battleaxe": "Axe", "Greataxe": "Axe",
+  "Hammer, Carpenter's": "Hammer", "Hammer, Sledge": "Hammer", "Hammer, War": "Hammer",
+  "Club": "Club", "Greatclub": "Club",
+  "Mace": "Mace", "Morningstar": "Mace", "Flail": "Flail",
+  "Knife": "Knife",
+  "Sword, Short": "Short Sword", "Sword, Long": "Longsword", "Greatsword": "Greatsword",
+  "Rapier": "Rapier", "Scimitar": "Scimitar",
+  "Glaive": "Polearm", "Halberd": "Polearm", "Pike": "Polearm",
+  "Spear, Long": "Spear", "Javelin": "Spear", "Trident": "Spear", "Spear, Short/Long": "Spear",
+  "Lance, Heavy Cavalry": "Lance", "Lance, Light Cavalry": "Lance",
+  "Staff": "Staff", "Whip": "Whip", "Net": "Net",
+  "Shield, Small": "Shield", "Shield, Large": "Shield", "Shield, Buckler": "Shield",
+  "Bare Handed": "Unarmed",
+  "Bow, Horse": "Bow", "Bow, Hunting": "Bow", "Bow, Light": "Bow", "Bow, War": "Bow",
+  "Crossbow, Hand": "Crossbow", "Crossbow, Heavy": "Crossbow", "Crossbow, Light": "Crossbow",
+  "Sling Pellet": "Sling", "Sling Stone": "Sling", "Blowgun": "Blowgun", "Dart": "Dart",
+};
+function _escWeaponType(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function _defaultWeaponType(weapon, naturalSlot) {
+  if (naturalSlot) return 'Natural';
+  return DEFAULT_WEAPON_TYPES[weapon] || DEFAULT_WEAPON_TYPES[normalizeWeaponName(weapon)] || '';
+}
+
+// The type of a held/owned weapon by name ('' if it has none). Looks across melee
+// AND ranged rows by normalized name, so "Knife" and "Knife (Thrown)" agree. This
+// is the hook later features (level-up techniques) should call.
+function getWeaponType(itemName) {
+  const norm = normalizeWeaponName(itemName || '');
+  if (!norm) return '';
+  for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
+    if (r.weaponType && normalizeWeaponName(r.weapon) === norm) return r.weaponType;
+  }
+  return '';
+}
+// Every weapon type currently in use (sorted) — feeds the managers' suggestion list.
+function getWeaponTypes() {
+  const set = new Set();
+  for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) if (r.weaponType) set.add(r.weaponType);
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+function _refreshWeaponTypeList() {
+  const dl = document.getElementById('weapon-type-list');
+  if (dl) dl.innerHTML = getWeaponTypes().map(t => `<option value="${_paEsc(t)}"></option>`).join('');
+}
+// A weapon has ONE type however many action rows it has: after saving a row,
+// give every other row for the same (normalized) weapon name the same type.
+function _propagateWeaponType(weapon, type) {
+  const norm = normalizeWeaponName(weapon);
+  for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
+    if (normalizeWeaponName(r.weapon) === norm) r.weaponType = type;
+  }
+}
+// Configs saved before weapon types existed: fill any row that has none by name
+// (custom weapons without a default stay blank until a GM sets them). Rows that
+// already carry a type — including one a GM cleared on purpose — are untouched.
+function _backfillWeaponTypes() {
+  for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
+    if (r.weaponType === undefined) r.weaponType = _defaultWeaponType(r.weapon, r.naturalSlot);
+  }
+}
+
 const DEFAULT_MELEE_WEAPON_PRICES = {
   "Axe, Hatchet": 500, "Battleaxe": 2000, "Club": 100, "Flail": 1800,
   "Glaive": 2500, "Greataxe": 3500, "Greatclub": 300, "Greatsword": 4000,
@@ -4690,7 +4768,7 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Rear Claws",  action:"Rake",  naturalSlot:"hindlegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
   { weapon:"Tail Slam",   action:"Slam",  naturalSlot:"tail",     minReach:0, reach:1,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:8, maxPowerMod:0.5 },
   { weapon:"Stinger",     action:"Sting", naturalSlot:"tail",     minReach:0, reach:0.5, hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.3 },
-].map(r => ({ ...r, price: DEFAULT_MELEE_WEAPON_PRICES[r.weapon] || 0 }));
+].map(r => ({ ...r, price: DEFAULT_MELEE_WEAPON_PRICES[r.weapon] || 0, weaponType: _defaultWeaponType(r.weapon, r.naturalSlot) }));
 let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
 let editingMeleeIndex = null;
 
@@ -4734,6 +4812,8 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-price').value       = row ? (row.price || 0) : 0;
   document.getElementById('mf-quintessence').value = row ? (row.quintessence || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
+  document.getElementById('mf-weapontype').value  = row ? (row.weaponType || '') : '';
+  _refreshWeaponTypeList();
 }
 
 function openMeleeWeaponForm(index) {
@@ -4783,12 +4863,14 @@ function saveMeleeWeapon() {
     price: parseInt(document.getElementById('mf-price').value, 10) || 0,
     quintessence: parseFloat(document.getElementById('mf-quintessence').value) || 0,
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
+    weaponType: document.getElementById('mf-weapontype').value.trim(),
   };
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
     MELEE_WEAPONS.push(row);
   }
+  _propagateWeaponType(row.weapon, row.weaponType); // one type per weapon, all its rows
   writeConfigToDisk();
   closeMeleeWeaponForm();
   buildMeleeWeaponsManagerTable();
@@ -4822,7 +4904,7 @@ function buildMeleeWeaponsManagerTable() {
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
       : '—';
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${row.quintessence || 0}</td><td>${slotLabel}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.weaponType ? _escWeaponType(row.weaponType) : '—'}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${row.quintessence || 0}</td><td>${slotLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
@@ -4887,7 +4969,7 @@ const DEFAULT_RANGED_WEAPONS = [
   { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
   { weapon:"Javelin",               action:"Throw (Stab)",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
   { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
-].map(r => ({ ...r, price: DEFAULT_RANGED_WEAPON_PRICES[r.weapon] || 0 }));
+].map(r => ({ ...r, price: DEFAULT_RANGED_WEAPON_PRICES[r.weapon] || 0, weaponType: _defaultWeaponType(r.weapon) }));
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
 
@@ -5433,6 +5515,8 @@ function _fillRangedForm(row) {
   document.getElementById('rf-maxpowermod').value    = row ? row.maxPowerMod : 0;
   document.getElementById('rf-wt').value             = row ? (row.wt || 0) : 0;
   document.getElementById('rf-price').value          = row ? (row.price || 0) : 0;
+  document.getElementById('rf-weapontype').value     = row ? (row.weaponType || '') : '';
+  _refreshWeaponTypeList();
 }
 
 function openRangedWeaponForm(index) {
@@ -5481,12 +5565,14 @@ function saveRangedWeapon() {
     maxPowerMod: parseFloat(document.getElementById('rf-maxpowermod').value) || 0,
     wt: parseFloat(document.getElementById('rf-wt').value) || 0,
     price: parseInt(document.getElementById('rf-price').value, 10) || 0,
+    weaponType: document.getElementById('rf-weapontype').value.trim(),
   };
   if (editingRangedIndex !== null) {
     RANGED_WEAPONS[editingRangedIndex] = row;
   } else {
     RANGED_WEAPONS.push(row);
   }
+  _propagateWeaponType(row.weapon, row.weaponType); // one type per weapon, all its rows
   writeConfigToDisk();
   closeRangedWeaponForm();
   buildRangedWeaponsManagerTable();
@@ -5817,7 +5903,7 @@ function buildRangedWeaponsManagerTable() {
   tbody.innerHTML = '';
   RANGED_WEAPONS.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.weaponType ? _escWeaponType(row.weaponType) : '—'}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyRangedWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteRangedWeapon(${i})">✕</button></td>`;
@@ -6600,7 +6686,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261017c';
+const VERSION = 'v0.1.20261018a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7505,6 +7591,7 @@ function applyConfigData(data) {
     }
   });
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
+  _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
