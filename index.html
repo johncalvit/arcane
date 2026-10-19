@@ -1101,6 +1101,12 @@
             <option selected>Realm</option><option>Barbaric</option><option>New World</option><option>Demonic</option><option>Sublime</option><option>Ancients</option><option>Underdweller</option>
           </select>
         </div>
+        <div class="field field-inline">
+          <label>Class</label>
+          <select id="sel-charclass" onchange="characterClass=this.value;recalc()" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
+            <option>Warrior</option><option>Disciple</option><option>Caster</option>
+          </select>
+        </div>
         </div><!-- end grid-2 -->
         </div><!-- end right column -->
       </div><!-- end avatar+fields grid -->
@@ -1928,12 +1934,6 @@
     <div id="panel-techniques" class="panel">
       <h2>Techniques</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Techniques are fighting skills tied to a weapon type (Axe, Longsword, ...). Choose them up to your class's allowance per level × your Level; each is gated by the level shown. They only apply while using a weapon of that type. You can respec freely while the game is in development.</p>
-      <div class="field field-inline" style="margin-bottom:10px;">
-        <label>Class</label>
-        <select id="sel-charclass" onchange="characterClass=this.value;recalc()" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
-          <option>Warrior</option><option>Disciple</option><option>Caster</option>
-        </select>
-      </div>
       <div class="points-bar" id="techniques-bar" style="display:block;"></div>
       <div id="techniques-list"></div>
     </div>
@@ -6877,7 +6877,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261018b';
+const VERSION = 'v0.1.20261018c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
