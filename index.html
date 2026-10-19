@@ -962,6 +962,8 @@
       <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
       <div class="nav-section">Magic</div>
       <button class="nav-btn" onclick="showPanel('spellbook')">📖 Spell Book</button>
+      <div class="nav-section">Combat</div>
+      <button class="nav-btn" onclick="showPanel('techniques')">⚔ Techniques</button>
       <div class="nav-section">Summary</div>
       <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
       <div class="nav-section">File</div>
@@ -989,6 +991,7 @@
       <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables</button>
       <button class="nav-btn" onclick="showPanel('equipmgr')">🎒 Equipment</button>
       <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spells</button>
+      <button class="nav-btn" onclick="showPanel('techmgr')">🥋 Techniques</button>
       <button class="nav-btn" onclick="showPanel('economymgr')">💰 Economy</button>
       <button class="nav-btn" onclick="exportConfig()">💾 Export Configuration</button>
       <button class="nav-btn" onclick="document.getElementById('import-config-file').click()">📂 Import Configuration</button>
@@ -1921,6 +1924,33 @@
       <div id="spellbook-list"></div>
     </div>
 
+    <!-- TECHNIQUES -->
+    <div id="panel-techniques" class="panel">
+      <h2>Techniques</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Techniques are fighting skills tied to a weapon type (Axe, Longsword, ...). Choose them up to your class's allowance per level × your Level; each is gated by the level shown. They only apply while using a weapon of that type. You can respec freely while the game is in development.</p>
+      <div class="field field-inline" style="margin-bottom:10px;">
+        <label>Class</label>
+        <select id="sel-charclass" onchange="characterClass=this.value;recalc()" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
+          <option>Warrior</option><option>Disciple</option><option>Caster</option>
+        </select>
+      </div>
+      <div class="points-bar" id="techniques-bar" style="display:block;"></div>
+      <div id="techniques-list"></div>
+    </div>
+
+    <!-- TECHNIQUES (GM config) -->
+    <div id="panel-techmgr" class="panel">
+      <h2>Techniques</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">Techniques characters can choose per Weapon Type. Hit = added to the attack's hit chance; Damage = added to the damage roll; Parry = added to a Parry made with that weapon type. Allowance is techniques gained per level, by class.</p>
+      <div id="techmgr-allowance" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;"></div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
+        <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
+      </div>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th></th></tr></thead>
+      <tbody id="techmgr-list"></tbody></table>
+    </div>
+
     <!-- PLAYSHEET -->
     <div id="panel-playsheet" class="panel playsheet">
       <h2>Character Playsheet</h2>
@@ -2371,6 +2401,7 @@ function recalc() {
   // current attrs/level the same way Skill Points is, so raising Knowledge
   // or leveling up is reflected immediately if that tab happens to be open.
   buildSpellBookPanel(attrs);
+  buildTechniquesPanel();
 
   // Playsheet
   updatePlaysheet(attrs);
@@ -5102,6 +5133,158 @@ const DEFAULT_SPELLS = [
 let SPELLS = [...DEFAULT_SPELLS];
 let editingSpellIndex = null;
 
+// ─── TECHNIQUES ──────────────────────────────────────────────────────────────
+// Level-gated fighting techniques, one family per Weapon Type. A character
+// CHOOSES techniques (stats.Techniques = ids) up to an allowance of
+// (per-level allowance for their class) × Level, and may respec freely. A
+// technique only applies while the attacker is using a weapon of its type:
+//   hit    — added to the attack's hit chance (the same points the defender's
+//            Block/Parry/Evade reduction is subtracted from)
+//   damage — added to the damage roll (before armor, and to the weapon's cap)
+//   parry  — added to the reduction of a Parry made with that weapon type
+// Config data (TECHNIQUES, TECHNIQUE_ALLOWANCE) — edited in Game Config →
+// Techniques, saved with the config and merged by Core Rules.
+const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster'];
+const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1 };
+function _techSlug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
+// Technique I (level 1, +10 hit, +1 damage) for every weapon type, plus a
+// Parry technique (+10 parry, level 2) for every type that has a Parry action.
+function _techniquesForTypes(types, existing) {
+  const have = new Set((existing || []).map(t => t.id));
+  const parryTypes = new Set(DEFAULT_MELEE_WEAPONS.filter(r => r.action === 'Parry').map(r => r.weaponType).filter(Boolean));
+  const out = [];
+  for (const type of types) {
+    if (!type || type === 'Natural' || type === 'Shield') continue;
+    const slug = _techSlug(type);
+    if (!have.has(slug + '-1'))
+      out.push({ id: slug + '-1', name: type + ' Technique I', weaponType: type, minLevel: 1, hit: 10, damage: 1, parry: 0 });
+    if (parryTypes.has(type) && !have.has(slug + '-parry'))
+      out.push({ id: slug + '-parry', name: type + ' Parry', weaponType: type, minLevel: 2, hit: 0, damage: 0, parry: 10 });
+  }
+  return out;
+}
+const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []);
+let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
+let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
+
+// Techniques picked by `techIds` that apply to a weapon (by its Weapon Type).
+function _techniqueBonus(techIds, weaponName) {
+  const b = { hit: 0, damage: 0, parry: 0 };
+  const type = weaponName ? getWeaponType(weaponName) : '';
+  if (!type || !Array.isArray(techIds)) return b;
+  for (const id of techIds) {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (!t || t.weaponType !== type) continue;
+    b.hit += t.hit || 0; b.damage += t.damage || 0; b.parry += t.parry || 0;
+  }
+  return b;
+}
+// Same, for a combatant id ('char::<id>'). Creatures have no techniques.
+function _combatantTechBonus(cid, weaponName) {
+  const [kind, id] = String(cid || '').split('::');
+  const ids = kind === 'char' ? playCharCache[id]?.stats?.Techniques : null;
+  return _techniqueBonus(ids, weaponName);
+}
+function _techniqueSummary(t) {
+  const parts = [];
+  if (t.hit)    parts.push(`${t.hit > 0 ? '+' : ''}${t.hit} hit`);
+  if (t.damage) parts.push(`${t.damage > 0 ? '+' : ''}${t.damage} damage`);
+  if (t.parry)  parts.push(`${t.parry > 0 ? '+' : ''}${t.parry} parry`);
+  return parts.join(', ') || 'no effect';
+}
+
+// Character-builder state (stats.CharClass / stats.Techniques piggyback).
+var characterClass = 'Warrior'; // unset on older characters = Warrior
+var characterTechniques = [];
+function _techAllowanceTotal() {
+  return Math.max(0, Math.round((TECHNIQUE_ALLOWANCE[characterClass] ?? 0) * characterLevel));
+}
+function toggleTechnique(id) {
+  const i = characterTechniques.indexOf(id);
+  if (i >= 0) { characterTechniques.splice(i, 1); }
+  else {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (!t || (t.minLevel || 1) > characterLevel || characterTechniques.length >= _techAllowanceTotal()) return;
+    characterTechniques.push(id);
+  }
+  recalc();
+}
+function respecTechniques() {
+  if (!characterTechniques.length) return;
+  characterTechniques = [];
+  recalc();
+}
+// ── Game Config → Techniques ──
+function buildTechniqueManager() {
+  const al = document.getElementById('techmgr-allowance');
+  if (al) al.innerHTML = TECHNIQUE_CLASSES.map(c => `<label style="font-size:0.85rem;">${c} techniques per level
+    <input type="number" min="0" step="1" value="${TECHNIQUE_ALLOWANCE[c] ?? 0}" style="width:60px;margin-left:6px;" onchange="setTechniqueAllowance('${c}', this.value)"></label>`).join('');
+  const tb = document.getElementById('techmgr-list');
+  if (!tb) return;
+  const num = (i, k) => `<input type="number" step="1" value="${TECHNIQUES[i][k] || 0}" style="width:60px;" onchange="editTechnique(${i},'${k}',this.value)">`;
+  tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
+    <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
+    <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
+    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td>
+    <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
+  _refreshWeaponTypeList();
+}
+function setTechniqueAllowance(cls, v) {
+  TECHNIQUE_ALLOWANCE[cls] = Math.max(0, parseFloat(v) || 0);
+  writeConfigToDisk();
+}
+function editTechnique(i, key, v) {
+  const t = TECHNIQUES[i]; if (!t) return;
+  if (key === 'name' || key === 'weaponType') t[key] = String(v).trim();
+  else t[key] = key === 'minLevel' ? Math.max(1, parseInt(v, 10) || 1) : (parseInt(v, 10) || 0);
+  writeConfigToDisk();
+}
+function addTechniqueRow() {
+  let n = 1; while (TECHNIQUES.some(t => t.id === 'custom-' + n)) n++;
+  TECHNIQUES.push({ id: 'custom-' + n, name: 'New Technique', weaponType: '', minLevel: 1, hit: 0, damage: 0, parry: 0 });
+  writeConfigToDisk(); buildTechniqueManager();
+}
+function deleteTechnique(i) {
+  const t = TECHNIQUES[i]; if (!t || !confirm(`Delete "${t.name}"? Characters who chose it lose it.`)) return;
+  TECHNIQUES.splice(i, 1);
+  writeConfigToDisk(); buildTechniqueManager();
+}
+function addMissingTechniques() {
+  const add = _techniquesForTypes(getWeaponTypes(), TECHNIQUES);
+  TECHNIQUES.push(...add);
+  writeConfigToDisk(); buildTechniqueManager();
+  showToast(add.length ? `Added ${add.length} technique${add.length === 1 ? '' : 's'}.` : 'Every weapon type already has its techniques.', 'info');
+}
+
+function buildTechniquesPanel() {
+  const list = document.getElementById('techniques-list');
+  if (!list) return;
+  const total = _techAllowanceTotal(), used = characterTechniques.length, left = total - used;
+  const sel = document.getElementById('sel-charclass');
+  if (sel && sel.value !== characterClass) sel.value = characterClass;
+  const bar = document.getElementById('techniques-bar');
+  if (bar) bar.innerHTML = `<b>${_escWeaponType(characterClass)}</b> · Level ${characterLevel} · `
+    + `<span style="color:${left < 0 ? '#e05555' : 'var(--gold2)'};font-weight:bold;">${used} of ${total}</span> techniques chosen`
+    + ` <span style="color:var(--text-dim);">(${TECHNIQUE_ALLOWANCE[characterClass] ?? 0} per level)</span>`
+    + `<button class="btn" style="margin-left:14px;padding:3px 10px;font-size:0.75rem;" onclick="respecTechniques()" ${used ? '' : 'disabled'}>Respec (clear all)</button>`;
+  if (!TECHNIQUES.length) { list.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No techniques configured yet.</p>'; return; }
+  const byType = {};
+  for (const t of TECHNIQUES) (byType[t.weaponType || 'Other'] ||= []).push(t);
+  list.innerHTML = Object.keys(byType).sort().map(type => `
+    <h4 style="margin:14px 0 6px;color:var(--gold2);">${_escWeaponType(type)}</h4>
+    ${byType[type].sort((a, b) => (a.minLevel || 1) - (b.minLevel || 1) || a.name.localeCompare(b.name)).map(t => {
+      const has = characterTechniques.includes(t.id);
+      const locked = (t.minLevel || 1) > characterLevel;
+      const full = !has && left <= 0;
+      const btn = has ? `<button class="btn" onclick="toggleTechnique('${_escWeaponType(t.id)}')">✓ Chosen — Unlearn</button>`
+        : locked ? `<button class="btn" disabled>Level ${t.minLevel}</button>`
+        : `<button class="btn" ${full ? 'disabled title="No technique slots left"' : ''} onclick="toggleTechnique('${_escWeaponType(t.id)}')">Learn</button>`;
+      return `<div class="ps-block" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:12px;${has ? 'border-color:var(--gold2);' : ''}${locked ? 'opacity:0.55;' : ''}">
+        <div><div style="font-weight:bold;">${_escWeaponType(t.name)} <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;">Level ${t.minLevel || 1}+</span></div>
+        <div style="font-size:0.8rem;color:var(--text-dim);">${_escWeaponType(_techniqueSummary(t))} with ${_escWeaponType(type)} weapons</div></div>${btn}</div>`;
+    }).join('')}`).join('');
+}
+
 // ─── Hit Location Data ────────────────────────────────────────────────────────
 // matrix: 8 rows × 5 cols, values are part keys or null (re-roll).
 // parts: sizeFactor multiplies the hit threshold; rowBias/colBias shift
@@ -5929,12 +6112,14 @@ function showPanel(id) {
   if (id === 'skillmgr')   buildSkillManagerTable();
   if (id === 'speciesmgr') buildSpeciesManagerTable();
   if (id === 'spellbook')  buildSpellBookPanel();
-  if (id === 'equipmgr')   buildEquipManagerTable();
+  if (id === 'techniques') buildTechniquesPanel();
+  if (id === 'techmgr')    buildTechniqueManager();
+  if (id === 'equipmgr')  buildEquipManagerTable();
   if (id === 'economymgr') _loadEconomySettingsUI();
   if (id === 'shop')       buildShopPanel();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','spellmgr','economymgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','spellmgr','techmgr','economymgr'];
 
 // Browser tab title AND the in-page header (#app-title) while in Character
 // Builder mode — "Arcane Character Builder" plus whatever's currently in the
@@ -6281,6 +6466,8 @@ function gatherCharacterData() {
     xp:      characterXP,
     pence:   characterPence,
     knownSpells: [...characterKnownSpells],
+    charClass: characterClass,
+    techniques: [...characterTechniques],
     notes:   document.getElementById('char-notes')?.value || '',
     stats:   { ...statValues },
     features: [...document.querySelectorAll('#feature-list input:checked')].map(cb => cb.dataset.name),
@@ -6353,6 +6540,7 @@ async function saveCharacter() {
     social:      data.social || '',
     mental:      data.mental || '',
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
+                   CharClass: data.charClass, Techniques: data.techniques,
                    ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language },
     notes:       data.notes || '',
     features:    data.features,
@@ -6588,6 +6776,7 @@ function _doNewCharacter() {
   characterPence = 0; // real starting amount is derived at this character's first save — see saveCharacter
   updatePurseDisplay();
   characterKnownSpells = [];
+  characterClass = 'Warrior'; characterTechniques = [];
   const newLangSel = document.getElementById('sel-language');
   if (newLangSel) newLangSel.value = 'Realm';
   const newXpDisplay = document.getElementById('char-xp-display');
@@ -6656,6 +6845,8 @@ function gatherConfigData() {
     rangedWeapons: RANGED_WEAPONS,
     consumables: CONSUMABLES,
     spells: SPELLS,
+    techniques: TECHNIQUES,
+    techniqueAllowance: TECHNIQUE_ALLOWANCE,
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
@@ -6686,7 +6877,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261018a';
+const VERSION = 'v0.1.20261018b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7344,6 +7535,8 @@ var _coreLatest = null; // {id, version, notes, published_at, published_by} of t
 const CORE_SECTIONS = [
   { key: 'skills',        label: 'Skills',                kind: 'list', id: s => s.name },
   { key: 'spells',        label: 'Spells',                kind: 'list', id: s => s.name },
+  { key: 'techniques',    label: 'Techniques',            kind: 'list', id: t => t.id },
+  { key: 'techniqueAllowance', label: 'Technique allowance', kind: 'map' },
   { key: 'meleeWeapons',  label: 'Melee weapon actions',  kind: 'list', id: r => `${r.weapon} — ${r.action}` },
   { key: 'rangedWeapons', label: 'Ranged weapon actions', kind: 'list', id: r => `${r.weapon} — ${r.action}` },
   { key: 'weapons',       label: 'Weapons',               kind: 'list', id: w => w.name },
@@ -7594,6 +7787,8 @@ function applyConfigData(data) {
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
+  replaceArrayContents(TECHNIQUES,      (data.techniques && data.techniques.length ? data.techniques : DEFAULT_TECHNIQUES).map(t => ({ ...t })));
+  replaceObjectContents(TECHNIQUE_ALLOWANCE, data.techniqueAllowance && Object.keys(data.techniqueAllowance).length ? data.techniqueAllowance : DEFAULT_TECHNIQUE_ALLOWANCE);
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
@@ -7686,6 +7881,10 @@ function applyCharacterData(data) {
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
   characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
+  // Class + chosen techniques — same stats piggyback (older characters: Warrior, none chosen yet).
+  const _cls = data.charClass || data.stats?.CharClass;
+  characterClass = TECHNIQUE_CLASSES.includes(_cls) ? _cls : 'Warrior';
+  characterTechniques = Array.isArray(data.techniques || data.stats?.Techniques) ? [...(data.techniques || data.stats.Techniques)] : [];
   spellBookFilter = 'All';
   // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
   // to compute the +1/level stat bonus, so it has to already be current.
@@ -11853,9 +12052,12 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // Roll damage: random 1–(Power × maxPowerMod), subtract armor DR, cap at damageMax.
   // Use ?? not || so a legitimate 0 (e.g. Grab: damageMax 0, maxPowerMod 0 — a
   // non-damaging control action) isn't silently replaced by the default.
-  const dmgCap      = weaponRow.damageMax  ?? 10;
+  const baseCap     = weaponRow.damageMax  ?? 10;
+  // Technique damage (techniques chosen for this weapon type) raises the roll and the cap alike, before armor.
+  const techDmg     = baseCap > 0 ? _combatantTechBonus(ctx.attackerCombatantId, weaponRow.weapon).damage : 0;
+  const dmgCap      = baseCap + techDmg;
   const powerMod    = weaponRow.maxPowerMod ?? 0.5;
-  const maxRoll     = Math.max(1, (atkPower || 1) * powerMod);
+  const maxRoll     = Math.max(1, (atkPower || 1) * powerMod) + techDmg;
   // A precise hit — the attack's own to-hit roll came in at 3 or below —
   // always lands at the weapon's max damage, PLUS a second ordinary damage
   // roll stacked on top. Unlike a normal hit, this one isn't capped at the
@@ -15129,7 +15331,9 @@ function attackTokenClick(tokenId) {
   // so this doubling only applies to melee attacks.
   const targetIsProne  = getConditions(target.id).has('prone');
   const proneMeleeMult = (targetIsProne && !attackIsRanged) ? 2 : 1;
-  const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult : null;
+  // Techniques chosen for this weapon type add flat hit points on top of the size-adjusted chance.
+  const techHit = _combatantTechBonus(attackCombatantId, attackWeaponName).hit;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult + techHit : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null; // before range — the modal subtracts it
 
   // ── Log action to tracker ─────────────────────────────────────────────────
@@ -15251,7 +15455,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
-        const reduction = Math.round(defVal * defSize);
+        const reduction = Math.round(defVal * defSize) + (r.action === 'Parry' ? _combatantTechBonus(defCid, itemName).parry : 0);
         defenseOptions.push({
           label: `${r.action} — ${itemName} (−${reduction})`,
           reduction,
@@ -15322,7 +15526,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
             const wRow  = wRows.find(r => r.action === keyword);
             if (wRow) {
               const defVal   = calcHitValue(wRow.hitFormula, defAttrs);
-              const reduction = defVal != null ? Math.round(defVal * defSize) : 0;
+              const reduction = defVal != null ? Math.round(defVal * defSize) + (keyword === 'Parry' ? _combatantTechBonus(defCid, weaponName).parry : 0) : 0;
               best = { label: `${keyword} — ${weaponName} (−${reduction})`, reduction,
                         onSelect: () => {
                           atSetSlot(defCid, slotKey, `${keyword} — ${weaponName}`, 1, false);
