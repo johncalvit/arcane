@@ -6877,7 +6877,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020a';
+const VERSION = 'v0.1.20261020b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12734,13 +12734,51 @@ async function _axpConfirmAward() {
 // applyCharacterData) — stats.XP, no schema change needed. Updates the
 // cached row too so the Character Builder/Tokens panel reflect the new
 // total without waiting for a fresh page load.
+// GM: grant (or, with a negative amount, take back) XP for chosen characters outside of combat.
+function atOpenGrantXpModal() {
+  if (!isGM()) return;
+  document.getElementById('grant-xp-modal')?.remove();
+  const ids = new Set(Object.keys(playCharCache));
+  for (const t of Object.values(mapTokens || {})) if (t.entity_type === 'character') ids.add(t.entity_id);
+  const rows = [...ids].map(id => {
+    const tok = Object.values(mapTokens || {}).find(t => t.entity_type === 'character' && t.entity_id === id);
+    return { id, name: playCharCache[id]?.name || tok?.label || id, xp: Math.round(playCharCache[id]?.stats?.XP || 0), onMap: !!tok };
+  }).sort((a, b) => (b.onMap - a.onMap) || a.name.localeCompare(b.name));
+  const overlay = document.createElement('div');
+  overlay.id = 'grant-xp-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:360px;max-width:94vw;max-height:86vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-family:Georgia,serif;';
+  card.innerHTML = `
+    <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">🏅 Grant XP</div>
+    <div style="font-size:0.78rem;color:var(--text-dim);font-style:italic;">Each checked character receives the amount below (negative takes XP back). Characters on the map are listed first.</div>
+    <div>${rows.map((r, i) => `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:0.85rem;cursor:pointer;"><input type="checkbox" id="gxp-${i}" ${r.onMap ? 'checked' : ''}><span style="flex:1;">${_paEsc(r.name)}</span><span style="color:var(--text-dim);font-size:0.75rem;">${r.xp} XP · Lv ${_levelFromXp(r.xp)}</span></label>`).join('') || '<div style="color:var(--text-dim);">No characters loaded.</div>'}</div>
+    <div style="display:flex;align-items:center;gap:8px;font-size:0.85rem;">XP each: <input type="number" id="gxp-amount" value="0" style="width:100px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;"><button class="btn" id="gxp-go">Grant</button><button class="btn danger" onclick="document.getElementById('grant-xp-modal').remove()">Cancel</button></div>`;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  document.getElementById('gxp-go').onclick = async () => {
+    const amount = parseInt(document.getElementById('gxp-amount').value, 10) || 0;
+    const chosen = rows.filter((r, i) => document.getElementById(`gxp-${i}`)?.checked);
+    if (!amount || !chosen.length) { showToast('Pick at least one character and a non-zero amount.', 'warn'); return; }
+    const ok = [], failed = [];
+    for (const r of chosen) ((await _awardXpToCharacter(r.id, amount)) ? ok : failed).push(r.name);
+    if (ok.length) logCombat(`${amount > 0 ? '+' : ''}${amount} XP ${amount > 0 ? 'granted to' : 'taken from'} ${ok.join(', ')}.`, 'good');
+    if (failed.length) { logCombat(`XP NOT saved for ${failed.join(', ')} - the database refused the write (run supabase-gm-update-characters.sql).`, 'bad'); showToast(`XP could not be saved for: ${failed.join(', ')}.`, 'error'); }
+    else showToast(`XP updated for ${ok.length} character(s).`, 'good');
+    overlay.remove();
+    if (typeof refreshUI === 'function') refreshUI();
+  };
+}
+
 async function _awardXpToCharacter(characterId, amount) {
   const row = playCharCache[characterId];
   // Read the character's CURRENT stats first — the cache can be stale (the player may
   // have saved since), and the write replaces the whole stats object.
   const { data: fresh } = await sb.from('characters').select('stats').eq('id', characterId).maybeSingle();
   const base = fresh?.stats || row?.stats || {};
-  const newStats = { ...base, XP: Math.round(base.XP || 0) + amount };
+  const newStats = { ...base, XP: Math.max(0, Math.round(base.XP || 0) + amount) };
   // .select() — RLS silently turns a write on someone else's character into "0 rows
   // updated, no error", which is how a GM's XP award used to vanish unnoticed.
   const { data, error } = await sb.from('characters').update({ stats: newStats }).eq('id', characterId).select('id');
@@ -21003,6 +21041,7 @@ async function _deleteMapPin(pinId) {
             <button id="at-roll-remaining-btn" class="at-btn primary" onclick="atRollAllRemaining()" title="Roll initiative for every combatant who hasn't rolled yet" style="display:none;">🎲 Roll Remaining</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
             <button class="at-btn primary" onclick="atOpenAwardXpModal()" title="Mark which foes were actually defeated and award XP to the party">🏆 Finish Combat</button>
+            <button class="at-btn" onclick="atOpenGrantXpModal()" title="Give (or take back) XP for specific characters, outside of combat">🏅 Grant XP</button>
           </div>
         </div>
         <!-- combatant list -->
