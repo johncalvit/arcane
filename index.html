@@ -6877,7 +6877,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261018c';
+const VERSION = 'v0.1.20261020a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8867,7 +8867,9 @@ async function updateEntity(ref, patch) {
   delete row._attrs;
   refreshUI(); // immediate optimistic feedback while the write is in flight
   const table = ref.startsWith('char::') ? 'characters' : 'session_creatures';
-  const { error } = await sb.from(table).update(patch).eq('id', row.id);
+  // .select() so a write RLS silently filters out (0 rows, no error) is caught too.
+  let { data: written, error } = await sb.from(table).update(patch).eq('id', row.id).select('id');
+  if (!error && !(written && written.length)) error = { message: 'No permission to change this ' + (table === 'characters' ? 'character' : 'creature') + ' (permission) - the change was not saved.' };
   if (error) {
     Object.assign(row, before);
     delete row._attrs;
@@ -12698,12 +12700,20 @@ async function _axpConfirmAward() {
   const { total, includedIdxs, share } = _axpTotals();
 
   if (includedIdxs.length && share > 0) {
+    const failed = [];
     for (const i of includedIdxs) {
       const charId = _axpPartyRows[i].id.split('::')[1];
-      await _awardXpToCharacter(charId, share);
+      if (!(await _awardXpToCharacter(charId, share))) failed.push(_axpPartyRows[i].name);
     }
-    logCombat(`Combat finished — ${total} XP awarded (${share} each to ${includedIdxs.length} ${includedIdxs.length === 1 ? 'character' : 'characters'}).`, 'good');
-    showToast(`Awarded ${share} XP to ${includedIdxs.length} character(s).`, 'good');
+    if (failed.length) {
+      logCombat(`XP NOT saved for ${failed.join(', ')} - the database refused the write (run supabase-gm-update-characters.sql).`, 'bad');
+      showToast(`XP could not be saved for: ${failed.join(', ')}. See the journal.`, 'error');
+    }
+    const okCount = includedIdxs.length - failed.length;
+    if (okCount > 0) {
+      logCombat(`Combat finished — ${total} XP awarded (${share} each to ${okCount} ${okCount === 1 ? 'character' : 'characters'}).`, 'good');
+      showToast(`Awarded ${share} XP to ${okCount} character(s).`, 'good');
+    }
   }
 
   // Independent of XP actually being awarded above — a GM might clear 0-XP
@@ -12726,11 +12736,21 @@ async function _axpConfirmAward() {
 // total without waiting for a fresh page load.
 async function _awardXpToCharacter(characterId, amount) {
   const row = playCharCache[characterId];
-  const currentXp = Math.round(row?.stats?.XP || 0);
-  const newStats = { ...(row?.stats || {}), XP: currentXp + amount };
-  const { error } = await sb.from('characters').update({ stats: newStats }).eq('id', characterId);
-  if (error) { _writeErrorToast(error, 'characters (award XP)'); return; }
+  // Read the character's CURRENT stats first — the cache can be stale (the player may
+  // have saved since), and the write replaces the whole stats object.
+  const { data: fresh } = await sb.from('characters').select('stats').eq('id', characterId).maybeSingle();
+  const base = fresh?.stats || row?.stats || {};
+  const newStats = { ...base, XP: Math.round(base.XP || 0) + amount };
+  // .select() — RLS silently turns a write on someone else's character into "0 rows
+  // updated, no error", which is how a GM's XP award used to vanish unnoticed.
+  const { data, error } = await sb.from('characters').update({ stats: newStats }).eq('id', characterId).select('id');
+  if (error) { _writeErrorToast(error, 'characters (award XP)'); return false; }
+  if (!data || !data.length) {
+    console.warn('award XP: 0 rows updated for', characterId);
+    return false;
+  }
   if (row) row.stats = newStats;
+  return true;
 }
 
 function atAcceptAction(combatantId) {
