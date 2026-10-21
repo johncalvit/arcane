@@ -283,6 +283,45 @@
   .ps-stat-row { display: flex; justify-content: space-between; padding: 2px 0; font-size: 0.78rem; border-bottom: 1px solid rgba(61,51,40,0.4); }
   .ps-stat-label { color: var(--text-dim); }
   .ps-stat-val   { color: var(--gold2); font-weight: bold; }
+  /* ── Play-mode left panel redesign ────────────────────────────────────── */
+  .play-panel-header .panel-title { color: var(--gold); font-size: 0.9rem; letter-spacing: 0.22em; display: flex; align-items: center; gap: 10px; }
+  .play-panel-header .panel-title .ico { width: 1.3em; height: 1.3em; }
+  .pa-id { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
+  .pa-id .ps-compact-avatar { width: 76px; height: 92px; border: 2px solid var(--gold); }
+  .pa-id-text { flex: 1; min-width: 0; }
+  .pa-id-name { font-size: 1.3rem; color: var(--gold2); font-weight: bold; line-height: 1.1; margin-bottom: 3px; overflow-wrap: anywhere; }
+  .pa-id-sub { font-size: 0.85rem; color: var(--text-dim); line-height: 1.35; }
+  .pa-id-xp { font-size: 0.72rem; color: var(--text-dim); opacity: 0.8; margin-top: 2px; }
+  .pa-edit-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--gold2); border-radius: 5px; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+  .pa-edit-btn:hover { border-color: var(--gold); }
+  .pa-tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 8px; }
+  .pa-tile { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; text-align: center; padding: 4px 2px; min-width: 0; }
+  .pa-tile-l { font-size: 0.56rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+  .pa-tile-v { font-size: 0.86rem; color: var(--text); font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pa-sec { margin-bottom: 6px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg2); }
+  .pa-sec-h { display: flex; align-items: center; gap: 9px; padding: 6px 10px; cursor: pointer; background: var(--bg3); color: var(--text-dim); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.16em; user-select: none; }
+  .pa-sec-ico { display: inline-flex; color: var(--gold); }
+  .pa-sec-t { flex: 1; }
+  .pa-chev { display: inline-flex; opacity: 0.7; transition: transform 0.15s; }
+  .pa-sec-h.collapsed .pa-chev { transform: rotate(180deg); }
+  .pa-sec-b { padding: 6px 10px; }
+  .pa-sec .ps-stat-row { font-size: 0.9rem; padding: 3px 0; }
+  .pa-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-bottom: 1px solid rgba(61,51,40,0.4); }
+  .pa-row:last-child { border-bottom: none; }
+  .pa-row-ico { display: inline-flex; color: var(--text-dim); width: 1.4em; justify-content: center; flex-shrink: 0; }
+  .pa-row-l { flex: 0 0 auto; font-size: 0.9rem; color: var(--text); }
+  .pa-dim { color: var(--text-dim); font-size: 0.8em; }
+  .pa-val { margin-left: auto; font-size: 0.85rem; text-align: right; }
+  .pa-sel { margin-left: auto; flex: 1; min-width: 0; max-width: 62%; font-size: 0.85rem; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; font-family: var(--ui-font); }
+  .pa-view-btn { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; background: transparent; border: 1px solid var(--gold); color: var(--gold2); border-radius: 4px; padding: 3px 10px; font-size: 0.82rem; cursor: pointer; font-family: var(--ui-font); }
+  .pa-view-btn:hover { background: rgba(201,168,76,0.12); }
+  .pa-view-btn .ico { width: 1em; height: 1em; }
+  .pa-drop { color: #c96b6b; cursor: pointer; font-size: 0.8rem; padding: 0 4px; }
+  .pa-none { font-size: 0.85rem; color: var(--text-dim); font-style: italic; padding: 2px 0; }
+  .pa-addrow { display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-top: 6px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 0.85rem; color: var(--text); }
+  .pa-addrow .ico { width: 1em; height: 1em; opacity: 0.7; }
+  .pa-select-ghost { padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); color: var(--text-dim); font-size: 0.85rem; }
+  .pa-sub { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-dim); }
   .ps-rollable   { cursor: pointer; border-bottom: 1px dashed var(--gold); }
   .ps-rollable:hover { color: var(--gold); }
 
@@ -7052,7 +7091,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261021d';
+const VERSION = 'v0.1.20261021e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8887,6 +8926,7 @@ function getEntity(ref) {
     tokenId:   token?.id || null,
     name:      row.name || token?.label || '',
     species:   row.species || '',
+    social:    row.social || '',
     bodyType:  row.body_type || (isChar ? '' : 'Humanoid'),
     avatarUrl: row.avatar_url || token?.avatar_url || '',
     attrs,
@@ -21010,7 +21050,7 @@ async function _deleteMapPin(pinId) {
     <!-- LEFT: compact character sheet -->
     <div class="play-panel" id="play-char-panel" style="display:flex;flex-direction:column;overflow:hidden;">
       <div class="play-panel-header">
-        <span class="panel-title">Character</span>
+        <span class="panel-title"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 6-8 12L4 9z M4 9h16"/></svg>Character</span>
       </div>
       <!-- Persistent active-turn banner (survives content re-renders) -->
       <div id="play-active-banner" style="padding:0;flex-shrink:0;"></div>

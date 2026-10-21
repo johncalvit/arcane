@@ -37,17 +37,84 @@ function _itemNameSpan(name) {
     : _paEsc(label);
 }
 
-// Collapsible section. Header toggles the body via delegation (data-pa).
+// ── Icons (24px line icons, currentColor) ─────────────────────────────────────
+const _PA_ICON_PATHS = {
+  heart:   'M12 21s-7.5-4.6-9.3-9.2C1.4 8.3 3.3 5 6.6 5c2 0 3.5 1.2 5.4 3 1.9-1.8 3.4-3 5.4-3 3.3 0 5.2 3.3 3.9 6.8C19.500 16.400 12 21 12 21z',
+  shield:  'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z',
+  swords:  'M4 20L20 4 M4 4l16 16 M3 15l6 6 M21 15l-6 6',
+  book:    'M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z',
+  box:     'M3 8l9-5 9 5v9l-9 5-9-5z M3 8l9 5 9-5 M12 13v9',
+  bars:    'M5 20V11 M12 20V4 M19 20v-6',
+  gear:    'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9L7 7 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1',
+  sword:   'M5 19L19 5 M8 11l5 5 M4 20l2-2',
+  doc:     'M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7',
+  chat:    'M4 5h16v11H9l-5 4z',
+  dice:    'M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z M8.500 8.500h.01 M15.500 8.500h.01 M12 12h.01 M8.500 15.500h.01 M15.500 15.500h.01',
+  pencil:  'M4 20l4-1 11-11a2.100 2.100 0 0 0-3-3L5 16z M14 7l3 3',
+  up:      'M6 15l6-6 6 6',
+  right:   'M9 6l6 6-6 6',
+  down:    'M6 9l6 6 6-6',
+  gem:     'M12 3l8 6-8 12L4 9z M4 9h16',
+};
+function _paIcon(name, cls) {
+  const p = _PA_ICON_PATHS[name] || _PA_ICON_PATHS.doc;
+  return `<svg class="ico ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${p}"/></svg>`;
+}
+const _PA_TITLE_ICON = { Health: 'heart', Conditions: 'shield', Combat: 'swords', Abilities: 'book', Equipment: 'box',
+  Armor: 'shield', Stats: 'bars', Language: 'chat', 'Background & Notes': 'doc', Skills: 'gear', Magic: 'book', Techniques: 'swords' };
+
+// Collapsible section: icon + spaced uppercase title + chevron. Header toggles the
+// body via delegation (data-pa="collapse").
 function _paSection(title, content) {
   return `
-    <div style="margin-bottom:4px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
-      <div data-pa="collapse"
-           style="display:flex;justify-content:space-between;align-items:center;padding:3px 8px;cursor:pointer;background:var(--bg3);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">
-        ${title}<span style="font-size:0.7rem;opacity:0.5;">▾</span>
+    <div class="pa-sec">
+      <div class="pa-sec-h" data-pa="collapse">
+        <span class="pa-sec-ico">${_paIcon(_PA_TITLE_ICON[title] || 'doc')}</span><span class="pa-sec-t">${title}</span><span class="pa-chev">${_paIcon('up')}</span>
       </div>
-      <div style="padding:4px 6px;">${content}</div>
+      <div class="pa-sec-b">${content}</div>
     </div>`;
 }
+
+// Small centered modal for "View" lists (skills, techniques, all equipment).
+function _paOpenModal(title, bodyHtml, onReady) {
+  document.getElementById('pa-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'pa-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:18px 22px;min-width:320px;max-width:94vw;max-height:84vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;';
+  card.innerHTML = `<div style="display:flex;align-items:center;gap:10px;"><div style="flex:1;font-size:1.05rem;font-weight:bold;color:var(--gold);letter-spacing:0.08em;text-transform:uppercase;">${_paEsc(title)}</div>
+      <button class="btn" style="padding:2px 10px;" onclick="document.getElementById('pa-modal').remove()">Close</button></div>
+    <div id="pa-modal-body">${bodyHtml}</div>`;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  if (onReady) onReady(card);
+}
+function _paViewSkills(ent, skills, attrs) {
+  _paOpenModal('Skills', _paSkillRowsHtml(skills, attrs), card => {
+    card.onclick = e => {
+      const t = e.target.closest('[data-pa="roll-skill"]');
+      if (t) { document.getElementById('pa-modal')?.remove(); openRoller({ label: t.dataset.name, target: +t.dataset.pct, targetLabel: 'or less' }); }
+    };
+  });
+}
+function _paViewTechniques(ent) {
+  const html = (typeof _techniquesListHTML === 'function' ? _techniquesListHTML(ent?.stats?.Techniques) : '') ||
+    '<div style="color:var(--text-dim);font-style:italic;">No techniques chosen.</div>';
+  _paOpenModal('Techniques', html);
+}
+function _paViewEquipment(ent, attrs) {
+  const rows = _paWeaponRowsHtml(ent, attrs);
+  const carried = (ent.loadout || []);
+  const carriedHtml = carried.length
+    ? carried.map(n => `<div class="ps-stat-row"><span class="ps-stat-label">${_itemNameSpan(n)}</span></div>`).join('')
+    : '<div style="color:var(--text-dim);font-style:italic;font-size:0.8rem;">Nothing carried.</div>';
+  _paOpenModal('Equipment',
+    `<div class="pa-sub">Weapon actions</div>${rows || '<div style="color:var(--text-dim);font-style:italic;font-size:0.8rem;">No weapons held.</div>'}
+     <div class="pa-sub" style="margin-top:10px;">Carried</div>${carriedHtml}`);
+}
+
 
 // ── Section builders ──────────────────────────────────────────────────────────
 
@@ -84,13 +151,13 @@ function _paSecConditions(ent) {
   // Active conditions up top (click to clear, for the GM).
   let html = activeDefs.length
     ? `<div style="display:flex;flex-wrap:wrap;gap:5px;">${activeDefs.map(chip).join('')}</div>`
-    : `<div style="font-size:0.72rem;color:var(--text-dim);font-style:italic;">None active.</div>`;
+    : `<div class="pa-none">None active.</div>`;
 
   // Inactive conditions behind an expander (GM only — players can't set them).
   if (canEdit && inactiveDefs.length) {
     html += `
-      <div data-pa="collapse" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:8px;padding-top:6px;border-top:1px solid var(--border);font-size:0.63rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);">
-        <span>+ Add condition</span><span style="opacity:0.5;">▾</span>
+      <div data-pa="collapse" class="pa-addrow">
+        <span>+ Add Condition</span>${_paIcon('right')}
       </div>
       <div style="display:none;margin-top:6px;">
         <div style="display:flex;flex-wrap:wrap;gap:5px;">${inactiveDefs.map(chip).join('')}</div>
@@ -110,8 +177,8 @@ function _paSecCombat(ent, canEdit, prefixHtml) {
   if (!c || !canEdit || c.initiative != null) return '';
   return _paSection('Combat', `
     <div class="at-action-row">
-      <span style="font-size:0.72rem;color:var(--text-dim);">Initiative not rolled</span>
-      <button class="at-btn primary" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🎲 Roll</button>
+      <span style="font-size:0.85rem;color:var(--text);">Initiative not rolled</span>
+      <button class="pa-view-btn" data-pa="roll-init" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">${_paIcon('dice')} Roll</button>
     </div>`);
 }
 
@@ -159,64 +226,49 @@ function _twoHandedGrip(ent) {
   return count < 2;
 }
 
-function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
+function _paSkillRowsHtml(skills, attrs) {
+  const invested = Object.entries(skills || {}).filter(([, pts]) => pts > 0);
+  return invested.length
+    ? invested.map(([name, pts]) => {
+        const skill = SKILLS.find(s => s.name === name);
+        const pct = calcSkillSuccess(skill, attrs, pts);
+        return `<div class="ps-stat-row">
+          <span class="ps-stat-label" style="flex:1;">${_paEsc(name)}</span>
+          <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" data-pa="roll-skill" data-name="${_paEsc(name)}" data-pct="${pct}">${pct}%</span>
+        </div>`;
+      }).join('')
+    : `<div style="font-size:0.8rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
+}
+
+// Abilities: one row per ability list, each with a "View ›" button that opens it
+// (skills and techniques in a small modal, the spell book in its own modal) — the
+// panel stays short however many skills/spells/techniques a character has.
+// Spell Book and Techniques rows only appear when there is something to show.
+function _paSecAbilities(ent, skills, attrs) {
+  const row = (icon, label, count, pa, extra) => `
+    <div class="pa-row">
+      <span class="pa-row-ico">${_paIcon(icon)}</span>
+      <span class="pa-row-l">${label}${count != null ? ` <span class="pa-dim">(${count})</span>` : ''}</span>
+      <button class="pa-view-btn" data-pa="${pa}" ${extra || ''}>View ${_paIcon('right')}</button>
+    </div>`;
+  const skillCount = Object.values(skills || {}).filter(p => p > 0).length;
+  const spellCount = (typeof _knownSpellsFor === 'function' && typeof SPELLS !== 'undefined') ? _knownSpellsFor(ent).length : 0;
+  const techCount = ent.type === 'char' ? (ent.stats?.Techniques || []).length : 0;
+  let html = '';
+  if (skillCount || ent.type === 'char') html += row('gear', 'Skills', skillCount, 'view-skills');
+  if (spellCount) html += row('book', 'Spell Book', spellCount, 'open-spellbook', `data-cid="${_paEsc(ent.ref)}"`);
+  if (techCount || ent.type === 'char') html += row('swords', 'Techniques', techCount, 'view-techniques');
+  return html ? _paSection('Abilities', html) : '';
+}
+
+// Hit/damage rows for held weapons — same math for every entity. A two-handed
+// grip is one weapon, so only walk the right hand (skip the mirrored left). A
+// natural-plan creature walks every body-plan slot instead of right/left.
+function _paWeaponRowsHtml(ent, attrs) {
   const held = ent.held || {};
-  // Non-Humanoid body plans (Quadruped, Dragon, Snake, ...) fight with body
-  // parts, not hands — same NATURAL_BODY_PLAN/naturalSlot split _dlgRender's
-  // channel sections already use. This section used to hardcode Right/Left
-  // Hand regardless of body type, which for a natural-plan creature meant
-  // showing two always-empty hand slots while its real Fangs/Claws/Tail Slam
-  // (stored under held.head/held.forelegs/... ) were invisible here and its
-  // hit/damage rows never appeared at all.
   const plan = _paBodyPlan(ent.bodyType);
   const isNatural = plan !== BODY_PLANS.Humanoid;
   const twoHanded = !isNatural && _twoHandedGrip(ent);
-  const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:var(--ui-font);';
-  let html = '';
-  if (isNatural) {
-    html += plan.map(slot => {
-      const cur = held[slot.key] || '';
-      if (canEdit) {
-        const options = [...new Set(MELEE_WEAPONS.filter(r => r.naturalSlot === slot.key).map(r => r.weapon))];
-        const opts = ['', ...options].map(n =>
-          `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— None —'}</option>`).join('');
-        return `<div style="margin-bottom:6px;">
-          <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">${slot.icon || ''} ${_paEsc(slot.label)}</div>
-          <select style="${selStyle}" data-pa="set-hand" data-side="${slot.key}">${opts}</select>
-        </div>`;
-      }
-      return `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">${_paEsc(slot.label)}: <span style="color:var(--text);">${cur ? _itemNameSpan(cur) : '<span style="color:var(--text-dim);">None</span>'}</span></div>`;
-    }).join('');
-  } else if (canEdit) {
-    // A creature's hand options are its own saved loadout — same as a
-    // character's — unioned with whatever it's already holding, so it can't
-    // be re-armed with anything in the game, only what it (or the GM, via
-    // the Loadout tab) actually gave it.
-    const options = [...new Set([...(loadoutOverride || ent.loadout || []), held.right, held.left].filter(Boolean))];
-    html += ['right', 'left'].map(side => {
-      const cur = held[side] || '';
-      const opts = ['', ...options].map(n =>
-        `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Bare Hand —'}</option>`).join('');
-      // Drop lands the item on the map (1–4 ft away) so it can be picked back up.
-      const dropX = cur
-        ? `<span data-pa="drop-hand" data-side="${side}" title="Drop ${_paEsc(cur)} on the ground" style="cursor:pointer;color:#c96b6b;font-size:0.62rem;text-transform:none;letter-spacing:0;">✕ drop</span>`
-        : '';
-      return `<div style="margin-bottom:6px;">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">
-          <span>${side === 'right' ? 'Right Hand' : 'Left Hand'}</span>${dropX}</div>
-        <select style="${selStyle}" data-pa="set-hand" data-side="${side}">${opts}</select>
-      </div>`;
-    }).join('');
-  } else if (twoHanded) {
-    html += `<div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Both hands: <span style="color:var(--text);">${_itemNameSpan(held.right)} <span style="color:var(--text-dim);">(Two-Handed)</span></span></div>`;
-  } else {
-    html += `
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:3px;">Right: <span style="color:var(--text);">${_itemNameSpan(held.right)}</span></div>
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">Left: <span style="color:var(--text);">${_itemNameSpan(held.left)}</span></div>`;
-  }
-  // Hit/damage rows for held weapons — same math for every entity. A two-handed
-  // grip is one weapon, so only walk the right hand (skip the mirrored left).
-  // A natural-plan creature walks every body-plan slot instead of right/left.
   const sizeAdj = attrs._targetAdj ?? 1;
   const sides = isNatural ? plan.map(s => s.key) : (twoHanded ? ['right'] : ['right', 'left']);
   let rows = '';
@@ -236,8 +288,59 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
         <span class="ps-stat-val">${adj != null ? `HIT ${adj}` : '—'}${r.damageMax ? ` · DMG ${r.damageMax}` : ''}</span></div>`;
     });
   }
-  return _paSection('Equipment', html + rows);
+  return rows;
 }
+
+function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
+  const held = ent.held || {};
+  // Non-Humanoid body plans (Quadruped, Dragon, Snake, ...) fight with body
+  // parts, not hands — same NATURAL_BODY_PLAN/naturalSlot split _dlgRender's
+  // channel sections already use.
+  const plan = _paBodyPlan(ent.bodyType);
+  const isNatural = plan !== BODY_PLANS.Humanoid;
+  const twoHanded = !isNatural && _twoHandedGrip(ent);
+  let html = '';
+  const rowFor = (icon, label, control) => `<div class="pa-row"><span class="pa-row-ico">${icon}</span><span class="pa-row-l">${label}</span>${control}</div>`;
+  if (isNatural) {
+    html += plan.map(slot => {
+      const cur = held[slot.key] || '';
+      if (canEdit) {
+        const options = [...new Set(MELEE_WEAPONS.filter(r => r.naturalSlot === slot.key).map(r => r.weapon))];
+        const opts = ['', ...options].map(n =>
+          `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— None —'}</option>`).join('');
+        return rowFor(`<span style="font-size:0.9rem;">${slot.icon || ''}</span>`, _paEsc(slot.label),
+          `<select class="pa-sel" data-pa="set-hand" data-side="${slot.key}">${opts}</select>`);
+      }
+      return rowFor(`<span style="font-size:0.9rem;">${slot.icon || ''}</span>`, _paEsc(slot.label),
+        `<span class="pa-val">${cur ? _itemNameSpan(cur) : '<span class="pa-dim">None</span>'}</span>`);
+    }).join('');
+  } else if (canEdit) {
+    // A creature's hand options are its own saved loadout — same as a
+    // character's — unioned with whatever it's already holding.
+    const options = [...new Set([...(loadoutOverride || ent.loadout || []), held.right, held.left].filter(Boolean))];
+    html += ['right', 'left'].map(side => {
+      const cur = held[side] || '';
+      const opts = ['', ...options].map(n =>
+        `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n) || '— Empty —'}</option>`).join('');
+      // Drop lands the item on the map (1–4 ft away) so it can be picked back up.
+      const dropX = cur
+        ? `<span data-pa="drop-hand" data-side="${side}" title="Drop ${_paEsc(cur)} on the ground" class="pa-drop">✕</span>`
+        : '';
+      return rowFor(_paIcon(side === 'right' ? 'sword' : 'shield'), side === 'right' ? 'Right Hand' : 'Left Hand',
+        `<select class="pa-sel" data-pa="set-hand" data-side="${side}">${opts}</select>${dropX}`);
+    }).join('');
+  } else if (twoHanded) {
+    html += rowFor(_paIcon('sword'), 'Both hands', `<span class="pa-val">${_itemNameSpan(held.right)} <span class="pa-dim">(Two-Handed)</span></span>`);
+  } else {
+    html += rowFor(_paIcon('sword'), 'Right', `<span class="pa-val">${_itemNameSpan(held.right)}</span>`)
+          + rowFor(_paIcon('shield'), 'Left', `<span class="pa-val">${_itemNameSpan(held.left)}</span>`);
+  }
+  // HIT/DMG rows moved behind "View All" (with the carried items) to keep the panel short.
+  html += `<div style="display:flex;justify-content:flex-end;margin-top:4px;"><button class="pa-view-btn" data-pa="view-equipment">View All ${_paIcon('right')}</button></div>`;
+  return _paSection('Equipment', html);
+}
+
+
 
 // Free-text background/notes field — characters and creature templates
 // alike (both live in the same `characters` table, see
@@ -265,7 +368,8 @@ function _paSecArmor(ent) {
   const armor = ent.armor || {};
   const owned = ent.armorOwned || [];
   const equipped = ent.armorEquipped || {};
-  const rows = slots.map(s => {
+  const anyArmor = slots.some(s => owned.find(o => o.id === equipped[s.key]) || (armor[s.key] && armor[s.key] !== 'None'));
+  const rows = !anyArmor ? '<div class="pa-select-ghost">— None —</div>' : slots.map(s => {
     const inst = owned.find(o => o.id === equipped[s.key]);
     const label = inst ? inst.name : (armor[s.key] || 'None');
     return `<div class="ps-stat-row"><span class="ps-stat-label">${_paEsc(s.label)}</span><span class="ps-stat-val" style="font-size:0.72rem;">${_paEsc(label)}</span></div>`;
@@ -291,45 +395,8 @@ function _paSecLanguage(ent, isOwnSheet) {
     `<div class="ps-stat-row"><span class="ps-stat-label">Native</span><span class="ps-stat-val" style="font-size:0.78rem;">${_paEsc(lang)}</span></div>`);
 }
 
-function _paSecSkills(skills, attrs) {
-  const invested = Object.entries(skills || {}).filter(([, pts]) => pts > 0);
-  const content = invested.length
-    ? invested.map(([name, pts]) => {
-        const skill = SKILLS.find(s => s.name === name);
-        const pct = calcSkillSuccess(skill, attrs, pts);
-        return `<div class="ps-stat-row">
-          <span class="ps-stat-label" style="flex:1;">${_paEsc(name)}</span>
-          <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" data-pa="roll-skill" data-name="${_paEsc(name)}" data-pct="${pct}">${pct}%</span>
-        </div>`;
-      }).join('')
-    : `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
-  return _paSection('Skills', content);
-}
 
-// Just a link into the full reference (_openPlaySpellBookModal, index.html) —
-// same reasoning as the Cast a Spell chip in the action dialog: dumping every
-// known spell's full card inline stops scaling past a couple of spells, so
-// this stays a single button regardless of how many are known. Hidden
-// entirely for non-casters (no magic-class skill at all) rather than showing
-// an empty section.
-function _paSecSpellBook(ent) {
-  if (typeof _knownSpellsFor !== 'function' || typeof SPELLS === 'undefined') return '';
-  const count = _knownSpellsFor(ent).length;
-  if (!count) return '';
-  const content = `<button data-pa="open-spellbook" data-cid="${_paEsc(ent.ref)}"
-    style="width:100%;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:var(--ui-font);
-    font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.10);color:var(--text);">
-    📖 View Spell Book <span style="color:var(--text-dim);font-size:0.72rem;">(${count})</span>
-  </button>`;
-  return _paSection('Magic', content);
-}
 
-// Chosen techniques (Combat tab of the builder). Hidden when none are chosen.
-function _paSecTechniques(ent) {
-  if (typeof _techniquesListHTML !== 'function') return '';
-  const html = _techniquesListHTML(ent?.stats?.Techniques);
-  return html ? _paSection('Techniques', html) : '';
-}
 
 // ── Event delegation ──────────────────────────────────────────────────────────
 // Bound by assignment (el.onclick = …) so re-renders never stack listeners.
@@ -342,9 +409,14 @@ function _paBind(el, ctx) {
     switch (d.pa) {
       case 'collapse': {
         const body = t.nextElementSibling;
-        if (body) body.style.display = body.style.display === 'none' ? 'block' : 'none';
+        if (body) body.style.display = body.style.display === 'none' ? '' : 'none';
+        t.classList.toggle('collapsed', body && body.style.display === 'none');
         break;
       }
+      case 'view-skills': _paViewSkills(ctx.ent, ctx.skills, ctx.attrs); break;
+      case 'view-techniques': _paViewTechniques(ctx.ent); break;
+      case 'view-equipment': _paViewEquipment(ctx.ent, ctx.attrs); break;
+      case 'edit-char': if (typeof exitPlayMode === 'function') exitPlayMode(); break;
       case 'back': backToMyCharacter(); break;
       case 'cond': setCondition(d.token, d.key, d.on === '1'); break;
       case 'roll-skill': openRoller({ label: d.name, target: +d.pct, targetLabel: 'or less' }); break;
@@ -413,6 +485,12 @@ function renderEntityPanel(ref, opts = {}) {
        <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">XP</div><div style="font-size:0.82rem;color:var(--text);">${Math.round(ent.stats?.XP || 0)}</div></div>`
     : '';
 
+  // Summary tiles: Height / Weight / Speed / Size / Blood.
+  const heightStr = (attrs._heightInches != null && typeof inchesToFeetStr === 'function') ? inchesToFeetStr(attrs._heightInches) : '—';
+  const weightStr = attrs._weight != null ? Math.round(attrs._weight) + ' lbs' : '—';
+  const tile = (label, val) => `<div class="pa-tile"><div class="pa-tile-l">${label}</div><div class="pa-tile-v">${val}</div></div>`;
+  const tilesHtml = `<div class="pa-tiles">${tile('Height', heightStr)}${tile('Weight', weightStr)}${tile('Speed', speedStr.replace(' (crawl)', ''))}${tile('Size', sizeStr)}${tile('Blood', bloodStr)}</div>`;
+
   let headerHtml = '';
   if (opts.header === 'back' || opts.header === 'self') {
     const backBtn = opts.header === 'back'
@@ -421,31 +499,39 @@ function renderEntityPanel(ref, opts = {}) {
     const avatarSrc = opts.avatar !== undefined ? opts.avatar : resolveAvatarUrl(ent.avatarUrl);
     const fallbackIcon = ent.type === 'char' ? '🧙' : '👾';
     const avatarHtml = avatarSrc
-      ? `<img src="${_paEsc(avatarSrc)}" style="width:100%;height:100%;object-fit:cover;" onerror="this.style.display='none'">`
+      ? `<img src="${_paEsc(avatarSrc)}" style="width:100%;height:100%;object-fit:cover;object-position:top center;" onerror="this.style.display='none'">`
       : `<span style="font-size:1.4rem;opacity:0.4;">${fallbackIcon}</span>`;
+    // Identity lines: "Level 4 • Human" / "Caster • Introvert" for characters (own sheet
+    // reads the live builder fields), "Species · Body type" for creatures.
+    let line1, line2 = '';
+    if (ent.type === 'char') {
+      const cls = isOwnSheet && typeof characterClass !== 'undefined' ? characterClass : (ent.stats?.CharClass || 'Warrior');
+      const soc = isOwnSheet ? (document.getElementById('sel-social')?.value || ent.social) : ent.social;
+      line1 = `Level ${ent.level ?? 1} • ${_paEsc(ent.species)}`;
+      line2 = [cls, soc].filter(Boolean).map(_paEsc).join(' • ');
+    } else {
+      line1 = _paEsc(sub);
+    }
+    const xpLine = ent.type === 'char'
+      ? `<div class="pa-id-xp" title="Experience points">${Math.round(ent.stats?.XP || 0)} XP</div>` : '';
+    const editBtn = isOwnSheet
+      ? `<button class="pa-edit-btn" data-pa="edit-char" title="Edit character (Character Mode)">${_paIcon('pencil')}</button>` : '';
     headerHtml = `${backBtn}
-      <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">
+      <div class="pa-id">
         <div class="ps-compact-avatar">${avatarHtml}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:1rem;color:var(--gold2);font-weight:bold;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_paEsc(name)}</div>
-          <div style="font-size:0.72rem;color:var(--text-dim);">${_paEsc(sub)}</div>
-          <div style="display:flex;gap:12px;margin-top:5px;">
-            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;color:var(--text);">${speedStr}</div></div>
-            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;color:var(--text);">${sizeStr}</div></div>
-            <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Blood</div><div style="font-size:0.82rem;color:var(--text);">${bloodStr}</div></div>
-            ${levelXpHtml}
-          </div>
+        <div class="pa-id-text">
+          <div class="pa-id-name">${_paEsc(name)}</div>
+          <div class="pa-id-sub">${line1}</div>
+          ${line2 ? `<div class="pa-id-sub">${line2}</div>` : ''}
+          ${xpLine}
         </div>
-      </div>`;
+        ${editBtn}
+      </div>
+      ${tilesHtml}`;
   } else if (opts.header === 'mini') {
     headerHtml = `
-      <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:6px;">${_paEsc(sub)}</div>
-      <div style="display:flex;gap:12px;margin-bottom:10px;">
-        <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Max Speed</div><div style="font-size:0.82rem;">${speedStr}</div></div>
-        <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Size</div><div style="font-size:0.82rem;">${sizeStr}</div></div>
-        <div><div style="font-size:0.6rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.07em;">Blood</div><div style="font-size:0.82rem;">${bloodStr}</div></div>
-        ${levelXpHtml}
-      </div>`;
+      <div class="pa-id-sub" style="margin-bottom:6px;">${_paEsc(ent.type === 'char' ? `Level ${ent.level ?? 1} • ${ent.species}` : sub)}</div>
+      ${tilesHtml}`;
   }
 
   el.innerHTML = `
@@ -454,16 +540,14 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecHealth(ent, canEdit)}
     ${_paSecConditions(ent)}
     ${_paSecCombat(ent, canEdit, opts.combatPrefix)}
-    ${_paSecStats(attrs, ent.baseAttrs)}
+    ${_paSecAbilities(ent, skills, attrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
+    ${_paSecStats(attrs, ent.baseAttrs)}
     ${_paSecLanguage(ent, isOwnSheet)}
-    ${_paSecSkills(skills, attrs)}
-    ${_paSecSpellBook(ent)}
-    ${_paSecTechniques(ent)}
     ${_paSecNotes(ent)}`;
 
-  _paBind(el, { ent, isOwnSheet });
+  _paBind(el, { ent, isOwnSheet, skills, attrs });
 }
 
 // ── Active combatant banner (shared header during combat) ─────────────────────
