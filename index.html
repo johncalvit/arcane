@@ -26,13 +26,14 @@
     --accent2: #8b5cc8;
   }
   :root { --ui-font: "Arial Narrow", "Archivo Narrow", "Liberation Sans Narrow", Arial, sans-serif; }
+  html { font-size: 17px; } /* rem-based text scales up ~6% (default 16px); the narrow face reads small */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
     font-family:var(--ui-font);
     min-height: 100vh;
-    font-size: 14px;
+    font-size: 15px;
   }
   header {
     background: linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);
@@ -477,7 +478,7 @@
     transform: translateX(-50%);
     margin-top: 0;
     font-family: var(--map-label-font, "Arial Narrow", "Archivo Narrow", Arial, sans-serif);
-    font-size: 9px;
+    font-size: 8px;
     color: #fff;
     text-shadow: 0 0 3px #000, 0 0 6px #000;
     white-space: nowrap;
@@ -507,7 +508,7 @@
   .map-token.token-shadow .token-ring .token-icon { display: none !important; }
   .map-token.token-shadow .token-ring::after { content: '?'; color: #9a9aaa; font-weight: bold; font-size: 1.1rem; }
   .map-token.token-shadow .token-label-text { font-size: 0; }
-  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 9px; font-style: italic; color: #b0b0c0; }
+  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 8px; font-style: italic; color: #b0b0c0; }
   .map-token.token-shadow .token-label-icons,
   .map-token.token-shadow .token-cond-overlay { display: none; }
 
@@ -6900,7 +6901,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020j';
+const VERSION = 'v0.1.20261020k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
