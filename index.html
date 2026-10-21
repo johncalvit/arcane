@@ -5221,18 +5221,23 @@ let editingSpellIndex = null;
 const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster'];
 const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1 };
 function _techSlug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
-// Technique I (level 1, +10 hit, +1 damage) for every weapon type, plus a
-// Parry technique (+10 parry, level 2) for every type that has a Parry action.
-function _techniquesForTypes(types, existing) {
+// Technique I / II / III (unlock at levels 1 / 2 / 3, each +10 hit and +1 damage — they
+// stack) for every weapon type, plus a Parry technique (+10 parry, level 2) for every type
+// that has a Parry action. TECHNIQUE_TIERS bumps when new tiers are added so older saved
+// configs get just the new ones (see applyConfigData).
+const TECHNIQUE_TIERS = 3;
+const _ROMAN = ['', 'I', 'II', 'III'];
+function _techniquesForTypes(types, existing, tiers) {
   const have = new Set((existing || []).map(t => t.id));
   const parryTypes = new Set(DEFAULT_MELEE_WEAPONS.filter(r => r.action === 'Parry').map(r => r.weaponType).filter(Boolean));
   const out = [];
   for (const type of types) {
     if (!type || type === 'Natural' || type === 'Shield') continue;
     const slug = _techSlug(type);
-    if (!have.has(slug + '-1'))
-      out.push({ id: slug + '-1', name: type + ' Technique I', weaponType: type, minLevel: 1, hit: 10, damage: 1, parry: 0 });
-    if (parryTypes.has(type) && !have.has(slug + '-parry'))
+    for (const n of (tiers || [1, 2, 3]))
+      if (!have.has(slug + '-' + n))
+        out.push({ id: slug + '-' + n, name: type + ' Technique ' + _ROMAN[n], weaponType: type, minLevel: n, hit: 10, damage: 1, parry: 0 });
+    if (!tiers && parryTypes.has(type) && !have.has(slug + '-parry'))
       out.push({ id: slug + '-parry', name: type + ' Parry', weaponType: type, minLevel: 2, hit: 0, damage: 0, parry: 10 });
   }
   return out;
@@ -7016,6 +7021,7 @@ function gatherConfigData() {
     spells: SPELLS,
     techniques: TECHNIQUES,
     techniqueAllowance: TECHNIQUE_ALLOWANCE,
+    techniqueTiers: TECHNIQUE_TIERS,
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
@@ -7046,7 +7052,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261021c';
+const VERSION = 'v0.1.20261021d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7958,6 +7964,9 @@ function applyConfigData(data) {
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   replaceArrayContents(TECHNIQUES,      (data.techniques && data.techniques.length ? data.techniques : DEFAULT_TECHNIQUES).map(t => ({ ...t })));
   replaceObjectContents(TECHNIQUE_ALLOWANCE, data.techniqueAllowance && Object.keys(data.techniqueAllowance).length ? data.techniqueAllowance : DEFAULT_TECHNIQUE_ALLOWANCE);
+  // Configs saved before tiers II/III existed: add just those (never re-adds ones you deleted later).
+  if (data.techniques && data.techniques.length && data.techniqueTiers !== TECHNIQUE_TIERS)
+    TECHNIQUES.push(..._techniquesForTypes(getWeaponTypes(), TECHNIQUES, [2, 3]));
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
