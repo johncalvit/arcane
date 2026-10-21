@@ -4759,6 +4759,19 @@ function _propagateWeaponType(weapon, type) {
 // Configs saved before weapon types existed: fill any row that has none by name
 // (custom weapons without a default stay blank until a GM sets them). Rows that
 // already carry a type — including one a GM cleared on purpose — are untouched.
+// "Spear, Short/Long" used to ship as a ranged-only row (it showed up under Ranged Weapons). It is a
+// melee spear: move a saved ranged row to melee (Stab + Parry) unless a melee one already exists.
+function _migrateSpearShortLong() {
+  const NAME = 'Spear, Short/Long';
+  const ri = RANGED_WEAPONS.findIndex(r => r.weapon === NAME);
+  if (ri < 0 || MELEE_WEAPONS.some(r => r.weapon === NAME)) return;
+  const old = RANGED_WEAPONS.splice(ri, 1)[0];
+  const common = { weapon: NAME, hitFormula: old.hitFormula || 'Physical Coordination + Manual Dexterity', minStr: old.minStr ?? 12,
+    wt: old.wt, price: old.price || 600, weaponType: old.weaponType || 'Spear' };
+  MELEE_WEAPONS.push(
+    { ...common, action: 'Stab', minReach: 3.5, reach: 5, material: 'Steel; Iron; Bronze; Stone', damageMax: old.damageMax ?? 7, maxPowerMod: old.maxPowerMod ?? 0.7 },
+    { ...common, action: 'Parry', minReach: 1, reach: 3, hitFormula: 'Manual Dexterity * .6', material: 'Wood', damageMax: 0, maxPowerMod: 0 });
+}
 function _backfillWeaponTypes() {
   for (const r of [...MELEE_WEAPONS, ...RANGED_WEAPONS]) {
     if (r.weaponType === undefined) r.weaponType = _defaultWeaponType(r.weapon, r.naturalSlot);
@@ -4772,7 +4785,7 @@ const DEFAULT_MELEE_WEAPON_PRICES = {
   "Hammer, War": 1500, "Javelin": 300, "Knife": 300, "Lance, Heavy Cavalry": 2500,
   "Lance, Light Cavalry": 1500, "Mace": 1000, "Morningstar": 1500, "Net": 500,
   "Pike": 1200, "Rapier": 2000, "Scimitar": 1800, "Shield, Buckler": 500,
-  "Shield, Large": 1500, "Shield, Small": 800, "Spear, Long": 800, "Staff": 200,
+  "Shield, Large": 1500, "Shield, Small": 800, "Spear, Long": 800, "Spear, Short/Long": 600, "Staff": 200,
   "Sword, Long": 1500, "Sword, Short": 800, "Trident": 1000, "Whip": 400,
 };
 // Flat list of weapon+action rows — a single weapon (e.g. Battleaxe) has one
@@ -4876,6 +4889,9 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Spear, Long",           action:"Stab",          minReach:5,   reach:6,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:16, damageMax:7,  maxPowerMod:0.5 },
   { weapon:"Spear, Long",           action:"Smash (Pommel)",minReach:0,   reach:2,    hitFormula:"Physical Coordination",                       material:"Wood",                       minStr:16, damageMax:3,  maxPowerMod:0.3 },
   { weapon:"Spear, Long",           action:"Parry",         minReach:1,   reach:4,    hitFormula:"Manual Dexterity * .6",                       material:"Steel; Iron; Bronze; Stone", minStr:16, damageMax:0,  maxPowerMod:0   },
+
+  { weapon:"Spear, Short/Long",     action:"Stab",          minReach:3.5, reach:5,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:12, damageMax:7,  maxPowerMod:0.7 },
+  { weapon:"Spear, Short/Long",     action:"Parry",         minReach:1,   reach:3,    hitFormula:"Manual Dexterity * .6",                       material:"Wood",                       minStr:12, damageMax:0,  maxPowerMod:0   },
 
   { weapon:"Staff",                 action:"Smash",         minReach:2,   reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:14, damageMax:5,  maxPowerMod:0.5 },
   { weapon:"Staff",                 action:"Parry",         minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:14, damageMax:0,  maxPowerMod:0   },
@@ -5126,7 +5142,6 @@ const DEFAULT_RANGED_WEAPONS = [
   { weapon:"Sling Pellet",          action:"Smash", rangeIncrement:4,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:6,  maxPowerMod:0.6 },
   { weapon:"Sling Stone",           action:"Smash", rangeIncrement:3,  maxRange:null, reload:1,     hitFormula:"Physical Coordination + Day Vision",       material:"", minStr:7,  damageMax:5,  maxPowerMod:0.5 },
   { weapon:"Javelin",               action:"Throw (Stab)",  rangeIncrement:6,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:10, damageMax:6,  maxPowerMod:0.6 },
-  { weapon:"Spear, Short/Long",     action:"Stab",  rangeIncrement:5,  maxRange:null, reload:'N/A', hitFormula:"Physical Coordination + Manual Dexterity", material:"", minStr:12, damageMax:7,  maxPowerMod:0.7 },
 ].map(r => ({ ...r, price: DEFAULT_RANGED_WEAPON_PRICES[r.weapon] || 0, weaponType: _defaultWeaponType(r.weapon) }));
 let RANGED_WEAPONS = [...DEFAULT_RANGED_WEAPONS];
 let editingRangedIndex = null;
@@ -7134,7 +7149,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022b';
+const VERSION = 'v0.1.20261022c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8041,6 +8056,7 @@ function applyConfigData(data) {
     }
   });
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
+  _migrateSpearShortLong(); // see its comment
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
