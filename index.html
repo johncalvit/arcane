@@ -83,6 +83,41 @@
   .nav-btn.active { color: var(--gold2); border-left-color: var(--gold); background: var(--bg3); }
   .nav-section { color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 14px 2px; }
   .nav-ico { display: inline-block; width: 1.5em; text-align: center; margin-right: 4px; }
+  /* ── Sidebar redesign: character card, grouped nav, header menu ───────── */
+  .ico { width: 1.15em; height: 1.15em; flex-shrink: 0; }
+  .nav-card { display: flex; gap: 10px; align-items: center; padding: 10px 12px; cursor: pointer; }
+  .nav-card:hover .nav-card-name { text-decoration: underline; }
+  .nav-card-avatar { width: 42px; height: 50px; border: 1px solid var(--gold); border-radius: 4px; overflow: hidden; background: var(--bg3); display: flex; align-items: center; justify-content: center; color: var(--text-dim); flex-shrink: 0; }
+  .nav-card-avatar img { width: 100%; height: 100%; object-fit: cover; object-position: top center; }
+  .nav-card-avatar .ico { width: 1.6em; height: 1.6em; }
+  .nav-card-text { min-width: 0; }
+  .nav-card-name { color: var(--gold2); font-weight: bold; font-size: 1.02rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .nav-card-sub { color: var(--text-dim); font-size: 0.8rem; line-height: 1.25; }
+  .nav-save-status { padding: 2px 12px 8px; font-size: 0.72rem; color: var(--text-dim); min-height: 1.4em; border-bottom: 1px solid var(--border); }
+  .nav-group { display: flex; align-items: center; gap: 8px; padding: 9px 12px 3px; color: var(--text-dim); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.16em; }
+  .nav-btn ~ .nav-group { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 12px; }
+  .nav-group-ico { display: inline-flex; color: var(--gold); }
+  .nav-item { display: flex; align-items: center; padding-left: 28px; font-size: 0.92rem; }
+  .nav-item .nav-ico { display: inline-flex; width: 1.3em; margin-right: 9px; color: var(--text-dim); }
+  .nav-item.active .nav-ico { color: var(--gold2); }
+  .app-menu-wrap { position: relative; }
+  .app-menu-btn { display: flex; align-items: center; padding: 5px 9px; }
+  .app-menu-btn .ico { width: 1.3em; height: 1.3em; }
+  .app-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 4000; min-width: 270px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); padding: 6px 0; max-height: calc(100vh - 60px); overflow-y: auto; }
+  .app-menu > button, .app-menu-sub > button { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: none; color: var(--text); font-family: var(--ui-font); font-size: 0.92rem; padding: 8px 14px; text-align: left; cursor: pointer; }
+  .app-menu > button:hover, .app-menu-sub > button:hover { background: var(--bg3); }
+  .app-menu .ico { color: var(--gold2); }
+  .app-menu-sep { height: 1px; background: var(--border); margin: 5px 0; }
+  .app-menu-sub { display: none; padding-left: 26px; }
+  .app-menu-sub.open { display: block; }
+  .app-menu-sub > button { font-size: 0.86rem; color: var(--text-dim); padding: 6px 14px; }
+  .app-menu-chev { margin-left: auto; opacity: 0.5; font-style: normal; }
+  .app-menu-who { padding: 6px 14px 2px; }
+  .app-menu-who #nav-user { font-size: 0.88rem; color: var(--text); }
+  .app-menu-who #nav-campaign { font-size: 0.8rem; color: var(--gold); cursor: pointer; }
+  .app-menu-join { padding: 4px 14px 6px 40px; }
+  .app-menu-join input { flex: 1; min-width: 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.1em; background: var(--bg3); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 4px 6px; }
+  .app-menu-join .nav-btn { width: auto; padding: 3px 10px; border: 1px solid var(--border); border-radius: 3px; }
 
   /* ── PLAY MODE ─────────────────────────────────────────────────────────── */
   .play-btn {
@@ -941,13 +976,47 @@
 
 <header>
   <div>
-    <h1 id="app-title" class="mode-title">✦ Arcane Character</h1>
+    <h1 id="app-title" class="mode-title">✦ Arcane</h1>
   </div>
-  <div style="margin-left:auto;display:flex;gap:8px;">
-    <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
-    <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+    <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
     <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="_clickPlayModeBtn()">▶ Play Mode</button>
     <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="_enterConfigModeFromCharDesign()">⚙ GM Config Mode</button>
+    <div class="app-menu-wrap">
+      <button class="play-btn app-menu-btn" id="app-menu-btn" onclick="toggleAppMenu(event)" title="Menu" aria-haspopup="true"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16"/></svg></button>
+      <div id="app-menu" class="app-menu" style="display:none;" onclick="event.stopPropagation()">
+        <div class="app-menu-who"><div id="nav-user"></div><div id="nav-campaign" onclick="appMenuDo(showCampaignModal)" title="Switch campaign"></div></div>
+        <div class="app-menu-sep"></div>
+        <button onclick="appMenuDo(saveCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.5-1A4.5 4.5 0 0 1 17 18 M12 12v7 M9 15l3-3 3 3"/></svg><span>Save Character</span></button>
+        <button onclick="appMenuDo(showCharacterListModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Load Character</span></button>
+        <button onclick="appMenuDo(newCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"/></svg><span>New Character</span></button>
+        <button onclick="toggleAppMenuSub('app-menu-file')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4 M8 8l4-4 4 4 M4 15v5h16v-5"/></svg><span>Export / Import</span><i class="app-menu-chev">▾</i></button>
+        <div id="app-menu-file" class="app-menu-sub">
+          <button onclick="appMenuDo(exportCharacter)"><span>Export to File</span></button>
+          <button onclick="appMenuDo(function(){document.getElementById('import-file').click()})"><span>Import from File</span></button>
+        </div>
+        <div class="app-menu-sep"></div>
+        <button onclick="appMenuDo(showCampaignModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2 20a7 7 0 0 1 14 0 M17 4.5a3.5 3.5 0 0 1 0 6.5 M18 14a7 7 0 0 1 4 6"/></svg><span>Select New Campaign/Character</span></button>
+        <button onclick="toggleAppMenuSub('nav-join-campaign')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2 20a7 7 0 0 1 14 0 M17 4.5a3.5 3.5 0 0 1 0 6.5 M18 14a7 7 0 0 1 4 6"/></svg><span>Join a Campaign</span><i class="app-menu-chev">▾</i></button>
+        <div id="nav-join-campaign" class="app-menu-sub app-menu-join">
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="nav-invite-input" placeholder="Invite code" maxlength="6" onkeydown="if(event.key==='Enter')navRedeemInviteCode()">
+            <button class="nav-btn" onclick="navRedeemInviteCode()">Join</button>
+          </div>
+          <div id="nav-join-status" style="font-size:0.7rem;color:var(--gold2);min-height:1em;margin-top:3px;"></div>
+        </div>
+        <div class="app-menu-sep"></div>
+        <button id="app-menu-gm" onclick="toggleAppMenuSub('app-menu-gmtools')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3z"/></svg><span>GM Tools</span><i class="app-menu-chev">▾</i></button>
+        <div id="app-menu-gmtools" class="app-menu-sub">
+          <button onclick="appMenuDo(_enterConfigModeFromCharDesign)"><span>Game Configuration</span></button>
+          <button onclick="appMenuDo(function(){checkCoreRulesUpdate(true)})"><span>Check Core Rules Updates</span></button>
+        </div>
+        <div class="app-menu-sep"></div>
+        <button onclick="appMenuDo(openProfileModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0"/></svg><span>Profile</span></button>
+        <button onclick="appMenuDo(openBugReportModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9a3 3 0 0 1 6 0v6a3 3 0 0 1-6 0z M5 11h4 M15 11h4 M5 17h4 M15 17h4 M9 4l1.5 2 M15 4l-1.5 2"/></svg><span>Report a Bug / Request</span></button>
+        <button onclick="appMenuDo(submitSignOut)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 4H5v16h5 M15 8l4 4-4 4 M19 12H9"/></svg><span>Sign Out</span></button>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -956,31 +1025,29 @@
 
     <!-- CHARACTER MODE NAV -->
     <div id="char-nav">
-      <div class="nav-section">Design</div>
-      <button class="nav-btn active" onclick="showPanel('overview')">🧬 Traits, Stats &amp; Attributes</button>
+      <div class="nav-card" id="nav-char-card" onclick="showPanel('overview')" title="Open Traits &amp; Attributes">
+        <div class="nav-card-avatar"><img id="nav-card-img" src="" alt="" style="display:none;"><span id="nav-card-ph"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0"/></svg></span></div>
+        <div class="nav-card-text">
+          <div class="nav-card-name" id="nav-card-name">New Character</div>
+          <div class="nav-card-sub" id="nav-card-sub1"></div>
+          <div class="nav-card-sub" id="nav-card-sub2"></div>
+        </div>
+      </div>
+      <div id="char-save-status" class="nav-save-status" title="Last save status"></div>
+      <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span><span>Character</span></div>
+      <button class="nav-btn nav-item active" onclick="showPanel('overview')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0"/></svg></span>Traits &amp; Attributes</button>
       <!-- Hidden for now, revisit in v2/v3 — panel/data/logic left intact, just not linked to -->
-      <button class="nav-btn" onclick="showPanel('features')" style="display:none;">✦ Features</button>
-      <button class="nav-btn" onclick="showPanel('skills')">📜 Skills</button>
-      <div class="nav-section">Equipment</div>
-      <button class="nav-btn" onclick="showPanel('shop')">🛒 Shop</button>
-      <button class="nav-btn" onclick="showPanel('loadout')">🗡 Loadout</button>
-      <button class="nav-btn" onclick="showPanel('armor')">🛡 Armor</button>
-      <div class="nav-section">Magic</div>
-      <button class="nav-btn" onclick="showPanel('spellbook')">📖 Spell Book</button>
-      <div class="nav-section">Combat</div>
-      <button class="nav-btn" onclick="showPanel('techniques')">⚔ Techniques</button>
-      <div class="nav-section">Summary</div>
-      <button class="nav-btn" onclick="showPanel('playsheet')">📋 Playsheet</button>
-      <div class="nav-section">File</div>
-      <button class="nav-btn" onclick="saveCharacter()">☁ Save Character</button>
-      <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
-      <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
-      <div id="char-save-status" style="padding:2px 14px 6px;font-size:0.7rem;color:var(--text-dim);"></div>
-      <label id="is-template-row" style="display:none;align-items:center;gap:6px;padding:2px 14px 6px;font-size:0.82rem;color:var(--text-dim);cursor:pointer;">
-        <input type="checkbox" id="is-template-chk" onchange="buildCharSelects();recalc();"> Monster Template
-      </label>
-      <button class="nav-btn" onclick="exportCharacter()">↓ Export to File</button>
-      <button class="nav-btn" onclick="document.getElementById('import-file').click()">↑ Import from File</button>
+      <button class="nav-btn nav-item" onclick="showPanel('features')" style="display:none;">Features</button>
+      <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></span><span>Abilities</span></div>
+      <button class="nav-btn nav-item" onclick="showPanel('skills')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9L7 7 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1"/></svg></span>Skills</button>
+      <button class="nav-btn nav-item" onclick="showPanel('spellbook')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></span>Spell Book</button>
+      <button class="nav-btn nav-item" onclick="showPanel('techniques')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4 M4 4l16 16 M3 15l6 6 M21 15l-6 6"/></svg></span>Techniques</button>
+      <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9-5 9 5v9l-9 5-9-5z M3 8l9 5 9-5 M12 13v9"/></svg></span><span>Equipment</span></div>
+      <button class="nav-btn nav-item" onclick="showPanel('shop')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.5 11h10l2-8H6.5 M9.5 20h.01 M17.5 20h.01"/></svg></span>Shop</button>
+      <button class="nav-btn nav-item" onclick="showPanel('loadout')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5 M8 11l5 5 M4 20l2-2"/></svg></span>Loadout</button>
+      <button class="nav-btn nav-item" onclick="showPanel('armor')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span>Armor</button>
+      <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7"/></svg></span><span>Summary</span></div>
+      <button class="nav-btn nav-item" onclick="showPanel('playsheet')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7"/></svg></span>Playsheet</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
     </div>
 
@@ -1008,21 +1075,6 @@
       <div id="config-status" style="padding:8px 14px;font-size:0.7rem;color:var(--text-dim);line-height:1.4;"></div>
     </div>
 
-    <!-- ACCOUNT (always visible) -->
-    <div class="nav-section">Account</div>
-    <div id="nav-user" style="padding:6px 14px;font-size:0.82rem;color:var(--text-dim);"></div>
-    <div id="nav-campaign" style="padding:2px 14px 6px;font-size:0.82rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
-    <div id="nav-join-campaign" style="padding:4px 14px 6px;display:none;">
-      <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:4px;">Join a Campaign</div>
-      <div style="display:flex;gap:4px;">
-        <input type="text" id="nav-invite-input" placeholder="Invite code" maxlength="6"
-          style="flex:1;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.1em;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;"
-          onkeydown="if(event.key==='Enter')navRedeemInviteCode()">
-        <button class="nav-btn" style="padding:2px 8px;margin:0;flex:0 0 auto;width:auto;" onclick="navRedeemInviteCode()">Join</button>
-      </div>
-      <div id="nav-join-status" style="font-size:0.66rem;color:var(--gold2);min-height:1em;margin-top:3px;"></div>
-    </div>
-    <button class="nav-btn" onclick="submitSignOut()">🚪 Sign Out</button>
   </nav>
 
   <main class="main-content">
@@ -1111,6 +1163,10 @@
           <select id="sel-charclass" onchange="characterClass=this.value;recalc()" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
             <option>Warrior</option><option>Disciple</option><option>Caster</option>
           </select>
+        </div>
+        <div class="field field-inline" id="is-template-row" style="display:none;" title="Mark this character as a reusable monster/NPC template (GM)">
+          <label>Monster Template</label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text-dim);font-size:0.82rem;"><input type="checkbox" id="is-template-chk" onchange="buildCharSelects();recalc();"> Template</label>
         </div>
         </div><!-- end grid-2 -->
         </div><!-- end right column -->
@@ -2900,6 +2956,7 @@ function applySpeciesDefaultAvatar() {
 
 function setAvatarUrl(url) {
   avatarUrl = url;
+  if (typeof _updateNavCharCard === 'function') setTimeout(() => _updateNavCharCard(), 0); // sidebar card thumbnail
   // Overview panel
   const img  = document.getElementById('avatar-img');
   const ph   = document.getElementById('avatar-placeholder');
@@ -6148,6 +6205,76 @@ function showPanel(id) {
 
 const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','spellmgr','techmgr','economymgr'];
 
+// ─── HEADER MENU (☰) + SIDEBAR CHARACTER CARD ────────────────────────────────
+function closeAppMenu() {
+  const m = document.getElementById('app-menu');
+  if (m) m.style.display = 'none';
+}
+function toggleAppMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('app-menu');
+  if (!m) return;
+  const open = m.style.display === 'none';
+  m.style.display = open ? 'block' : 'none';
+  if (open) {
+    const gm = document.getElementById('app-menu-gm');
+    if (gm) gm.style.display = (typeof isGM === 'function' && isGM()) ? '' : 'none';
+    m.querySelectorAll('.app-menu-sub.open').forEach(s => s.classList.remove('open'));
+  }
+}
+function toggleAppMenuSub(id) { document.getElementById(id)?.classList.toggle('open'); }
+function appMenuDo(fn) { closeAppMenu(); if (typeof fn === 'function') fn(); }
+document.addEventListener('click', e => { if (!e.target.closest?.('.app-menu-wrap')) closeAppMenu(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeAppMenu(); });
+
+// Minimal profile: display name (shown in the menu and to other players).
+function openProfileModal() {
+  if (!currentUser) { alert('Sign in first.'); return; }
+  document.getElementById('profile-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'profile-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:320px;max-width:94vw;display:flex;flex-direction:column;gap:12px;';
+  const nm = currentUser.user_metadata?.display_name || '';
+  card.innerHTML = `<div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">Profile</div>
+    <label style="font-size:0.78rem;color:var(--text-dim);">Email<div style="color:var(--text);font-size:0.9rem;margin-top:2px;">${_escWeaponType(currentUser.email || '')}</div></label>
+    <label style="font-size:0.78rem;color:var(--text-dim);">Display name
+      <input type="text" id="profile-name" value="${_escWeaponType(nm)}" maxlength="40" style="display:block;width:100%;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-family:var(--ui-font);"></label>
+    <div id="profile-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;"><button class="btn" id="profile-save">Save</button><button class="btn danger" onclick="document.getElementById('profile-modal').remove()">Close</button></div>`;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  document.getElementById('profile-save').onclick = async () => {
+    const name = document.getElementById('profile-name').value.trim();
+    const st = document.getElementById('profile-status');
+    const { data, error } = await sb.auth.updateUser({ data: { display_name: name } });
+    if (error) { st.style.color = '#e05555'; st.textContent = 'Could not save: ' + error.message; return; }
+    if (data?.user) currentUser = data.user;
+    const nu = document.getElementById('nav-user');
+    if (nu) nu.textContent = name || currentUser.email;
+    st.style.color = 'var(--gold2)'; st.textContent = 'Saved.';
+  };
+}
+
+// Sidebar card: portrait, name, "Level N • Species", "Class • Social" — refreshed
+// from _updateBuilderTitle (every recalc) and when the portrait changes.
+function _updateNavCharCard(name) {
+  const $ = id => document.getElementById(id);
+  if (!$('nav-card-name')) return;
+  if (name === undefined) name = $('char-name')?.value?.trim();
+  $('nav-card-name').textContent = name || 'New Character';
+  const race = $('sel-race')?.value || '';
+  $('nav-card-sub1').textContent = `Level ${characterLevel}` + (race ? ` • ${race}` : '');
+  $('nav-card-sub2').textContent = [characterClass, $('sel-social')?.value].filter(Boolean).join(' • ');
+  const src = $('avatar-img');
+  const has = !!(src && src.style.display !== 'none' && src.getAttribute('src'));
+  const img = $('nav-card-img'), ph = $('nav-card-ph');
+  if (img) { if (has) img.src = src.src; img.style.display = has ? '' : 'none'; }
+  if (ph) ph.style.display = has ? 'none' : '';
+}
+
 // Browser tab title AND the in-page header (#app-title) while in Character
 // Builder mode — "Arcane Character Builder" plus whatever's currently in the
 // Name field, so a GM with several tabs open (one per character, or builder
@@ -6158,10 +6285,11 @@ const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','melee
 // the user switches away.
 function _updateBuilderTitle() {
   const name = document.getElementById('char-name')?.value?.trim();
-  const suffix = name ? ` - ${name}` : '';
-  document.title = `Arcane Character${suffix}`;
+  const suffix = name ? ` — ${name}` : '';
+  document.title = `Arcane${suffix}`;
   const header = document.getElementById('app-title');
-  if (header) header.textContent = `✦ Arcane Character${suffix}`;
+  if (header) header.textContent = `✦ Arcane${suffix}`;
+  _updateNavCharCard(name);
 }
 
 // Offered every time someone clicks away from Character Design Mode into
@@ -6597,7 +6725,7 @@ async function saveCharacter() {
   if (error) {
     setCharSaveStatus('Save failed: ' + error.message, false);
   } else {
-    setCharSaveStatus('Saved ' + new Date().toLocaleTimeString(), true);
+    setCharSaveStatus('☁ Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), true);
     // Ensure a campaign_characters link exists (Phase 3: characters are
     // user-owned and join campaigns via the join table; campaign_id is kept
     // in sync as the home campaign for now).
@@ -6904,7 +7032,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020m';
+const VERSION = 'v0.1.20261021b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8035,11 +8163,6 @@ buildStatRows();
 buildFeatures();
 buildArmorFields();
 _updateBuilderTitle(); // the app opens in Character Builder mode by default
-// Give every nav button's leading emoji a fixed-width slot so the labels line up.
-document.querySelectorAll('.nav-btn').forEach(b => {
-  const m = b.textContent.match(/^(S+)s+([sS]*)$/);
-  if (m && m[1].charCodeAt(0) > 127) { b.textContent = ''; const i = document.createElement('span'); i.className = 'nav-ico'; i.textContent = m[1]; b.append(i, m[2]); }
-});
 
 // Handle auth state changes — login shows app, logout shows login screen
 sb.auth.onAuthStateChange(async (event, session) => {
