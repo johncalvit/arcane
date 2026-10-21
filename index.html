@@ -81,7 +81,8 @@
   }
   .nav-btn:hover { background: var(--bg3); color: var(--text); }
   .nav-btn.active { color: var(--gold2); border-left-color: var(--gold); background: var(--bg3); }
-  .nav-section { color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 18px 2px; }
+  .nav-section { color: var(--text-dim); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.18em; padding: 10px 14px 2px; }
+  .nav-ico { display: inline-block; width: 1.5em; text-align: center; margin-right: 4px; }
 
   /* ── PLAY MODE ─────────────────────────────────────────────────────────── */
   .play-btn {
@@ -974,12 +975,12 @@
       <button class="nav-btn" onclick="saveCharacter()">☁ Save Character</button>
       <button class="nav-btn" onclick="showCharacterListModal()">📂 Load Character</button>
       <button class="nav-btn" onclick="newCharacter()">✦ New Character</button>
-      <div id="char-save-status" style="padding:2px 18px 6px;font-size:0.66rem;color:var(--text-dim);"></div>
-      <label id="is-template-row" style="display:none;align-items:center;gap:6px;padding:2px 18px 6px;font-size:0.75rem;color:var(--text-dim);cursor:pointer;">
+      <div id="char-save-status" style="padding:2px 14px 6px;font-size:0.7rem;color:var(--text-dim);"></div>
+      <label id="is-template-row" style="display:none;align-items:center;gap:6px;padding:2px 14px 6px;font-size:0.82rem;color:var(--text-dim);cursor:pointer;">
         <input type="checkbox" id="is-template-chk" onchange="buildCharSelects();recalc();"> Monster Template
       </label>
-      <button class="nav-btn" onclick="exportCharacter()" style="font-size:0.75rem;color:var(--text-dim);">↓ Export to File</button>
-      <button class="nav-btn" onclick="document.getElementById('import-file').click()" style="font-size:0.75rem;color:var(--text-dim);">↑ Import from File</button>
+      <button class="nav-btn" onclick="exportCharacter()">↓ Export to File</button>
+      <button class="nav-btn" onclick="document.getElementById('import-file').click()">↑ Import from File</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
     </div>
 
@@ -1004,14 +1005,14 @@
       <button id="core-publish-btn" class="nav-btn" onclick="publishCoreRules()" style="display:none; color:var(--gold2);" title="Publish your current config as the next numbered Core Rules version for every campaign's GM to review">📣 Publish Core Rules</button>
       <button id="save-owner-default-btn" class="nav-btn" onclick="saveAsOwnerDefault()" style="display:none; color:var(--gold2);">⭐ Save as Default Config</button>
       <button class="nav-btn" onclick="document.getElementById('modal-reset-defaults').style.display='flex'" style="color:#c08080;">↺ Reset to Defaults</button>
-      <div id="config-status" style="padding:8px 18px;font-size:0.66rem;color:var(--text-dim);line-height:1.4;"></div>
+      <div id="config-status" style="padding:8px 14px;font-size:0.7rem;color:var(--text-dim);line-height:1.4;"></div>
     </div>
 
     <!-- ACCOUNT (always visible) -->
     <div class="nav-section">Account</div>
-    <div id="nav-user" style="padding:6px 18px;font-size:0.76rem;color:var(--text-dim);"></div>
-    <div id="nav-campaign" style="padding:2px 18px 6px;font-size:0.72rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
-    <div id="nav-join-campaign" style="padding:4px 18px 6px;display:none;">
+    <div id="nav-user" style="padding:6px 14px;font-size:0.82rem;color:var(--text-dim);"></div>
+    <div id="nav-campaign" style="padding:2px 14px 6px;font-size:0.82rem;color:var(--gold);cursor:pointer;" onclick="showCampaignModal()" title="Switch campaign"></div>
+    <div id="nav-join-campaign" style="padding:4px 14px 6px;display:none;">
       <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:4px;">Join a Campaign</div>
       <div style="display:flex;gap:4px;">
         <input type="text" id="nav-invite-input" placeholder="Invite code" maxlength="6"
@@ -1021,7 +1022,7 @@
       </div>
       <div id="nav-join-status" style="font-size:0.66rem;color:var(--gold2);min-height:1em;margin-top:3px;"></div>
     </div>
-    <button class="nav-btn" onclick="submitSignOut()">Sign Out</button>
+    <button class="nav-btn" onclick="submitSignOut()">🚪 Sign Out</button>
   </nav>
 
   <main class="main-content">
@@ -6903,7 +6904,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020l';
+const VERSION = 'v0.1.20261020m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8034,6 +8035,11 @@ buildStatRows();
 buildFeatures();
 buildArmorFields();
 _updateBuilderTitle(); // the app opens in Character Builder mode by default
+// Give every nav button's leading emoji a fixed-width slot so the labels line up.
+document.querySelectorAll('.nav-btn').forEach(b => {
+  const m = b.textContent.match(/^(S+)s+([sS]*)$/);
+  if (m && m[1].charCodeAt(0) > 127) { b.textContent = ''; const i = document.createElement('span'); i.className = 'nav-ico'; i.textContent = m[1]; b.append(i, m[2]); }
+});
 
 // Handle auth state changes — login shows app, logout shows login screen
 sb.auth.onAuthStateChange(async (event, session) => {
