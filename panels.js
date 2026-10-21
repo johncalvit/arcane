@@ -40,12 +40,12 @@ function _itemNameSpan(name) {
 // Collapsible section. Header toggles the body via delegation (data-pa).
 function _paSection(title, content) {
   return `
-    <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
+    <div style="margin-bottom:4px;border:1px solid var(--border);border-radius:4px;overflow:hidden;">
       <div data-pa="collapse"
-           style="display:flex;justify-content:space-between;align-items:center;padding:5px 8px;cursor:pointer;background:var(--bg3);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">
+           style="display:flex;justify-content:space-between;align-items:center;padding:3px 8px;cursor:pointer;background:var(--bg3);font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">
         ${title}<span style="font-size:0.7rem;opacity:0.5;">▾</span>
       </div>
-      <div style="padding:6px 8px;">${content}</div>
+      <div style="padding:4px 6px;">${content}</div>
     </div>`;
 }
 
