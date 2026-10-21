@@ -6896,7 +6896,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020e';
+const VERSION = 'v0.1.20261020f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15437,7 +15437,9 @@ function attackTokenClick(tokenId) {
   if (!wasRanged) {
     const atkTok = _pathFindToken(attackCombatantId);
     if (atkTok && getConditions(atkTok.id).has('prone')) {
-      alert(`${atkTok.label} is prone and cannot make melee attacks. Use "Stand Up" first.`);
+      alert(getConditions(atkTok.id).has('dead')
+        ? `${atkTok.label} is dead and cannot attack.`
+        : `${atkTok.label} is prone and cannot make melee attacks. Use "Stand Up" first.`);
       return false;
     }
   }

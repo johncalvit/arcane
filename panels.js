@@ -833,7 +833,9 @@ function _dlgRender(body) {
   // ── Full body section ──────────────────────────────────────────────────────
   const isProne = conds.has('prone');
   let fullChips = '';
-  if (isProne) {
+  // A dead combatant keeps its prone condition (healing could raise it again) but
+  // there's nothing to stand up for until then — don't offer it.
+  if (isProne && !conds.has('dead')) {
     fullChips += _dlgChip({
       label: 'Stand Up', sub: '1r', lit: c.slots.move?.label === 'Stand Up',
       title: 'Prone — stand up first!',
