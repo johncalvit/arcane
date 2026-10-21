@@ -6896,7 +6896,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020d';
+const VERSION = 'v0.1.20261020e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16569,8 +16569,13 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
     // Also try to show it locally — covers the GM moving one monster past
     // another monster's watch, or solo testing, with no network round trip.
     _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense });
-  }).then(() => {
-    if (wasOpen && _atIsCombatActive() && _atSharedActive()?.id === moverCid) atOpenActionDialog(moverCid);
+  }).then((reactionStarted) => {
+    if (!wasOpen || !_atIsCombatActive() || _atSharedActive()?.id !== moverCid) return;
+    // A reaction shot is mid-resolution (Called Shot modal, then the roller) — don't
+    // throw the mover's action dialog up in front of it. Hand it to _dlgMaybeReopen,
+    // which reopens it once that attack's roller closes or it's cancelled.
+    if (reactionStarted && typeof _dlgReopenId !== 'undefined') _dlgReopenId = moverCid;
+    else atOpenActionDialog(moverCid);
   });
 }
 
@@ -16636,9 +16641,10 @@ async function _applySentinelAnswer(checkId, attack) {
   if (!_sentinelCheckPending || _sentinelCheckPending.checkId !== checkId) return;
   const pending = _sentinelCheckPending;
   _sentinelCheckPending = null;
-  if (attack) await _resolveSentinelAttack(pending);
+  let reactionStarted = false;
+  if (attack) reactionStarted = !!(await _resolveSentinelAttack(pending));
   else if (pending.vigilantSense) await _vigilantCallOut(pending);
-  pending.resolve();
+  pending.resolve(reactionStarted);
 }
 
 // The Vigilant player chose Call Out instead of (or couldn't) Attack —
@@ -16709,6 +16715,7 @@ async function _resolveSentinelAttack(pending) {
     : `${sentinelTok.label} reacts to ${moverTok.label} entering ${isTargetAction ? 'their guarded sector' : 'melee range'}!`, 'roll');
   enterAttackMode(sentinelCid, weaponName, actionLabel, isTargetAction, rangeFt);
   attackTokenClick(moverTok.id);
+  return true; // the reaction attack is now in flight (its modal/roller will follow)
 }
 
 // Walks a recorded route (image-percent waypoints) leg by leg, pausing at
