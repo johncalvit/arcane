@@ -6877,7 +6877,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020b';
+const VERSION = 'v0.1.20261020c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12703,7 +12703,7 @@ async function _axpConfirmAward() {
     const failed = [];
     for (const i of includedIdxs) {
       const charId = _axpPartyRows[i].id.split('::')[1];
-      if (!(await _awardXpToCharacter(charId, share))) failed.push(_axpPartyRows[i].name);
+      { const why = await _awardXpToCharacter(charId, share); if (why) failed.push(`${_axpPartyRows[i].name} [${why}]`); }
     }
     if (failed.length) {
       logCombat(`XP NOT saved for ${failed.join(', ')} - the database refused the write (run supabase-gm-update-characters.sql).`, 'bad');
@@ -12763,7 +12763,7 @@ function atOpenGrantXpModal() {
     const chosen = rows.filter((r, i) => document.getElementById(`gxp-${i}`)?.checked);
     if (!amount || !chosen.length) { showToast('Pick at least one character and a non-zero amount.', 'warn'); return; }
     const ok = [], failed = [];
-    for (const r of chosen) ((await _awardXpToCharacter(r.id, amount)) ? ok : failed).push(r.name);
+    for (const r of chosen) { const why = await _awardXpToCharacter(r.id, amount); if (why) failed.push(`${r.name} [${why}]`); else ok.push(r.name); }
     if (ok.length) logCombat(`${amount > 0 ? '+' : ''}${amount} XP ${amount > 0 ? 'granted to' : 'taken from'} ${ok.join(', ')}.`, 'good');
     if (failed.length) { logCombat(`XP NOT saved for ${failed.join(', ')} - the database refused the write (run supabase-gm-update-characters.sql).`, 'bad'); showToast(`XP could not be saved for: ${failed.join(', ')}.`, 'error'); }
     else showToast(`XP updated for ${ok.length} character(s).`, 'good');
@@ -12772,6 +12772,7 @@ function atOpenGrantXpModal() {
   };
 }
 
+// Returns null on success, otherwise a short reason string (shown in the Journal).
 async function _awardXpToCharacter(characterId, amount) {
   const row = playCharCache[characterId];
   // Read the character's CURRENT stats first — the cache can be stale (the player may
@@ -12782,13 +12783,13 @@ async function _awardXpToCharacter(characterId, amount) {
   // .select() — RLS silently turns a write on someone else's character into "0 rows
   // updated, no error", which is how a GM's XP award used to vanish unnoticed.
   const { data, error } = await sb.from('characters').update({ stats: newStats }).eq('id', characterId).select('id');
-  if (error) { _writeErrorToast(error, 'characters (award XP)'); return false; }
+  if (error) { console.warn('award XP failed', characterId, error); return `error: ${error.message || error.code || 'unknown'}`; }
   if (!data || !data.length) {
-    console.warn('award XP: 0 rows updated for', characterId);
-    return false;
+    console.warn('award XP: 0 rows updated for', characterId, { cached: !!row, freshRead: !!fresh });
+    return `0 rows updated (id ${String(characterId).slice(0, 8)}, ${fresh ? 'row readable' : 'row NOT readable'})`;
   }
   if (row) row.stats = newStats;
-  return true;
+  return null;
 }
 
 function atAcceptAction(combatantId) {
