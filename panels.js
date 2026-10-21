@@ -171,7 +171,7 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
   const plan = _paBodyPlan(ent.bodyType);
   const isNatural = plan !== BODY_PLANS.Humanoid;
   const twoHanded = !isNatural && _twoHandedGrip(ent);
-  const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:Georgia,serif;';
+  const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:4px;font-family:var(--ui-font);';
   let html = '';
   if (isNatural) {
     html += plan.map(slot => {
@@ -317,7 +317,7 @@ function _paSecSpellBook(ent) {
   const count = _knownSpellsFor(ent).length;
   if (!count) return '';
   const content = `<button data-pa="open-spellbook" data-cid="${_paEsc(ent.ref)}"
-    style="width:100%;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;
+    style="width:100%;padding:6px 10px;border-radius:4px;cursor:pointer;font-family:var(--ui-font);
     font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.10);color:var(--text);">
     📖 View Spell Book <span style="color:var(--text-dim);font-size:0.72rem;">(${count})</span>
   </button>`;
@@ -416,7 +416,7 @@ function renderEntityPanel(ref, opts = {}) {
   let headerHtml = '';
   if (opts.header === 'back' || opts.header === 'self') {
     const backBtn = opts.header === 'back'
-      ? `<button data-pa="back" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">${isGM() ? '← Back' : '← My Character'}</button>`
+      ? `<button data-pa="back" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:var(--ui-font);">${isGM() ? '← Back' : '← My Character'}</button>`
       : '';
     const avatarSrc = opts.avatar !== undefined ? opts.avatar : resolveAvatarUrl(ent.avatarUrl);
     const fallbackIcon = ent.type === 'char' ? '🧙' : '👾';
@@ -760,7 +760,7 @@ function _slotCountdownLabel(slot) {
 
 // One selectable chip. data-dact carries the click behavior.
 function _dlgChip({ label, sub, lit, disabled, title, data }) {
-  const base = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;font-size:0.78rem;font-family:Georgia,serif;user-select:none;border:1px solid ';
+  const base = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;font-size:0.78rem;font-family:var(--ui-font);user-select:none;border:1px solid ';
   const style = disabled
     ? base + 'var(--border);background:var(--bg3);color:var(--text-dim);opacity:0.4;cursor:not-allowed;'
     : lit
@@ -953,7 +953,7 @@ function _dlgRender(body) {
   // A single weapon in both hands (and not two copies) is held two-handed — its
   // actions show once under "Both Hands" instead of duplicated per arm.
   const twoHanded = _twoHandedGrip(ent);
-  const handSelStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:Georgia,serif;';
+  const handSelStyle = 'width:100%;font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin-bottom:6px;font-family:var(--ui-font);';
   // options/bareLabel default to the hand catalog — natural channels pass
   // their own slot-filtered list and a "— None —" label instead.
   const handSelect = (side, options, bareLabel) => {
@@ -1116,7 +1116,7 @@ function _dlgRender(body) {
   let carryHtml = '';
   const selfTok = typeof _pathFindToken === 'function' ? _pathFindToken(combatantId) : null;
   if (selfTok) {
-    const csel = 'font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin:0 6px 6px 0;font-family:Georgia,serif;';
+    const csel = 'font-size:0.72rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;margin:0 6px 6px 0;font-family:var(--ui-font);';
     const myConds  = getConditions(selfTok.id);
     const borneOn  = [...myConds].find(cc => cc.startsWith('borneby:')); // I'm being carried/ridden
     const iCarry   = _dependentTokensOf(selfTok).some(d =>
@@ -1141,7 +1141,7 @@ function _dlgRender(body) {
   // ── Custom action + footer ─────────────────────────────────────────────────
   const channelOpts = [`<option value="full">Full body</option>`]
     .concat(plan.map(ch => `<option value="${_paEsc(ch.key)}">${_paEsc(ch.label)}</option>`)).join('');
-  const selStyle = 'font-size:0.75rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:Georgia,serif;';
+  const selStyle = 'font-size:0.75rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);';
 
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(c.name)} — Round ${round}</h3>

@@ -25,11 +25,12 @@
     --accent: #6b3fa0;
     --accent2: #8b5cc8;
   }
+  :root { --ui-font: "Arial Narrow", "Archivo Narrow", "Liberation Sans Narrow", Arial, sans-serif; }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     background: var(--bg);
     color: var(--text);
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     min-height: 100vh;
     font-size: 14px;
   }
@@ -68,7 +69,7 @@
     color: var(--text-dim);
     text-align: left;
     padding: 7px 18px;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.82rem;
     cursor: pointer;
     transition: all 0.15s;
@@ -85,7 +86,7 @@
     background: linear-gradient(135deg, var(--accent), var(--accent2));
     border: 1px solid var(--accent2);
     color: #fff;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.82rem;
     padding: 5px 16px;
     border-radius: 4px;
@@ -157,7 +158,7 @@
     background: linear-gradient(135deg, #3a2a0e, #5a4020);
     border: 1px solid var(--gold); color: var(--gold2);
     border-radius: 4px; font-size: 0.8rem; padding: 4px 12px;
-    cursor: pointer; font-family: Georgia, serif;
+    cursor: pointer; font-family:var(--ui-font);
   }
   .at-next-btn:hover { filter: brightness(1.2); }
   .at-next-btn:disabled { opacity: 0.4; cursor: default; filter: none; }
@@ -179,7 +180,7 @@
   .at-btn {
     font-size: 0.7rem; padding: 2px 8px; border-radius: 3px;
     border: 1px solid var(--border); background: var(--bg3);
-    color: var(--text-dim); cursor: pointer; font-family: Georgia, serif;
+    color: var(--text-dim); cursor: pointer; font-family:var(--ui-font);
   }
   .at-btn:hover { border-color: var(--gold); color: var(--gold2); }
   .at-btn.danger { border-color: #6b2020; color: #c06060; }
@@ -206,7 +207,7 @@
   .at-action-pick-btn {
     background: var(--bg3); border: 1px solid var(--border); border-radius: 5px;
     padding: 7px 8px; cursor: pointer; text-align: left;
-    font-family: Georgia, serif; color: var(--text); transition: border-color 0.15s;
+    font-family:var(--ui-font); color: var(--text); transition: border-color 0.15s;
   }
   .at-action-pick-btn:hover { border-color: var(--gold); color: var(--gold2); }
   .at-pick-name { font-size: 0.82rem; font-weight: 600; }
@@ -275,7 +276,7 @@
   #roller-number.fail    { color: #e05050; text-shadow: 0 0 20px rgba(224,80,80,0.5); }
   #roller-status {
     margin-top: 18px; font-size: 0.82rem; color: var(--text-dim);
-    min-height: 1.4em; font-family: Georgia, serif;
+    min-height: 1.4em; font-family:var(--ui-font);
   }
   #roller-result-label {
     margin-top: 8px; font-size: 1.3rem; font-weight: bold;
@@ -286,7 +287,7 @@
   #roller-close, #roller-cancel {
     margin-top: 18px; font-size: 0.75rem; color: var(--text-dim);
     background: none; border: 1px solid var(--border); border-radius: 3px;
-    padding: 3px 14px; cursor: pointer; font-family: Georgia, serif;
+    padding: 3px 14px; cursor: pointer; font-family:var(--ui-font);
     display: none;
   }
 
@@ -389,7 +390,7 @@
     border: none;
     border-bottom: 2px solid transparent;
     color: var(--text-dim);
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.74rem;
     padding: 7px 4px;
     cursor: pointer;
@@ -474,23 +475,23 @@
     top: 100%;
     left: 50%;
     transform: translateX(-50%);
-    margin-top: 2px;
+    margin-top: 0;
     font-family: var(--map-label-font, "Arial Narrow", "Archivo Narrow", Arial, sans-serif);
-    font-size: 10px;
+    font-size: 8px;
     color: #fff;
     text-shadow: 0 0 3px #000, 0 0 6px #000;
     white-space: nowrap;
     max-width: 120px;
     text-align: center;
-    line-height: 1.2;
+    line-height: 1.05;
     pointer-events: none;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 3px;
+    gap: 2px;
   }
   .token-label-icons {
-    font-size: 0.78rem;
+    font-size: 0.62rem;
     line-height: 1;
     text-shadow: 0 0 4px #000, 0 0 8px #000;
     flex-shrink: 0;
@@ -506,7 +507,7 @@
   .map-token.token-shadow .token-ring .token-icon { display: none !important; }
   .map-token.token-shadow .token-ring::after { content: '?'; color: #9a9aaa; font-weight: bold; font-size: 1.1rem; }
   .map-token.token-shadow .token-label-text { font-size: 0; }
-  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 10px; font-style: italic; color: #b0b0c0; }
+  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 8px; font-style: italic; color: #b0b0c0; }
   .map-token.token-shadow .token-label-icons,
   .map-token.token-shadow .token-cond-overlay { display: none; }
 
@@ -547,7 +548,7 @@
   .at-weapon-header.open .at-weapon-chevron { transform:rotate(180deg); }
   .at-weapon-actions { display:none; padding:6px 8px; gap:5px; flex-wrap:wrap; background:var(--bg); }
   .at-weapon-actions.open { display:flex; }
-  .at-weapon-action-btn { font-size:0.75rem; padding:4px 10px; border-radius:3px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-family:Georgia,serif; }
+  .at-weapon-action-btn { font-size:0.75rem; padding:4px 10px; border-radius:3px; border:1px solid var(--border); background:var(--bg3); color:var(--text); cursor:pointer; font-family:var(--ui-font); }
   .at-weapon-action-btn:hover { border-color:#e05050; color:#e08080; }
   #scale-indicator {
     position: absolute; bottom: 8px; left: 8px;
@@ -632,7 +633,7 @@
     border: 1px solid var(--border);
     color: var(--text);
     padding: 5px 9px;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.85rem;
     border-radius: 4px;
     outline: none;
@@ -694,7 +695,7 @@
     color: var(--gold2);
     text-align: center;
     padding: 3px;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.9rem;
     border-radius: 4px;
     outline: none;
@@ -822,7 +823,7 @@
     padding: 3px 11px;
     border-radius: 20px;
     cursor: pointer;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.75rem;
     transition: all 0.15s;
   }
@@ -868,7 +869,7 @@
     padding: 5px 14px;
     border-radius: 4px;
     cursor: pointer;
-    font-family: 'Georgia', serif;
+    font-family:var(--ui-font);
     font-size: 0.82rem;
     transition: all 0.15s;
   }
@@ -1124,7 +1125,7 @@
       <div class="collapse-body" id="body-notes">
         <textarea id="char-notes" placeholder="Backstory, personality, plot hooks, anything else worth remembering — visible on the play sheet during sessions."
           style="width:100%;min-height:120px;background:var(--bg3);color:var(--text);border:1px solid var(--border);
-          border-radius:4px;padding:8px 10px;font-family:Georgia,serif;font-size:0.85rem;resize:vertical;"></textarea>
+          border-radius:4px;padding:8px 10px;font-family:var(--ui-font);font-size:0.85rem;resize:vertical;"></textarea>
       </div>
 
       <h2 class="collapsible" onclick="toggleCollapse('stats')">Raw Stats<span class="collapse-arrow" id="arrow-stats">▼</span></h2>
@@ -1331,7 +1332,7 @@
         </div>
         <div class="field" style="margin-top:10px;">
           <label>Description <span style="color:var(--text-dim);font-weight:normal;">(shown to players as a tooltip)</span></label>
-          <textarea id="sf-description" rows="2" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;" placeholder="e.g. Tracking prey, reading terrain, foraging in the wild."></textarea>
+          <textarea id="sf-description" rows="2" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--ui-font);" placeholder="e.g. Tracking prey, reading terrain, foraging in the wild."></textarea>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveSkill()">Save Skill</button>
@@ -1799,7 +1800,7 @@
           <div class="field"><label>Buff Amount</label><input type="text" id="spf-buffamount" placeholder="0"></div>
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="spf-buffminutes" placeholder="e.g. 10-100"></div>
         </div>
-        <div class="field" style="margin-top:10px;"><label>Description</label><textarea id="spf-description" rows="3" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;"></textarea></div>
+        <div class="field" style="margin-top:10px;"><label>Description</label><textarea id="spf-description" rows="3" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--ui-font);"></textarea></div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveSpell()">Save Spell</button>
           <button class="btn danger" onclick="closeSpellForm()">Cancel</button>
@@ -1866,7 +1867,7 @@
       <div class="loadout-section">
         <h3>Weapons</h3>
         <div class="loadout-add">
-          <select id="weapon-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <select id="weapon-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
           <button class="btn" onclick="addWeapon()">Add Selected Weapon(s)</button>
         </div>
         <table class="loadout-table">
@@ -1877,8 +1878,8 @@
       <div class="loadout-section">
         <h3>Equipment</h3>
         <div class="loadout-add">
-          <select id="equip-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
-          <input type="number" id="equip-qty" value="1" min="1" style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:'Georgia',serif;">
+          <select id="equip-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
+          <input type="number" id="equip-qty" value="1" min="1" style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:var(--ui-font);">
           <button class="btn" onclick="addEquip()">Add Selected Item(s)</button>
         </div>
         <table class="loadout-table">
@@ -1894,9 +1895,9 @@
           THEM, so it'll only actually equip (see the Armor tab) if it happens to match your own Target Size.
         </p>
         <div class="loadout-add">
-          <select id="armorpiece-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:'Georgia',serif;"></select>
+          <select id="armorpiece-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
           <input type="number" id="armorpiece-size" min="1" step="1" title="Target Size this specific piece is sized for — defaults to your own"
-            style="width:70px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:'Georgia',serif;">
+            style="width:70px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:var(--ui-font);">
           <button class="btn" onclick="addArmorPiece()">Add Piece</button>
         </div>
         <table class="loadout-table">
@@ -3406,7 +3407,7 @@ function buildSkillFormAttrOptions() {
   container.innerHTML = ATTRIBUTES.map(a => `
     <label class="feature-item" style="padding:6px 10px;align-items:center;">
       <div class="fi-name" style="font-size:0.82rem;flex:1;">${a.label}</div>
-      <input type="number" min="0" max="10" value="0" data-attr="${a.key}" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--gold2);text-align:center;padding:3px;border-radius:4px;font-family:'Georgia',serif;">
+      <input type="number" min="0" max="10" value="0" data-attr="${a.key}" style="width:50px;background:var(--bg);border:1px solid var(--border);color:var(--gold2);text-align:center;padding:3px;border-radius:4px;font-family:var(--ui-font);">
     </label>`).join('');
 }
 
@@ -6899,7 +6900,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020h';
+const VERSION = 'v0.1.20261020i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7722,7 +7723,7 @@ async function openCoreUpdateDialog() {
   overlay.id = 'core-update-modal';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:3500;display:flex;align-items:center;justify-content:center;';
   const card = document.createElement('div');
-  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:min(640px,94vw);max-height:84vh;display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;color:var(--text);';
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:min(640px,94vw);max-height:84vh;display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);color:var(--text);';
   const when = data.published_at ? new Date(data.published_at).toLocaleDateString() : '';
   card.innerHTML = `
     <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);">📚 Core Rules v${data.version} <span style="font-weight:normal;font-size:0.75rem;color:var(--text-dim);">${when} · this campaign is on v${_coreAppliedVersion || '—'}</span></div>
@@ -8779,7 +8780,7 @@ function showToast(msg, kind) {
     el = document.createElement('div');
     el.id = 'app-toast';
     el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;'
-      + 'padding:10px 16px;border-radius:6px;font-family:Georgia,serif;font-size:0.85rem;'
+      + 'padding:10px 16px;border-radius:6px;font-family:var(--ui-font);font-size:0.85rem;'
       + 'box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:80vw;text-align:center;pointer-events:none;'
       + 'opacity:0;transition:opacity 0.2s;';
     document.body.appendChild(el);
@@ -9530,7 +9531,7 @@ function renderItemPanel(item) {
   if (!el) return;
   const range = mapScalePPF > 0 ? 5 : 8; // 5 ft, or 8% on an uncalibrated map
   const cands = _adjacentControllableChars(item, range);
-  const btnStyle = 'display:block;width:100%;margin-top:6px;padding:7px 10px;border-radius:4px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--gold2);cursor:pointer;font-family:Georgia,serif;font-size:0.8rem;';
+  const btnStyle = 'display:block;width:100%;margin-top:6px;padding:7px 10px;border-radius:4px;border:1px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--gold2);cursor:pointer;font-family:var(--ui-font);font-size:0.8rem;';
   const btns = cands.length
     ? cands.map(c => {
         const isChar = c.entity_type === 'character';
@@ -9547,7 +9548,7 @@ function renderItemPanel(item) {
   const wt = rec ? (rec.wt != null ? rec.wt : (rec.unitWt != null ? rec.unitWt * (rec.qty || 1) : null)) : null;
   const wtStr = wt != null ? `Weight: ${Math.round(wt * 10) / 10} lbs` : '';
   el.innerHTML = `
-    <button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:Georgia,serif;">← Back</button>
+    <button onclick="backToMyCharacter()" style="font-size:0.7rem;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:3px;padding:2px 8px;cursor:pointer;margin-bottom:10px;font-family:var(--ui-font);">← Back</button>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
       <div style="font-size:1.6rem;">📦</div>
       <div style="font-size:1rem;color:var(--gold2);font-weight:bold;">${_paEsc ? _paEsc(item.label) : item.label}</div>
@@ -10004,7 +10005,7 @@ function _openSpellPickerModal(combatantId) {
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+    display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);`;
 
   const title = document.createElement('div');
   title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
@@ -10025,7 +10026,7 @@ function _openSpellPickerModal(combatantId) {
     const row = document.createElement('button');
     row.disabled = notBuilt;
     row.style.cssText = `display:flex;justify-content:space-between;align-items:center;gap:14px;
-      width:100%;padding:9px 14px;border-radius:5px;text-align:left;font-family:Georgia,serif;
+      width:100%;padding:9px 14px;border-radius:5px;text-align:left;font-family:var(--ui-font);
       border:1px solid ${notBuilt ? 'var(--border)' : 'var(--gold)'};
       background:${notBuilt ? 'var(--bg3)' : 'rgba(201,168,76,0.10)'};
       color:${notBuilt ? 'var(--text-dim)' : 'var(--text)'};
@@ -10051,7 +10052,7 @@ function _openSpellPickerModal(combatantId) {
   const cancel = document.createElement('button');
   cancel.textContent = 'Cancel';
   cancel.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
-    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+    font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
   cancel.onclick = () => overlay.remove();
   card.appendChild(cancel);
 
@@ -10081,7 +10082,7 @@ function _openPlaySpellBookModal(combatantId) {
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+    display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);`;
 
   const title = document.createElement('div');
   title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
@@ -10102,7 +10103,7 @@ function _openPlaySpellBookModal(combatantId) {
   const closeBtn = document.createElement('button');
   closeBtn.textContent = 'Close';
   closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
-    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+    font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
   closeBtn.onclick = () => overlay.remove();
   card.appendChild(closeBtn);
 
@@ -10451,7 +10452,7 @@ function _aoeDrawShape(casterCid, spell, rangeFt, cursorXPct, cursorYPct, readOn
   prompt.setAttribute('text-anchor', 'middle');
   prompt.setAttribute('fill', 'rgba(192,96,224,0.85)');
   prompt.setAttribute('font-size', '11');
-  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   prompt.textContent = readOnly
     ? `${spell.name} — aiming…`
@@ -10612,7 +10613,7 @@ function _obstacleRedraw(cursorXPct, cursorYPct) {
     const prompt = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     prompt.setAttribute('x', vpX); prompt.setAttribute('y', vpY + r + 16);
     prompt.setAttribute('text-anchor', 'middle'); prompt.setAttribute('fill', 'rgba(96,192,224,0.85)');
-    prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Georgia,serif');
+    prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
     prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
     prompt.textContent = `${obstacleSpell.name} — click-drag to place the wall · Esc to cancel`;
     svg.appendChild(prompt);
@@ -10636,7 +10637,7 @@ function _obstacleRedraw(cursorXPct, cursorYPct) {
   prompt.setAttribute('x', (p1.x + p2.x) / 2); prompt.setAttribute('y', Math.min(p1.y, p2.y) - 14);
   prompt.setAttribute('text-anchor', 'middle');
   prompt.setAttribute('fill', inRange ? 'rgba(96,192,224,0.85)' : 'rgba(224,80,80,0.9)');
-  prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('font-size', '11'); prompt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   prompt.textContent = inRange ? 'release to place the wall' : 'out of range';
   svg.appendChild(prompt);
@@ -10860,7 +10861,7 @@ function _renderAoeResolvePanel() {
     el.id = 'aoe-resolve-panel';
     el.style.cssText = `position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2200;
       background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:10px 18px;
-      font-family:Georgia,serif;font-size:0.8rem;color:var(--text);text-align:center;
+      font-family:var(--ui-font);font-size:0.8rem;color:var(--text);text-align:center;
       box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
     document.body.appendChild(el);
   }
@@ -10868,7 +10869,7 @@ function _renderAoeResolvePanel() {
   el.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:4px;">${_paEsc(st.spell.name)} — click a highlighted target to resolve its save</div>
     <div style="color:var(--text-dim);margin-bottom:6px;">${st.remaining.length} remaining: ${names || '—'}</div>
     <button onclick="_aoeResolveRemainingFast()" style="padding:5px 14px;border-radius:5px;cursor:pointer;
-      font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">
+      font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">
       Resolve Remaining Automatically</button>`;
 }
 
@@ -12658,10 +12659,10 @@ function atOpenAwardXpModal() {
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:22px 26px;min-width:380px;max-width:94vw;max-height:86vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:14px;font-family:Georgia,serif;`;
+    display:flex;flex-direction:column;gap:14px;font-family:var(--ui-font);`;
 
   const rowStyle = 'display:flex;align-items:center;gap:8px;padding:4px 0;font-size:0.85rem;';
-  const numStyle = 'width:80px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:Georgia,serif;';
+  const numStyle = 'width:80px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:var(--ui-font);';
 
   card.innerHTML = `
     <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">🏆 Finish Combat — Award XP</div>
@@ -12772,7 +12773,7 @@ function atOpenGrantXpModal() {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
   const card = document.createElement('div');
-  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:360px;max-width:94vw;max-height:86vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-family:Georgia,serif;';
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:360px;max-width:94vw;max-height:86vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-family:var(--ui-font);';
   card.innerHTML = `
     <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">🏅 Grant XP</div>
     <div style="font-size:0.78rem;color:var(--text-dim);font-style:italic;">Each checked character receives the amount below (negative takes XP back). Characters on the map are listed first.</div>
@@ -13251,7 +13252,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:24px 28px;min-width:320px;max-width:94vw;display:flex;flex-direction:column;gap:14px;
-    font-family:Georgia,serif;`;
+    font-family:var(--ui-font);`;
 
   const titleTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
   const title = document.createElement('div');
@@ -13310,7 +13311,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   const regPct = _hitPct(baseThreshold != null ? Math.max(0, baseThreshold - rangePenalty) : null);
   regBtn.textContent = regPct != null ? `⚔ Regular Attack (Torso) — ${regPct}%` : '⚔ Regular Attack (Torso)';
   regBtn.style.cssText = `width:100%;padding:8px 12px;border-radius:5px;cursor:pointer;
-    font-family:Georgia,serif;font-size:0.82rem;
+    font-family:var(--ui-font);font-size:0.82rem;
     border:2px solid var(--gold);background:rgba(201,168,76,0.12);color:var(--text);`;
   regBtn.onclick = () => pickPart(null);
   card.appendChild(regBtn);
@@ -13329,7 +13330,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     btn.textContent = hitPct != null ? `${part.label} — ${hitPct}%` : part.label;
     btn.title = `${Math.round(part.sizeFactor * 100)}% of body size${hitPct != null ? ` · ~${hitPct}% to hit, no defense` : ''}`;
     btn.style.cssText = `padding:6px 14px;border-radius:5px;cursor:pointer;
-      font-family:Georgia,serif;font-size:0.78rem;
+      font-family:var(--ui-font);font-size:0.78rem;
       border:1px solid var(--border);background:var(--bg3);color:var(--text);`;
     btn.onmouseover = () => btn.style.borderColor = 'var(--gold)';
     btn.onmouseout  = () => btn.style.borderColor = 'var(--border)';
@@ -13340,7 +13341,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
   const cancel = document.createElement('button');
   cancel.textContent = 'Cancel';
   cancel.style.cssText = `padding:5px 16px;border-radius:5px;cursor:pointer;
-    font-family:Georgia,serif;font-size:0.75rem;align-self:center;
+    font-family:var(--ui-font);font-size:0.75rem;align-self:center;
     border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
   cancel.onclick = () => {
     overlay.remove();
@@ -13447,7 +13448,7 @@ function _showDefenseWaiting(target, options, reqId) {
   const name = target?.label || 'the defender';
   let el = document.getElementById('defense-waiting');
   if (!el) { el = document.createElement('div'); el.id = 'defense-waiting'; document.body.appendChild(el); }
-  el.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;font-family:var(--ui-font);';
   const showGmPicker = isGM() && options && options.length;
   const opts = [{ label: 'No Defense', reduction: 0, prone: false }, ...(options || [])];
   const gmBtns = showGmPicker
@@ -13463,14 +13464,14 @@ function _showDefenseWaiting(target, options, reqId) {
            border:1px solid ${lit ? 'var(--gold)' : 'var(--border)'};
            background:${lit ? 'rgba(201,168,76,0.15)' : 'var(--bg3)'};
            color:${lit ? 'var(--gold2)' : 'var(--text)'};
-           cursor:pointer;font-family:Georgia,serif;font-size:0.75rem;">${_logEsc(o.label)}${lit ? ' ✓' : ''}</button>`;
+           cursor:pointer;font-family:var(--ui-font);font-size:0.75rem;">${_logEsc(o.label)}${lit ? ' ✓' : ''}</button>`;
        }).join('')}</div>`
     : '';
   el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:24px 28px;text-align:center;max-width:90vw;">
     <div style="font-size:0.95rem;color:var(--gold2);margin-bottom:6px;">⏳ Waiting for ${_logEsc(name)}</div>
     <div style="font-size:0.74rem;color:var(--text-dim);margin-bottom:14px;">choosing their defense…</div>
     ${gmBtns}
-    <button onclick="_skipDefenseWait()" style="margin-top:10px;font-size:0.78rem;padding:6px 16px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:Georgia,serif;">Skip — resolve now</button>
+    <button onclick="_skipDefenseWait()" style="margin-top:10px;font-size:0.78rem;padding:6px 16px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:var(--ui-font);">Skip — resolve now</button>
   </div>`;
   if (showGmPicker) {
     document.getElementById('defense-waiting-opts').onclick = (e) => {
@@ -13495,9 +13496,9 @@ function _showDefensePicker(payload) {
       border:1px solid var(--gold);
       background:${lit ? 'rgba(201,168,76,0.30)' : 'rgba(201,168,76,0.12)'};
       color:${lit ? 'var(--gold2)' : 'var(--text)'};font-weight:${lit ? 'bold' : 'normal'};
-      cursor:pointer;font-family:Georgia,serif;font-size:0.82rem;">${_logEsc(o.label)}${lit ? ' ✓ readied' : ''}</button>`;
+      cursor:pointer;font-family:var(--ui-font);font-size:0.82rem;">${_logEsc(o.label)}${lit ? ' ✓ readied' : ''}</button>`;
   }).join('');
-  el.style.cssText = 'position:fixed;inset:0;z-index:1650;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;font-family:Georgia,serif;';
+  el.style.cssText = 'position:fixed;inset:0;z-index:1650;background:rgba(0,0,0,0.72);display:flex;align-items:center;justify-content:center;font-family:var(--ui-font);';
   el.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;min-width:280px;max-width:92vw;">
     <div style="font-size:0.95rem;color:var(--gold2);text-align:center;margin-bottom:4px;">⚔ ${_logEsc(payload.attackerName)} attacks ${_logEsc(payload.targetName)}!</div>
     <div style="font-size:0.72rem;color:var(--text-dim);text-align:center;margin-bottom:8px;">Choose your defense</div>
@@ -13590,7 +13591,7 @@ function _makeDefBtn(label, reduction, active, onSelect) {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.dataset.reduction = reduction;
-  btn.style.cssText = `font-size:0.72rem;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:Georgia,serif;
+  btn.style.cssText = `font-size:0.72rem;padding:4px 10px;border-radius:4px;cursor:pointer;font-family:var(--ui-font);
     border:1px solid ${active ? 'var(--gold)' : 'var(--border)'};
     background:${active ? 'rgba(201,168,76,0.15)' : 'var(--bg3)'};
     color:${active ? 'var(--gold2)' : 'var(--text)'};`;
@@ -15231,7 +15232,7 @@ function drawRangeCircle() {
   rangeTxt.setAttribute('text-anchor', 'middle');
   rangeTxt.setAttribute('fill', color);
   rangeTxt.setAttribute('font-size', '11');
-  rangeTxt.setAttribute('font-family', 'Georgia,serif');
+  rangeTxt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
   rangeTxt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   rangeTxt.textContent = `${attackActionLabel} · ${attackRangeFt} ft`;
   svg.appendChild(rangeTxt);
@@ -15243,7 +15244,7 @@ function drawRangeCircle() {
   prompt.setAttribute('text-anchor', 'middle');
   prompt.setAttribute('fill', 'rgba(224,80,80,0.8)');
   prompt.setAttribute('font-size', '11');
-  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   prompt.textContent = 'Click target — Esc to cancel';
   svg.appendChild(prompt);
@@ -16089,7 +16090,7 @@ function drawSentinelRanges() {
       label.setAttribute('text-anchor', 'middle');
       label.setAttribute('fill', '#ff8c00');
       label.setAttribute('font-size', '11');
-      label.setAttribute('font-family', 'Georgia,serif');
+      label.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
       label.textContent = `👁 ${t.label} · ${maxReach}ft`;
       svg.appendChild(label);
     }
@@ -16118,7 +16119,7 @@ function drawSentinelRanges() {
       label.setAttribute('text-anchor', 'middle');
       label.setAttribute('fill', '#40c0ff');
       label.setAttribute('font-size', '11');
-      label.setAttribute('font-family', 'Georgia,serif');
+      label.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
       label.textContent = `🎯 ${t.label} · ${rangeFt}ft`;
       svg.appendChild(label);
     }
@@ -16168,7 +16169,7 @@ function drawSentinelRanges() {
       label.setAttribute('text-anchor', 'middle');
       label.setAttribute('fill', '#a060ff');
       label.setAttribute('font-size', '11');
-      label.setAttribute('font-family', 'Georgia,serif');
+      label.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
       label.textContent = `🦉 ${t.label} · ${Math.round(visionFt)}ft`;
       svg.appendChild(label);
     }
@@ -16264,7 +16265,7 @@ function _targetAimRedraw(cursorXPct, cursorYPct) {
   prompt.setAttribute('text-anchor', 'middle');
   prompt.setAttribute('fill', isVigilant ? 'rgba(160,96,255,0.9)' : 'rgba(64,192,255,0.9)');
   prompt.setAttribute('font-size', '11');
-  prompt.setAttribute('font-family', 'Georgia,serif');
+  prompt.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
   prompt.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   prompt.textContent = (isVigilant ? 'Vigilant' : 'Target') + ' — click to set facing · Esc to cancel';
   svg.appendChild(prompt);
@@ -16611,7 +16612,7 @@ function _maybeShowSentinelPrompt(payload) {
   overlay.id = 'sentinel-check-modal-' + payload.checkId;
   overlay.style.cssText = `position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:3200;
     background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:14px 20px;
-    font-family:Georgia,serif;font-size:0.85rem;color:var(--text);text-align:center;
+    font-family:var(--ui-font);font-size:0.85rem;color:var(--text);text-align:center;
     box-shadow:0 4px 16px rgba(0,0,0,0.5);max-width:92vw;`;
   const moverSneaking = !!moverTok && getConditions(moverTok.id).has('infiltrating');
   const headline = isVigilant
@@ -16621,9 +16622,9 @@ function _maybeShowSentinelPrompt(payload) {
     : `${isTargetAction ? '🎯' : '👁'} ${_paEsc(watcherTok.label)} — ${_paEsc(moverName)} entered ${isTargetAction ? 'the guarded sector' : 'melee range'}. Attack?`;
   overlay.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">${headline}</div>
     <div style="display:flex;gap:10px;justify-content:center;">
-      ${(!isVigilant || canMeleeAttack) ? `<button data-ans="1" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+      ${(!isVigilant || canMeleeAttack) ? `<button data-ans="1" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:var(--ui-font);
         font-size:0.8rem;border:1px solid var(--gold);background:rgba(201,168,76,0.15);color:var(--text);">Attack</button>` : ''}
-      <button data-ans="0" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;
+      <button data-ans="0" style="padding:6px 16px;border-radius:5px;cursor:pointer;font-family:var(--ui-font);
         font-size:0.8rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">${isVigilant ? 'Call Out' : 'Let it pass'}</button>
     </div>`;
   overlay.querySelectorAll('button').forEach(btn => {
@@ -17283,7 +17284,7 @@ enterPlayMode = function() {
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="wall-btn" onclick="toggleWallMode()">🧱 Walls</button>
-       <select id="wall-shape-sel" class="btn-sm" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
+       <select id="wall-shape-sel" class="btn-sm" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.74rem;padding:2px 4px;">
          <option value="line">Line</option>
          <option value="rect">Rect</option>
          <option value="circle">Circle</option>
@@ -17813,7 +17814,7 @@ function pathRenderSvg(mouseX, mouseY, override) {
     tx.setAttribute('y', lastPt.y - 8);
     tx.setAttribute('fill', fillClr);
     tx.setAttribute('font-size', '12');
-    tx.setAttribute('font-family', 'Georgia,serif');
+    tx.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
     tx.setAttribute('font-weight', 'bold');
     tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
     tx.textContent = label;
@@ -17828,7 +17829,7 @@ function pathRenderSvg(mouseX, mouseY, override) {
     tx.setAttribute('y', lastPt.y - 8);
     tx.setAttribute('fill', '#4de080');
     tx.setAttribute('font-size', '12');
-    tx.setAttribute('font-family', 'Georgia,serif');
+    tx.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
     tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
     tx.textContent = Math.round((dist / mapScale)) + ' px (calibrate map for ft/s)';
     svg.appendChild(tx);
@@ -18861,7 +18862,7 @@ async function _openManageWallsModal() {
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:22px 26px;min-width:320px;max-width:94vw;max-height:80vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:10px;font-family:Georgia,serif;`;
+    display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);`;
 
   const title = document.createElement('div');
   title.style.cssText = 'font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;';
@@ -18890,8 +18891,8 @@ async function _openManageWallsModal() {
     const controls = w.type === 'litarea'
       ? `<button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.maxHp
-      ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:Georgia,serif;font-size:0.78rem;">
-         <button onclick="applyWallDamage('${safeId}', parseFloat(document.getElementById('wall-dmg-${safeId}').value) || 0)" style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;">Apply</button>
+      ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:var(--ui-font);font-size:0.78rem;">
+         <button onclick="applyWallDamage('${safeId}', parseFloat(document.getElementById('wall-dmg-${safeId}').value) || 0)" style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:var(--ui-font);font-size:0.74rem;">Apply</button>
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;" title="Remove immediately">✕</button>`
       : `<label style="cursor:pointer;"><input type="checkbox" ${w.blocksVision ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksVision')"> 👁</label>
          <label style="cursor:pointer;"><input type="checkbox" ${w.blocksMovement ? 'checked' : ''} onchange="toggleWallFlag('${safeId}','blocksMovement')"> 🚶</label>
@@ -18905,7 +18906,7 @@ async function _openManageWallsModal() {
   const closeBtn = document.createElement('button');
   closeBtn.textContent = 'Close';
   closeBtn.style.cssText = `padding:6px 16px;border-radius:5px;cursor:pointer;align-self:center;
-    font-family:Georgia,serif;font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
+    font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);`;
   closeBtn.onclick = () => overlay.remove();
   card.appendChild(closeBtn);
 
@@ -19576,7 +19577,7 @@ function _openSharedImageModal(url, caption) {
   overlay.appendChild(img);
   if (caption) {
     const cap = document.createElement('div');
-    cap.style.cssText = 'color:var(--text);font-family:Georgia,serif;font-size:0.9rem;max-width:80vw;text-align:center;';
+    cap.style.cssText = 'color:var(--text);font-family:var(--ui-font);font-size:0.9rem;max-width:80vw;text-align:center;';
     cap.textContent = caption;
     overlay.appendChild(cap);
   }
@@ -19701,7 +19702,7 @@ function _renderHelpPanel() {
 
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
-    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:var(--ui-font);overflow:hidden;`;
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
@@ -19752,7 +19753,7 @@ function _renderHelpPanel() {
   if (canEdit) {
     const newBtn = document.createElement('button');
     newBtn.textContent = '+ New Doc';
-    newBtn.style.cssText = 'width:100%;margin-top:6px;padding:6px;border-radius:5px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);';
+    newBtn.style.cssText = 'width:100%;margin-top:6px;padding:6px;border-radius:5px;cursor:pointer;font-family:var(--ui-font);font-size:0.76rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);';
     newBtn.onclick = _helpNewDoc;
     list.appendChild(newBtn);
   }
@@ -19794,7 +19795,7 @@ function _renderHelpPanel() {
     content.innerHTML = `
       <input id="help-edit-title" type="text" value="${_paEsc(doc.title)}"
         style="width:100%;font-size:0.95rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
-        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:Georgia,serif;">
+        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:var(--ui-font);">
       <textarea id="help-edit-body" spellcheck="false"
         style="width:100%;height:50vh;background:var(--bg3);color:var(--text);border:1px solid var(--border);
         border-radius:4px;padding:8px;font-family:'Courier New',monospace;font-size:0.82rem;resize:vertical;">${_paEsc(doc.body)}</textarea>
@@ -19804,7 +19805,7 @@ function _renderHelpPanel() {
       <div style="display:flex;gap:8px;">
         <button id="help-save-btn" class="btn">Save</button>
         <button id="help-cancel-btn" class="btn danger">Cancel</button>
-        <button onclick="_triggerDocImageUpload('help-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
+        <button onclick="_triggerDocImageUpload('help-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="help-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete this doc</button>
       </div>`;
@@ -19817,13 +19818,13 @@ function _renderHelpPanel() {
       // nothing to edit, just triage: read it, then clear it once handled.
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑 Delete';
-      deleteBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:#e05555;border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;';
+      deleteBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:#e05555;border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.74rem;';
       deleteBtn.onclick = () => _helpDeleteReport(doc.id);
       titleRow.appendChild(deleteBtn);
     } else if (canEdit) {
       const editBtn = document.createElement('button');
       editBtn.textContent = '✎ Edit';
-      editBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;';
+      editBtn.style.cssText = 'border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.74rem;';
       editBtn.onclick = _helpStartEdit;
       titleRow.appendChild(editBtn);
     }
@@ -19999,7 +20000,7 @@ function _renderCampaignNotesTab() {
     bodyEl.innerHTML = `
       <input id="campaign-edit-title" type="text" value="${_paEsc(doc.title)}"
         style="width:100%;font-size:0.85rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
-        border:1px solid var(--border);border-radius:4px;padding:5px 7px;margin-bottom:6px;font-family:Georgia,serif;">
+        border:1px solid var(--border);border-radius:4px;padding:5px 7px;margin-bottom:6px;font-family:var(--ui-font);">
       <label style="display:flex;align-items:center;gap:6px;font-size:0.74rem;color:var(--text-dim);margin-bottom:6px;cursor:pointer;">
         <input type="checkbox" id="campaign-edit-visible" ${doc.visible_to_players ? 'checked' : ''}> Visible to players
       </label>
@@ -20012,7 +20013,7 @@ function _renderCampaignNotesTab() {
       <div style="display:flex;gap:6px;">
         <button id="campaign-save-btn" class="btn" style="font-size:0.76rem;padding:4px 10px;">Save</button>
         <button id="campaign-cancel-btn" class="btn danger" style="font-size:0.76rem;padding:4px 10px;">Cancel</button>
-        <button onclick="_triggerDocImageUpload('campaign-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
+        <button onclick="_triggerDocImageUpload('campaign-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="campaign-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.72rem;">Delete</button>
       </div>`;
@@ -20024,7 +20025,7 @@ function _renderCampaignNotesTab() {
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
         <div style="font-size:0.85rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(doc.title)}</div>
         <span style="font-size:0.68rem;color:var(--text-dim);">${doc.visible_to_players ? '👁 visible to players' : '🔒 GM only'}</span>
-        <button id="campaign-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:3px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.7rem;">✎ Edit</button>
+        <button id="campaign-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:3px 8px;cursor:pointer;font-family:var(--ui-font);font-size:0.7rem;">✎ Edit</button>
       </div>
       <div id="campaign-notes-rendered" style="font-size:0.8rem;"></div>`;
     document.getElementById('campaign-edit-btn').onclick = _campaignStartEdit;
@@ -20057,7 +20058,7 @@ function _renderCampaignNotesModal(docs, activeId) {
 
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
-    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+    width:min(760px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:var(--ui-font);overflow:hidden;`;
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
@@ -20318,7 +20319,7 @@ enterPlayMode = function() {
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="light-btn" onclick="toggleLightMode()">💡 Lights</button>
-       <select id="light-type-sel" class="btn-sm" onchange="_lightAreaPts=[];drawLightAreaPreview();" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}. Lit Area: click corners, click the first corner / double-click / right-click to close." style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:Georgia,serif;font-size:0.74rem;padding:2px 4px;">
+       <select id="light-type-sel" class="btn-sm" onchange="_lightAreaPts=[];drawLightAreaPreview();" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}. Lit Area: click corners, click the first corner / double-click / right-click to close." style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.74rem;padding:2px 4px;">
          ${LIGHT_SOURCES.map(l => `<option value="${l.label}">${l.label} (${l.ft}ft)</option>`).join('')}
          <option value="__area">▭ Lit Area (draw room/region)</option>
        </select>`);
@@ -20534,7 +20535,7 @@ function drawPins() {
     return `<g data-pin-id="${p.id}" style="cursor:pointer;pointer-events:auto;" transform="translate(${pt.x},${pt.y})">
       <circle r="11" fill="rgba(200,40,40,0.92)" stroke="#fff" stroke-width="1.5"/>
       <text x="0" y="1" text-anchor="middle" dominant-baseline="middle" fill="#fff"
-        font-size="11" font-weight="bold" font-family="Georgia,serif">${i + 1}</text>
+        font-size="11" font-weight="bold" font-family="Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif">${i + 1}</text>
     </g>`;
   }).join('');
   svg.querySelectorAll('[data-pin-id]').forEach(g => {
@@ -20558,7 +20559,7 @@ function _openMapPinModal(pinId, startEditing) {
 
   const card = document.createElement('div');
   card.style.cssText = `background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
-    width:min(560px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;`;
+    width:min(560px,94vw);max-height:86vh;display:flex;flex-direction:column;font-family:var(--ui-font);overflow:hidden;`;
 
   const header = document.createElement('div');
   header.style.cssText = 'display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);';
@@ -20579,7 +20580,7 @@ function _openMapPinModal(pinId, startEditing) {
     content.innerHTML = `
       <input id="pin-edit-title" type="text" value="${_paEsc(pin.title)}"
         style="width:100%;font-size:0.95rem;font-weight:bold;color:var(--gold2);background:var(--bg3);
-        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:Georgia,serif;">
+        border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin-bottom:8px;font-family:var(--ui-font);">
       <textarea id="pin-edit-body" spellcheck="false"
         style="width:100%;height:40vh;background:var(--bg3);color:var(--text);border:1px solid var(--border);
         border-radius:4px;padding:8px;font-family:'Courier New',monospace;font-size:0.82rem;resize:vertical;">${_paEsc(pin.body)}</textarea>
@@ -20589,7 +20590,7 @@ function _openMapPinModal(pinId, startEditing) {
       <div style="display:flex;gap:8px;">
         <button id="pin-save-btn" class="btn">Save</button>
         <button id="pin-cancel-btn" class="btn danger">Cancel</button>
-        <button onclick="_triggerDocImageUpload('pin-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.76rem;">📎 Image</button>
+        <button onclick="_triggerDocImageUpload('pin-edit-body')" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.76rem;">📎 Image</button>
         <div style="flex:1;"></div>
         <button id="pin-delete-btn" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.78rem;">Delete pin</button>
       </div>`;
@@ -20597,7 +20598,7 @@ function _openMapPinModal(pinId, startEditing) {
     content.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
         <div style="font-size:0.95rem;font-weight:bold;color:var(--gold2);flex:1;">${_paEsc(pin.title)}</div>
-        <button id="pin-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:Georgia,serif;font-size:0.74rem;">✎ Edit</button>
+        <button id="pin-edit-btn" style="border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.74rem;">✎ Edit</button>
       </div>
       <div id="pin-rendered-body"></div>`;
   }
@@ -20782,7 +20783,7 @@ async function _deleteMapPin(pinId) {
     box-shadow:0 0 60px rgba(0,0,0,0.8), 0 0 20px rgba(201,168,76,0.08);">
 
     <div style="text-align:center; margin-bottom:28px;">
-      <div style="font-size:2rem; color:var(--gold2); font-family:Georgia,serif; font-weight:bold; letter-spacing:0.06em;">✦ Arcane</div>
+      <div style="font-size:2rem; color:var(--gold2); font-family:var(--ui-font); font-weight:bold; letter-spacing:0.06em;">✦ Arcane</div>
       <div style="font-size:0.72rem; color:var(--text-dim); letter-spacing:0.18em; text-transform:uppercase; margin-top:4px;">Virtual Tabletop</div>
       <div style="width:48px; height:1px; background:var(--gold); margin:14px auto 0; opacity:0.4;"></div>
     </div>
@@ -20805,7 +20806,7 @@ async function _deleteMapPin(pinId) {
       <button type="submit" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Sign In</button>
       <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
         No account?
-        <button type="button" onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
+        <button type="button" onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:var(--ui-font); font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
       </div>
     </form>
 
@@ -20825,7 +20826,7 @@ async function _deleteMapPin(pinId) {
       <button type="submit" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Create Account</button>
       <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
         Already have an account?
-        <button type="button" onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:Georgia,serif; font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Sign in</button>
+        <button type="button" onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:var(--ui-font); font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Sign in</button>
       </div>
     </form>
 
@@ -20893,7 +20894,7 @@ async function _deleteMapPin(pinId) {
       </div>
       <div class="map-viewport" id="map-viewport">
         <!-- GM "View as…" indicator (see setPovToken) -->
-        <div id="pov-banner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:40;align-items:center;gap:10px;padding:5px 12px;border-radius:14px;background:rgba(18,16,14,0.92);border:1px solid var(--gold);color:var(--gold2);font-size:0.78rem;font-family:Georgia,serif;">
+        <div id="pov-banner" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:40;align-items:center;gap:10px;padding:5px 12px;border-radius:14px;background:rgba(18,16,14,0.92);border:1px solid var(--gold);color:var(--gold2);font-size:0.78rem;font-family:var(--ui-font);">
           <span>🔭 Viewing as <b class="pov-name"></b></span>
           <button class="btn-sm" onclick="setPovToken(null)" style="padding:1px 8px;">Exit</button>
         </div>
@@ -20930,14 +20931,14 @@ async function _deleteMapPin(pinId) {
              makes that, and the way out, obvious instead of a silent trap. -->
         <div id="wall-mode-hint" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
              z-index:30;background:rgba(20,15,5,0.92);border:1px solid var(--gold);border-radius:5px;
-             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:Georgia,serif;
+             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:var(--ui-font);
              white-space:nowrap;pointer-events:none;">
           🧱 Wall Mode — click to draw · double-click/right-click to finish a Line · pick <b>Erase</b> to click a wall and remove just that segment · <b>Esc</b> or the <b>Walls</b> button to exit
         </div>
         <!-- Phase 5: map pin notes — click-to-place hint, same styling/placement as wall-mode-hint -->
         <div id="pin-mode-hint" style="display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
              z-index:30;background:rgba(20,15,5,0.92);border:1px solid var(--gold);border-radius:5px;
-             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:Georgia,serif;
+             padding:6px 14px;font-size:0.78rem;color:var(--gold2);font-family:var(--ui-font);
              white-space:nowrap;pointer-events:none;">
           📍 Pin Mode — click the map to drop a note · <b>Esc</b> or the <b>Pins</b> button to exit
         </div>
@@ -20947,7 +20948,7 @@ async function _deleteMapPin(pinId) {
              end with no way to signal the GM; see _requestMapToken. -->
         <div id="no-token-banner" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
              z-index:30;background:rgba(20,15,5,0.94);border:1px solid var(--gold);border-radius:8px;
-             padding:20px 26px;font-size:0.85rem;color:var(--text);font-family:Georgia,serif;
+             padding:20px 26px;font-size:0.85rem;color:var(--text);font-family:var(--ui-font);
              text-align:center;max-width:80vw;">
           <div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">🗺 You don't have a token on this map yet</div>
           <div style="color:var(--text-dim);font-size:0.78rem;margin-bottom:14px;">The GM hasn't placed you here — ask them to add you.</div>
@@ -20962,7 +20963,7 @@ async function _deleteMapPin(pinId) {
           <line id="cal-line" stroke="#f0d080" stroke-width="2" stroke-dasharray="6,3" x1="0" y1="0" x2="0" y2="0"/>
           <circle id="cal-dot-a" r="5" fill="#f0d080" cx="0" cy="0"/>
           <circle id="cal-dot-b" r="5" fill="#f0d080" cx="0" cy="0"/>
-          <text id="cal-text" fill="#f0d080" font-size="12" font-family="Georgia,serif" text-anchor="middle" dy="-6"></text>
+          <text id="cal-text" fill="#f0d080" font-size="12" font-family="Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif" text-anchor="middle" dy="-6"></text>
         </svg>
         <!-- measure line SVG overlay -->
         <svg id="measure-svg" width="100%" height="100%"
@@ -20971,7 +20972,7 @@ async function _deleteMapPin(pinId) {
           <circle id="measure-dot-a" r="5" fill="#40c8e0" cx="0" cy="0"/>
           <circle id="measure-dot-b" r="5" fill="#40c8e0" cx="0" cy="0"/>
           <text id="measure-text" fill="#40c8e0" font-size="13" font-weight="bold"
-                font-family="Georgia,serif" text-anchor="middle" dy="-8"
+                font-family="Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif" text-anchor="middle" dy="-8"
                 style="paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;"></text>
         </svg>
         <!-- scale indicator -->
@@ -21034,7 +21035,7 @@ async function _deleteMapPin(pinId) {
           <div style="padding:7px 10px;font-size:0.66rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.1em;
             border-bottom:1px solid var(--border);background:var(--bg3);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
             <span>📓 Campaign Notes</span>
-            <button style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:Georgia,serif;font-size:0.7rem;" onclick="_campaignNewDoc()">+ New</button>
+            <button style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:var(--ui-font);font-size:0.7rem;" onclick="_campaignNewDoc()">+ New</button>
           </div>
           <div id="campaign-notes-list" style="flex-shrink:0;max-height:110px;overflow-y:auto;border-bottom:1px solid var(--border);"></div>
           <div id="campaign-notes-body" style="flex:1;overflow-y:auto;padding:8px 10px;"></div>
@@ -21116,7 +21117,7 @@ async function _deleteMapPin(pinId) {
   background:rgba(0,0,0,0.82);align-items:center;justify-content:center;">
   <div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;
     padding:24px 28px;width:480px;max-width:94vw;max-height:88vh;overflow-y:auto;
-    display:flex;flex-direction:column;gap:14px;font-family:Georgia,serif;">
+    display:flex;flex-direction:column;gap:14px;font-family:var(--ui-font);">
     <h2 style="margin:0;font-size:1.05rem;color:var(--gold2);">🐛 Report a Bug / Request a Feature</h2>
     <p style="margin:0;color:var(--text-dim);font-size:0.78rem;">
       Goes straight to the GM as a private campaign note — they'll see it, you won't need to remember to mention it.
@@ -21134,7 +21135,7 @@ async function _deleteMapPin(pinId) {
     </div>
     <div class="field">
       <label>Description</label>
-      <textarea id="bugreport-description" rows="5" style="width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:Georgia,serif;" placeholder="What happened? What did you expect instead?"></textarea>
+      <textarea id="bugreport-description" rows="5" style="width:100%;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--ui-font);" placeholder="What happened? What did you expect instead?"></textarea>
     </div>
     <div style="display:flex;align-items:center;gap:10px;">
       <button class="btn" id="bugreport-screenshot-btn" onclick="_bugReportCaptureScreenshot()">📸 Attach Screenshot</button>
