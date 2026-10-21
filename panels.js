@@ -1016,6 +1016,7 @@ function _dlgRender(body) {
         });
       }
     }
+    const aim = typeof _techniqueAim === 'function' ? _techniqueAim(ent?.stats?.Techniques, itemName) : null;
     return loadChip + rows.map(({ r, ranged }) => {
       const lbl = `${r.action} — ${itemName}`;
       if (cur?.label === lbl) return ''; // already shown as the lit chip
@@ -1023,7 +1024,7 @@ function _dlgRender(body) {
                 : r.action.toLowerCase().includes('aim') ? 2 : 1;
       const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
       const defensive = r.action === 'Block' || r.action === 'Parry';
-      return _dlgChip({
+      const normalChip = _dlgChip({
         label: r.action, sub,
         data: defensive
           ? { dact: 'set', slot: chKey, label: lbl, dur: 99, locks: 0 } // lock-on stance
@@ -1031,6 +1032,16 @@ function _dlgRender(body) {
               item: itemName, action: r.action, ranged: ranged ? 1 : 0,
               range: ranged ? (r.rangeIncrement || 5) : (r.reach ?? 0) },
       });
+      // Marksmen technique: an extra Aimed variant of each ranged attack - aim time on top of the
+      // shot (action slots are whole rounds, so it rounds up), at a reduced range penalty.
+      const aimLbl = `Aimed ${r.action} — ${itemName}`;
+      const aimedChip = (ranged && aim && r.damageMax > 0 && cur?.label !== aimLbl) ? _dlgChip({
+        label: `🎯 Aimed ${r.action}`, sub: `+${aim.aimSec}s · ×${aim.rangeMult} range`,
+        title: `${aim.name}: ${aim.aimSec}s to aim (the action takes ${Math.ceil((dur * 3 + aim.aimSec) / 3)} rounds), range penalty ×${aim.rangeMult}`,
+        data: { dact: 'attack', slot: chKey, label: aimLbl, dur: dur * 3 + aim.aimSec,
+                item: itemName, action: r.action, ranged: 1, aimed: 1, range: r.rangeIncrement || 5 },
+      }) : '';
+      return normalChip + aimedChip;
     }).join('');
   };
 
@@ -1346,7 +1357,7 @@ async function _dlgAct(d, id, body) {
       _dlgReopenId = id; // reopen once targeting + the roll resolve
       if (endsRound) _dlgRoundEndPendingId = id; // ...or auto-advance instead, see _dlgMaybeReopen
       atCloseModal();
-      enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range);
+      enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range, d.aimed === '1');
       break;
     }
     case 'custom': {

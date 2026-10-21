@@ -2048,7 +2048,7 @@
         <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
         <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
       </div>
-      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th></th></tr></thead>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
       <tbody id="techmgr-list"></tbody></table>
     </div>
 
@@ -5281,7 +5281,15 @@ function _techniquesForTypes(types, existing, tiers) {
   }
   return out;
 }
-const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []);
+// Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
+// action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
+// aimed variant only to a character who has chosen the technique for the weapon's type.
+const TECHNIQUE_EXTRAS_VERSION = 1;
+const MARKSMEN_TECHNIQUES = [
+  { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
+  { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
+];
+const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(MARKSMEN_TECHNIQUES.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
 
@@ -5306,11 +5314,28 @@ function _combatantTechBonus(cid, weaponName) {
   const ids = kind === 'char' ? playCharCache[id]?.stats?.Techniques : null;
   return _techniqueBonus(ids, weaponName);
 }
+// The aimed-shot technique (if any) a set of chosen techniques gives for a weapon: {aimSec, rangeMult, name}.
+function _techniqueAim(techIds, weaponName) {
+  const type = weaponName ? getWeaponType(weaponName) : '';
+  if (!type || !Array.isArray(techIds)) return null;
+  let best = null;
+  for (const id of techIds) {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (!t || t.weaponType !== type || !(t.aimSec > 0)) continue;
+    if (!best || (t.rangeMult ?? 1) < best.rangeMult) best = { aimSec: t.aimSec, rangeMult: t.rangeMult ?? 1, name: t.name };
+  }
+  return best;
+}
+function _combatantAim(cid, weaponName) {
+  const [kind, id] = String(cid || '').split('::');
+  return kind === 'char' ? _techniqueAim(playCharCache[id]?.stats?.Techniques, weaponName) : null;
+}
 function _techniqueSummary(t) {
   const parts = [];
   if (t.hit)    parts.push(`${t.hit > 0 ? '+' : ''}${t.hit} hit`);
   if (t.damage) parts.push(`${t.damage > 0 ? '+' : ''}${t.damage} damage`);
   if (t.parry)  parts.push(`${t.parry > 0 ? '+' : ''}${t.parry} parry`);
+  if (t.aimSec)  parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
 }
 
@@ -5342,11 +5367,12 @@ function buildTechniqueManager() {
     <input type="number" min="0" step="1" value="${TECHNIQUE_ALLOWANCE[c] ?? 0}" style="width:60px;margin-left:6px;" onchange="setTechniqueAllowance('${c}', this.value)"></label>`).join('');
   const tb = document.getElementById('techmgr-list');
   if (!tb) return;
+  const numf = (i, k, dflt) => `<input type="number" step="0.1" min="0" value="${TECHNIQUES[i][k] ?? dflt}" style="width:60px;" onchange="editTechnique(${i},'${k}',this.value)">`;
   const num = (i, k) => `<input type="number" step="1" value="${TECHNIQUES[i][k] || 0}" style="width:60px;" onchange="editTechnique(${i},'${k}',this.value)">`;
   tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
     <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
     <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
-    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td>
+    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
     <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
   _refreshWeaponTypeList();
 }
@@ -5357,6 +5383,7 @@ function setTechniqueAllowance(cls, v) {
 function editTechnique(i, key, v) {
   const t = TECHNIQUES[i]; if (!t) return;
   if (key === 'name' || key === 'weaponType') t[key] = String(v).trim();
+  else if (key === 'aimSec' || key === 'rangeMult') t[key] = Math.max(0, parseFloat(v) || 0);
   else t[key] = key === 'minLevel' ? Math.max(1, parseInt(v, 10) || 1) : (parseInt(v, 10) || 0);
   writeConfigToDisk();
 }
@@ -5372,6 +5399,7 @@ function deleteTechnique(i) {
 }
 function addMissingTechniques() {
   const add = _techniquesForTypes(getWeaponTypes(), TECHNIQUES);
+  add.push(...MARKSMEN_TECHNIQUES.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
   TECHNIQUES.push(...add);
   writeConfigToDisk(); buildTechniqueManager();
   showToast(add.length ? `Added ${add.length} technique${add.length === 1 ? '' : 's'}.` : 'Every weapon type already has its techniques.', 'info');
@@ -7061,6 +7089,7 @@ function gatherConfigData() {
     techniques: TECHNIQUES,
     techniqueAllowance: TECHNIQUE_ALLOWANCE,
     techniqueTiers: TECHNIQUE_TIERS,
+    techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
@@ -7091,7 +7120,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261021f';
+const VERSION = 'v0.1.20261022a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8006,6 +8035,8 @@ function applyConfigData(data) {
   // Configs saved before tiers II/III existed: add just those (never re-adds ones you deleted later).
   if (data.techniques && data.techniques.length && data.techniqueTiers !== TECHNIQUE_TIERS)
     TECHNIQUES.push(..._techniquesForTypes(getWeaponTypes(), TECHNIQUES, [2, 3]));
+  if (data.techniques && data.techniques.length && data.techniqueExtras !== TECHNIQUE_EXTRAS_VERSION)
+    TECHNIQUES.push(...MARKSMEN_TECHNIQUES.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
@@ -13471,7 +13502,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     const sizedThreshold = (baseThreshold != null && part)
       ? Math.max(1, Math.round(baseThreshold * part.sizeFactor))
       : baseThreshold;
-    const locThreshold = sizedThreshold != null ? Math.max(0, sizedThreshold - rangePenalty) : null;
+    const locThreshold = sizedThreshold != null ? Math.max(0, Math.round(sizedThreshold - rangePenalty)) : null;
     const locSubtitle = (part ? `${baseSubtitle} × Part ${part.label} (×${part.sizeFactor})` : baseSubtitle)
       + (rangePenalty ? ` − ${rangePenalty} range (${rangeNote})` : '')
       + ((part || rangePenalty) ? ` = ${locThreshold}` : '')
@@ -14119,7 +14150,7 @@ function _triggerStrayShot(roll, threshold, ctx) {
       strayAdj = Math.max(1, Math.round(((race.Height || 60) / 12)));
     }
     // Size first, then the original shot's range penalty — same order as the main shot.
-    strayThreshold = Math.max(0, Math.round(ctx.hitValue * strayAdj) - (ctx.rangePenalty || 0));
+    strayThreshold = Math.max(0, Math.round(Math.round(ctx.hitValue * strayAdj) - (ctx.rangePenalty || 0)));
   }
 
   // Damage/location context for the stray target — same weapon/attacker as
@@ -15361,8 +15392,9 @@ let attackWeaponName  = null;
 let attackActionLabel = null;
 let attackIsRanged    = false;
 let attackRangeFt     = 0;
+let attackAimed       = false; // an Aimed shot (Marksmen technique) - scales the range penalty
 
-function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt) {
+function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt, aimed) {
   if (attackMode) exitAttackMode();
   if (pathMode)   exitPathMode();
   if (targetAimMode) exitTargetAimMode();
@@ -15372,6 +15404,7 @@ function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt
   attackActionLabel = actionLabel;
   attackIsRanged    = isRanged;
   attackRangeFt     = rangeFt;
+  attackAimed       = !!aimed;
 
   document.getElementById('map-viewport').classList.add('attack-mode');
 
@@ -15382,6 +15415,7 @@ function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt
 
 function exitAttackMode() {
   attackMode        = false;
+  attackAimed       = false;
   attackCombatantId = null;
   attackWeaponName  = null;
   attackActionLabel = null;
@@ -15588,6 +15622,9 @@ function attackTokenClick(tokenId) {
   // effect on a melee attack (no range penalty to double).
   const targetObscured = _isTokenObscured(target);
   if (targetObscured) rangePenalty *= 2;
+  // Aimed shot (Marksmen technique chosen for this weapon type): scales the penalty (e.g. half).
+  const aimTech = attackAimed ? _combatantAim(attackCombatantId, attackWeaponName) : null;
+  if (aimTech) rangePenalty *= aimTech.rangeMult;
 
   // Order matters: target size is applied FIRST, then the range penalty is
   // subtracted from the size-adjusted chance (see _openCalledShotModal, which
@@ -15690,7 +15727,7 @@ function attackTokenClick(tokenId) {
   const techNote = techHit ? ` + ${techHit} (${techB.hitNames.join(', ')})` : '';
   const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${proneNote}${techNote}` : '';
   const rangeNote = (attackIsRanged && rangeIncrements > 0)
-    ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}` : '';
+    ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}${aimTech ? ', ×' + aimTech.rangeMult + ' aimed (' + aimTech.name + ')' : ''}` : '';
   _openCalledShotModal({
     bodyType: targetBodyType, baseThreshold: threshold, baseSubtitle: subtitle,
     rangePenalty, rangeNote,
