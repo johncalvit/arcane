@@ -101,6 +101,7 @@
   .nav-item .nav-ico { display: inline-flex; width: 1.3em; margin-right: 9px; color: var(--text-dim); }
   .nav-item.active .nav-ico { color: var(--gold2); }
   .app-menu-wrap { position: relative; }
+  #app-menu[data-mode="play"] .app-menu-charonly { display: none !important; }
   .app-menu-btn { display: flex; align-items: center; padding: 5px 9px; }
   .app-menu-btn .ico { width: 1.3em; height: 1.3em; }
   .app-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 4000; min-width: 270px; background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.6); padding: 6px 0; max-height: calc(100vh - 60px); overflow-y: auto; }
@@ -978,7 +979,7 @@
   <div>
     <h1 id="app-title" class="mode-title">✦ Arcane</h1>
   </div>
-  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+  <div id="header-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
     <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
     <button class="play-btn" id="play-mode-btn" style="margin-left:0;" onclick="_clickPlayModeBtn()">▶ Play Mode</button>
     <button class="play-btn" id="config-mode-btn" style="margin-left:0;" onclick="_enterConfigModeFromCharDesign()">⚙ GM Config Mode</button>
@@ -987,15 +988,15 @@
       <div id="app-menu" class="app-menu" style="display:none;" onclick="event.stopPropagation()">
         <div class="app-menu-who"><div id="nav-user"></div><div id="nav-campaign" onclick="appMenuDo(showCampaignModal)" title="Switch campaign"></div></div>
         <div class="app-menu-sep"></div>
-        <button onclick="appMenuDo(saveCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.5-1A4.5 4.5 0 0 1 17 18 M12 12v7 M9 15l3-3 3 3"/></svg><span>Save Character</span></button>
-        <button onclick="appMenuDo(showCharacterListModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Load Character</span></button>
-        <button onclick="appMenuDo(newCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"/></svg><span>New Character</span></button>
-        <button onclick="toggleAppMenuSub('app-menu-file')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4 M8 8l4-4 4 4 M4 15v5h16v-5"/></svg><span>Export / Import</span><i class="app-menu-chev">▾</i></button>
+        <button class="app-menu-charonly" onclick="appMenuDo(saveCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.5-1A4.5 4.5 0 0 1 17 18 M12 12v7 M9 15l3-3 3 3"/></svg><span>Save Character</span></button>
+        <button class="app-menu-charonly" onclick="appMenuDo(showCharacterListModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Load Character</span></button>
+        <button class="app-menu-charonly" onclick="appMenuDo(newCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"/></svg><span>New Character</span></button>
+        <button class="app-menu-charonly" onclick="toggleAppMenuSub('app-menu-file')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4 M8 8l4-4 4 4 M4 15v5h16v-5"/></svg><span>Export / Import</span><i class="app-menu-chev">▾</i></button>
         <div id="app-menu-file" class="app-menu-sub">
           <button onclick="appMenuDo(exportCharacter)"><span>Export to File</span></button>
           <button onclick="appMenuDo(function(){document.getElementById('import-file').click()})"><span>Import from File</span></button>
         </div>
-        <div class="app-menu-sep"></div>
+        <div class="app-menu-sep app-menu-charonly"></div>
         <button onclick="appMenuDo(showCampaignModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2 20a7 7 0 0 1 14 0 M17 4.5a3.5 3.5 0 0 1 0 6.5 M18 14a7 7 0 0 1 4 6"/></svg><span>Select New Campaign/Character</span></button>
         <button onclick="toggleAppMenuSub('nav-join-campaign')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2 20a7 7 0 0 1 14 0 M17 4.5a3.5 3.5 0 0 1 0 6.5 M18 14a7 7 0 0 1 4 6"/></svg><span>Join a Campaign</span><i class="app-menu-chev">▾</i></button>
         <div id="nav-join-campaign" class="app-menu-sub app-menu-join">
@@ -1008,7 +1009,7 @@
         <div class="app-menu-sep"></div>
         <button id="app-menu-gm" onclick="toggleAppMenuSub('app-menu-gmtools')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.7 6.3a4 4 0 0 0 5 5L11 20a2.1 2.1 0 0 1-3-3z"/></svg><span>GM Tools</span><i class="app-menu-chev">▾</i></button>
         <div id="app-menu-gmtools" class="app-menu-sub">
-          <button onclick="appMenuDo(_enterConfigModeFromCharDesign)"><span>Game Configuration</span></button>
+          <button onclick="appMenuDo(_menuEnterConfig)"><span>Game Configuration</span></button>
           <button onclick="appMenuDo(function(){checkCoreRulesUpdate(true)})"><span>Check Core Rules Updates</span></button>
         </div>
         <div class="app-menu-sep"></div>
@@ -6222,6 +6223,19 @@ function toggleAppMenu(e) {
     m.querySelectorAll('.app-menu-sub.open').forEach(s => s.classList.remove('open'));
   }
 }
+// The header (builder) and the play toolbar each get the same ☰ menu: one element, moved
+// between them as the mode changes. data-mode hides the character-only items in Play Mode.
+function _mountAppMenu(containerId, mode) {
+  const wrap = document.querySelector('.app-menu-wrap'), box = document.getElementById(containerId);
+  if (!wrap || !box) return;
+  box.appendChild(wrap);
+  document.getElementById('app-menu').dataset.mode = mode;
+  closeAppMenu();
+}
+function _menuEnterConfig() {
+  if (document.getElementById('play-mode')?.classList.contains('active')) { exitPlayMode(); enterConfigMode(); }
+  else _enterConfigModeFromCharDesign();
+}
 function toggleAppMenuSub(id) { document.getElementById(id)?.classList.toggle('open'); }
 function appMenuDo(fn) { closeAppMenu(); if (typeof fn === 'function') fn(); }
 document.addEventListener('click', e => { if (!e.target.closest?.('.app-menu-wrap')) closeAppMenu(); });
@@ -7032,7 +7046,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261021b';
+const VERSION = 'v0.1.20261021c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8267,11 +8281,12 @@ function enterPlayMode() {
   const pm = document.getElementById('play-mode');
   pm.classList.add('active');
   document.getElementById('play-mode-btn').style.display = 'none';
+  _mountAppMenu('play-actions', 'play'); // the ☰ menu lives in the play toolbar while Play Mode is up
 
   const campaignName = document.getElementById('nav-campaign').textContent || '';
   document.getElementById('play-title').textContent = campaignName
-    ? `⚔ Arcane — ${campaignName}`
-    : '⚔ Arcane';
+    ? `✦ Arcane — ${campaignName}`
+    : '✦ Arcane';
   document.title = campaignName ? `Arcane - ${campaignName}` : 'Arcane';
 
   // Layout: GM gets right panel
@@ -8330,6 +8345,7 @@ function exitPlayMode() {
   const pm = document.getElementById('play-mode');
   pm.classList.remove('active');
   document.getElementById('play-mode-btn').style.display = '';
+  _mountAppMenu('header-actions', '');
   if (mapChannel) { mapChannel.unsubscribe(); mapChannel = null; }
   cleanupMapInteraction();
   // Restore whichever tab title belongs to the mode underneath Play Mode
@@ -20968,13 +20984,12 @@ async function _deleteMapPin(pinId) {
 <!-- ─── PLAY MODE ──────────────────────────────────────────────────────── -->
 <div id="play-mode">
   <!-- toolbar row -->
-  <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--bg3);border-bottom:1px solid var(--border);flex-shrink:0;">
-    <span id="play-title" class="mode-title">⚔ Arcane</span>
+  <div style="display:flex;align-items:center;gap:8px;height:var(--header-h);padding:0 12px;background:linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);border-bottom:2px solid var(--gold);flex-shrink:0;">
+    <span id="play-title" class="mode-title">✦ Arcane</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
-    <div style="margin-left:auto;display:flex;gap:8px;">
+    <div id="play-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
-      <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
-      <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
+      <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Mode</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
     </div>
