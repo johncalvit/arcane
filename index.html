@@ -936,7 +936,7 @@
 
 <header>
   <div>
-    <h1 id="app-title" class="mode-title">✦ Arcane Character Builder</h1>
+    <h1 id="app-title" class="mode-title">✦ Arcane Character</h1>
   </div>
   <div style="margin-left:auto;display:flex;gap:8px;">
     <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
@@ -6153,10 +6153,10 @@ const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','melee
 // the user switches away.
 function _updateBuilderTitle() {
   const name = document.getElementById('char-name')?.value?.trim();
-  const suffix = name ? ` — ${name}` : '';
-  document.title = 'Arcane - Character Builder' + (name ? ` - ${name}` : '');
+  const suffix = name ? ` - ${name}` : '';
+  document.title = `Arcane Character${suffix}`;
   const header = document.getElementById('app-title');
-  if (header) header.textContent = `✦ Arcane Character Builder${suffix}`;
+  if (header) header.textContent = `✦ Arcane Character${suffix}`;
 }
 
 // Offered every time someone clicks away from Character Design Mode into
@@ -6212,7 +6212,7 @@ function enterConfigMode(panel) {
   document.getElementById('char-nav').style.display       = 'none';
   document.getElementById('gm-config-nav').style.display  = '';
   const cfgBtn = document.getElementById('config-mode-btn');
-  cfgBtn.textContent = '✎ Character Design Mode';
+  cfgBtn.textContent = '✎ Character Mode';
   cfgBtn.onclick = exitConfigMode;
   document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
   document.title = 'Arcane - Game Configuration';
@@ -6899,7 +6899,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020g';
+const VERSION = 'v0.1.20261020h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -19865,7 +19865,7 @@ const DEFAULT_QUICK_START_BODY = `Welcome! This guide walks through building you
 
 # Building a Character
 
-Start in **Character Design Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically.
+Start in **Character Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically.
 
 ## 1. Name, Species & Traits
 
@@ -20842,7 +20842,7 @@ async function _deleteMapPin(pinId) {
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
       <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openBugReportModal()" title="Report a bug or request a feature">🐛</button>
       <button class="play-btn" style="margin-left:0;padding:8px 12px;" onclick="openHelpPanel()" title="Help">?</button>
-      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Design Mode</button>
+      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Mode</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
     </div>
   </div>
