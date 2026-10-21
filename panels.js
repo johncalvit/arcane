@@ -324,6 +324,13 @@ function _paSecSpellBook(ent) {
   return _paSection('Magic', content);
 }
 
+// Chosen techniques (Combat tab of the builder). Hidden when none are chosen.
+function _paSecTechniques(ent) {
+  if (typeof _techniquesListHTML !== 'function') return '';
+  const html = _techniquesListHTML(ent?.stats?.Techniques);
+  return html ? _paSection('Techniques', html) : '';
+}
+
 // ── Event delegation ──────────────────────────────────────────────────────────
 // Bound by assignment (el.onclick = …) so re-renders never stack listeners.
 
@@ -453,6 +460,7 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecLanguage(ent, isOwnSheet)}
     ${_paSecSkills(skills, attrs)}
     ${_paSecSpellBook(ent)}
+    ${_paSecTechniques(ent)}
     ${_paSecNotes(ent)}`;
 
   _paBind(el, { ent, isOwnSheet });

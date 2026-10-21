@@ -2047,6 +2047,12 @@
         </div>
       </div>
       <div class="ps-block">
+        <h4 class="collapsible" onclick="toggleCollapse('pstechniques')">Techniques<span class="collapse-arrow" id="arrow-pstechniques">▼</span></h4>
+        <div class="collapse-body" id="body-pstechniques">
+          <div id="ps-techniques" style="color:var(--text-dim);font-size:0.85rem;">No techniques chosen.</div>
+        </div>
+      </div>
+      <div class="ps-block">
         <h4 class="collapsible" onclick="toggleCollapse('psspellbook')">Spell Book<span class="collapse-arrow" id="arrow-psspellbook">▼</span></h4>
         <div class="collapse-body" id="body-psspellbook">
           <div id="ps-spellbook" style="color:var(--text-dim);font-size:0.85rem;">No spells known.</div>
@@ -2526,6 +2532,11 @@ function updatePlaysheet(attrs) {
   document.getElementById('ps-features').innerHTML = checkedFeatures.length
     ? checkedFeatures.map(f=>`<div style="padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">${f}</div>`).join('')
     : '<span style="color:var(--text-dim)">None selected.</span>';
+
+  // Techniques
+  const psTech = document.getElementById('ps-techniques');
+  if (psTech) psTech.innerHTML = _techniquesListHTML(characterTechniques)
+    || '<span style="color:var(--text-dim)">No techniques chosen.</span>';
 
   // Spell Book
   const knownSpells = _builderKnownSpells();
@@ -5256,6 +5267,14 @@ function addMissingTechniques() {
   showToast(add.length ? `Added ${add.length} technique${add.length === 1 ? '' : 's'}.` : 'Every weapon type already has its techniques.', 'info');
 }
 
+// Compact list of chosen techniques (by id) for the Playsheet and the play-mode character panel.
+function _techniquesListHTML(ids) {
+  const list = (ids || []).map(id => TECHNIQUES.find(t => t.id === id)).filter(Boolean)
+    .sort((a, b) => (a.weaponType || '').localeCompare(b.weaponType || '') || (a.minLevel || 1) - (b.minLevel || 1));
+  return list.map(t => `<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+    <span>${_escWeaponType(t.name)}</span><span style="color:var(--gold2);text-align:right;">${_escWeaponType(_techniqueSummary(t))}</span></div>`).join('');
+}
+
 function buildTechniquesPanel() {
   const list = document.getElementById('techniques-list');
   if (!list) return;
@@ -6877,7 +6896,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261020c';
+const VERSION = 'v0.1.20261020d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
