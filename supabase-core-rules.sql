@@ -57,3 +57,7 @@ create policy "Owners publish Core Rules"
 --   select id from auth.users where email = 'you@example.com';
 --
 -- insert into public.core_rules_owners (user_id) values ('PASTE-YOUR-USER-ID-HERE');
+
+-- Data API access (required for tables created after Oct 30, 2026; harmless before).
+grant select, insert, update, delete on public.core_rules, public.core_rules_owners to authenticated;
+grant select, insert, update, delete on public.core_rules, public.core_rules_owners to service_role;

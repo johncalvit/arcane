@@ -58,3 +58,7 @@ create policy "Claim or cancel transfers"
     created_by = auth.uid() or public.is_my_character(to_character_id)
     or exists (select 1 from public.campaigns c where c.id = item_transfers.campaign_id and c.gm_id = auth.uid())
   );
+
+-- Data API access (required for tables created after Oct 30, 2026; harmless before).
+grant select, insert, update, delete on public.item_transfers to authenticated;
+grant select, insert, update, delete on public.item_transfers to service_role;

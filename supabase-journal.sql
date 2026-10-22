@@ -55,3 +55,7 @@ create policy "GM clears journal"
       where c.id = journal_entries.campaign_id and c.gm_id = auth.uid()
     )
   );
+
+-- Data API access (required for tables created after Oct 30, 2026; harmless before).
+grant select, insert, update, delete on public.journal_entries to authenticated;
+grant select, insert, update, delete on public.journal_entries to service_role;
