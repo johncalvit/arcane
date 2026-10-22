@@ -1934,7 +1934,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-melee')">⚔ Melee Weapons<span class="collapse-arrow" id="arrow-shop-melee">▼</span></h3>
       <div class="collapse-body" id="body-shop-melee">
         <table class="loadout-table">
-          <thead><tr><th>Weapon</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th></th></tr></thead>
           <tbody id="shop-melee-list"></tbody>
         </table>
       </div>
@@ -3878,6 +3878,14 @@ function adjustPurse() {
 // same physical object regardless of which action is being performed with
 // it. Replaces the old WEAPONS catalog, which had no GM editor at all —
 // anything added via the Weapons Managers now shows up here automatically.
+// The first damaging action listed for a weapon: its damage type (slash / pierce / crush, from the
+// action name), max damage and minimum Power. Blank when it has no damaging action.
+function _weaponFirstDamage(name) {
+  const row = [...MELEE_WEAPONS, ...RANGED_WEAPONS].find(r => r.weapon === name && r.damageMax > 0);
+  if (!row) return { dmgType: '', dmgMax: '', minPower: '' };
+  const t = getAttackCategory(row.action);
+  return { dmgType: t.charAt(0).toUpperCase() + t.slice(1), dmgMax: row.damageMax, minPower: row.minStr ?? '' };
+}
 function _weaponLoadoutCatalog() {
   const seen = new Set();
   const out = [];
@@ -3896,6 +3904,7 @@ function _weaponLoadoutCatalog() {
       reach: r.reach ?? r.rangeIncrement ?? 0,
       price: r.price || 0,
       ranged: rangedRows.has(r), // first row found is a ranged one: bows, crossbows, slings, ...
+      ..._weaponFirstDamage(r.weapon),
     });
   }
   return out;
@@ -4404,21 +4413,23 @@ function buildShopPanel() {
   if (purseEl) purseEl.textContent = formatMoney(characterPence);
 
   // Four itemised tables (melee weapons, ranged weapons, equipment, consumables).
-  const fillShopTable = (tbodyId, items, buyFn) => {
+  const fillShopTable = (tbodyId, items, buyFn, extraCells) => {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
-    if (!items.length) { tbody.innerHTML = '<tr><td colspan="4" style="color:var(--text-dim);font-style:italic;">Nothing for sale yet.</td></tr>'; return; }
+    if (!items.length) { tbody.innerHTML = `<tr><td colspan="${4 + (extraCells ? extraCells(items[0] || {}).length : 0)}" style="color:var(--text-dim);font-style:italic;">Nothing for sale yet.</td></tr>`; return; }
     items.forEach(it => {
       const afford = characterPence >= (it.price || 0);
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${it.name}</td><td>${it.wt}</td><td>${formatMoney(it.price)}</td>
+      const extra = extraCells ? extraCells(it).map(c => `<td>${c}</td>`).join('') : '';
+      tr.innerHTML = `<td>${it.name}</td>${extra}<td>${it.wt}</td><td>${formatMoney(it.price)}</td>
         <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\'")}')">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="${buyFn}('${it.name.replace(/'/g, "\'")}', true)">Acquire</button></td>`;
       tbody.appendChild(tr);
     });
   };
   const weaponCat = _weaponLoadoutCatalog();
-  fillShopTable('shop-melee-list',  weaponCat.filter(w => !w.ranged), '_buyWeapon');
+  fillShopTable('shop-melee-list',  weaponCat.filter(w => !w.ranged), '_buyWeapon',
+    w => [w.dmgType || '—', w.dmgMax || '—', w.minPower || '—']);
   fillShopTable('shop-ranged-list', weaponCat.filter(w => w.ranged),  '_buyWeapon');
   fillShopTable('shop-equip-list',  EQUIPMENT,   '_buyGear');
   fillShopTable('shop-consum-list', CONSUMABLES, '_buyGear');
@@ -7422,7 +7433,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261023c';
+const VERSION = 'v0.1.20261023d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
