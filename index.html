@@ -4175,9 +4175,19 @@ async function _openGiveModal(src) {
     <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);">Give ${_paEsc(_itemLabel(it))}</div>
     <div id="give-body" class="landing-dim">Loading recipients…</div></div>`;
   document.body.appendChild(overlay);
-  await Promise.all([loadPlayCharCache(), loadSessionCreatureCache()]);
-  const chars = Object.values(playCharCache).filter(c => c.id !== currentCharacterId && !c.is_template);
-  const creatures = Object.values(sessionCreatureCache);
+  // Only whoever has a token on the campaign's ACTIVE map can receive things (hidden tokens only for the GM).
+  const { data: camp } = await sb.from('campaigns').select('active_map_id').eq('id', currentCampaignId).single();
+  const mapId = camp?.active_map_id;
+  const [tokRes] = await Promise.all([
+    mapId ? sb.from('map_tokens').select('entity_type, entity_id, label, visible').eq('map_id', mapId) : Promise.resolve({ data: [] }),
+    loadPlayCharCache(), loadSessionCreatureCache(),
+  ]);
+  const toks = (tokRes.data || []).filter(t => t.entity_id && (t.visible !== false || isGM()));
+  const uniq = arr => [...new Map(arr.map(x => [x.id, x])).values()];
+  const chars = uniq(toks.filter(t => t.entity_type === 'character' && t.entity_id !== currentCharacterId)
+    .map(t => playCharCache[t.entity_id] || { id: t.entity_id, name: t.label, species: '' }));
+  const creatures = uniq(toks.filter(t => t.entity_type === 'creature').map(t => sessionCreatureCache[t.entity_id]).filter(Boolean));
+  const mapNote = mapId ? 'Only characters, mounts and monsters on the active map can be given things.' : 'No map is active, so there is no one to give things to right now.';
   const isArmor = it.kind === 'armor';
   const opt = (kind, id, name, sub, disabled) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;${disabled ? 'opacity:0.45;' : 'cursor:pointer;'}">
     <input type="radio" name="give-to" value="${kind}:${id}" ${disabled ? 'disabled' : ''}><span style="flex:1;">${_paEsc(name)}</span><span class="landing-dim">${_paEsc(sub || '')}</span></label>`;
@@ -4185,10 +4195,11 @@ async function _openGiveModal(src) {
     ? `<label style="font-size:0.85rem;">How many? <input type="number" id="give-qty" min="1" max="${it.qty}" value="${it.qty}" style="width:70px;margin-left:6px;"> <span class="landing-dim">of ${it.qty}</span></label>` : '';
   document.getElementById('give-body').outerHTML = `<div id="give-body" style="display:flex;flex-direction:column;gap:8px;">
     ${qtyHtml}
-    <div class="pa-sub">Characters in this campaign</div>
-    ${chars.length ? chars.map(c => opt('character', c.id, c.name, c.species)).join('') : '<div class="landing-dim">No other characters here yet.</div>'}
+    <div class="landing-dim">${mapNote}</div>
+    <div class="pa-sub">Characters on the map</div>
+    ${chars.length ? chars.map(c => opt('character', c.id, c.name, c.species)).join('') : '<div class="landing-dim">No other characters on the active map.</div>'}
     <div class="pa-sub" style="margin-top:6px;">Mounts &amp; monsters${isArmor ? ' <span style="text-transform:none;letter-spacing:0;">(armor pieces can\'t be given to creatures)</span>' : ''}</div>
-    ${creatures.length ? creatures.map(c => opt('creature', c.id, c.name, c.species, isArmor)).join('') : '<div class="landing-dim">No mounts or monsters in this session.</div>'}
+    ${creatures.length ? creatures.map(c => opt('creature', c.id, c.name, c.species, isArmor)).join('') : '<div class="landing-dim">No mounts or monsters on the active map.</div>'}
     <div id="give-status" style="font-size:0.78rem;color:var(--gold2);min-height:1em;"></div>
     <div style="display:flex;gap:10px;justify-content:center;"><button class="btn" id="give-go">Give</button><button class="btn danger" onclick="document.getElementById('give-modal').remove()">Cancel</button></div></div>`;
   document.getElementById('give-go').onclick = async () => {
@@ -7411,7 +7422,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261023b';
+const VERSION = 'v0.1.20261023c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -20407,7 +20418,7 @@ Skills are bought with a separate Skill Points pool (shown on the Skills page), 
 
 ## 5. Shop & Loadout — Weapons & Equipment
 
-You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear (or **Acquire** something you find, which is noted in the Journal for the GM). The **Loadout** page then shows where your things are: what you are **carrying** (it counts toward your weight, and a weapon you carry can be held in your right or left hand during play), what is **in storage** (kept safe, weighs nothing, can't be held), and what you have **given away**. Use **Store**/**Take** to move things between carrying and storage, and **Give…** to hand an item to another character, a mount, or a monster. Some weapons can also be thrown (they leave your hand and land near the target).
+You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear (or **Acquire** something you find, which is noted in the Journal for the GM). The **Loadout** page then shows where your things are: what you are **carrying** (it counts toward your weight, and a weapon you carry can be held in your right or left hand during play), what is **in storage** (kept safe, weighs nothing, can't be held), and what you have **given away**. Use **Store**/**Take** to move things between carrying and storage, and **Give…** to hand an item to another character, a mount, or a monster that is on the active map. Some weapons can also be thrown (they leave your hand and land near the target).
 
 ## 6. Armor
 
