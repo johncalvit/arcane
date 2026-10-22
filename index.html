@@ -7167,7 +7167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022e';
+const VERSION = 'v0.1.20261022f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7379,7 +7379,9 @@ async function _landingPickChar(id, name) {
   const item = document.querySelector(`.landing-char-item[data-id="${id}"]`);
   const charCampId   = item?.dataset.campaignId   || '';
   const charCampName = item?.dataset.campaignName || '';
-  if (charCampId && !currentCampaignId) {
+  // ...but only when it's their ONLY campaign: a character's home campaign isn't necessarily the game
+  // they want to play in, and silently picking it put players in the wrong campaign.
+  if (charCampId && !currentCampaignId && _campaignCache.length <= 1) {
     const campEl  = document.querySelector(`.landing-campaign-item[data-id="${charCampId}"]`);
     const cached  = _campaignCache.find(c => c.id === charCampId);
     const gmId    = campEl?.dataset.gm || cached?.gm_id || '';
@@ -18945,6 +18947,8 @@ function drawFog(fromLights) {
   // separate cleanup.
   const noTokenBanner = document.getElementById('no-token-banner');
   if (noTokenBanner) noTokenBanner.style.display = 'none';
+  const noTokenCamp = document.getElementById('no-token-campaign');
+  if (noTokenCamp) noTokenCamp.textContent = document.getElementById('nav-campaign')?.textContent || 'this campaign';
 
   // The GM always sees everything — no fog to compute, same as before —
   // unless they've picked a token to view the map as (see setPovToken).
@@ -21285,7 +21289,8 @@ async function _deleteMapPin(pinId) {
              padding:20px 26px;font-size:0.85rem;color:var(--text);font-family:var(--ui-font);
              text-align:center;max-width:80vw;">
           <div style="color:var(--gold2);font-weight:bold;margin-bottom:8px;">🗺 You don't have a token on this map yet</div>
-          <div style="color:var(--text-dim);font-size:0.78rem;margin-bottom:14px;">The GM hasn't placed you here — ask them to add you.</div>
+          <div style="color:var(--text-dim);font-size:0.78rem;margin-bottom:6px;">The GM hasn't placed you here — ask them to add you.</div>
+          <div style="color:var(--text-dim);font-size:0.72rem;margin-bottom:14px;">You're in <b id="no-token-campaign" style="color:var(--text);"></b>. Wrong game? Use the ☰ menu → Select New Campaign/Character.</div>
           <button id="no-token-request-btn" class="btn" onclick="_requestMapToken()">🙋 Request to be added</button>
         </div>
         <div class="map-placeholder" id="map-placeholder">
