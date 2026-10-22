@@ -1942,7 +1942,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-ranged')">🏹 Ranged Weapons<span class="collapse-arrow" id="arrow-shop-ranged">▼</span></h3>
       <div class="collapse-body" id="body-shop-ranged">
         <table class="loadout-table">
-          <thead><tr><th>Weapon</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th></th></tr></thead>
           <tbody id="shop-ranged-list"></tbody>
         </table>
       </div>
@@ -3878,13 +3878,12 @@ function adjustPurse() {
 // same physical object regardless of which action is being performed with
 // it. Replaces the old WEAPONS catalog, which had no GM editor at all —
 // anything added via the Weapons Managers now shows up here automatically.
-// The first damaging action listed for a weapon: its damage type (slash / pierce / crush, from the
-// action name), max damage and minimum Power. Blank when it has no damaging action.
+// The first damaging action listed for a weapon in the config tables: its damage type (the action
+// as configured - Slash, Smash, Stab, ...), max damage and minimum Power. Blank when it has none.
 function _weaponFirstDamage(name) {
   const row = [...MELEE_WEAPONS, ...RANGED_WEAPONS].find(r => r.weapon === name && r.damageMax > 0);
   if (!row) return { dmgType: '', dmgMax: '', minPower: '' };
-  const t = getAttackCategory(row.action);
-  return { dmgType: t.charAt(0).toUpperCase() + t.slice(1), dmgMax: row.damageMax, minPower: row.minStr ?? '' };
+  return { dmgType: row.action, dmgMax: row.damageMax, minPower: row.minStr ?? '' };
 }
 function _weaponLoadoutCatalog() {
   const seen = new Set();
@@ -4430,7 +4429,8 @@ function buildShopPanel() {
   const weaponCat = _weaponLoadoutCatalog();
   fillShopTable('shop-melee-list',  weaponCat.filter(w => !w.ranged), '_buyWeapon',
     w => [w.dmgType || '—', w.dmgMax || '—', w.minPower || '—']);
-  fillShopTable('shop-ranged-list', weaponCat.filter(w => w.ranged),  '_buyWeapon');
+  fillShopTable('shop-ranged-list', weaponCat.filter(w => w.ranged),  '_buyWeapon',
+    w => [w.dmgType || '—', w.dmgMax || '—', w.minPower || '—']);
   fillShopTable('shop-equip-list',  EQUIPMENT,   '_buyGear');
   fillShopTable('shop-consum-list', CONSUMABLES, '_buyGear');
 
@@ -7433,7 +7433,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261023d';
+const VERSION = 'v0.1.20261023e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
