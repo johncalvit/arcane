@@ -7168,7 +7168,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022g';
+const VERSION = 'v0.1.20261022h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7230,6 +7230,19 @@ async function submitSignOut() {
 function showCampaignModal() { showLandingModal(); }
 function hideCampaignModal() { hideLandingModal(); }
 
+// Switching campaigns from the landing dialog while Play Mode is up: the map, tokens, combat tracker,
+// channel and Journal all belong to the OLD campaign, so Play Mode is torn down and re-entered for the
+// new one (otherwise you stayed in the old campaign even though the new one looked selected).
+let _landingStartCampaign = null, _landingOpen = false;
+function _switchPlayCampaign() {
+  exitPlayMode();
+  _combatLog = [];
+  mapTokens = {};
+  _povTokenId = null;
+  atCombatants.length = 0; atRound = 1; atActiveIdx = 0; _atStateFromGM = null;
+  enterPlayMode();
+}
+
 function showLandingModal() {
   const modal = document.getElementById('modal-landing');
   if (!modal) {
@@ -7237,6 +7250,8 @@ function showLandingModal() {
     document.addEventListener('DOMContentLoaded', showLandingModal, { once: true });
     return;
   }
+  if (!_landingOpen) _landingStartCampaign = currentCampaignId; // so dismissing can tell whether the campaign changed
+  _landingOpen = true;
   modal.style.display = 'flex';
   const vEl = document.getElementById('landing-version');
   if (vEl) vEl.textContent = VERSION;
@@ -7246,6 +7261,9 @@ function showLandingModal() {
 
 function hideLandingModal() {
   document.getElementById('modal-landing').style.display = 'none';
+  const changed = _landingStartCampaign && currentCampaignId && currentCampaignId !== _landingStartCampaign;
+  _landingOpen = false; _landingStartCampaign = null;
+  if (changed && document.getElementById('play-mode')?.classList.contains('active')) _switchPlayCampaign();
 }
 
 function setCampaignError(msg) {
