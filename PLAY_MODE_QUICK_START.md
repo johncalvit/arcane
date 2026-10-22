@@ -50,4 +50,4 @@ You only see what your character can see. Walls block sight, dark areas need lig
 
 ## Journal
 
-The Journal (bottom left) records what happens during the session — attacks, damage, spells, and so on — so you can scroll back if you missed something. It isn't saved: reloading or closing the page clears it, and the ✕ button clears it right away.
+The Journal (bottom left) records what happens during the session — attacks, damage, spells, and so on — so you can scroll back if you missed something. It is saved for the campaign, so it is still there after a reload or the next session. Only the GM can permanently clear the history (the ✕ button, with a confirmation); for players, ✕ just hides the entries on their own screen until they reload.

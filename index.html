@@ -4060,6 +4060,7 @@ function _logAcquire(itemName, price) {
   const who = document.getElementById('char-name')?.value?.trim() || 'A character';
   const entry = { t: Date.now(), text: `🎁 ${who} acquired ${itemName} for free (value ${formatMoney(price)}).`, kind: 'good', imageUrl: null };
   _logReceive(entry); // into this client's own Journal
+  _persistJournal(entry);
   if (mapChannel) { mapChannel.send({ type: 'broadcast', event: 'combat-log', payload: entry }); return; }
   if (!currentCampaignId) return;
   const ch = sb.channel('play-campaign-' + currentCampaignId);
@@ -7166,7 +7167,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022d';
+const VERSION = 'v0.1.20261022e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8402,6 +8403,7 @@ function isGM() {
 
 // ─── Mode toggle ─────────────────────────────────────────────────────────────
 function enterPlayMode() {
+  loadJournalHistory();
   document.querySelector('.app-layout').style.display = 'none';
   document.querySelector('header').style.display = 'none';
   const pm = document.getElementById('play-mode');
@@ -9089,6 +9091,7 @@ function logCombat(text, kind, opts) {
   if (_combatLog.length > 300) _combatLog.shift();
   renderCombatLog();
   if (!(opts && opts.noBroadcast) && mapChannel) mapChannel.send({ type: 'broadcast', event: 'combat-log', payload: entry });
+  if (!(opts && opts.noBroadcast)) _persistJournal(entry);
 }
 function _logReceive(entry) {
   if (!entry || !entry.text) return;
@@ -9130,7 +9133,47 @@ function renderCombatLog() {
     if (img) _openSharedImageModal(img.dataset.journalImg, img.dataset.journalCaption);
   };
 }
-function clearCombatLog() { _combatLog = []; renderCombatLog(); }
+// ── Permanent Journal ────────────────────────────────────────────────────────
+// Every shared Journal line is also saved to journal_entries (see supabase-journal.sql) by the
+// client that produced it — other clients get it live over the channel and don't re-save it. On
+// entering Play Mode the saved history is loaded back in. Only the GM can clear it (for everyone).
+// Private noBroadcast entries (e.g. debug lines) are never saved. If the table doesn't exist yet,
+// saving quietly does nothing and the Journal behaves as before.
+let _journalWarned = false;
+function _persistJournal(entry) {
+  if (!currentCampaignId || !currentUser || !entry) return;
+  sb.from('journal_entries').insert({
+    campaign_id: currentCampaignId, user_id: currentUser.id,
+    t: entry.t, text: entry.text, kind: entry.kind || '', image_url: entry.imageUrl || null,
+  }).then(({ error }) => {
+    if (error && !_journalWarned) { _journalWarned = true; console.warn('Journal not saved (run supabase-journal.sql?):', error.message); }
+  });
+}
+async function loadJournalHistory() {
+  if (!currentCampaignId) return;
+  const { data, error } = await sb.from('journal_entries').select('t,text,kind,image_url')
+    .eq('campaign_id', currentCampaignId).order('t', { ascending: false }).limit(300);
+  if (error) { if (!_journalWarned) { _journalWarned = true; console.warn('Journal history not loaded:', error.message); } return; }
+  for (const r of (data || []).reverse()) {
+    if (_combatLog.some(e => e.t === r.t && e.text === r.text)) continue;
+    _combatLog.push({ t: r.t, text: r.text, kind: r.kind || '', imageUrl: r.image_url || null });
+  }
+  _combatLog.sort((a, b) => a.t - b.t);
+  if (_combatLog.length > 300) _combatLog = _combatLog.slice(-300);
+  renderCombatLog();
+}
+// GM: permanently delete the saved history for this campaign and clear everyone's view.
+// Players: just hides the entries on their own screen until they reload.
+async function clearCombatLog() {
+  if (isGM() && currentCampaignId) {
+    if (!(await styledConfirm('Permanently clear the Journal history for this campaign? It disappears for everyone and cannot be undone.'))) return;
+    const { error } = await sb.from('journal_entries').delete().eq('campaign_id', currentCampaignId);
+    if (error) { _writeErrorToast(error, 'journal_entries (clear)'); return; }
+    if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'combat-log-clear', payload: {} });
+  }
+  _combatLog = [];
+  renderCombatLog();
+}
 // Resolve a combatant/entity ref to a display name for the log.
 function _logName(refOrCid) {
   return (refOrCid && getEntity(refOrCid)?.name) || 'Someone';
@@ -14472,6 +14515,7 @@ function subscribeMapRealtime() {
       }
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
+    .on('broadcast', { event: 'combat-log-clear' }, () => { _combatLog = []; renderCombatLog(); })
     // A player with no token on the active map asked to be added (see the
     // "no token yet" banner in drawFog's no-viewer branch / _requestMapToken)
     // — only the GM's own client acts on it, with an attention-grabbing
@@ -20198,7 +20242,7 @@ Play Mode is where your character moves around the map, fights, and casts spells
 - **Left panel:** your portrait, level, class, Health, Conditions, and an **Initiative** roll button when combat starts. **Abilities** has **View** buttons for your skills (click a percentage to roll it), spell book, and techniques; **Equipment** lets you change what's in each hand; **View All** shows each held weapon's hit chance and damage. The ✎ button jumps back to Character Mode.
 - **On your turn:** open **Actions** to choose moves, attacks, spells, and defensive stances such as Sentinel (react to anyone who steps into melee range), Target (the same for ranged), and Vigilant (watch for movers in a cone). Your hit chance depends on the weapon, your target's size, range, and lighting; a target in darkness is harder to hit at range.
 - **Seeing the map:** you only see what your character can see — walls block sight, dark areas need light (torches, campfires, light spells) or Night Vision, and places you've explored stay dimly remembered.
-- **Journal:** the Journal (bottom left) logs everything that happens so you can scroll back if you missed something.
+- **Journal:** the Journal (bottom left) logs everything that happens, and is saved for the campaign, so you can scroll back if you missed something.
 - **Menu (☰):** top right — switch campaign, join one, edit your profile, report a bug, or sign out.
 `;
 
@@ -21153,7 +21197,7 @@ async function _deleteMapPin(pinId) {
       <div id="combat-log-wrap" style="flex-shrink:0;border-top:1px solid var(--border);background:var(--bg);">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 10px;font-size:0.62rem;text-transform:uppercase;letter-spacing:0.09em;color:var(--text-dim);">
           <span>📜 Journal</span>
-          <span onclick="clearCombatLog()" title="Clear the journal" style="cursor:pointer;">✕</span>
+          <span id="journal-clear-btn" onclick="clearCombatLog()" title="Hide the journal on your screen (until reload)" style="cursor:pointer;">✕</span>
         </div>
         <div id="combat-log" style="max-height:170px;overflow-y:auto;padding:0 10px 8px;font-size:0.72rem;line-height:1.45;"></div>
       </div>
