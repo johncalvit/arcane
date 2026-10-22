@@ -24,7 +24,7 @@ Skills are bought with a separate Skill Points pool (shown on the Skills page), 
 
 ## 5. Shop & Loadout — Weapons & Equipment
 
-You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear, then manage what you carry on the **Loadout** page — everything you carry contributes to your total carried weight. Once a weapon is in your loadout, you can hold it in your right or left hand during play. Some weapons can also be thrown (they leave your hand and land near the target).
+You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear (or **Acquire** something you find, which is noted in the Journal for the GM). The **Loadout** page then shows where your things are: what you are **carrying** (it counts toward your weight, and a weapon you carry can be held in your right or left hand during play), what is **in storage** (kept safe, weighs nothing, can't be held), and what you have **given away**. Use **Store**/**Take** to move things between carrying and storage, and **Give…** to hand an item to another character, a mount, or a monster. Some weapons can also be thrown (they leave your hand and land near the target).
 
 ## 6. Armor
 

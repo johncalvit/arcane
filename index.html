@@ -664,6 +664,12 @@
     cursor: pointer; width: 100%; text-align: left; transition: border-color 0.15s;
   }
   .landing-config-btn:hover { border-color: var(--gold); color: var(--gold2); }
+  /* Loadout: carried / storage / given away */
+  .lo-group { margin: 18px 0 8px; font-size: 0.9rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold2); border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+  .lo-actions { white-space: nowrap; text-align: right; }
+  .lo-act { background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 4px; padding: 2px 8px; margin-right: 4px; font-size: 0.78rem; cursor: pointer; font-family: var(--ui-font); }
+  .lo-act:hover { border-color: var(--gold); color: var(--gold2); }
+  body:not(.lo-template) .lo-addctl { display: none; }
 
   /* active tokens section */
   .token-on-map-row {
@@ -1972,6 +1978,7 @@
     <!-- LOADOUT -->
     <div id="panel-loadout" class="panel">
       <h2>Loadout</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">What your character owns: what you're <b>carrying</b>, what's in <b>storage</b>, and what you've <b>given away</b>. Buy or find gear in the Shop. Carried gear counts toward your weight and can be held in your hands; stored gear is kept safe and weighs nothing. Anything can be handed to another character, a mount or a monster.</p>
       <div class="weight-summary" id="weight-summary">
         <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
         <div class="ws-item"><div class="label">Weapon Weight</div><div class="value" id="ws-weapons">0 lbs</div></div>
@@ -1981,9 +1988,10 @@
         <div class="ws-item"><div class="label">Can Deadlift</div><div class="value" id="ws-lift">—</div></div>
         <div class="ws-item"><div class="label">Maximum Speed</div><div class="value" id="ws-maxspeed">—</div></div>
       </div>
+      <h3 class="lo-group">🎒 Carried</h3>
       <div class="loadout-section">
         <h3>Weapons</h3>
-        <div class="loadout-add">
+        <div class="loadout-add lo-addctl">
           <select id="weapon-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
           <button class="btn" onclick="addWeapon()">Add Selected Weapon(s)</button>
         </div>
@@ -1994,7 +2002,7 @@
       </div>
       <div class="loadout-section">
         <h3>Equipment</h3>
-        <div class="loadout-add">
+        <div class="loadout-add lo-addctl">
           <select id="equip-select" multiple size="6" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
           <input type="number" id="equip-qty" value="1" min="1" style="width:60px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:var(--ui-font);">
           <button class="btn" onclick="addEquip()">Add Selected Item(s)</button>
@@ -2006,12 +2014,12 @@
       </div>
       <div class="loadout-section">
         <h3>Armor</h3>
-        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;font-style:italic;">
+        <p class="lo-addctl" style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;font-style:italic;">
           Buy or record a specific armor piece in the size YOU need — weight and cost are fixed to that size the
           moment it's added, not recalculated later. Armor scavenged from someone else keeps whatever size fit
           THEM, so it'll only actually equip (see the Armor tab) if it happens to match your own Target Size.
         </p>
-        <div class="loadout-add">
+        <div class="loadout-add lo-addctl">
           <select id="armorpiece-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
           <input type="number" id="armorpiece-size" min="1" step="1" title="Target Size this specific piece is sized for — defaults to your own"
             style="width:70px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:4px;text-align:center;font-family:var(--ui-font);">
@@ -2022,12 +2030,27 @@
           <tbody id="armor-owned-list"></tbody>
         </table>
       </div>
+      <h3 class="lo-group">📦 In Storage</h3>
+      <div class="loadout-section">
+        <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;font-style:italic;">Kept safe somewhere — it doesn't weigh you down and can't be held. <b>Take</b> it back to carry it again.</p>
+        <table class="loadout-table">
+          <thead><tr><th>Item</th><th>Type</th><th>Weight</th><th></th></tr></thead>
+          <tbody id="storage-list"></tbody>
+        </table>
+      </div>
+      <h3 class="lo-group">🤝 Given Away</h3>
+      <div class="loadout-section">
+        <table class="loadout-table">
+          <thead><tr><th>Item</th><th>Given to</th><th>When</th></tr></thead>
+          <tbody id="given-list"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- ARMOR -->
     <div id="panel-armor" class="panel">
       <h2>Armor</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip an owned armor piece (Loadout tab) into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip a piece you're carrying (see Loadout) into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
     </div>
 
@@ -2526,6 +2549,7 @@ function recalc() {
   // or leveling up is reflected immediately if that tab happens to be open.
   buildSpellBookPanel(attrs);
   buildTechniquesPanel();
+  _updateLoadoutAddVisibility();
 
   // Playsheet
   updatePlaysheet(attrs);
@@ -3950,11 +3974,7 @@ function addWeapon() {
   for (const name of selected) {
     const w = catalog.find(x=>x.name===name);
     if (!w) continue;
-    const tr = document.createElement('tr');
-    const wt = Number(w.wt) || 0;
-    tr.dataset.wt = wt;
-    tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-    tbody.appendChild(tr);
+    _appendWeaponRow({ name: w.name, damage: w.damage, wt: Number(w.wt) || 0, reach: w.reach });
   }
   select.selectedIndex = -1;
   recalc();
@@ -3988,23 +4008,9 @@ function addArmorPiece() {
   const cost   = Math.round(areaWeight * size * (piece.costPerMod || 0) * PENCE_PER_CROWN);
   const id = 'armorpc-' + Date.now() + '-' + Math.round(Math.random() * 9999);
 
-  const tbody = document.getElementById('armor-owned-list');
-  const tr = document.createElement('tr');
-  tr.dataset.id = id;
-  tr.dataset.name = piece.name;
-  tr.dataset.slot = piece.slot || '';
-  tr.dataset.material = piece.material;
-  tr.dataset.size = size;
-  tr.dataset.gap = piece.gap;
-  tr.dataset.noise = piece.noise || 0;
-  tr.dataset.visionmod = piece.visionMod || 0;
-  tr.dataset.hearingmod = piece.hearingMod || 0;
-  tr.dataset.impedance = piece.impedance || 0; // frozen with the instance, like noise/vision/hearing
-  tr.dataset.weight = weight;
-  tr.dataset.cost = cost;
-  tr.innerHTML = `<td>${_paEsc(piece.name)}</td><td>${piece.slot ? _paEsc(piece.slot) : 'any'}</td><td>${_paEsc(piece.material)}</td><td>${size}</td><td>${Math.round(weight * 10) / 10}</td><td>${formatMoney(cost)}</td>
-    <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
-  tbody.appendChild(tr);
+  _appendArmorRow({ id, name: piece.name, slot: piece.slot || null, material: piece.material, size, gap: piece.gap,
+    noise: piece.noise || 0, visionMod: piece.visionMod || 0, hearingMod: piece.hearingMod || 0,
+    impedance: piece.impedance || 0, weight, cost });
   buildArmorFields();
   recalc();
 }
@@ -4033,15 +4039,241 @@ function addEquip() {
   for (const name of selected) {
     const e = _lookupEquipItem(name);
     if (!e) continue;
-    const tr = document.createElement('tr');
-    const unitWt = Number(e.wt) || 0; // a catalog item saved without a weight counts as 0, not NaN
-    const total = unitWt * qty;
-    tr.dataset.wt = total;
-    tr.innerHTML = `<td>${e.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-    tbody.appendChild(tr);
+    _appendEquipRow({ name: e.name, qty, unitWt: Number(e.wt) || 0 }); // a catalog item saved without a weight counts as 0, not NaN
   }
   select.selectedIndex = -1;
   recalc();
+}
+
+// ─── LOADOUT: carried / in storage / given away ──────────────────────────────
+// Loadout is no longer where gear is acquired (that's the Shop). It records where each possession
+// is: CARRIED (the three tables — counts toward weight, can be held), IN STORAGE (characterStorage —
+// kept safe, weighs nothing, can't be held), or GIVEN AWAY (handed to another character, a mount
+// or a monster). The carried tables remain the live source of truth; storage and the given-away log
+// ride on stats.Storage / stats.Given.
+var characterStorage = [];
+var characterGiven = [];
+
+function _loActions(isArmor) {
+  return `<button class="lo-act" onclick="loadoutStoreRow(this)" title="Put it in storage">Store</button>`
+    + `<button class="lo-act" onclick="loadoutGiveRow(this)" title="Give it to another character, a mount or a monster">Give…</button>`
+    + `<button class="remove-btn" onclick="this.closest('tr').remove();${isArmor ? 'buildArmorFields();' : ''}recalc()" title="Discard">✕</button>`;
+}
+function _appendWeaponRow(w) {
+  const tr = document.createElement('tr');
+  const wt = Number(w.wt) || 0;
+  tr.dataset.wt = wt;
+  tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td class="lo-actions">${_loActions(false)}</td>`;
+  document.getElementById('weapon-list').appendChild(tr);
+}
+function _appendEquipRow(eq) {
+  const unitWt = Number(eq.unitWt) || 0, qty = Number(eq.qty) || 1;
+  const total = unitWt * qty;
+  const tr = document.createElement('tr');
+  tr.dataset.wt = total;
+  tr.innerHTML = `<td>${eq.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td class="lo-actions">${_loActions(false)}</td>`;
+  document.getElementById('equip-list').appendChild(tr);
+}
+function _appendArmorRow(o) {
+  const tr = document.createElement('tr');
+  tr.dataset.id = o.id; tr.dataset.name = o.name; tr.dataset.slot = o.slot || '';
+  tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
+  tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
+  tr.dataset.impedance = o.impedance || 0; // frozen with the instance, like noise/vision/hearing
+  tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
+  tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight || 0) * 10) / 10}</td><td>${formatMoney(o.cost)}</td>
+    <td class="lo-actions">${_loActions(true)}</td>`;
+  document.getElementById('armor-owned-list').appendChild(tr);
+}
+
+// A possession as a plain object (what storage and transfers carry).
+function _rowToItem(tr) {
+  const body = tr.parentElement.id;
+  if (body === 'weapon-list')
+    return { kind: 'weapon', name: tr.cells[0].textContent, damage: tr.cells[1].textContent, wt: parseFloat(tr.dataset.wt) || 0, reach: tr.cells[3].textContent };
+  if (body === 'equip-list')
+    return { kind: 'equip', name: tr.cells[0].textContent, qty: parseInt(tr.cells[1].textContent) || 1, unitWt: parseFloat(tr.cells[2].textContent) || 0 };
+  const p = _ownedArmorPieces().find(x => x.id === tr.dataset.id);
+  return { kind: 'armor', name: p.name, piece: p };
+}
+function _itemLabel(it) {
+  return it.kind === 'equip' && it.qty > 1 ? `${it.name} ×${it.qty}`
+    : it.kind === 'armor' ? `${it.name} (size ${it.piece.size})` : it.name;
+}
+function _itemWeight(it) {
+  return it.kind === 'weapon' ? (Number(it.wt) || 0)
+    : it.kind === 'equip' ? (Number(it.unitWt) || 0) * (Number(it.qty) || 1)
+    : (Number(it.piece?.weight) || 0);
+}
+function _addItemToCarried(it) {
+  if (it.kind === 'weapon') _appendWeaponRow(it);
+  else if (it.kind === 'equip') _appendEquipRow(it);
+  else if (it.kind === 'armor') { _appendArmorRow(it.piece); buildArmorFields(); }
+}
+
+// ── Carried ⇄ storage ──
+function loadoutStoreRow(btn) {
+  const tr = btn.closest('tr');
+  const it = _rowToItem(tr);
+  tr.remove();
+  if (it.kind === 'armor') buildArmorFields();
+  characterStorage.push(it);
+  buildStorageSection();
+  recalc();
+}
+function loadoutTake(i) {
+  const it = characterStorage[i];
+  if (!it) return;
+  characterStorage.splice(i, 1);
+  _addItemToCarried(it);
+  buildStorageSection();
+  recalc();
+}
+function loadoutDiscardStored(i) {
+  const it = characterStorage[i];
+  if (!it || !confirm(`Discard ${_itemLabel(it)} from storage? It's gone for good.`)) return;
+  characterStorage.splice(i, 1);
+  buildStorageSection();
+}
+function buildStorageSection() {
+  const tb = document.getElementById('storage-list');
+  if (tb) {
+    tb.innerHTML = characterStorage.length ? characterStorage.map((it, i) => `<tr>
+      <td>${_paEsc(_itemLabel(it))}</td><td>${it.kind === 'equip' ? 'Equipment' : it.kind === 'weapon' ? 'Weapon' : 'Armor'}</td>
+      <td>${Math.round(_itemWeight(it) * 10) / 10} lbs</td>
+      <td class="lo-actions"><button class="lo-act" onclick="loadoutTake(${i})" title="Carry it again">Take</button>
+        <button class="lo-act" onclick="loadoutGiveStored(${i})" title="Give it to another character, a mount or a monster">Give…</button>
+        <button class="remove-btn" onclick="loadoutDiscardStored(${i})" title="Discard">✕</button></td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--text-dim);font-style:italic;">Nothing in storage.</td></tr>';
+  }
+  const gl = document.getElementById('given-list');
+  if (gl) {
+    gl.innerHTML = characterGiven.length ? [...characterGiven].reverse().slice(0, 25).map(g => `<tr>
+      <td>${_paEsc(g.item)}</td><td>${_paEsc(g.to)}${g.toKind === 'creature' ? ' <span style="color:var(--text-dim);font-size:0.72rem;">(mount/monster)</span>' : ''}</td>
+      <td>${new Date(g.t).toLocaleDateString()}</td></tr>`).join('')
+      : '<tr><td colspan="3" style="color:var(--text-dim);font-style:italic;">Nothing given away yet.</td></tr>';
+  }
+}
+// Direct-add controls are for building monster templates; hidden for ordinary characters.
+function _updateLoadoutAddVisibility() {
+  document.body.classList.toggle('lo-template', !!document.getElementById('is-template-chk')?.checked);
+}
+
+// ── Giving things away ──
+function loadoutGiveRow(btn) { const tr = btn.closest('tr'); _openGiveModal({ where: 'carried', tr, item: _rowToItem(tr) }); }
+function loadoutGiveStored(i) { if (characterStorage[i]) _openGiveModal({ where: 'stored', index: i, item: characterStorage[i] }); }
+
+async function _openGiveModal(src) {
+  if (!currentCampaignId) { showToast('Select a campaign first.', 'error'); return; }
+  const it = src.item;
+  document.getElementById('give-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'give-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:420px;max-width:94vw;max-height:86vh;overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
+    <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);">Give ${_paEsc(_itemLabel(it))}</div>
+    <div id="give-body" class="landing-dim">Loading recipients…</div></div>`;
+  document.body.appendChild(overlay);
+  await Promise.all([loadPlayCharCache(), loadSessionCreatureCache()]);
+  const chars = Object.values(playCharCache).filter(c => c.id !== currentCharacterId && !c.is_template);
+  const creatures = Object.values(sessionCreatureCache);
+  const isArmor = it.kind === 'armor';
+  const opt = (kind, id, name, sub, disabled) => `<label style="display:flex;align-items:center;gap:8px;padding:5px 6px;border:1px solid var(--border);border-radius:4px;${disabled ? 'opacity:0.45;' : 'cursor:pointer;'}">
+    <input type="radio" name="give-to" value="${kind}:${id}" ${disabled ? 'disabled' : ''}><span style="flex:1;">${_paEsc(name)}</span><span class="landing-dim">${_paEsc(sub || '')}</span></label>`;
+  const qtyHtml = it.kind === 'equip' && it.qty > 1
+    ? `<label style="font-size:0.85rem;">How many? <input type="number" id="give-qty" min="1" max="${it.qty}" value="${it.qty}" style="width:70px;margin-left:6px;"> <span class="landing-dim">of ${it.qty}</span></label>` : '';
+  document.getElementById('give-body').outerHTML = `<div id="give-body" style="display:flex;flex-direction:column;gap:8px;">
+    ${qtyHtml}
+    <div class="pa-sub">Characters in this campaign</div>
+    ${chars.length ? chars.map(c => opt('character', c.id, c.name, c.species)).join('') : '<div class="landing-dim">No other characters here yet.</div>'}
+    <div class="pa-sub" style="margin-top:6px;">Mounts &amp; monsters${isArmor ? ' <span style="text-transform:none;letter-spacing:0;">(armor pieces can\'t be given to creatures)</span>' : ''}</div>
+    ${creatures.length ? creatures.map(c => opt('creature', c.id, c.name, c.species, isArmor)).join('') : '<div class="landing-dim">No mounts or monsters in this session.</div>'}
+    <div id="give-status" style="font-size:0.78rem;color:var(--gold2);min-height:1em;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;"><button class="btn" id="give-go">Give</button><button class="btn danger" onclick="document.getElementById('give-modal').remove()">Cancel</button></div></div>`;
+  document.getElementById('give-go').onclick = async () => {
+    const sel = document.querySelector('input[name="give-to"]:checked');
+    const st = document.getElementById('give-status');
+    if (!sel) { st.textContent = 'Pick who to give it to.'; return; }
+    const [kind, id] = sel.value.split(':');
+    const qty = it.kind === 'equip' ? Math.max(1, Math.min(it.qty, parseInt(document.getElementById('give-qty')?.value, 10) || it.qty)) : 1;
+    st.textContent = 'Giving…';
+    const err = await _giveItem(src, kind, id, qty);
+    if (err) { st.style.color = '#e05555'; st.textContent = err; return; }
+    document.getElementById('give-modal')?.remove();
+  };
+}
+
+// Returns null on success, else an error message. Nothing leaves the giver until it has landed.
+async function _giveItem(src, kind, recipientId, qty) {
+  const it = src.item;
+  const out = it.kind === 'equip' ? { ...it, qty } : it;       // what is handed over
+  let toName = '';
+  if (kind === 'character') {
+    toName = playCharCache[recipientId]?.name || 'a character';
+    const fromName = document.getElementById('char-name')?.value?.trim() || 'Someone';
+    const { error } = await sb.from('item_transfers').insert({
+      campaign_id: currentCampaignId, from_character_id: currentCharacterId || null,
+      from_name: fromName, to_character_id: recipientId, item: out,
+    });
+    if (error) return /relation|does not exist|schema cache/i.test(error.message)
+      ? 'Giving to characters needs supabase-item-transfers.sql run once.' : 'Could not give it: ' + error.message;
+    mapChannel?.send({ type: 'broadcast', event: 'item-gift', payload: { to: recipientId } });
+  } else {
+    const row = sessionCreatureCache[recipientId];
+    if (!row) return 'That creature is no longer in the session.';
+    toName = row.name;
+    let patch;
+    if (it.kind === 'weapon') patch = { weapons: [...(row.weapons || []), { name: out.name, damage: out.damage, wt: out.wt, reach: out.reach }] };
+    else if (it.kind === 'equip') {
+      const eq = [...(row.equipment || [])];
+      const ex = eq.find(e => e.name === out.name);
+      if (ex) ex.qty = (Number(ex.qty) || 1) + out.qty; else eq.push({ name: out.name, qty: out.qty, unitWt: out.unitWt });
+      patch = { equipment: eq };
+    } else return "Armor pieces can't be given to creatures.";
+    if (!(await updateEntity(_entityRef('creature', recipientId), patch))) return 'The creature could not be updated (no permission?).';
+  }
+  // Landed — now take it from the giver.
+  if (src.where === 'carried') {
+    if (it.kind === 'equip' && qty < it.qty) {
+      src.tr.remove(); _appendEquipRow({ ...it, qty: it.qty - qty });
+    } else { src.tr.remove(); if (it.kind === 'armor') buildArmorFields(); }
+  } else if (it.kind === 'equip' && qty < it.qty) characterStorage[src.index] = { ...it, qty: it.qty - qty };
+  else characterStorage.splice(src.index, 1);
+  characterGiven.push({ t: Date.now(), item: _itemLabel(out), to: toName, toKind: kind });
+  if (characterGiven.length > 50) characterGiven = characterGiven.slice(-50);
+  buildStorageSection();
+  recalc();
+  const who = document.getElementById('char-name')?.value?.trim() || 'A character';
+  _shareJournalLine(`🤝 ${who} gave ${_itemLabel(out)} to ${toName}.`, 'good');
+  showToast(`Gave ${_itemLabel(out)} to ${toName}.`, 'good');
+  if (currentUser && document.getElementById('char-name')?.value?.trim()) { try { await saveCharacter(); } catch (e) {} } // persist the removal now
+  return null;
+}
+
+// Gifts addressed to the loaded character: claim each (the delete is the claim, so two open copies
+// can't both take it), add it to Carried, and save. Runs when a character loads, when Loadout opens,
+// when Play Mode starts, and when a gift broadcast arrives.
+let _collectingGifts = false;
+async function _collectIncomingItems() {
+  if (_collectingGifts || !currentCharacterId || !currentUser) return;
+  _collectingGifts = true;
+  try {
+    const { data, error } = await sb.from('item_transfers').select('*').eq('to_character_id', currentCharacterId);
+    if (error || !data || !data.length) return;
+    let got = 0;
+    for (const t of data) {
+      const { data: claimed } = await sb.from('item_transfers').delete().eq('id', t.id).select('id');
+      if (!claimed || !claimed.length) continue;
+      _addItemToCarried(t.item);
+      got++;
+      showToast(`Received ${_itemLabel(t.item)} from ${t.from_name || 'someone'}.`, 'good');
+    }
+    if (got) {
+      buildStorageSection(); recalc();
+      if (document.getElementById('char-name')?.value?.trim()) { try { await saveCharacter(); } catch (e) {} }
+    }
+  } finally { _collectingGifts = false; }
 }
 
 // ─── SHOP ───────────────────────────────────────────────────────────────────
@@ -4059,7 +4291,10 @@ function _selectSingleOption(select, value) {
 // channel open) a short-lived one is opened just to send it.
 function _logAcquire(itemName, price) {
   const who = document.getElementById('char-name')?.value?.trim() || 'A character';
-  const entry = { t: Date.now(), text: `🎁 ${who} acquired ${itemName} for free (value ${formatMoney(price)}).`, kind: 'good', imageUrl: null };
+  _shareJournalLine(`🎁 ${who} acquired ${itemName} for free (value ${formatMoney(price)}).`, 'good');
+}
+function _shareJournalLine(text, kind) {
+  const entry = { t: Date.now(), text, kind: kind || 'good', imageUrl: null };
   _logReceive(entry); // into this client's own Journal
   _persistJournal(entry);
   if (mapChannel) { mapChannel.send({ type: 'broadcast', event: 'combat-log', payload: entry }); return; }
@@ -6318,6 +6553,7 @@ function showPanel(id) {
   if (id === 'speciesmgr') buildSpeciesManagerTable();
   if (id === 'spellbook')  buildSpellBookPanel();
   if (id === 'techniques') buildTechniquesPanel();
+  if (id === 'loadout')    { buildStorageSection(); _collectIncomingItems(); }
   if (id === 'techmgr')    buildTechniqueManager();
   if (id === 'equipmgr')  buildEquipManagerTable();
   if (id === 'economymgr') _loadEconomySettingsUI();
@@ -6755,6 +6991,8 @@ function gatherCharacterData() {
     xp:      characterXP,
     pence:   characterPence,
     knownSpells: [...characterKnownSpells],
+    storage: characterStorage.map(x => ({ ...x })),
+    given: characterGiven.slice(-50),
     charClass: characterClass,
     techniques: [...characterTechniques],
     notes:   document.getElementById('char-notes')?.value || '',
@@ -6830,6 +7068,7 @@ async function saveCharacter() {
     mental:      data.mental || '',
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
                    CharClass: data.charClass, Techniques: data.techniques,
+                   Storage: data.storage, Given: data.given,
                    ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language },
     notes:       data.notes || '',
     features:    data.features,
@@ -7030,6 +7269,8 @@ async function loadCharacter(id) {
     ? data.avatar_url : '';
 
   setCharSaveStatus('Loaded: ' + data.name, true);
+  buildStorageSection();
+  _collectIncomingItems(); // gifts that arrived while this character was closed
 }
 
 async function deleteCharacter(id, name) {
@@ -7066,6 +7307,7 @@ function _doNewCharacter() {
   updatePurseDisplay();
   characterKnownSpells = [];
   characterClass = 'Warrior'; characterTechniques = [];
+  characterStorage = []; characterGiven = [];
   const newLangSel = document.getElementById('sel-language');
   if (newLangSel) newLangSel.value = 'Realm';
   const newXpDisplay = document.getElementById('char-xp-display');
@@ -7079,6 +7321,7 @@ function _doNewCharacter() {
   document.getElementById('equip-list').innerHTML = '';
   document.getElementById('armor-owned-list').innerHTML = '';
   buildArmorFields(); // rebuilds each slot's options against the now-empty owned list
+  buildStorageSection();
   recalc();
 }
 
@@ -7168,7 +7411,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261023a';
+const VERSION = 'v0.1.20261023b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8162,6 +8405,9 @@ function applyCharacterData(data) {
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
   characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
+  // Storage + given-away log (stats.Storage / stats.Given; exported files carry them top-level)
+  characterStorage = Array.isArray(data.storage || data.stats?.Storage) ? [...(data.storage || data.stats.Storage)] : [];
+  characterGiven   = Array.isArray(data.given   || data.stats?.Given)   ? [...(data.given   || data.stats.Given)]   : [];
   // Class + chosen techniques — same stats piggyback (older characters: Warrior, none chosen yet).
   const _cls = data.charClass || data.stats?.CharClass;
   characterClass = TECHNIQUE_CLASSES.includes(_cls) ? _cls : 'Warrior';
@@ -8207,26 +8453,13 @@ function applyCharacterData(data) {
   // Weapons
   if (data.weapons) {
     document.getElementById('weapon-list').innerHTML = '';
-    data.weapons.forEach(w => {
-      const tr = document.createElement('tr');
-      const wt = Number(w.wt) || 0;
-      tr.dataset.wt = wt;
-      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-      document.getElementById('weapon-list').appendChild(tr);
-    });
+    data.weapons.forEach(w => _appendWeaponRow(w));
   }
 
   // Equipment
   if (data.equipment) {
     document.getElementById('equip-list').innerHTML = '';
-    data.equipment.forEach(eq => {
-      const unitWt = Number(eq.unitWt) || 0, qty = Number(eq.qty) || 1;
-      const total = unitWt * qty;
-      const tr = document.createElement('tr');
-      tr.dataset.wt = total;
-      tr.innerHTML = `<td>${eq.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-      document.getElementById('equip-list').appendChild(tr);
-    });
+    data.equipment.forEach(eq => _appendEquipRow(eq));
   }
 
   // Armor — owned pieces (stats.ArmorOwned, same piggyback as XP/KnownSpells)
@@ -8242,17 +8475,7 @@ function applyCharacterData(data) {
   if (ownedArmor.length) {
     const tbody = document.getElementById('armor-owned-list');
     tbody.innerHTML = '';
-    ownedArmor.forEach(o => {
-      const tr = document.createElement('tr');
-      tr.dataset.id = o.id; tr.dataset.name = o.name; tr.dataset.slot = o.slot || '';
-      tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
-      tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
-      tr.dataset.impedance = o.impedance || 0;
-      tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
-      tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight||0) * 10) / 10}</td><td>${formatMoney(o.cost)}</td>
-        <td><button class="remove-btn" onclick="this.closest('tr').remove();buildArmorFields();recalc()">✕</button></td>`;
-      tbody.appendChild(tr);
-    });
+    ownedArmor.forEach(o => _appendArmorRow(o));
   }
   buildArmorFields();
   const equippedArmor = data.stats?.ArmorEquipped;
@@ -8389,6 +8612,7 @@ function isGM() {
 // ─── Mode toggle ─────────────────────────────────────────────────────────────
 function enterPlayMode() {
   loadJournalHistory();
+  _collectIncomingItems();
   document.querySelector('.app-layout').style.display = 'none';
   document.querySelector('header').style.display = 'none';
   const pm = document.getElementById('play-mode');
@@ -9599,25 +9823,12 @@ function _rebuildBuilderLoadout(row) {
   const wl = document.getElementById('weapon-list');
   if (wl) {
     wl.innerHTML = '';
-    (row.weapons || []).forEach(w => {
-      const tr = document.createElement('tr');
-      const wt = Number(w.wt) || 0;
-      tr.dataset.wt = wt;
-      tr.innerHTML = `<td>${w.name}</td><td>${w.damage}</td><td>${wt}</td><td>${w.reach}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-      wl.appendChild(tr);
-    });
+    (row.weapons || []).forEach(w => _appendWeaponRow(w));
   }
   const eqEl = document.getElementById('equip-list');
   if (eqEl) {
     eqEl.innerHTML = '';
-    (row.equipment || []).forEach(eq => {
-      const unitWt = Number(eq.unitWt) || 0, qty = Number(eq.qty) || 1;
-      const total = unitWt * qty;
-      const tr = document.createElement('tr');
-      tr.dataset.wt = total;
-      tr.innerHTML = `<td>${eq.name}</td><td>${qty}</td><td>${unitWt}</td><td>${Math.round(total)}</td><td><button class="remove-btn" onclick="this.closest('tr').remove();recalc()">✕</button></td>`;
-      eqEl.appendChild(tr);
-    });
+    (row.equipment || []).forEach(eq => _appendEquipRow(eq));
   }
 }
 // If this ref is the loaded own character, resync its builder tables + selectors.
@@ -14501,6 +14712,7 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
     .on('broadcast', { event: 'combat-log-clear' }, () => { _combatLog = []; renderCombatLog(); })
+    .on('broadcast', { event: 'item-gift' }, ({ payload }) => { if (payload && payload.to === currentCharacterId) _collectIncomingItems(); })
     // A player with no token on the active map asked to be added (see the
     // "no token yet" banner in drawFog's no-viewer branch / _requestMapToken)
     // — only the GM's own client acts on it, with an attention-grabbing
@@ -20195,7 +20407,7 @@ Skills are bought with a separate Skill Points pool (shown on the Skills page), 
 
 ## 5. Shop & Loadout — Weapons & Equipment
 
-You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear, then manage what you carry on the **Loadout** page — everything you carry contributes to your total carried weight. Once a weapon is in your loadout, you can hold it in your right or left hand during play. Some weapons can also be thrown (they leave your hand and land near the target).
+You start with a **Purse** of money. Use the **Shop** to buy weapons, armor, and other gear (or **Acquire** something you find, which is noted in the Journal for the GM). The **Loadout** page then shows where your things are: what you are **carrying** (it counts toward your weight, and a weapon you carry can be held in your right or left hand during play), what is **in storage** (kept safe, weighs nothing, can't be held), and what you have **given away**. Use **Store**/**Take** to move things between carrying and storage, and **Give…** to hand an item to another character, a mount, or a monster. Some weapons can also be thrown (they leave your hand and land near the target).
 
 ## 6. Armor
 
