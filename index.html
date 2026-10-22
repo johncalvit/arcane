@@ -4052,30 +4052,47 @@ function _selectSingleOption(select, value) {
   [...select.options].forEach(o => { o.selected = (o.value === String(value)); });
 }
 
-function _buyWeapon(name) {
+// "Acquire" = take an item without paying (loot, a gift, a GM handout). The item still goes into the
+// Loadout like a purchase, the purse is untouched, and a Journal line records the item and its value
+// so the GM can track it. In Play Mode it goes out on the campaign channel; from Character Mode (no
+// channel open) a short-lived one is opened just to send it.
+function _logAcquire(itemName, price) {
+  const who = document.getElementById('char-name')?.value?.trim() || 'A character';
+  const entry = { t: Date.now(), text: `🎁 ${who} acquired ${itemName} for free (value ${formatMoney(price)}).`, kind: 'good', imageUrl: null };
+  _logReceive(entry); // into this client's own Journal
+  if (mapChannel) { mapChannel.send({ type: 'broadcast', event: 'combat-log', payload: entry }); return; }
+  if (!currentCampaignId) return;
+  const ch = sb.channel('play-campaign-' + currentCampaignId);
+  ch.subscribe(status => {
+    if (status !== 'SUBSCRIBED') return;
+    ch.send({ type: 'broadcast', event: 'combat-log', payload: entry }).finally(() => setTimeout(() => sb.removeChannel(ch), 500));
+  });
+}
+
+function _buyWeapon(name, free) {
   const w = _weaponLoadoutCatalog().find(x => x.name === name);
   if (!w) return;
   const price = w.price || 0;
-  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  if (!free && characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
   _selectSingleOption(document.getElementById('weapon-select'), name);
   addWeapon();
-  characterPence -= price;
+  if (free) _logAcquire(name, price); else characterPence -= price;
   updatePurseDisplay();
   buildShopPanel();
 }
 
-function _buyGear(name) {
+function _buyGear(name, free) {
   const item = _lookupEquipItem(name);
   if (!item) return;
   const price = item.price || 0;
-  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  if (!free && characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
   const qtyInput = document.getElementById('equip-qty');
   const prevQty = qtyInput.value; // a Buy click is always exactly 1 unit, regardless of whatever the Loadout tab's own qty field was last set to
   qtyInput.value = 1;
   _selectSingleOption(document.getElementById('equip-select'), name);
   addEquip();
   qtyInput.value = prevQty;
-  characterPence -= price;
+  if (free) _logAcquire(name, price); else characterPence -= price;
   updatePurseDisplay();
   buildShopPanel();
 }
@@ -4110,7 +4127,7 @@ function _shopArmorPriceUpdate(index) {
   }
 }
 
-function _buyArmorPiece(index) {
+function _buyArmorPiece(index, free) {
   const piece = ARMOR_PIECES[index];
   if (!piece) return;
   const size = parseFloat(document.getElementById('shop-armor-size-' + index)?.value) || 0;
@@ -4124,11 +4141,11 @@ function _buyArmorPiece(index) {
     `This is sized for Target Size ${size}, but your character is size ${mySize} — it won't fit in the Armor tab until it matches. Buy it anyway?`
   )) return;
   const price = _shopArmorPrice(index);
-  if (characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  if (!free && characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
   document.getElementById('armorpiece-select').value = index;
   document.getElementById('armorpiece-size').value = size;
   addArmorPiece();
-  characterPence -= price;
+  if (free) _logAcquire(`${piece.name} (size ${size})`, price); else characterPence -= price;
   updatePurseDisplay();
   buildShopPanel();
 }
@@ -4148,7 +4165,7 @@ function buildShopPanel() {
       const afford = characterPence >= (it.price || 0);
       const tr = document.createElement('tr');
       tr.innerHTML = `<td>${it.name}</td><td>${it.wt}</td><td>${formatMoney(it.price)}</td>
-        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\'")}')">Buy</button></td>`;
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\'")}')">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="${buyFn}('${it.name.replace(/'/g, "\'")}', true)">Acquire</button></td>`;
       tbody.appendChild(tr);
     });
   };
@@ -4172,7 +4189,7 @@ function buildShopPanel() {
           style="width:56px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px;border-radius:4px;text-align:center;"
           oninput="_shopArmorPriceUpdate(${i})"></td>
         <td><span id="shop-armor-price-${i}">—</span><span id="shop-armor-warn-${i}" style="display:none;color:#e05555;font-size:0.72rem;margin-left:6px;" title="Won't fit your character at this size — see the Armor tab's own size check">⚠ won't fit</span></td>
-        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button></td>`;
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="_buyArmorPiece(${i}, true)">Acquire</button></td>`;
       aTbody.appendChild(tr);
     });
     ARMOR_PIECES.forEach((p, i) => _shopArmorPriceUpdate(i));
@@ -7149,7 +7166,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022c';
+const VERSION = 'v0.1.20261022d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
