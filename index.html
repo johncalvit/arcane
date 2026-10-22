@@ -7168,7 +7168,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261022h';
+const VERSION = 'v0.1.20261023a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7255,7 +7255,7 @@ function showLandingModal() {
   modal.style.display = 'flex';
   const vEl = document.getElementById('landing-version');
   if (vEl) vEl.textContent = VERSION;
-  _landingLoadCharacters();
+  _landingShowStep(1);
   _landingLoadCampaigns();
 }
 
@@ -7274,56 +7274,76 @@ function setCampaignError(msg) {
 async function loadCampaignList() { _landingLoadCampaigns(); }
 
 // ── Landing modal data loaders ────────────────────────────────────────────────
+// Step switcher for the landing dialog: 1 = pick a campaign, 2 = pick/create a character in it.
+function _landingShowStep(n) {
+  const a = document.getElementById('landing-step-campaigns'), b = document.getElementById('landing-step-characters');
+  if (a) a.style.display = n === 1 ? '' : 'none';
+  if (b) b.style.display = n === 2 ? '' : 'none';
+  if (n === 2) {
+    const t = document.getElementById('landing-camp-title');
+    if (t) t.textContent = document.getElementById('nav-campaign')?.textContent || '';
+    const st = document.getElementById('landing-char-status'); if (st) st.textContent = '';
+    _landingLoadCharacters();
+  }
+}
+// Clicking a campaign selects it and moves on to its characters.
+async function _landingChooseCampaign(id, name, gmId) {
+  await selectCampaign(id, name, gmId);
+  _landingShowStep(2);
+}
+
+// Characters for the selected campaign: those whose home campaign it is plus any linked to it
+// (campaign_characters). The rest of the player's characters sit under "bring in".
 async function _landingLoadCharacters() {
   const el = document.getElementById('landing-char-list');
+  const otherEl = document.getElementById('landing-other-list');
+  const otherWrap = document.getElementById('landing-other-wrap');
+  if (!el) return;
+  if (!currentCampaignId) { el.innerHTML = '<span class="landing-dim">Choose a campaign first.</span>'; return; }
   el.innerHTML = '<span class="landing-dim">Loading…</span>';
 
-  const { data: chars, error } = await sb
-    .from('characters')
-    .select('id, name, species, avatar_url, campaign_id')
-    .eq('user_id', currentUser.id)
-    .eq('is_template', false)
-    .order('updated_at', { ascending: false });
-  if (error) { el.innerHTML = `<span class="landing-dim">${error.message}</span>`; return; }
-  if (!chars.length) { el.innerHTML = '<span class="landing-dim">No saved characters yet.</span>'; return; }
+  const [charsRes, linksRes] = await Promise.all([
+    sb.from('characters').select('id, name, species, avatar_url, campaign_id')
+      .eq('user_id', currentUser.id).eq('is_template', false).order('updated_at', { ascending: false }),
+    sb.from('campaign_characters').select('character_id').eq('campaign_id', currentCampaignId),
+  ]);
+  if (charsRes.error) { el.innerHTML = `<span class="landing-dim">${charsRes.error.message}</span>`; return; }
+  const chars = charsRes.data || [];
+  const linked = new Set((linksRes.data || []).map(l => l.character_id));
+  const inCamp = chars.filter(c => c.campaign_id === currentCampaignId || linked.has(c.id));
+  const others = chars.filter(c => !inCamp.includes(c));
+  const campName = id => (_campaignCache.find(c => c.id === id) || {}).name || '';
 
-  // Fetch campaign names for any campaign_ids present
-  const campIds = [...new Set(chars.map(c => c.campaign_id).filter(Boolean))];
-  const campNames = {};
-  if (campIds.length) {
-    const { data: camps } = await sb.from('campaigns').select('id, name').in('id', campIds);
-    (camps || []).forEach(c => { campNames[c.id] = c.name; });
-  }
-
-  el.innerHTML = chars.map(c => {
+  const row = (c, bringIn) => {
     const avatarUrl = resolveAvatarUrl(c.avatar_url);
     const thumb = avatarUrl
       ? `<img src="${avatarUrl}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
       : `<span style="width:32px;height:32px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.1rem;">🧙</span>`;
-    const campName = c.campaign_id ? campNames[c.campaign_id] : null;
-    const campBadge = campName
-      ? `<span style="font-size:0.68rem;color:var(--gold);opacity:0.8;">⚔ ${campName}</span>`
-      : `<span style="font-size:0.68rem;color:var(--text-dim);font-style:italic;">No campaign</span>`;
-    return `<div class="landing-item landing-char-item" data-id="${c.id}"
-        data-campaign-id="${c.campaign_id || ''}"
-        data-campaign-name="${(campName||'').replace(/"/g,'&quot;')}"
-        onclick="_landingPickChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">
+    const safe = c.name.replace(/'/g, "\\'");
+    const from = bringIn && c.campaign_id && campName(c.campaign_id)
+      ? `<span style="font-size:0.68rem;color:var(--gold);opacity:0.8;">⚔ ${campName(c.campaign_id)}</span>` : '';
+    const actions = bringIn
+      ? `<span class="landing-dim" style="flex-shrink:0;">+ Bring in</span>`
+      : `<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
+          <button class="landing-delete-btn" title="Move to another campaign"
+            onclick="event.stopPropagation();openMoveCampaignModal('${c.id}','${safe}','${c.campaign_id||''}')">🔀</button>
+          <button class="landing-delete-btn" title="Delete character"
+            onclick="event.stopPropagation();_landingDeleteChar('${c.id}','${safe}')">🗑</button>
+        </div>`;
+    return `<div class="landing-item landing-char-item" data-id="${c.id}" onclick="_landingPickChar('${c.id}','${safe}')">
       ${thumb}
       <div style="min-width:0;flex:1;">
         <div style="color:var(--text-bright);font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
-        <div style="display:flex;gap:6px;align-items:center;">
-          <span class="landing-dim" style="font-size:0.7rem;">${c.species || ''}</span>
-          ${campBadge}
-        </div>
+        <div style="display:flex;gap:6px;align-items:center;"><span class="landing-dim" style="font-size:0.7rem;">${c.species || ''}</span>${from}</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">
-        <button class="landing-delete-btn" title="Move to campaign"
-          onclick="event.stopPropagation();openMoveCampaignModal('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.campaign_id||''}')">🔀</button>
-        <button class="landing-delete-btn" title="Delete character"
-          onclick="event.stopPropagation();_landingDeleteChar('${c.id}','${c.name.replace(/'/g,"\\'")}')">🗑</button>
-      </div>
+      ${actions}
     </div>`;
-  }).join('');
+  };
+
+  el.innerHTML = inCamp.length ? inCamp.map(c => row(c, false)).join('')
+    : '<span class="landing-dim">No characters in this campaign yet — create one below' + (others.length ? ', or bring one in from another campaign.' : '.') + '</span>';
+  if (otherEl) otherEl.innerHTML = others.map(c => row(c, true)).join('');
+  if (otherWrap) otherWrap.style.display = others.length ? '' : 'none';
 }
 
 let _campaignCache = []; // used by _landingPickChar when camp col is hidden
@@ -7339,7 +7359,6 @@ async function _landingLoadCampaigns() {
 
   _campaignCache = data || [];
 
-  const userIsGmAnywhere = data.some(c => c.gm_id === currentUser.id);
   if (!data.length) {
     el.innerHTML = '<span class="landing-dim">No campaigns yet. Name one above to run it as GM, or paste a friend’s invite code to join theirs.</span>';
     return;
@@ -7350,7 +7369,7 @@ async function _landingLoadCampaigns() {
     const sel    = currentCampaignId === c.id;
     return `<div class="landing-item landing-campaign-item${sel ? ' selected' : ''}"
       data-id="${c.id}" data-gm="${c.gm_id}"
-      onclick="selectCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.gm_id}')">
+      onclick="_landingChooseCampaign('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.gm_id}')">
       <span style="font-size:1.1rem;">${isGmOf ? '👑' : '🎲'}</span>
       <div style="min-width:0;flex:1;">
         <div style="color:var(--text-bright);font-size:0.88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.name}</div>
@@ -7360,12 +7379,6 @@ async function _landingLoadCampaigns() {
     </div>`;
   }).join('');
 
-  // For pure players: auto-select their campaign (silently if only one)
-  if (!userIsGmAnywhere && !currentCampaignId) {
-    if (data.length === 1) {
-      await selectCampaign(data[0].id, data[0].name, data[0].gm_id);
-    }
-  }
 }
 
 function _landingUpdateContinue() {
@@ -7375,37 +7388,13 @@ function _landingUpdateContinue() {
 
 async function _landingPickChar(id, name) {
   await loadCharacter(id);
-
-  // Mark selected
+  // Bring it into the chosen campaign (idempotent link) so the GM's lists include it.
+  if (currentCampaignId) await _ensureCampaignLink(id, currentCampaignId);
   document.querySelectorAll('.landing-char-item').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === id);
   });
-
-  // If the character belongs to a campaign and none is selected yet, auto-select it
-  const item = document.querySelector(`.landing-char-item[data-id="${id}"]`);
-  const charCampId   = item?.dataset.campaignId   || '';
-  const charCampName = item?.dataset.campaignName || '';
-  // ...but only when it's their ONLY campaign: a character's home campaign isn't necessarily the game
-  // they want to play in, and silently picking it put players in the wrong campaign.
-  if (charCampId && !currentCampaignId && _campaignCache.length <= 1) {
-    const campEl  = document.querySelector(`.landing-campaign-item[data-id="${charCampId}"]`);
-    const cached  = _campaignCache.find(c => c.id === charCampId);
-    const gmId    = campEl?.dataset.gm || cached?.gm_id || '';
-    const cName   = charCampName || cached?.name || '';
-    await selectCampaign(charCampId, cName, gmId);
-  }
-
   const status = document.getElementById('landing-char-status');
-  if (status) {
-    if (currentCampaignId) {
-      status.textContent = '✓ ' + name + ' loaded';
-      status.style.color = 'var(--gold2)';
-    } else {
-      status.textContent = '✓ ' + name + ' loaded — select a campaign to continue';
-      status.style.color = 'var(--text-dim)';
-    }
-  }
-
+  if (status) { status.textContent = '✓ ' + name + ' loaded'; status.style.color = 'var(--gold2)'; }
   if (currentCampaignId) hideLandingModal();
 }
 
@@ -7428,6 +7417,7 @@ async function _landingCreateCampaign() {
   inp.value = '';
   await selectCampaign(data.id, data.name, data.gm_id);
   _landingLoadCampaigns();
+  _landingShowStep(2);
 }
 
 function _genInviteCode() {
@@ -21496,51 +21486,56 @@ async function _deleteMapPin(pinId) {
   background:rgba(0,0,0,0.88); align-items:center; justify-content:center;">
   <div style="
     background:var(--bg2); border:1px solid var(--gold); border-radius:8px;
-    padding:32px 36px; width:860px; max-width:96vw; max-height:90vh; overflow-y:auto;">
+    padding:32px 36px; width:560px; max-width:96vw; max-height:90vh; overflow-y:auto;">
 
     <h2 style="text-align:center; margin:0 0 24px; letter-spacing:0.06em;">✦ Arcane</h2>
 
     <div id="campaign-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:14px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
 
-    <div class="landing-cols">
-
-      <!-- CHARACTERS -->
-      <div class="landing-col">
-        <h3>Your Characters</h3>
-        <div class="landing-scroll" id="landing-char-list">
-          <span class="landing-dim">Loading…</span>
-        </div>
-        <div id="landing-char-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;"></div>
-        <button class="landing-config-btn" onclick="newCharacter();">
-          <span>✦</span> New Character
-        </button>
+    <!-- STEP 1: pick (or create / join) a campaign -->
+    <div id="landing-step-campaigns" class="landing-col">
+      <h3>1 · Choose your campaign</h3>
+      <div class="landing-dim" style="margin-top:-2px;">Pick the game you're playing in. Just starting? Your Home campaign is a ready-made place to build a character. Running a game? Create a campaign and invite players from the menu once you're in.</div>
+      <div class="landing-scroll" id="landing-camp-list">
+        <span class="landing-dim">Loading…</span>
       </div>
-
-      <!-- CAMPAIGNS -->
-      <div class="landing-col" id="landing-camp-col">
-        <h3>Campaigns</h3>
-        <div class="landing-scroll" id="landing-camp-list">
-          <span class="landing-dim">Loading…</span>
-        </div>
-        <div id="landing-camp-create" style="display:flex; gap:8px; margin-top:2px;">
-          <input type="text" id="landing-new-camp-name" placeholder="New campaign name…"
-            style="flex:1; font-size:0.82rem;" onkeydown="if(event.key==='Enter')_landingCreateCampaign()">
-          <button class="btn-sm btn-text" onclick="_landingCreateCampaign()">Create</button>
-        </div>
-        <!-- Always-visible join-by-code so new players can get in immediately -->
-        <div style="border-top:1px solid var(--border); margin-top:8px; padding-top:10px;">
-          <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Or join with an invite code</div>
-          <div style="display:flex;gap:8px;">
-            <input type="text" id="landing-invite-input" placeholder="e.g. A3X9K2"
-              style="flex:1;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.1em;"
-              maxlength="6" onkeydown="if(event.key==='Enter')redeemInviteCode()">
-            <button class="btn-sm btn-text" onclick="redeemInviteCode()">Join</button>
-          </div>
-          <div id="landing-join-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
-        </div>
+      <div id="landing-camp-create" style="display:flex; gap:8px; margin-top:2px;">
+        <input type="text" id="landing-new-camp-name" placeholder="New campaign name…"
+          style="flex:1; font-size:0.82rem;" onkeydown="if(event.key==='Enter')_landingCreateCampaign()">
+        <button class="btn-sm btn-text" onclick="_landingCreateCampaign()">Create</button>
       </div>
-
+      <!-- Always-visible join-by-code so new players can get in immediately -->
+      <div style="border-top:1px solid var(--border); margin-top:8px; padding-top:10px;">
+        <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Or join with an invite code</div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="landing-invite-input" placeholder="e.g. A3X9K2"
+            style="flex:1;font-size:0.95rem;text-transform:uppercase;letter-spacing:0.1em;"
+            maxlength="6" onkeydown="if(event.key==='Enter')redeemInviteCode()">
+          <button class="btn-sm btn-text" onclick="redeemInviteCode()">Join</button>
+        </div>
+        <div id="landing-join-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
+      </div>
     </div>
+
+    <!-- STEP 2: characters for the chosen campaign -->
+    <div id="landing-step-characters" class="landing-col" style="display:none;">
+      <h3 style="display:flex;align-items:center;gap:10px;">
+        <button class="btn-sm btn-text" onclick="_landingShowStep(1)" style="text-transform:none;letter-spacing:0;">← Campaigns</button>
+        <span>2 · Your characters in <span id="landing-camp-title" style="color:var(--gold2);"></span></span>
+      </h3>
+      <div class="landing-scroll" id="landing-char-list">
+        <span class="landing-dim">Loading…</span>
+      </div>
+      <div id="landing-char-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;"></div>
+      <button class="landing-config-btn" onclick="newCharacter();">
+        <span>✦</span> New Character in this campaign
+      </button>
+      <div id="landing-other-wrap" style="display:none;border-top:1px solid var(--border);margin-top:6px;padding-top:10px;">
+        <div style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-dim);margin-bottom:6px;">Bring in a character from another campaign</div>
+        <div class="landing-scroll" id="landing-other-list"></div>
+      </div>
+    </div>
+
 
     <div style="display:flex; justify-content:space-between; align-items:center; margin-top:24px; padding-top:16px; border-top:1px solid var(--border);">
       <button class="btn-sm btn-text" onclick="submitSignOut()" style="color:var(--text-dim);">Sign Out</button>
