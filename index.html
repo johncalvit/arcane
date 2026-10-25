@@ -7537,7 +7537,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261025e';
+const VERSION = 'v0.1.20261026a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7622,6 +7622,8 @@ function showLandingModal() {
   if (!_landingOpen) _landingStartCampaign = currentCampaignId; // so dismissing can tell whether the campaign changed
   _landingOpen = true;
   modal.style.display = 'flex';
+  const loginBox = document.getElementById('modal-login');
+  if (loginBox && currentUser) loginBox.style.display = 'none'; // signed in: the login box must not sit under this dialog
   const vEl = document.getElementById('landing-version');
   if (vEl) vEl.textContent = VERSION;
   _landingShowStep(1);
@@ -8736,8 +8738,13 @@ sb.auth.onAuthStateChange(async (event, session) => {
 });
 
 // Restore last-used email once the DOM is fully parsed
+// The auth listener can fire before the login/landing dialogs below this script have been parsed, in which
+// case its "hide the login box" step found nothing to hide and the login box stayed up underneath the
+// landing dialog (the account sign-in then appeared AFTER choosing a campaign and character). Re-apply it
+// once the page is parsed.
 document.addEventListener('DOMContentLoaded', () => {
   const savedEmail = localStorage.getItem('arcane-last-email');
+  if (currentUser) { const ml = document.getElementById('modal-login'); if (ml) ml.style.display = 'none'; }
   const el = document.getElementById('auth-email');
   if (savedEmail && el) el.value = savedEmail;
 });
