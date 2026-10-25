@@ -7462,6 +7462,7 @@ function gatherConfigData() {
     techniqueTiers: TECHNIQUE_TIERS,
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
     defaultsFilled: 1,
+    coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
@@ -7492,7 +7493,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261025c';
+const VERSION = 'v0.1.20261025d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7737,7 +7738,14 @@ async function _landingCreateCampaign() {
     .single();
   if (error) { setCampaignError(error.message); return; }
   await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
-  await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() });
+  let seedConfig = gatherConfigData();
+  const core = await _latestCoreRules();
+  if (core && core.config) {
+    // a new campaign starts from the newest Core Rules, not from whatever this GM has loaded
+    seedConfig = JSON.parse(JSON.stringify(core.config));
+    seedConfig.coreRulesVersion = core.version; seedConfig.defaultsFilled = 1; seedConfig.coreDefaultsFilled = 1;
+  }
+  await sb.from('game_configs').insert({ campaign_id: data.id, config: seedConfig });
   inp.value = '';
   await selectCampaign(data.id, data.name, data.gm_id);
   _landingLoadCampaigns();
@@ -8078,6 +8086,58 @@ async function resetToDefaults() {
 }
 
 
+// ── Core Rules as the default source ─────────────────────────────────────────
+// A campaign that has never taken a Core Rules version (coreRulesVersion 0) starts from the newest
+// published Core Rules for anything it's missing: prices and weights that are blank/0 are filled from
+// Core Rules (the built-in defaults remain the fallback). Once only per config - the stamp below is
+// saved with it, so a later deliberate 0 stays 0 - and it never touches a campaign that already
+// merged Core Rules. Brand-new campaigns are seeded from Core Rules outright (see _landingCreateCampaign).
+var _coreDefaultsFilled = 0;
+var _deferDefaultsFill = false; // set while a Supabase config loads, so Core Rules gets first say
+async function _latestCoreRules() {
+  const { data, error } = await sb.from('core_rules').select('version, config').order('version', { ascending: false }).limit(1);
+  return (!error && data && data[0]) ? data[0] : null;
+}
+function _fillFromReference(ref, includeZeros) {
+  let n = 0;
+  const missing = v => v === undefined || v === null || v === '' || (includeZeros && !Number(v));
+  const fillList = (arr, refArr, keyOf) => (arr || []).forEach(it => {
+    const d = (refArr || []).find(x => keyOf(x) === keyOf(it));
+    if (!d) return;
+    if (missing(it.price) && d.price) { it.price = d.price; n++; }
+    if (missing(it.wt) && d.wt) { it.wt = d.wt; n++; }
+  });
+  fillList(EQUIPMENT, ref.equipment, x => x.name);
+  fillList(CONSUMABLES, ref.consumables, x => x.name);
+  // a weapon's weight/price is the same on every action row; take it from any core row of that weapon
+  const fillWeapons = (arr, refArr) => (arr || []).forEach(r => {
+    const d = (refArr || []).find(x => x.weapon === r.weapon && (x.price || x.wt));
+    if (!d) return;
+    if (missing(r.price) && d.price) { r.price = d.price; n++; }
+    if (missing(r.wt) && d.wt) { r.wt = d.wt; n++; }
+  });
+  fillWeapons(MELEE_WEAPONS, ref.meleeWeapons);
+  fillWeapons(RANGED_WEAPONS, ref.rangedWeapons);
+  return n;
+}
+// Applies a config loaded from Supabase: Core Rules fills what is missing first, then the built-in defaults
+// fill anything still missing (once per config, via the defaultsFilled stamp).
+async function _applyLoadedConfig(cfg) {
+  _deferDefaultsFill = true;
+  try { applyConfigData(cfg); } finally { _deferDefaultsFill = false; }
+  await _applyCoreDefaults();
+  if (cfg && cfg.defaultsFilled !== 1 && _fillDefaultPricesWeights(true) && typeof isGM === 'function' && isGM()) writeConfigToDisk();
+}
+async function _applyCoreDefaults() {
+  if (!currentUser || _coreAppliedVersion > 0 || _coreDefaultsFilled === 1) return;
+  const core = await _latestCoreRules();
+  if (!core || !core.config) return;
+  const n = _fillFromReference(core.config, true);
+  _coreDefaultsFilled = 1;
+  if (n && typeof isGM === 'function' && isGM()) writeConfigToDisk();
+  if (n) setConfigStatus(`Filled ${n} price/weight value(s) from Core Rules v${core.version}.`, true);
+}
+
 async function loadConfigFromSupabase() {
   setConfigStatus('Loading configuration…', false);
 
@@ -8087,7 +8147,7 @@ async function loadConfigFromSupabase() {
     const { data } = await sb.from('game_configs').select('id, config').eq('id', cachedId).single();
     if (data) {
       currentConfigId = data.id;
-      applyConfigData(data.config);
+      await _applyLoadedConfig(data.config);
       setConfigStatus('Configuration loaded.', true);
       return;
     }
@@ -8103,7 +8163,7 @@ async function loadConfigFromSupabase() {
   if (row) {
     currentConfigId = row.id;
     localStorage.setItem(SHARED_CONFIG_LS_KEY, row.id);
-    applyConfigData(row.config);
+    await _applyLoadedConfig(row.config);
     setConfigStatus('Configuration loaded.', true);
     return;
   }
@@ -8389,7 +8449,8 @@ function applyConfigData(data) {
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   // A config saved before prices/weights existed (or with them blank) gets the defaults, once - the flag
   // is saved with the config so a value a GM later sets to 0 on purpose stays 0.
-  if (data.defaultsFilled !== 1 && _fillDefaultPricesWeights(true) && typeof isGM === 'function' && isGM()) writeConfigToDisk();
+  _coreDefaultsFilled = data.coreDefaultsFilled === 1 ? 1 : 0;
+  if (!_deferDefaultsFill && data.defaultsFilled !== 1 && _fillDefaultPricesWeights(true) && typeof isGM === 'function' && isGM()) writeConfigToDisk();
   replaceArrayContents(TECHNIQUES,      (data.techniques && data.techniques.length ? data.techniques : DEFAULT_TECHNIQUES).map(t => ({ ...t })));
   replaceObjectContents(TECHNIQUE_ALLOWANCE, data.techniqueAllowance && Object.keys(data.techniqueAllowance).length ? data.techniqueAllowance : DEFAULT_TECHNIQUE_ALLOWANCE);
   // Configs saved before tiers II/III existed: add just those (never re-adds ones you deleted later).
