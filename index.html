@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Arcane Virtual Tabletop</title>
+<title>Grim Toll</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.css">
 <script src="https://cdn.jsdelivr.net/npm/cropperjs@1/dist/cropper.min.js"></script>
@@ -1022,7 +1022,7 @@
 
 <header>
   <div>
-    <h1 id="app-title" class="mode-title">✦ Arcane</h1>
+    <h1 id="app-title" class="mode-title">✦ Grim Toll</h1>
   </div>
   <div id="header-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
     <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
@@ -6678,9 +6678,9 @@ function _updateNavCharCard(name) {
 function _updateBuilderTitle() {
   const name = document.getElementById('char-name')?.value?.trim();
   const suffix = name ? ` — ${name}` : '';
-  document.title = `Arcane${suffix}`;
+  document.title = `Grim Toll${suffix}`;
   const header = document.getElementById('app-title');
-  if (header) header.textContent = `✦ Arcane${suffix}`;
+  if (header) header.textContent = `✦ Grim Toll${suffix}`;
   _updateNavCharCard(name);
 }
 
@@ -6739,8 +6739,8 @@ function enterConfigMode(panel) {
   const cfgBtn = document.getElementById('config-mode-btn');
   cfgBtn.textContent = '✎ Character Mode';
   cfgBtn.onclick = exitConfigMode;
-  document.getElementById('app-title').textContent        = '⚙ Arcane Game Configuration';
-  document.title = 'Arcane - Game Configuration';
+  document.getElementById('app-title').textContent        = '⚙ Grim Toll Game Configuration';
+  document.title = 'Grim Toll - Game Configuration';
   showPanel(panel || 'skillmgr');
 }
 
@@ -7433,7 +7433,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261023e';
+const VERSION = 'v0.1.20261024a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7704,9 +7704,9 @@ async function generateInviteCode() {
     expires_at: expiresAt,
   });
   if (error) { showToast('Could not create an invite code: ' + error.message, 'error'); return; }
-  const campName = document.getElementById('nav-campaign')?.textContent || 'Arcane VTT';
+  const campName = document.getElementById('nav-campaign')?.textContent || 'Grim Toll';
   const body = encodeURIComponent(
-    `You've been invited to join the campaign "${campName}" in Arcane VTT.\n\n` +
+    `You've been invited to join the campaign "${campName}" in Grim Toll.\n\n` +
     `Your invite code is: ${code}\n\n` +
     `This code expires in 5 days. Log in at https://johncalvit.github.io/arcane and enter the code on the landing page to join.`
   );
@@ -7722,7 +7722,7 @@ async function generateInviteCode() {
         <span id="invite-code-text" style="font-family:monospace;font-size:1.6rem;letter-spacing:0.18em;color:var(--gold);">${code}</span>
         <button class="btn" style="padding:2px 10px;" onclick="copyInviteCode()" title="Copy">📋 Copy</button>
       </div>
-      <a href="mailto:?subject=${encodeURIComponent('Arcane VTT – Campaign Invite')}&body=${body}" style="font-size:0.82rem;color:var(--gold2);">📧 Email this code</a>
+      <a href="mailto:?subject=${encodeURIComponent('Grim Toll – Campaign Invite')}&body=${body}" style="font-size:0.82rem;color:var(--gold2);">📧 Email this code</a>
       <div id="invite-copy-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;margin-top:6px;"></div>
       <div style="margin-top:8px;"><button class="btn danger" onclick="document.getElementById('invite-modal').remove()">Close</button></div>
     </div>`;
@@ -8644,9 +8644,9 @@ function enterPlayMode() {
 
   const campaignName = document.getElementById('nav-campaign').textContent || '';
   document.getElementById('play-title').textContent = campaignName
-    ? `✦ Arcane — ${campaignName}`
-    : '✦ Arcane';
-  document.title = campaignName ? `Arcane - ${campaignName}` : 'Arcane';
+    ? `✦ Grim Toll — ${campaignName}`
+    : '✦ Grim Toll';
+  document.title = campaignName ? `Grim Toll - ${campaignName}` : 'Grim Toll';
 
   // Layout: GM gets right panel
   const layout = document.getElementById('play-layout');
@@ -8710,7 +8710,7 @@ function exitPlayMode() {
   // Restore whichever tab title belongs to the mode underneath Play Mode
   // (Builder or Config — entering Play Mode doesn't force either one).
   if (document.getElementById('gm-config-nav')?.style.display === 'none') _updateBuilderTitle();
-  else document.title = 'Arcane - Game Configuration';
+  else document.title = 'Grim Toll - Game Configuration';
 }
 
 // ─── Action Tracker ───────────────────────────────────────────────────────────
@@ -21333,8 +21333,12 @@ async function _deleteMapPin(pinId) {
     padding:36px 40px; width:360px; max-width:94vw;
     box-shadow:0 0 60px rgba(0,0,0,0.8), 0 0 20px rgba(201,168,76,0.08);">
 
+    <div style="height:150px;margin:-36px -40px 18px;border-radius:8px 8px 0 0;overflow:hidden;background:#0a0806;position:relative;">
+      <img src="grim-toll.jpg" alt="" onerror="this.parentNode.style.display='none'" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%;">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(10,8,6,0) 40%, rgba(26,20,12,0.96) 100%);"></div>
+    </div>
     <div style="text-align:center; margin-bottom:28px;">
-      <div style="font-size:2rem; color:var(--gold2); font-family:var(--ui-font); font-weight:bold; letter-spacing:0.06em;">✦ Arcane</div>
+      <div style="font-size:2rem; color:var(--gold2); font-family:var(--ui-font); font-weight:bold; letter-spacing:0.06em;">✦ Grim Toll</div>
       <div style="font-size:0.72rem; color:var(--text-dim); letter-spacing:0.18em; text-transform:uppercase; margin-top:4px;">Virtual Tabletop</div>
       <div style="width:48px; height:1px; background:var(--gold); margin:14px auto 0; opacity:0.4;"></div>
     </div>
@@ -21388,7 +21392,7 @@ async function _deleteMapPin(pinId) {
 <div id="play-mode">
   <!-- toolbar row -->
   <div style="display:flex;align-items:center;gap:8px;height:var(--header-h);padding:0 12px;background:linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);border-bottom:2px solid var(--gold);flex-shrink:0;">
-    <span id="play-title" class="mode-title">✦ Arcane</span>
+    <span id="play-title" class="mode-title">✦ Grim Toll</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div id="play-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
@@ -21722,7 +21726,12 @@ async function _deleteMapPin(pinId) {
     background:var(--bg2); border:1px solid var(--gold); border-radius:8px;
     padding:32px 36px; width:560px; max-width:96vw; max-height:90vh; overflow-y:auto;">
 
-    <h2 style="text-align:center; margin:0 0 24px; letter-spacing:0.06em;">✦ Arcane</h2>
+    <div class="landing-hero" style="position:relative;height:200px;margin:-32px -36px 20px;border-radius:8px 8px 0 0;overflow:hidden;background:#0a0806;">
+      <img src="grim-toll.jpg" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%;">
+      <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(10,8,6,0) 35%, rgba(26,20,12,0.96) 100%);"></div>
+      <h2 style="position:absolute;left:0;right:0;bottom:10px;margin:0;text-align:center;letter-spacing:0.12em;text-transform:uppercase;text-shadow:0 2px 10px #000;">✦ Grim Toll</h2>
+    </div>
+
 
     <div id="campaign-error" style="display:none; color:#e06060; font-size:0.82rem; margin-bottom:14px; padding:8px; background:rgba(180,30,30,0.15); border-radius:4px;"></div>
 
