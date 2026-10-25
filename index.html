@@ -7202,6 +7202,45 @@ async function _ensureCampaignLink(characterId, campaignId) {
 // a shared game. Created on demand (first save / sign-in) if they GM none yet.
 // Returns the home campaign id, or null on failure. In-flight-safe.
 let _homeCampaignPromise = null;
+// An account gets ONE Home campaign (its character stable + a blank place to play). Racing sign-ins (two
+// tabs/devices, or repeated auth events) used to each create one, leaving several empty "Home" campaigns.
+// Keep the oldest and delete extras that are completely empty (no maps, tokens, creatures, characters or
+// character links) - anything with content is left alone. Returns the keeper's id.
+var _homeDedupedFor = null;
+async function _campaignIsEmpty(id) {
+  const count = async (table, col) => {
+    const { count } = await sb.from(table).select(col, { count: 'exact', head: true }).eq('campaign_id', id);
+    return count || 0;
+  };
+  const [maps, chars, creatures, tokens, links] = await Promise.all([
+    count('maps', 'id'), count('characters', 'id'), count('session_creatures', 'id'),
+    count('map_tokens', 'id'), count('campaign_characters', 'character_id'),
+  ]);
+  return !(maps || chars || creatures || tokens || links);
+}
+async function _dedupeHomeCampaigns() {
+  const { data: mine } = await sb.from('campaigns').select('id, name, created_at')
+    .eq('gm_id', currentUser.id).order('created_at', { ascending: true }).order('id', { ascending: true });
+  const homes = (mine || []).filter(c => /^(.*'s )?Home$/.test(c.name || ''));
+  if (!homes.length) return null;
+  for (const c of homes.slice(1)) {
+    try { if (await _campaignIsEmpty(c.id)) await sb.from('campaigns').delete().eq('id', c.id); } catch (e) {}
+  }
+  return homes[0].id;
+}
+
+// Config a brand-new campaign starts with: the newest Core Rules if any are published (stamped with that
+// version), otherwise the creating GM's currently loaded config.
+async function _seedConfigForNewCampaign() {
+  const core = await _latestCoreRules();
+  if (core && core.config) {
+    const cfg = JSON.parse(JSON.stringify(core.config));
+    cfg.coreRulesVersion = core.version; cfg.defaultsFilled = 1; cfg.coreDefaultsFilled = 1;
+    return cfg;
+  }
+  return gatherConfigData();
+}
+
 async function _ensureHomeCampaign() {
   if (!currentUser) return null;
   if (_homeCampaignPromise) return _homeCampaignPromise;
@@ -7210,7 +7249,10 @@ async function _ensureHomeCampaign() {
     const { data: owned } = await sb.from('campaigns')
       .select('id').eq('gm_id', currentUser.id)
       .order('created_at', { ascending: true }).limit(1);
-    if (owned && owned.length) return owned[0].id;
+    if (owned && owned.length) {
+      if (_homeDedupedFor !== currentUser.id) { _homeDedupedFor = currentUser.id; try { await _dedupeHomeCampaigns(); } catch (e) {} } // once per session: clear leftover empty duplicates
+      return owned[0].id;
+    }
     const who = (currentUser.user_metadata?.display_name || '').trim();
     const homeName = (who ? `${who}'s Home` : 'Home').slice(0, 60);
     const { data, error } = await sb.from('campaigns')
@@ -7218,7 +7260,9 @@ async function _ensureHomeCampaign() {
       .select('id, gm_id').single();
     if (error || !data) { console.warn('home campaign create failed:', error?.message); return null; }
     await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
-    try { await sb.from('game_configs').insert({ campaign_id: data.id, config: gatherConfigData() }); } catch (e) {}
+    try { await sb.from('game_configs').insert({ campaign_id: data.id, config: await _seedConfigForNewCampaign() }); } catch (e) {}
+    // If another tab/device created one at the same moment, the oldest wins and this empty one is removed.
+    try { const keeper = await _dedupeHomeCampaigns(); if (keeper) { _homeDedupedFor = currentUser.id; return keeper; } } catch (e) {}
     return data.id;
   })();
   const id = await _homeCampaignPromise;
@@ -7493,7 +7537,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261025d';
+const VERSION = 'v0.1.20261025e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7738,14 +7782,7 @@ async function _landingCreateCampaign() {
     .single();
   if (error) { setCampaignError(error.message); return; }
   await sb.from('campaign_members').insert({ campaign_id: data.id, user_id: currentUser.id, role: 'gm' });
-  let seedConfig = gatherConfigData();
-  const core = await _latestCoreRules();
-  if (core && core.config) {
-    // a new campaign starts from the newest Core Rules, not from whatever this GM has loaded
-    seedConfig = JSON.parse(JSON.stringify(core.config));
-    seedConfig.coreRulesVersion = core.version; seedConfig.defaultsFilled = 1; seedConfig.coreDefaultsFilled = 1;
-  }
-  await sb.from('game_configs').insert({ campaign_id: data.id, config: seedConfig });
+  await sb.from('game_configs').insert({ campaign_id: data.id, config: await _seedConfigForNewCampaign() });
   inp.value = '';
   await selectCampaign(data.id, data.name, data.gm_id);
   _landingLoadCampaigns();
