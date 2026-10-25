@@ -7537,7 +7537,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261026b';
+const VERSION = 'v0.1.20261026c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7646,7 +7646,11 @@ async function loadCampaignList() { _landingLoadCampaigns(); }
 
 // ── Landing modal data loaders ────────────────────────────────────────────────
 // Step switcher for the landing dialog: 1 = pick a campaign, 2 = pick/create a character in it.
+// Banner per step: the necromancer while choosing a campaign, the goblin while choosing a character.
+const _LANDING_ART = { 1: ['grim-toll3-banner.jpg', '50% 45%'], 2: ['grim-toll5-banner.jpg', '50% 30%'] };
 function _landingShowStep(n) {
+  const art = document.getElementById('landing-hero-img');
+  if (art && _LANDING_ART[n]) { art.style.display = ''; art.src = _LANDING_ART[n][0]; art.style.objectPosition = _LANDING_ART[n][1]; }
   const a = document.getElementById('landing-step-campaigns'), b = document.getElementById('landing-step-characters');
   if (a) a.style.display = n === 1 ? '' : 'none';
   if (b) b.style.display = n === 2 ? '' : 'none';
@@ -21893,7 +21897,7 @@ async function _deleteMapPin(pinId) {
     padding:32px 36px; width:560px; max-width:96vw; max-height:90vh; overflow-y:auto;">
 
     <div class="landing-hero" style="position:relative;height:230px;margin:-32px -36px 20px;border-radius:8px 8px 0 0;overflow:hidden;background:#0a0806;">
-      <img src="grim-toll5-banner.jpg" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;object-position:50% 30%;">
+      <img id="landing-hero-img" src="grim-toll3-banner.jpg" alt="" onerror="this.style.display='none'" style="width:100%;height:100%;object-fit:cover;object-position:50% 45%;">
       <div style="position:absolute;inset:0;background:linear-gradient(180deg, rgba(26,20,12,0) 82%, rgba(26,20,12,0.95) 100%);"></div>
     </div>
 
