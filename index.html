@@ -48,8 +48,11 @@
     align-items: center;
     gap: 12px;
   }
+  .mode-title { display: flex; align-items: center; }
+  /* the coin from the favicon leads every title bar */
+  .mode-title::before { content: ""; flex: 0 0 auto; width: 1.45em; height: 1.45em; margin-right: 0.5em; background: url("favicon.png") center / contain no-repeat; }
   .mode-title {
-    display: block;
+    display: flex;
     font-size: 1.25rem;
     font-weight: bold;
     color: var(--gold2);
@@ -1025,7 +1028,7 @@
 
 <header>
   <div>
-    <h1 id="app-title" class="mode-title">✦ Grim Toll</h1>
+    <h1 id="app-title" class="mode-title">Grim Toll</h1>
   </div>
   <div id="header-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
     <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
@@ -6683,7 +6686,7 @@ function _updateBuilderTitle() {
   const suffix = name ? ` — ${name}` : '';
   document.title = `Grim Toll${suffix}`;
   const header = document.getElementById('app-title');
-  if (header) header.textContent = `✦ Grim Toll${suffix}`;
+  if (header) header.textContent = `Grim Toll${suffix}`;
   _updateNavCharCard(name);
 }
 
@@ -6742,7 +6745,7 @@ function enterConfigMode(panel) {
   const cfgBtn = document.getElementById('config-mode-btn');
   cfgBtn.textContent = '✎ Character Mode';
   cfgBtn.onclick = exitConfigMode;
-  document.getElementById('app-title').textContent        = '⚙ Grim Toll Game Configuration';
+  document.getElementById('app-title').textContent        = 'Grim Toll Game Configuration';
   document.title = 'Grim Toll - Game Configuration';
   showPanel(panel || 'skillmgr');
 }
@@ -7436,7 +7439,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261024f';
+const VERSION = 'v0.1.20261025a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8647,8 +8650,8 @@ function enterPlayMode() {
 
   const campaignName = document.getElementById('nav-campaign').textContent || '';
   document.getElementById('play-title').textContent = campaignName
-    ? `✦ Grim Toll — ${campaignName}`
-    : '✦ Grim Toll';
+    ? `Grim Toll — ${campaignName}`
+    : 'Grim Toll';
   document.title = campaignName ? `Grim Toll - ${campaignName}` : 'Grim Toll';
 
   // Layout: GM gets right panel
@@ -21394,7 +21397,7 @@ async function _deleteMapPin(pinId) {
 <div id="play-mode">
   <!-- toolbar row -->
   <div style="display:flex;align-items:center;gap:8px;height:var(--header-h);padding:0 12px;background:linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);border-bottom:2px solid var(--gold);flex-shrink:0;">
-    <span id="play-title" class="mode-title">✦ Grim Toll</span>
+    <span id="play-title" class="mode-title">Grim Toll</span>
     <span id="play-active-map-name" style="font-size:0.76rem;color:var(--text-dim);margin-left:8px;font-style:italic;"></span>
     <div id="play-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
