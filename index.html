@@ -1940,7 +1940,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-melee')">⚔ Melee Weapons<span class="collapse-arrow" id="arrow-shop-melee">▼</span></h3>
       <div class="collapse-body" id="body-shop-melee">
         <table class="loadout-table">
-          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
           <tbody id="shop-melee-list"></tbody>
         </table>
       </div>
@@ -1948,7 +1948,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-ranged')">🏹 Ranged Weapons<span class="collapse-arrow" id="arrow-shop-ranged">▼</span></h3>
       <div class="collapse-body" id="body-shop-ranged">
         <table class="loadout-table">
-          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
           <tbody id="shop-ranged-list"></tbody>
         </table>
       </div>
@@ -1956,7 +1956,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-equip')">🎒 Equipment<span class="collapse-arrow" id="arrow-shop-equip">▼</span></h3>
       <div class="collapse-body" id="body-shop-equip">
         <table class="loadout-table">
-          <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
           <tbody id="shop-equip-list"></tbody>
         </table>
       </div>
@@ -1964,7 +1964,7 @@
       <h3 class="collapsible" onclick="toggleCollapse('shop-consum')">🧪 Consumables<span class="collapse-arrow" id="arrow-shop-consum">▼</span></h3>
       <div class="collapse-body" id="body-shop-consum">
         <table class="loadout-table">
-          <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
           <tbody id="shop-consum-list"></tbody>
         </table>
       </div>
@@ -1975,7 +1975,7 @@
           Priced at whatever size you buy it — defaults to your own Target Size.
         </p>
         <table class="loadout-table">
-          <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Size</th><th>Price</th><th></th></tr></thead>
+          <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Size</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
           <tbody id="shop-armor-list"></tbody>
         </table>
       </div>
@@ -4412,7 +4412,31 @@ function _buyArmorPiece(index, free) {
   buildShopPanel();
 }
 
+// How many of each shop item the character already has: carried (the Loadout tables), in storage, and
+// whether it is currently in a hand. Keyed by item name; armor pieces counted by piece name.
+function _shopOwnedMap() {
+  const m = {};
+  const add = (name, key, n) => { if (!name) return; (m[name] ||= { carried: 0, stored: 0, held: 0 })[key] += n; };
+  document.querySelectorAll('#weapon-list tr').forEach(tr => add(tr.cells[0].textContent, 'carried', 1));
+  document.querySelectorAll('#equip-list tr').forEach(tr => add(tr.cells[0].textContent, 'carried', parseInt(tr.cells[1].textContent) || 1));
+  document.querySelectorAll('#armor-owned-list tr').forEach(tr => add(tr.dataset.name, 'carried', 1));
+  (characterStorage || []).forEach(it => add(it.name, 'stored', it.kind === 'equip' ? (Number(it.qty) || 1) : 1));
+  try { const h = getHeldItems(); [h.right, h.left].filter(Boolean).forEach(n => { if (m[n]) m[n].held++; }); } catch (e) {}
+  return m;
+}
+function _shopOwnedCell(owned, name) {
+  const o = owned[name];
+  const total = o ? o.carried + o.stored : 0;
+  if (!total) return '<span style="color:var(--text-dim);">—</span>';
+  const parts = [];
+  if (o.carried) parts.push(`${o.carried} carried`);
+  if (o.stored) parts.push(`${o.stored} in storage`);
+  if (o.held) parts.push('in hand');
+  return `<span title="${parts.join(', ')}" style="color:var(--gold2);font-weight:bold;">${total}</span>${o.held ? ' <span title="In hand" style="color:var(--text-dim);font-size:0.7rem;">✋</span>' : ''}`;
+}
+
 function buildShopPanel() {
+  const owned = _shopOwnedMap();
   updatePurseDisplay();
   const purseEl = document.getElementById('shop-purse-display');
   if (purseEl) purseEl.textContent = formatMoney(characterPence);
@@ -4422,12 +4446,12 @@ function buildShopPanel() {
     const tbody = document.getElementById(tbodyId);
     if (!tbody) return;
     tbody.innerHTML = '';
-    if (!items.length) { tbody.innerHTML = `<tr><td colspan="${4 + (extraCells ? extraCells(items[0] || {}).length : 0)}" style="color:var(--text-dim);font-style:italic;">Nothing for sale yet.</td></tr>`; return; }
+    if (!items.length) { tbody.innerHTML = `<tr><td colspan="${5 + (extraCells ? extraCells(items[0] || {}).length : 0)}" style="color:var(--text-dim);font-style:italic;">Nothing for sale yet.</td></tr>`; return; }
     items.forEach(it => {
       const afford = characterPence >= (it.price || 0);
       const tr = document.createElement('tr');
       const extra = extraCells ? extraCells(it).map(c => `<td>${c}</td>`).join('') : '';
-      tr.innerHTML = `<td>${it.name}</td>${extra}<td>${it.wt}</td><td>${formatMoney(it.price)}</td>
+      tr.innerHTML = `<td>${it.name}</td>${extra}<td>${it.wt}</td><td>${formatMoney(it.price)}</td><td>${_shopOwnedCell(owned, it.name)}</td>
         <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\'")}')">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="${buyFn}('${it.name.replace(/'/g, "\'")}', true)">Acquire</button></td>`;
       tbody.appendChild(tr);
     });
@@ -4454,6 +4478,7 @@ function buildShopPanel() {
           style="width:56px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px;border-radius:4px;text-align:center;"
           oninput="_shopArmorPriceUpdate(${i})"></td>
         <td><span id="shop-armor-price-${i}">—</span><span id="shop-armor-warn-${i}" style="display:none;color:#e05555;font-size:0.72rem;margin-left:6px;" title="Won't fit your character at this size — see the Armor tab's own size check">⚠ won't fit</span></td>
+        <td>${_shopOwnedCell(owned, p.name)}</td>
         <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="_buyArmorPiece(${i}, true)">Acquire</button></td>`;
       aTbody.appendChild(tr);
     });
@@ -7439,7 +7464,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261025a';
+const VERSION = 'v0.1.20261025b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
