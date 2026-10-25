@@ -1835,11 +1835,11 @@
       </div>
       <h3 style="margin-top:20px;">Catalog Prices</h3>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">
-        For a campaign whose Weapons/Equipment/Consumables/Armor Pieces were set up before prices existed — fills in
-        a starting price for anything that doesn't have one yet (never overwrites one you've already set by hand),
+        For a campaign whose Weapons/Equipment/Consumables/Armor Pieces were set up before prices and weights existed — fills in
+        a starting price and weight for anything that doesn't have one yet (never overwrites one you've already set by hand),
         and adds any newer default items your list is missing entirely (e.g. Arrows, Crossbow Bolts).
       </p>
-      <button class="btn" onclick="fillInDefaultPrices()">🏷 Fill In Default Prices</button>
+      <button class="btn" onclick="fillInDefaultPrices()">🏷 Fill In Default Prices &amp; Weights</button>
     </div>
 
     <!-- SPELL MANAGER -->
@@ -6422,8 +6422,35 @@ function saveEconomySettings() {
 // and adds any default catalog items this campaign's own lists are
 // missing entirely (e.g. a campaign saved before Arrows/Crossbow Bolts
 // existed). The no-SQL alternative to hand-patching a saved config.
+// Fills prices and weights an item is missing from the built-in defaults, matched by name (equipment,
+// consumables, and weapon rows - a weapon's weight comes from the default weapon list, thrown versions
+// use their base weapon). includeZeros also treats 0 as "not set" (how an old config saved a blank field);
+// otherwise only truly missing values are filled. Returns how many values it set.
+function _fillDefaultPricesWeights(includeZeros) {
+  let n = 0;
+  const missing = v => v === undefined || v === null || v === '' || (includeZeros && !Number(v));
+  const defWeight = name => (DEFAULT_WEAPONS.find(w => w.name === name) || DEFAULT_WEAPONS.find(w => w.name === normalizeWeaponName(name)) || {}).wt;
+  const fillItems = (arr, defaults) => arr.forEach(it => {
+    const d = defaults.find(x => x.name === it.name);
+    if (!d) return;
+    if (missing(it.price) && d.price) { it.price = d.price; n++; }
+    if (missing(it.wt) && d.wt) { it.wt = d.wt; n++; }
+  });
+  fillItems(EQUIPMENT, DEFAULT_EQUIPMENT);
+  fillItems(CONSUMABLES, DEFAULT_CONSUMABLES);
+  const fillWeapons = (arr, defaults) => arr.forEach(r => {
+    const d = defaults.find(x => x.weapon === r.weapon);
+    if (d && missing(r.price) && d.price) { r.price = d.price; n++; }
+    const w = defWeight(r.weapon);
+    if (w && missing(r.wt)) { r.wt = w; n++; }
+  });
+  fillWeapons(MELEE_WEAPONS, DEFAULT_MELEE_WEAPONS);
+  fillWeapons(RANGED_WEAPONS, DEFAULT_RANGED_WEAPONS);
+  return n;
+}
+
 function fillInDefaultPrices() {
-  let filled = 0, added = 0;
+  let filled = _fillDefaultPricesWeights(true), added = 0; // prices AND weights
   const fillArr = (arr, defaults, keyField) => {
     for (const row of arr) {
       if (row.price) continue;
@@ -6457,8 +6484,8 @@ function fillInDefaultPrices() {
   buildArmorPieceManagerTable();
   buildLoadoutSelects();
   alert(filled || added
-    ? `Filled in ${filled} price(s) and added ${added} new default item(s) that were missing.`
-    : 'Nothing to do — every item already has a price and no default items are missing.');
+    ? `Filled in ${filled} missing price/weight value(s) and added ${added} new default item(s) that were missing.`
+    : 'Nothing to do — every item already has its price and weight and no default items are missing.');
 }
 
 // ─── SPELL MANAGER ───────────────────────────────────────────────────────────
@@ -7434,6 +7461,7 @@ function gatherConfigData() {
     techniqueAllowance: TECHNIQUE_ALLOWANCE,
     techniqueTiers: TECHNIQUE_TIERS,
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
+    defaultsFilled: 1,
     startingCrowns: STARTING_CROWNS,
     nobleWealthMult: NOBLE_WEALTH_MULT,
     urchinWealthMult: URCHIN_WEALTH_MULT,
@@ -7464,7 +7492,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261025b';
+const VERSION = 'v0.1.20261025c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8359,6 +8387,9 @@ function applyConfigData(data) {
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
+  // A config saved before prices/weights existed (or with them blank) gets the defaults, once - the flag
+  // is saved with the config so a value a GM later sets to 0 on purpose stays 0.
+  if (data.defaultsFilled !== 1 && _fillDefaultPricesWeights(true) && typeof isGM === 'function' && isGM()) writeConfigToDisk();
   replaceArrayContents(TECHNIQUES,      (data.techniques && data.techniques.length ? data.techniques : DEFAULT_TECHNIQUES).map(t => ({ ...t })));
   replaceObjectContents(TECHNIQUE_ALLOWANCE, data.techniqueAllowance && Object.keys(data.techniqueAllowance).length ? data.techniqueAllowance : DEFAULT_TECHNIQUE_ALLOWANCE);
   // Configs saved before tiers II/III existed: add just those (never re-adds ones you deleted later).
