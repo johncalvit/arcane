@@ -12,7 +12,7 @@ These bars show your current Toughness (hit points), Stamina (energy), Blood (li
 
 * If your Toughness reaches 0, you are unconscious and fall prone (you may be able to revive on your own, and a healing potion will also do the trick).
 * Damage beyond Toughness subtracts Blood. Your character weakens as Blood drops, and if it runs out, your character dies. Some damage causes bleeding over time.
-* Stamina is spent by actions and comes back with rest. If it runs out, you fall prone and have to stand up again.
+* Stamina is spent by actions and comes back with rest. Moving more than half your movement in a round also costs 1 Stamina (the path you draw shows "−1 Stamina" when it will). If it runs out, you fall prone and have to stand up again.
 * Casters also have Quintessence, their magic power. It is spent on spells and some magic items and slowly comes back (about 1 point every 3 rounds). When a spell costs more Quintessence than you have, the rest is paid from Stamina, then Toughness, then Blood — desperate times call for desperate measures.
 
 ### Conditions
