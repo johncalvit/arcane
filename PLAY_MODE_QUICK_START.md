@@ -26,7 +26,7 @@ This lists the conditions affecting the character. The GM and the game assign an
 
 ### Combat
 
-When combat starts, press **Roll** under Combat to roll your initiative. When it's your turn, the banner at the top of the panel shows **Actions** (choose what to do) and **Done**. The action dialog covers moving, attacking, defending, casting spells, and stances such as Sentinel (react to anyone who steps into melee range), Target (the same at range), and Vigilant (watch a cone for movement).
+When combat starts, press **Roll** under Combat to roll your initiative. When it's your turn, the banner at the top of the panel shows **Actions** (choose what to do) and **Done**. The action dialog covers moving, attacking, defending, casting spells, and stances such as Sentinel (react to anyone who steps into melee range), Target (the same at range), and Vigilant (watch a cone for movement). Moving ends Sentinel, Evade, Target and Vigilant (Infiltrate is for sneaking, so it carries on).
 
 ### Abilities
 

@@ -7568,7 +7568,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261027a';
+const VERSION = 'v0.1.20261027b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15786,6 +15786,7 @@ async function onTokenMouseUp(e) {
   if (isTrackedCombatant) {
     const from = { x_pct: _dragStartXPct, y_pct: _dragStartYPct };
     const to   = { x_pct, y_pct };
+    await _cancelStancesOnMove(draggedCombId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
     await _executeMoveWithSentinelChecks(draggedCombId, [from, to]);
     if (isBudgetedMove) {
       _commitMoveSlot(draggedCombId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
@@ -18346,6 +18347,32 @@ function _pctDistFt(x1Pct, y1Pct, x2Pct, y2Pct) {
   return Math.hypot(dx, dy) / mapScalePPF;
 }
 
+// Moving breaks a held stance: Sentinel, Evade, Target and Vigilant all stop when the combatant moves
+// (Block/Parry and Infiltrate are untouched - sneaking IS moving). Clears just those stances' slots and
+// their condition badges, and says so in the Journal. `feet` null means unknown distance (uncalibrated map).
+const MOVE_CANCELS_STANCE = ['Sentinel', 'Evade', 'Target', 'Vigilant'];
+async function _cancelStancesOnMove(combId, feet) {
+  if (feet != null && feet < 0.5) return; // a nudge, not a move
+  const c = atCombatants.find(x => x.id === combId);
+  if (!c || !c.slots) return;
+  const token = _pathFindToken(combId);
+  const ended = new Set();
+  for (const slot of ['full', 'right', 'left']) {
+    const label = c.slots[slot]?.label;
+    if (!MOVE_CANCELS_STANCE.includes(label)) continue;
+    ended.add(label);
+    c.slots[slot] = null;
+    if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-clear-slot', payload: { combatantId: combId, slot } });
+  }
+  if (!ended.size) return;
+  if (token) {
+    const badge = { Sentinel: 'sentinel', Evade: 'evading', Target: 'target', Vigilant: 'vigilant' };
+    for (const label of ended) if (getConditions(token.id).has(badge[label])) await setCondition(token.id, badge[label], false);
+  }
+  logCombat(`${getEntity(combId)?.name || token?.label || 'Someone'} moves — ${[...ended].join(' / ')} ends.`, 'roll');
+  renderAtList();
+}
+
 // Sets/broadcasts a combatant's Move action-tracker slot for `feet` of
 // movement — shared by pathCommit (a waypoint route's total) and a direct
 // on-turn token drag (a single dragged segment), so both report movement
@@ -18613,6 +18640,7 @@ async function pathCommit() {
                y_pct: Math.min(100, Math.max(0, (imgY / mapImgH) * 100)) };
     });
     exitPathMode();
+    await _cancelStancesOnMove(combId, feet);
     await _executeMoveWithSentinelChecks(combId, waypoints);
   } else {
     exitPathMode();
