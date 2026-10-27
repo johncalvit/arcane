@@ -1090,6 +1090,7 @@
       <div id="char-save-status" class="nav-save-status" title="Last save status"></div>
       <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></span><span>Character</span></div>
       <button class="nav-btn nav-item active" onclick="showPanel('overview')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21a8 8 0 0 1 16 0"/></svg></span>Traits &amp; Attributes</button>
+      <button class="nav-btn nav-item" onclick="showPanel('playsheet')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7"/></svg></span>Playsheet</button>
       <!-- Hidden for now, revisit in v2/v3 — panel/data/logic left intact, just not linked to -->
       <button class="nav-btn nav-item" onclick="showPanel('features')" style="display:none;">Features</button>
       <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></span><span>Abilities</span></div>
@@ -1100,8 +1101,6 @@
       <button class="nav-btn nav-item" onclick="showPanel('shop')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.5 11h10l2-8H6.5 M9.5 20h.01 M17.5 20h.01"/></svg></span>Shop</button>
       <button class="nav-btn nav-item" onclick="showPanel('loadout')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5 M8 11l5 5 M4 20l2-2"/></svg></span>Loadout</button>
       <button class="nav-btn nav-item" onclick="showPanel('armor')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span>Armor</button>
-      <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7"/></svg></span><span>Summary</span></div>
-      <button class="nav-btn nav-item" onclick="showPanel('playsheet')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h8l5 5v13H6z M14 3v5h5 M9 13h7 M9 17h7"/></svg></span>Playsheet</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
     </div>
 
@@ -7561,7 +7560,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261026d';
+const VERSION = 'v0.1.20261026e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
