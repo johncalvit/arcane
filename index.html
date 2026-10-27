@@ -4336,8 +4336,12 @@ function _buyWeapon(name, free) {
   if (!w) return;
   const price = w.price || 0;
   if (!free && characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
+  const wl = '#weapon-list tr', wBefore = document.querySelectorAll(wl).length;
+  if (![...document.getElementById('weapon-select').options].some(o => o.value === name)) buildLoadoutSelects(); // list out of date
   _selectSingleOption(document.getElementById('weapon-select'), name);
   addWeapon();
+  // Never take money for something that didn't actually land in the Loadout.
+  if (document.querySelectorAll(wl).length === wBefore) { showToast(`Couldn't add ${name} to your Loadout - nothing was charged.`, 'error'); return; }
   if (free) _logAcquire(name, price); else characterPence -= price;
   updatePurseDisplay();
   buildShopPanel();
@@ -4351,9 +4355,13 @@ function _buyGear(name, free) {
   const qtyInput = document.getElementById('equip-qty');
   const prevQty = qtyInput.value; // a Buy click is always exactly 1 unit, regardless of whatever the Loadout tab's own qty field was last set to
   qtyInput.value = 1;
+  const el = '#equip-list tr', eBefore = document.querySelectorAll(el).length;
+  if (![...document.getElementById('equip-select').options].some(o => o.value === name)) buildLoadoutSelects(); // list out of date
   _selectSingleOption(document.getElementById('equip-select'), name);
   addEquip();
   qtyInput.value = prevQty;
+  // Never take money for something that didn't actually land in the Loadout.
+  if (document.querySelectorAll(el).length === eBefore) { showToast(`Couldn't add ${name} to your Loadout - nothing was charged.`, 'error'); return; }
   if (free) _logAcquire(name, price); else characterPence -= price;
   updatePurseDisplay();
   buildShopPanel();
@@ -4452,7 +4460,7 @@ function buildShopPanel() {
       const tr = document.createElement('tr');
       const extra = extraCells ? extraCells(it).map(c => `<td>${c}</td>`).join('') : '';
       tr.innerHTML = `<td>${it.name}</td>${extra}<td>${it.wt}</td><td>${formatMoney(it.price)}</td><td>${_shopOwnedCell(owned, it.name)}</td>
-        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\'")}')">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="${buyFn}('${it.name.replace(/'/g, "\'")}', true)">Acquire</button></td>`;
+        <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" ${afford ? '' : 'disabled'} onclick="${buyFn}('${it.name.replace(/'/g, "\\'")}')">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="${buyFn}('${it.name.replace(/'/g, "\\'")}', true)">Acquire</button></td>`;
       tbody.appendChild(tr);
     });
   };
@@ -7560,7 +7568,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261026e';
+const VERSION = 'v0.1.20261026f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
