@@ -7568,7 +7568,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261027b';
+const VERSION = 'v0.1.20261027c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -18402,6 +18402,12 @@ function _commitMoveSlot(combId, feet) {
   const durationRounds = Math.max(1, Math.ceil(secs / 3));
   c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds,
                    locksAll: false, feet: Math.round(totalFeet) };
+  // Going past half a round's movement costs 1 Stamina, once per round (the Path / drag preview shows it coming).
+  if (totalFeet > spd * 1.5 && c._moveStamRound !== atRound) {
+    c._moveStamRound = atRound;
+    _deductStamina(combId, 1);
+    logCombat(`${getEntity(combId)?.name || 'Someone'} moves past half their movement — -1 Stamina.`, 'roll');
+  }
   if (mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
       payload: { combatantId: combId, slot: 'move', label: c.slots.move.label,
@@ -18570,6 +18576,8 @@ function pathRenderSvg(mouseX, mouseY, override) {
       const note = tier.level === 2 ? ' · over full move' : tier.level === 1 ? ' · past half move' : '';
       const priorNote = tier.prior > 0 ? ` (${Math.round(tier.total)} ft this round)` : '';
       label = `${Math.round(feet)} ft · ${secRound}s${priorNote}${note}${tier.bang ? ' !' : ''}`;
+      const mover = atCombatants.find(x => x.id === cid);
+      if (tier.level >= 1 && !(mover && mover._moveStamRound === atRound)) label += '  ·  −1 Stamina';
     } else {
       fillClr = '#4de080';
       label = `${Math.round(feet)} ft · ${secRound <= 3 ? secRound + 's' : secRound + 's ⚠'}`;
