@@ -1042,6 +1042,7 @@
         <button class="app-menu-charonly" onclick="appMenuDo(saveCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18a4 4 0 0 1-.5-8 5.5 5.5 0 0 1 10.5-1A4.5 4.5 0 0 1 17 18 M12 12v7 M9 15l3-3 3 3"/></svg><span>Save Character</span></button>
         <button class="app-menu-charonly" onclick="appMenuDo(showCharacterListModal)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg><span>Load Character</span></button>
         <button class="app-menu-charonly" onclick="appMenuDo(newCharacter)"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14 M5 12h14"/></svg><span>New Character</span></button>
+        <button class="app-menu-charonly" onclick="appMenuDo(copyCharacter)" title="Save a duplicate of this character under a new name"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9h11v11H9z M5 15H4V4h11v1"/></svg><span>Copy Character</span></button>
         <button class="app-menu-charonly" onclick="toggleAppMenuSub('app-menu-file')"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4 M8 8l4-4 4 4 M4 15v5h16v-5"/></svg><span>Export / Import</span><i class="app-menu-chev">▾</i></button>
         <div id="app-menu-file" class="app-menu-sub">
           <button onclick="appMenuDo(exportCharacter)"><span>Export to File</span></button>
@@ -7097,6 +7098,29 @@ function setCharSaveStatus(text, ok) {
   if (el) { el.textContent = text; el.style.color = ok ? 'var(--gold2)' : 'var(--text-dim)'; }
 }
 
+// Copy Character: saves a duplicate of the character as it is on screen (unsaved edits included) under a
+// new name, then switches to the copy. Everything carries over - stats, skills, spells, techniques, gear,
+// storage, purse, XP - and the original stays exactly as last saved. A copy is a new character, so it does
+// NOT get a fresh starting purse (that is only for brand-new characters).
+var _savingCopy = false;
+async function copyCharacter() {
+  if (!currentUser) { showToast('Sign in first.', 'error'); return; }
+  const nameEl = document.getElementById('char-name');
+  const base = (nameEl.value || '').trim();
+  if (!base) { showToast('Give the character a name before copying it.', 'warn'); return; }
+  const suggested = base.replace(/ \(Copy( \d+)?\)$/, '') + ' (Copy)';
+  const name = prompt('Name for the copy:', suggested);
+  if (!name || !name.trim()) return;
+  const originalId = currentCharacterId;
+  currentCharacterId = null;          // next save inserts a new record
+  nameEl.value = name.trim();
+  recalc();
+  _savingCopy = true;
+  try { await saveCharacter(); } finally { _savingCopy = false; }
+  if (currentCharacterId) showToast(`Copied — you're now editing "${name.trim()}".`, 'good');
+  else { currentCharacterId = originalId; nameEl.value = base; recalc(); showToast('The copy could not be saved.', 'error'); }
+}
+
 async function saveCharacter() {
   if (!currentUser) {
     setCharSaveStatus('Sign in first.', false);
@@ -7119,7 +7143,7 @@ async function saveCharacter() {
   // still null then), never again afterward, so this can't clobber a
   // player's own subsequent spending or income. See the Economy Config
   // panel for the tunable baseline/multipliers.
-  if (currentCharacterId === null) {
+  if (currentCharacterId === null && !_savingCopy) {
     characterPence = _startingPenceForFeatures(data.features);
     data.pence = characterPence;
     updatePurseDisplay();
@@ -7537,7 +7561,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261026c';
+const VERSION = 'v0.1.20261026d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
