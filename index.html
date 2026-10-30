@@ -7572,7 +7572,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261029a';
+const VERSION = 'v0.1.20261030a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8902,9 +8902,11 @@ function enterPlayMode() {
   subscribeMapRealtime();
   loadActiveMap(activeMapId);
   initMapInteraction();
+  _startOwnTokenPoll();
 }
 
 function exitPlayMode() {
+  _stopOwnTokenPoll();
   document.querySelector('.app-layout').style.display = '';
   document.querySelector('header').style.display = '';
   const pm = document.getElementById('play-mode');
@@ -17561,6 +17563,50 @@ async function showTokenInfo(tokenId) {
 }
 
 // ── Realtime ──────────────────────────────────────────────────────────────────
+// A token was added to this campaign's map (realtime INSERT, or the fallback check below). Shared so both
+// routes do exactly the same thing - including, for the player whose OWN character was just added, making the
+// map come alive without a reload: their data cached, panel and fog redrawn, the "no token yet" banner gone.
+async function _onTokenInserted(t) {
+  mapTokens[t.id] = t;
+  upsertTokenElement(t);
+  if (isGM()) refreshTokenPanel();
+  // Join the action tracker immediately (same as atAutoAddMapTokens at load)
+  if (t.entity_type === 'character' || t.entity_type === 'creature') {
+    const cid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+    if (!atCombatants.find(c => c.id === cid)) {
+      const name = t.entity_type === 'character'
+        ? (playCharCache[t.entity_id]?.name || t.label || '?') : (t.label || t.id);
+      atCombatants.push({ id: cid, name, avatar: t.avatar_url || null,
+        type: t.entity_type === 'character' ? 'char' : 'creature',
+        initiative: null, tieBreak: null, slots: _newSlots() });
+      renderAtList();
+    }
+  }
+  const mine = t.entity_type === 'character' && t.entity_id === currentCharacterId;
+  if (mine && !playCharCache[currentCharacterId]) { try { await loadPlayCharCache(); } catch (e) {} }
+  refreshUI(); // panel may show "no token on map" for this entity
+  if (typeof drawFog === 'function' && mine) drawFog();
+  if (mine) { scheduleLights(); showToast("You've been added to the map.", 'good'); }
+}
+// Safety net for a missed realtime event: while the "you don't have a token yet" banner is up, look for the
+// player's own token every few seconds and pick it up if the GM has added it.
+var _ownTokenPoll = null;
+function _startOwnTokenPoll() {
+  clearInterval(_ownTokenPoll);
+  if (isGM()) return;
+  _ownTokenPoll = setInterval(async () => {
+    const banner = document.getElementById('no-token-banner');
+    if (!banner || banner.style.display === 'none' || !activeMapId || !currentCharacterId) return;
+    try {
+      const { data } = await sb.from('map_tokens').select('*').eq('map_id', activeMapId)
+        .eq('entity_type', 'character').eq('entity_id', currentCharacterId).limit(1);
+      const row = data && data[0];
+      if (row && !mapTokens[row.id]) await _onTokenInserted(row);
+    } catch (e) {}
+  }, 4000);
+}
+function _stopOwnTokenPoll() { clearInterval(_ownTokenPoll); _ownTokenPoll = null; }
+
 function subscribeTokenRealtime() {
   tokenChannel?.unsubscribe();
   if (!currentCampaignId) return;
@@ -17584,25 +17630,7 @@ function subscribeTokenRealtime() {
     })
     // DB changes: token added or removed
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'map_tokens',
-        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => {
-      mapTokens[t.id] = t;
-      upsertTokenElement(t);
-      if (isGM()) refreshTokenPanel();
-      // Join the action tracker immediately (same as atAutoAddMapTokens at load)
-      if (t.entity_type === 'character' || t.entity_type === 'creature') {
-        const cid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
-        if (!atCombatants.find(c => c.id === cid)) {
-          const name = t.entity_type === 'character'
-            ? (playCharCache[t.entity_id]?.name || t.label || '?') : (t.label || t.id);
-          atCombatants.push({ id: cid, name, avatar: t.avatar_url || null,
-            type: t.entity_type === 'character' ? 'char' : 'creature',
-            initiative: null, tieBreak: null, slots: _newSlots() });
-          renderAtList();
-        }
-      }
-      refreshUI(); // panel may show "no token on map" for this entity
-      if (typeof drawFog === 'function' && t.entity_type === 'character' && t.entity_id === currentCharacterId) drawFog();
-    })
+        filter: `campaign_id=eq.${currentCampaignId}` }, ({ new: t }) => { _onTokenInserted(t); })
     // NOTE: no filter — Postgres DELETE payloads only carry the primary key,
     // so a campaign_id filter never matches and the event is never delivered.
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'map_tokens' },
