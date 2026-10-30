@@ -1094,7 +1094,7 @@
       <!-- Hidden for now, revisit in v2/v3 — panel/data/logic left intact, just not linked to -->
       <button class="nav-btn nav-item" onclick="showPanel('features')" style="display:none;">Features</button>
       <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></span><span>Abilities</span></div>
-      <button class="nav-btn nav-item" onclick="showPanel('skills')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9L7 7 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1"/></svg></span>Skills</button>
+      <button class="nav-btn nav-item" onclick="showPanel('skills')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M12 2v3 M12 19v3 M2 12h3 M19 12h3 M4.9 4.9L7 7 M17 17l2.1 2.1 M4.9 19.1L7 17 M17 7l2.1-2.1"/></svg></span>Education</button>
       <button class="nav-btn nav-item" onclick="showPanel('spellbook')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z"/></svg></span>Spell Book</button>
       <button class="nav-btn nav-item" onclick="showPanel('techniques')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4 M4 4l16 16 M3 15l6 6 M21 15l-6 6"/></svg></span>Techniques</button>
       <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9-5 9 5v9l-9 5-9-5z M3 8l9 5 9-5 M12 13v9"/></svg></span><span>Equipment</span></div>
@@ -1108,7 +1108,7 @@
     <div id="gm-config-nav" style="display:none;">
       <div class="nav-section">Game Configuration</div>
       <button class="nav-btn" onclick="showPanel('speciesmgr')">🧬 Species</button>
-      <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Skills</button>
+      <button class="nav-btn" onclick="showPanel('skillmgr')">🛠 Education</button>
       <button class="nav-btn" onclick="showPanel('armormgr')">🛡 Armor</button>
       <button class="nav-btn" onclick="showPanel('armorpiecemgr')">🪖 Armor Pieces</button>
       <button class="nav-btn" onclick="showPanel('meleemgr')">⚔ Melee Weapons</button>
@@ -1207,7 +1207,7 @@
         </div>
         <div class="field field-inline">
           <label>Native Language</label>
-          <select id="sel-language" onchange="recalc()" title="The language this character grew up speaking. Other languages are learned as skills.">
+          <select id="sel-language" onchange="recalc()" title="The language this character grew up speaking. Other languages are learned through education.">
             <option selected>Realm</option><option>Barbaric</option><option>New World</option><option>Demonic</option><option>Sublime</option><option>Ancients</option><option>Underdweller</option>
           </select>
         </div>
@@ -1280,9 +1280,9 @@
 
     <!-- SKILLS -->
     <div id="panel-skills" class="panel">
-      <h2>Skills</h2>
+      <h2>Education</h2>
       <div class="points-bar">
-        <div class="label">Skill Points Used</div>
+        <div class="label">Education Points Used</div>
         <div class="value" id="skill-points-used">0</div>
         <div class="progress-track"><div class="progress-fill" id="skill-points-bar-fill" style="width:0%"></div></div>
         <div class="label">of</div>
@@ -1404,12 +1404,12 @@
 
     <!-- SKILL MANAGER -->
     <div id="panel-skillmgr" class="panel">
-      <h2>Skills</h2>
+      <h2>Education</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
-        Define new skills or edit/delete existing ones. Success % is the sum of the chosen attributes' values, capped at 100%.
+        Define new education subjects or edit/delete existing ones. Success % for the first point is the sum of the chosen attributes' values; each further point adds half the previous one (diminishing returns), so a subject tops out at twice that, capped at 100%.
         Set a count greater than 1 to add an attribute multiple times — e.g. Knowledge = 3 makes success = Knowledge × 3.
       </p>
-      <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:12px;">+ Add New Skill</button>
+      <button class="btn" onclick="openSkillForm(null)" style="margin-bottom:12px;">+ Add New Subject</button>
       <div class="skill-filter" id="skillmgr-filters" style="margin-bottom:14px;"></div>
       <div id="skill-form-anchor"></div>
 
@@ -1417,7 +1417,7 @@
         <h3 id="skill-form-title" style="margin-top:0;">New Skill</h3>
         <div class="grid-2">
           <div class="field">
-            <label>Skill Name</label>
+            <label>Subject Name</label>
             <input type="text" id="sf-name">
           </div>
           <div class="field">
@@ -1425,7 +1425,7 @@
             <input type="text" id="sf-type" placeholder="e.g. Trade, Language, Social...">
           </div>
           <div class="field">
-            <label>Skill Point Cost</label>
+            <label>Education Point Cost</label>
             <input type="text" id="sf-cost" placeholder="3">
           </div>
           <div class="field">
@@ -1448,13 +1448,13 @@
           <textarea id="sf-description" rows="2" style="width:100%;background:var(--bg2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:8px;font-family:var(--ui-font);" placeholder="e.g. Tracking prey, reading terrain, foraging in the wild."></textarea>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
-          <button class="btn" onclick="saveSkill()">Save Skill</button>
+          <button class="btn" onclick="saveSkill()">Save Subject</button>
           <button class="btn danger" onclick="closeSkillForm()">Cancel</button>
         </div>
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Skill</th><th>Type</th><th>Cost</th><th>Required Attr</th><th>Success Attrs</th><th></th></tr></thead>
+        <thead><tr><th>Subject</th><th>Type</th><th>Cost</th><th>Required Attr</th><th>Success Attrs</th><th></th></tr></thead>
         <tbody id="skillmgr-list"></tbody>
       </table>
     </div>
@@ -2182,7 +2182,7 @@
         </div>
       </div>
       <div class="ps-block" style="margin-bottom:16px;">
-        <h4 class="collapsible" onclick="toggleCollapse('psskills')">Selected Skills<span class="collapse-arrow" id="arrow-psskills">▼</span></h4>
+        <h4 class="collapsible" onclick="toggleCollapse('psskills')">Education<span class="collapse-arrow" id="arrow-psskills">▼</span></h4>
         <div class="collapse-body" id="body-psskills">
           <div id="ps-skills" style="color:var(--text-dim);font-size:0.85rem;">None selected.</div>
         </div>
@@ -2330,7 +2330,7 @@ const RAW_STATS = [
   { key:'Strength',    label:'Strength',    desc:'Affects power and speed',                         min:1 },
   { key:'Endurance',   label:'Endurance',   desc:'Affects toughness and stamina',                   min:1 },
   { key:'Agility',     label:'Agility',     desc:'Affects manual dexterity and physical coordination', min:1 },
-  { key:'Memory',      label:'Memory',      desc:'Affects knowledge and skills',                    min:1 },
+  { key:'Memory',      label:'Memory',      desc:'Affects knowledge and education',                    min:1 },
   { key:'Intellect',   label:'Intellect',   desc:'Affects logic and intuition',                     min:1 },
   { key:'Senses',      label:'Senses',      desc:'Affects vision, hearing, smell, taste, nightvision', min:1 },
   { key:'Quintessence',label:'Quintessence',desc:'Magic affinity and power',                        min:0 },
@@ -2673,7 +2673,7 @@ function updatePlaysheet(attrs) {
           <span style="color:var(--gold2);font-weight:bold;">${pct}%</span>
         </div>`;
       }).join('')
-    : '<span style="color:var(--text-dim)">No skills invested.</span>';
+    : '<span style="color:var(--text-dim)">No education yet.</span>';
 
   // Features
   const checkedFeatures = [...document.querySelectorAll('#feature-list input:checked')].map(cb=>cb.dataset.name);
@@ -3118,7 +3118,7 @@ const FEATURES = [
   { name:'Strikingly Beautiful', type:'Blessing', subtype:'Social',     desc:'Extremely attractive — strongly advantageous socially' },
   { name:'Loyal Pet',            type:'Blessing', subtype:'Social',     desc:'A loyal animal companion' },
   { name:'Echo Location',        type:'Blessing', subtype:'Physical',   desc:'Sense objects with reflected sound waves' },
-  { name:'Noble',                type:'Blessing', subtype:'Background', desc:'Additional skill, noble lineage' },
+  { name:'Noble',                type:'Blessing', subtype:'Background', desc:'Additional education, noble lineage' },
   { name:'Near Sighted',         type:'Curse',    subtype:'Physical',   desc:'Reduced Day Vision' },
   { name:'Fugitive',             type:'Curse',    subtype:'Social',     desc:'Actively pursued criminal or deserter' },
   { name:'Untouchable',          type:'Curse',    subtype:'Social',     desc:'Despised tribe or lineage. Impacts most social interactions' },
@@ -3278,12 +3278,16 @@ function migrateSkills() {
 // Each point invested raises success% by the sum of the skill's successAttrs values.
 // e.g. successAttrs=['Knowledge','Knowledge','Logic'], attrs={Knowledge:15,Logic:12}
 //   → perPoint = 42,  2 pts → 84%
+// Education has diminishing returns: the first point adds a full per-point value, the second half of that, the
+// third a quarter, and so on. N points are worth 2 x (1 - 0.5^N) full points (1, 1.5, 1.75, 1.875 ... never
+// quite 2), so a subject tops out at twice its per-point value.
+function _educationEffect(points) { return points > 0 ? 2 * (1 - Math.pow(0.5, points)) : 0; }
 function calcSkillSuccess(skill, attrs, points) {
   if (!skill || !skill.successAttrs || !skill.successAttrs.length || !attrs) return 0;
   points = points || 0;
   if (points === 0) return 0;
   const perPoint = skill.successAttrs.reduce((t, k) => t + (attrs[k] || 0), 0);
-  return Math.max(0, Math.min(100, Math.round(perPoint * points)));
+  return Math.max(0, Math.min(100, Math.round(perPoint * _educationEffect(points))));
 }
 
 function adjustSkillPoints(name, delta) {
@@ -3323,7 +3327,7 @@ function buildSkillList() {
         <span class="skill-pts">${pts}</span>
         <button class="skill-pt-btn" onclick="adjustSkillPoints('${s.name.replace(/'/g,"\\'")}', 1)">+</button>
         <span class="skill-pct ${pct >= 100 ? 'skill-pct-max' : pct > 0 ? 'skill-pct-active' : 'skill-pct-zero'}">${pct}%</span>
-        ${perPt ? `<span class="skill-per-pt">+${perPt}/pt</span>` : ''}
+        ${perPt ? `<span class="skill-per-pt" title="Diminishing returns: each further point adds half the previous one">+${Math.round(perPt * Math.pow(0.5, pts))}% next</span>` : ''}
       </div>`;
     container.appendChild(item);
   }
@@ -3646,10 +3650,10 @@ function closeSkillForm() {
 
 function saveSkill() {
   const name = document.getElementById('sf-name').value.trim();
-  if (!name) { alert('Skill name is required.'); return; }
+  if (!name) { alert('Subject name is required.'); return; }
   // Skill points are stored by name, so two skills can't share one.
   if (SKILLS.some((s, i) => i !== editingSkillIndex && s.name.toLowerCase() === name.toLowerCase())) {
-    alert(`A skill named "${name}" already exists — give this one a different name.`);
+    alert(`A subject named "${name}" already exists — give this one a different name.`);
     return;
   }
   const type = document.getElementById('sf-type').value.trim() || 'Custom';
@@ -3727,7 +3731,7 @@ function buildSkillManagerTable() {
       : `<td>${s.name}</td>`;
     tr.innerHTML = `${nameCell}<td>${s.type}</td><td>${skillCost(s)}</td><td>${reqLabel}${s.reqVal ? ' '+s.reqVal+'+' : ''}</td><td>${successLabel}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openSkillForm(${i})">Edit</button>
-      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copySkill(${i})" title="Duplicate this skill into a new entry">Copy</button>
+      <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copySkill(${i})" title="Duplicate this subject into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteSkill(${i})">✕</button></td>`;
     tbody.appendChild(tr);
   });
@@ -7568,7 +7572,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261027c';
+const VERSION = 'v0.1.20261029a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -20644,7 +20648,7 @@ const DEFAULT_QUICK_START_BODY = `Welcome! This guide walks through building you
 
 # Building a Character
 
-Start in **Character Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically. The left sidebar is grouped into **Character** (Traits & Attributes), **Abilities** (Skills, Spell Book, Techniques), **Equipment** (Shop, Loadout, Armor), and **Summary** (Playsheet). Saving, loading, and account actions live in the **menu (☰)** at the top right.
+Start in **Character Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically. The left sidebar is grouped into **Character** (Traits & Attributes), **Abilities** (Education, Spell Book, Techniques), **Equipment** (Shop, Loadout, Armor), and **Summary** (Playsheet). Saving, loading, and account actions live in the **menu (☰)** at the top right.
 
 ## 1. Name, Species & Traits
 
@@ -20660,9 +20664,9 @@ Quintessence is your magical aptitude — leave it at 0 for a non-caster, or inv
 
 These are computed automatically from your Raw Stats plus your Species, Age, Build, and Disposition choices — Power, Speed, Toughness, Stamina, Manual Dexterity, Physical Coordination, Knowledge, Social Skills, Logic, Intuition, and the Senses. You don't spend points here directly; they update live as you change the raw stats above them.
 
-## 4. Skills
+## 4. Education
 
-Skills are bought with a separate Skill Points pool (shown on the Skills page), spent per skill you want to invest in. Your success chance for each skill scales with the points invested and the Final Attribute it's tied to.
+Education is bought with a separate pool of Education Points (shown on the Education page), spent on the subjects you want to study. Your success chance in a subject depends on the points invested and the Final Attributes it's tied to — with diminishing returns: the first point is worth the most, the second half as much, the third a quarter, and so on.
 
 ## 5. Shop & Loadout — Weapons & Equipment
 
@@ -20674,7 +20678,7 @@ Equip the armor pieces you own into each body slot (Head, Torso, Arms, Legs, etc
 
 ## 7. Spell Book (casters only)
 
-At least 1 point in Quintessence makes you eligible to permanently memorize any spell — a magic-related skill (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
+At least 1 point in Quintessence makes you eligible to permanently memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
 
 ## 8. Techniques
 
@@ -20692,7 +20696,7 @@ Your character's Level is derived automatically from XP — the GM awards XP aft
 
 Play Mode is where your character moves around the map, fights, and casts spells alongside everyone else at the table.
 
-- **Left panel:** your portrait, level, class, Health, Conditions, and an **Initiative** roll button when combat starts. **Abilities** has **View** buttons for your skills (click a percentage to roll it), spell book, and techniques; **Equipment** lets you change what's in each hand; **View All** shows each held weapon's hit chance and damage. The ✎ button jumps back to Character Mode.
+- **Left panel:** your portrait, level, class, Health, Conditions, and an **Initiative** roll button when combat starts. **Abilities** has **View** buttons for your education (click a percentage to roll it), spell book, and techniques; **Equipment** lets you change what's in each hand; **View All** shows each held weapon's hit chance and damage. The ✎ button jumps back to Character Mode.
 - **On your turn:** open **Actions** to choose moves, attacks, spells, and defensive stances such as Sentinel (react to anyone who steps into melee range), Target (the same for ranged), and Vigilant (watch for movers in a cone). Your hit chance depends on the weapon, your target's size, range, and lighting; a target in darkness is harder to hit at range.
 - **Seeing the map:** you only see what your character can see — walls block sight, dark areas need light (torches, campfires, light spells) or Night Vision, and places you've explored stay dimly remembered.
 - **Journal:** the Journal (bottom left) logs everything that happens, and is saved for the campaign, so you can scroll back if you missed something.

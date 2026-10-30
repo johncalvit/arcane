@@ -30,7 +30,7 @@ When combat starts, press **Roll** under Combat to roll your initiative. When it
 
 ### Abilities
 
-Click **View** next to **Skills** to see your skills with their success percentages — click a percentage to roll it. **Spell Book** (casters) shows the spells you have memorized, and **Techniques** shows the weapon techniques you have chosen. Spells are memorized in Character Mode; a magic skill isn't needed to learn a spell, it only improves your chance of casting it.
+Click **View** next to **Education** to see your subjects with their success percentages — click a percentage to roll it. **Spell Book** (casters) shows the spells you have memorized, and **Techniques** shows the weapon techniques you have chosen. Spells are memorized in Character Mode; magic education isn't needed to learn a spell, it only improves your chance of casting it.
 
 ### Equipment (Held Items)
 

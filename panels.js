@@ -61,7 +61,7 @@ function _paIcon(name, cls) {
   return `<svg class="ico ${cls || ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${p}"/></svg>`;
 }
 const _PA_TITLE_ICON = { Health: 'heart', Conditions: 'shield', Combat: 'swords', Abilities: 'book', Equipment: 'box',
-  Armor: 'shield', Stats: 'bars', Language: 'chat', 'Background & Notes': 'doc', Skills: 'gear', Magic: 'book', Techniques: 'swords' };
+  Armor: 'shield', Stats: 'bars', Language: 'chat', 'Background & Notes': 'doc', Education: 'gear', Skills: 'gear', Magic: 'book', Techniques: 'swords' };
 
 // Collapsible section: icon + spaced uppercase title + chevron. Header toggles the
 // body via delegation (data-pa="collapse").
@@ -92,7 +92,7 @@ function _paOpenModal(title, bodyHtml, onReady) {
   if (onReady) onReady(card);
 }
 function _paViewSkills(ent, skills, attrs) {
-  _paOpenModal('Skills', _paSkillRowsHtml(skills, attrs), card => {
+  _paOpenModal('Education', _paSkillRowsHtml(skills, attrs), card => {
     card.onclick = e => {
       const t = e.target.closest('[data-pa="roll-skill"]');
       if (t) { document.getElementById('pa-modal')?.remove(); openRoller({ label: t.dataset.name, target: +t.dataset.pct, targetLabel: 'or less' }); }
@@ -237,7 +237,7 @@ function _paSkillRowsHtml(skills, attrs) {
           <span class="ps-stat-val ps-rollable" style="min-width:36px;text-align:right;" data-pa="roll-skill" data-name="${_paEsc(name)}" data-pct="${pct}">${pct}%</span>
         </div>`;
       }).join('')
-    : `<div style="font-size:0.8rem;color:var(--text-dim);font-style:italic;">No skills invested.</div>`;
+    : `<div style="font-size:0.8rem;color:var(--text-dim);font-style:italic;">No education yet.</div>`;
 }
 
 // Abilities: one row per ability list, each with a "View ›" button that opens it
@@ -255,7 +255,7 @@ function _paSecAbilities(ent, skills, attrs) {
   const spellCount = (typeof _knownSpellsFor === 'function' && typeof SPELLS !== 'undefined') ? _knownSpellsFor(ent).length : 0;
   const techCount = ent.type === 'char' ? (ent.stats?.Techniques || []).length : 0;
   let html = '';
-  if (skillCount || ent.type === 'char') html += row('gear', 'Skills', skillCount, 'view-skills');
+  if (skillCount || ent.type === 'char') html += row('gear', 'Education', skillCount, 'view-skills');
   if (spellCount) html += row('book', 'Spell Book', spellCount, 'open-spellbook', `data-cid="${_paEsc(ent.ref)}"`);
   if (techCount || ent.type === 'char') html += row('swords', 'Techniques', techCount, 'view-techniques');
   return html ? _paSection('Abilities', html) : '';

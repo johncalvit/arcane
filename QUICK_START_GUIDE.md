@@ -2,7 +2,7 @@ Welcome! This guide walks through building your first character and playing it.
 
 # Building a Character
 
-Start in **Character Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically. The left sidebar is grouped into **Character** (Traits & Attributes), **Abilities** (Skills, Spell Book, Techniques), **Equipment** (Shop, Loadout, Armor), and **Summary** (Playsheet). Saving, loading, and account actions live in the **menu (☰)** at the top right.
+Start in **Character Mode** (top right). Everything you set here is saved to your character sheet and carries over into Play Mode automatically. The left sidebar is grouped into **Character** (Traits & Attributes), **Abilities** (Education, Spell Book, Techniques), **Equipment** (Shop, Loadout, Armor), and **Summary** (Playsheet). Saving, loading, and account actions live in the **menu (☰)** at the top right.
 
 ## 1. Name, Species & Traits
 
@@ -18,9 +18,9 @@ Quintessence is your magical aptitude — leave it at 0 for a non-caster, or inv
 
 These are computed automatically from your Raw Stats plus your Species, Age, Build, and Disposition choices — Power, Speed, Toughness, Stamina, Manual Dexterity, Physical Coordination, Knowledge, Social Skills, Logic, Intuition, and the Senses. You don't spend points here directly; they update live as you change the raw stats above them.
 
-## 4. Skills
+## 4. Education
 
-Skills are bought with a separate Skill Points pool (shown on the Skills page), spent per skill you want to invest in. Your success chance for each skill scales with the points invested and the Final Attribute it's tied to.
+Education is bought with a separate pool of Education Points (shown on the Education page), spent on the subjects you want to study. Your success chance in a subject depends on the points invested and the Final Attributes it's tied to — with diminishing returns: the first point is worth the most, the second half as much, the third a quarter, and so on.
 
 ## 5. Shop & Loadout — Weapons & Equipment
 
@@ -32,7 +32,7 @@ Equip the armor pieces you own into each body slot (Head, Torso, Arms, Legs, etc
 
 ## 7. Spell Book (casters only)
 
-At least 1 point in Quintessence makes you eligible to permanently memorize any spell — a magic-related skill (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
+At least 1 point in Quintessence makes you eligible to permanently memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
 
 ## 8. Techniques
 
@@ -50,7 +50,7 @@ Your character's Level is derived automatically from XP — the GM awards XP aft
 
 Play Mode is where your character moves around the map, fights, and casts spells alongside everyone else at the table.
 
-- **Left panel:** your portrait, level, class, Health, Conditions, and an **Initiative** roll button when combat starts. **Abilities** has **View** buttons for your skills (click a percentage to roll it), spell book, and techniques; **Equipment** lets you change what's in each hand; **View All** shows each held weapon's hit chance and damage. The ✎ button jumps back to Character Mode.
+- **Left panel:** your portrait, level, class, Health, Conditions, and an **Initiative** roll button when combat starts. **Abilities** has **View** buttons for your education (click a percentage to roll it), spell book, and techniques; **Equipment** lets you change what's in each hand; **View All** shows each held weapon's hit chance and damage. The ✎ button jumps back to Character Mode.
 - **On your turn:** open **Actions** to choose moves, attacks, spells, and defensive stances such as Sentinel (react to anyone who steps into melee range), Target (the same for ranged), and Vigilant (watch for movers in a cone). Your hit chance depends on the weapon, your target's size, range, and lighting; a target in darkness is harder to hit at range.
 - **Seeing the map:** you only see what your character can see — walls block sight, dark areas need light (torches, campfires, light spells) or Night Vision, and places you've explored stay dimly remembered.
 - **Journal:** the Journal (bottom left) logs everything that happens, and is saved for the campaign, so you can scroll back if you missed something.
