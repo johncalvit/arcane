@@ -2063,7 +2063,7 @@
     <!-- SPELL BOOK -->
     <div id="panel-spellbook" class="panel">
       <h2>Spell Book</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Any character with at least 1 point in Quintessence can permanently memorize spells here, spending Memory Points (Knowledge × Level) — a matching magic-class skill (Arcane, Deific, Demonic, Nature) doesn't unlock spells any more, it only boosts casting success. Once memorized, a spell can't be unlearned or exchanged.</p>
+      <p id="spellbook-intro" style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;"></p>
       <div class="points-bar" id="spellbook-memory-bar" style="display:none;">
         <div class="label">Memory Points Used</div>
         <div class="value" id="memory-points-used">0</div>
@@ -3386,6 +3386,15 @@ function _memoryPointsUsed(attrs) {
 // Permanently memorize a spell — spends Memory Points, no undo. Confirmed
 // (styledConfirm) since "cannot be unbought or exchanged" makes this exactly
 // the kind of one-way action this app always confirms before committing.
+// Whether memorizing a spell is permanent. For now a spell CAN be unlearned (freeing its Memory Points so
+// the character can learn something else); flip this to true to go back to one-way learning everywhere
+// (Spell Book text, confirm dialog and Unlearn button all follow it).
+const SPELL_LEARNING_PERMANENT = false;
+function _spellbookIntroText() {
+  return 'Any character with at least 1 point in Quintessence can memorize spells here, spending Memory Points (Knowledge × Level) — magic-related education (Arcane, Deific, Demonic, Nature) doesn\'t unlock spells, it only boosts casting success. '
+    + (SPELL_LEARNING_PERMANENT ? 'Once memorized, a spell can\'t be unlearned or exchanged.' : 'You can unlearn a spell to get its Memory Points back and learn something else.');
+}
+
 async function learnSpell(name) {
   if (characterKnownSpells.includes(name)) return;
   const spell = SPELLS.find(s => s.name === name);
@@ -3394,9 +3403,18 @@ async function learnSpell(name) {
   const cost  = _spellMemoryCost(attrs, spell);
   const left  = _memoryPointsTotal(attrs) - _memoryPointsUsed(attrs);
   if (cost > left) { alert(`Not enough Memory Points — ${spell.name} costs ${cost}, only ${left} left.`); return; }
-  const ok = await styledConfirm(`Permanently memorize "${spell.name}" for ${cost} Memory Point${cost === 1 ? '' : 's'}? This can't be undone or exchanged later.`);
+  const ok = await styledConfirm(`${SPELL_LEARNING_PERMANENT ? 'Permanently memorize' : 'Memorize'} "${spell.name}" for ${cost} Memory Point${cost === 1 ? '' : 's'}?${SPELL_LEARNING_PERMANENT ? " This can't be undone or exchanged later." : ' You can unlearn it later.'}`);
   if (!ok) return;
   characterKnownSpells.push(name);
+  recalc();
+}
+async function unlearnSpell(name) {
+  if (SPELL_LEARNING_PERMANENT || !characterKnownSpells.includes(name)) return;
+  const spell = SPELL_LEARNING_PERMANENT ? null : SPELLS.find(s => s.name === name);
+  const cost = spell ? _spellMemoryCost(calcAttributes(), spell) : 0;
+  const ok = await styledConfirm(`Unlearn "${name}"? You get ${cost} Memory Point${cost === 1 ? '' : 's'} back and can learn it again later.`);
+  if (!ok) return;
+  characterKnownSpells = characterKnownSpells.filter(n => n !== name);
   recalc();
 }
 
@@ -3464,6 +3482,8 @@ function buildSpellBookFilters() {
 // learnSpell). attrs optional — recalc() passes its own already-computed
 // attrs; called standalone (e.g. from showPanel) it computes its own.
 function buildSpellBookPanel(attrs) {
+  const introEl = document.getElementById('spellbook-intro');
+  if (introEl) introEl.textContent = _spellbookIntroText();
   const container = document.getElementById('spellbook-list');
   if (!container) return;
   attrs = attrs || calcAttributes();
@@ -3542,7 +3562,7 @@ function buildSpellBookPanel(attrs) {
           <div style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;">${dot}${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${castPct}% cast · ${cost} memory${defNote}</div>
         </div>
         ${known
-          ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known</span>`
+          ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known</span>${SPELL_LEARNING_PERMANENT ? '' : ` <button class="btn-sm" onclick="unlearnSpell('${spell.name.replace(/'/g, "\'")}')" title="Forget this spell and get its Memory Points back">Unlearn</button>`}`
           : `<button class="btn-sm" ${canAfford ? '' : 'disabled'} onclick="learnSpell('${spell.name.replace(/'/g, "\\'")}')" title="${canAfford ? '' : 'Not enough Memory Points left'}">Learn (${cost})</button>`}
       </div>`;
   }).join('');
@@ -7572,7 +7592,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261030a';
+const VERSION = 'v0.1.20261031a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -20706,7 +20726,7 @@ Equip the armor pieces you own into each body slot (Head, Torso, Arms, Legs, etc
 
 ## 7. Spell Book (casters only)
 
-At least 1 point in Quintessence makes you eligible to permanently memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
+At least 1 point in Quintessence makes you eligible to memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. You can unlearn a spell later to get its Memory Points back and choose another. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
 
 ## 8. Techniques
 

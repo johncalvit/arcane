@@ -32,7 +32,7 @@ Equip the armor pieces you own into each body slot (Head, Torso, Arms, Legs, etc
 
 ## 7. Spell Book (casters only)
 
-At least 1 point in Quintessence makes you eligible to permanently memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. Once memorized, a spell is yours for good. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
+At least 1 point in Quintessence makes you eligible to memorize any spell — magic-related education (Arcane, Deific, Demonic, Nature) isn't required to learn one, it only boosts your casting success later. Memorizing spends Memory Points (Knowledge × Level, shown at the top of the page) — a spell you're a poor match for costs extra to hold onto. You can unlearn a spell later to get its Memory Points back and choose another. Casting itself happens in Play Mode, only from what you've memorized here; a spell's range and your own senses affect how easy it is to hit with.
 
 ## 8. Techniques
 
