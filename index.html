@@ -562,9 +562,11 @@
     transform: translateX(-50%);
     margin-top: 0;
     font-family: var(--map-label-font, "Arial Narrow", "Archivo Narrow", Arial, sans-serif);
-    font-size: 8px;
+    font-size: var(--token-label-size, 6px); /* one number to tune the map labels */
+    font-weight: bold;
     color: #fff;
-    text-shadow: 0 0 3px #000, 0 0 6px #000;
+    /* heavy black outline so tiny text stays readable over busy map art */
+    text-shadow: 1px 0 0 #000, -1px 0 0 #000, 0 1px 0 #000, 0 -1px 0 #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 0 0 3px #000;
     white-space: nowrap;
     max-width: 120px;
     text-align: center;
@@ -576,7 +578,7 @@
     gap: 2px;
   }
   .token-label-icons {
-    font-size: 0.62rem;
+    font-size: calc(var(--token-label-size, 6px) * 1.6);
     line-height: 1;
     text-shadow: 0 0 4px #000, 0 0 8px #000;
     flex-shrink: 0;
@@ -592,7 +594,7 @@
   .map-token.token-shadow .token-ring .token-icon { display: none !important; }
   .map-token.token-shadow .token-ring::after { content: '?'; color: #9a9aaa; font-weight: bold; font-size: 1.1rem; }
   .map-token.token-shadow .token-label-text { font-size: 0; }
-  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: 8px; font-style: italic; color: #b0b0c0; }
+  .map-token.token-shadow .token-label-text::after { content: 'Unknown'; font-size: var(--token-label-size, 6px); font-style: italic; color: #b0b0c0; }
   .map-token.token-shadow .token-label-icons,
   .map-token.token-shadow .token-cond-overlay { display: none; }
 
@@ -7592,7 +7594,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261031a';
+const VERSION = 'v0.1.20261101a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
