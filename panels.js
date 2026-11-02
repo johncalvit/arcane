@@ -427,17 +427,58 @@ function _paBind(el, ctx) {
       case 'drop-hand': dropHeldItem(ctx.ent.ref, d.side); break;
     }
   };
-  el.onchange = (e) => {
+  el.onchange = async (e) => {
     const t = e.target.closest('[data-pa="set-hand"]');
     if (!t) return;
     const side = t.dataset.side;
     const value = t.value;
-    if (ctx.isOwnSheet && document.getElementById('ps-hand-' + side)) {
-      _playSetHand(side, value);
+    const ent = ctx.ent;
+    const setHand = () => (ctx.isOwnSheet && document.getElementById('ps-hand-' + side))
+      ? _playSetHand(side, value)
+      : _acSetHand(ent.type, ent.id, side, value);
+    // Swapping what's in a hand on your own turn in combat costs something: stow the old item (ends
+    // the turn) or drop it (instant). Out of combat, off-turn, or into an empty hand it stays free.
+    const old = (ent.held || {})[side];
+    const combId = ent.ref;
+    const myTurn = old && value !== old && _atIsCombatActive() && _atSharedActive()?.id === combId
+      && _paBodyPlan(ent.bodyType) === BODY_PLANS.Humanoid;
+    if (!myTurn) { setHand(); return; }
+    const choice = await _paStowOrDrop(old, value);
+    if (!choice) { renderPlayCharacter(); return; } // cancelled: snap the dropdown back
+    if (choice === 'drop') {
+      await dropHeldItem(ent.ref, side);
+      await setHand();
+      renderPlayCharacter();
     } else {
-      _acSetHand(ctx.ent.type, ctx.ent.id, side, value);
+      await setHand();
+      await atSetSlot(combId, 'full', 'Stow ' + old, 3, true);
+      atAcceptAction(combId);
     }
   };
+}
+
+// "Stow it (ends your turn) or drop it (instant)?" — resolves 'stow' | 'drop' | null (cancelled).
+function _paStowOrDrop(oldItem, newItem) {
+  return new Promise(resolve => {
+    const existing = document.getElementById('stow-drop-modal');
+    if (existing) existing.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'stow-drop-modal';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+    const what = newItem ? `to ${_paEsc(newItem)}` : 'to an empty hand';
+    overlay.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;max-width:94vw;width:340px;display:flex;flex-direction:column;gap:12px;font-family:var(--ui-font);">
+      <div style="font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;">Change ${_paEsc(oldItem)} ${what}</div>
+      <button class="at-btn primary" data-c="stow" style="padding:8px;"><b>Stow ${_paEsc(oldItem)}</b><br><span style="font-size:0.72rem;">Ends your turn</span></button>
+      <button class="at-btn" data-c="drop" style="padding:8px;"><b>Drop ${_paEsc(oldItem)}</b><br><span style="font-size:0.72rem;">Instant — lands on the ground, use the new item now</span></button>
+      <button class="at-btn" data-c="" style="padding:6px;">Cancel</button></div>`;
+    overlay.onclick = (ev) => {
+      const b = ev.target.closest('[data-c]');
+      if (!b && ev.target !== overlay) return;
+      overlay.remove();
+      resolve(b ? (b.dataset.c || null) : null);
+    };
+    document.body.appendChild(overlay);
+  });
 }
 
 // ── The renderer ──────────────────────────────────────────────────────────────
