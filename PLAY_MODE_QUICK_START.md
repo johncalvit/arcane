@@ -34,7 +34,7 @@ Click **View** next to **Education** to see your subjects with their success per
 
 ### Equipment (Held Items)
 
-Equipment shows what is in your **right** and **left** hand. Want to use your sword? Equip it in one hand or both. Want to drink a potion? Equip it here and be ready for your turn. You can also drop an item here, but it lands on the map for anyone to pick up. In combat, changing what is in a hand on your turn gives a choice: **stow** the old item (this ends your turn) or **drop** it (instant, it lands on the map and you can use the new item right away). To pick something up (or grab an opponent), make sure the hand you need is free. **View All** shows the hit chance and damage of each held weapon action and everything you're carrying.
+Equipment shows what is in your **right** and **left** hand. Want to use your sword? Equip it in one hand or both. Want to drink a potion? Equip it here and be ready for your turn. You can also drop an item here, but it lands on the map for anyone to pick up. In combat, changing what is in a hand on your turn (from the Equipment panel or the action dialog) gives a choice: **stow** the old item (this ends your turn) or **drop** it (instant, it lands on the map and you can use the new item right away). To pick something up (or grab an opponent), make sure the hand you need is free. **View All** shows the hit chance and damage of each held weapon action and everything you're carrying.
 
 ### Armor
 

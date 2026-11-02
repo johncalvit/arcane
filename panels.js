@@ -1318,15 +1318,30 @@ async function _dlgChange(e) {
   if (!ent) return;
   const prev = ent.held?.[side] || '';
   if ((value || '') === prev) return; // no-op re-select
+  // Replacing an item you're holding: stow it (ends the turn) or drop it (instant) — same choice as
+  // the Equipment panel. An empty hand just readies the new item on that arm as before.
+  let choice = null;
+  if (prev && _paBodyPlan(ent.bodyType) === BODY_PLANS.Humanoid) {
+    choice = await _paStowOrDrop(prev, value);
+    if (!choice) { _dlgRender(body); return; } // cancelled: snap the dropdown back
+  }
   try {
     const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
+    if (choice === 'drop') await dropHeldItem(ent.ref, side);
     if (isOwn && document.getElementById('ps-hand-' + side)) {
       await _playSetHand(side, value);
     } else {
       await _acSetHand(ent.type, ent.id, side, value);
     }
-    const label = value ? `Ready ${value}` : 'Free hand';
-    await atSetSlot(id, side, label, 3, false); // ~1 round, this arm only
+    if (choice === 'stow') {
+      await atSetSlot(id, 'full', 'Stow ' + prev, 3, true);
+      atCloseModal(); atAcceptAction(id);
+      return;
+    }
+    if (choice !== 'drop') {
+      const label = value ? `Ready ${value}` : 'Free hand';
+      await atSetSlot(id, side, label, 3, false); // ~1 round, this arm only
+    }
     _dlgRender(body);
   } catch (err) {
     console.error('hand change:', err);
