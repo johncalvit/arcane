@@ -1561,8 +1561,8 @@
             <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling. Applies to every kind of spell except Deific — a prayer asks for the effect rather than casting it.">
           </div>
           <div class="field">
-            <label>Price per Modifier (Crowns)</label>
-            <input type="text" id="apf-costpermod" placeholder="e.g. 4" title="In Crowns, not pence — an owned instance's actual price is area weight × its own size × this (e.g. a Kettle Hat at 4cr/mod, bought at size 5, costs 20cr). This IS what the Shop charges.">
+            <label>Price per Size (Crowns)</label>
+            <input type="text" id="apf-costpermod" placeholder="e.g. 4" title="In Crowns, not pence — an owned instance's actual price is area weight (for the piece's body slot) × its own size × this (e.g. a Kettle Hat at 4cr per size point, bought at size 5, costs 20cr). This IS what the Shop charges.">
           </div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
@@ -1572,7 +1572,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th title="Per point of piece size; lowers the wearer's max casting success">Impedance</th><th>Price/Mod</th><th></th></tr></thead>
+        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th title="Per point of piece size; lowers the wearer's max casting success">Impedance</th><th title="Crowns per point of piece size, before the body-area factor: price = area weight × size × this">Price/Size</th><th></th></tr></thead>
         <tbody id="armorpiecemgr-list"></tbody>
       </table>
     </div>
@@ -7594,7 +7594,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261102c';
+const VERSION = 'v0.1.20261102d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
