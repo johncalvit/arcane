@@ -1463,7 +1463,7 @@ async function _dlgAct(d, id, body) {
       break;
     case 'recover':
       atCloseModal();
-      await atResolveRecovery(id, d.key); // manual save roll to shed the condition
+      await atResolveRecovery(id, d.key, d.key === 'stunned' || d.key === 'unconscious'); // manual save roll to shed the condition
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];

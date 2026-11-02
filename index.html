@@ -7594,7 +7594,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261102b';
+const VERSION = 'v0.1.20261102c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9036,6 +9036,13 @@ async function _clearDefConds(token) {
   }
 }
 
+// An unconscious character can't be stunned: drop the Stunned flag (and its save counter) whenever Unconscious is set.
+function _dropStunIfDown(set) {
+  if (!set.has("unconscious")) return;
+  set.delete("stunned");
+  for (const c of [...set]) if (c.startsWith("stunsince:")) set.delete(c);
+}
+
 async function setCondition(tokenId, condition, active, opts) {
   // Held/Holding are RELATIONAL — each side names the other (heldby:<cid> on
   // the target, holding on the grabber). Clearing either badge directly (e.g.
@@ -9061,6 +9068,7 @@ async function setCondition(tokenId, condition, active, opts) {
     const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', corroding: 'corrodesince:', burning: 'burnsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
+  _dropStunIfDown(current);
   const newConds = [...current];
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
@@ -9100,6 +9108,7 @@ async function setConditions(tokenId, changes) {
     const sweep = { slowed: 'legdmg:', stunned: 'stunsince:', bleeding: 'bleedsince:', corroding: 'corrodesince:', burning: 'burnsince:', buffed: 'buff:', held: 'heldby:', target: 'facing:', vigilant: 'facing:' }[condition];
     if (sweep) for (const c of [...current]) if (c.startsWith(sweep)) current.delete(c);
   }
+  _dropStunIfDown(current);
   const newConds = [...current];
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
@@ -10672,7 +10681,13 @@ function _recoverTarget(ent, tokenId, effectKey) {
 // (waking from 0 Toughness) — despite being unconscious, the player still
 // rolls this themselves rather than it happening silently to keep them
 // engaged; the GM can trigger it on a token's behalf same as the others.
-async function atResolveRecovery(combatantId, effectKey) {
+async function atResolveRecovery(combatantId, effectKey, endsTurn) {
+  // Shake Off Stun and Resuscitate are turn-enders: once the roll is made (win or lose) the turn is spent.
+  const endTurn = async (label) => {
+    if (!endsTurn) return;
+    await atSetSlot(combatantId, "full", label, 3, true);
+    atAcceptAction(combatantId);
+  };
   const token = _pathFindToken(combatantId);
   if (!token) return;
   const ent = getEntity(combatantId);
@@ -10694,12 +10709,14 @@ async function atResolveRecovery(combatantId, effectKey) {
       target, targetLabel: 'roll under to stabilize',
       onComplete: async (n) => {
         const success = n <= 5 || (n < 96 && n <= target);
-        if (!success) return;
+        if (success) {
         // baseAttrs — see applyDamage's comment; stabilizing should restore
         // toward the target's real Toughness ceiling, not a live-reduced one.
         const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
         await updateEntity(ent.ref, { damage: Object.assign({}, ent.damage, { toughness: Math.max(0, tMax - 1) }) });
-        await setCondition(token.id, 'unconscious', false);
+        await setCondition(token.id, "unconscious", false);
+        }
+        await endTurn("Resuscitate");
       },
     });
     return;
@@ -10719,6 +10736,7 @@ async function atResolveRecovery(combatantId, effectKey) {
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
       if (success) await setCondition(token.id, effectKey, false); // sweep clears the since marker
+      if (effectKey === "stunned") await endTurn("Shake Off Stun");
     },
   });
 }
