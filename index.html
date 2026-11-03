@@ -575,12 +575,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 1px;
   }
   .token-label-icons {
-    font-size: calc(var(--token-label-size, 6px) * 1.6);
+    font-size: calc(var(--token-label-size, 6px) * 1.15); /* about the height of a letter, so it reads as part of the name */
     line-height: 1;
-    text-shadow: 0 0 4px #000, 0 0 8px #000;
+    margin-right: -1px;
+    text-shadow: 0 0 3px #000, 0 0 5px #000;
     flex-shrink: 0;
   }
   .token-label-text {
@@ -7602,7 +7603,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261102e';
+const VERSION = 'v0.1.20261102f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
