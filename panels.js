@@ -186,7 +186,7 @@ function _paSecCombat(ent, canEdit, prefixHtml) {
 // that's currently modified (buffed or reduced, e.g. by blood loss) shows
 // its live value plus a colored (±delta) so the change is visible at a
 // glance instead of just a number that quietly moved.
-function _paSecStats(attrs, baseAttrs) {
+function _paSecStats(attrs, baseAttrs, armorNoise) {
   const groups = [
     { label: 'Physical',  keys: ATTRIBUTES.filter(a => a.group === 'physical') },
     { label: 'Movement',  keys: ATTRIBUTES.filter(a => a.group === 'movement') },
@@ -206,6 +206,7 @@ function _paSecStats(attrs, baseAttrs) {
     <div style="margin-bottom:8px;">
       <div style="font-size:0.62rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:3px;">${g.label}</div>
       ${g.keys.map(row).join('')}
+      ${g.label === "Movement" ? `<div class="ps-stat-row" title="${_paEsc(NOISE_TIP)}"><span class="ps-stat-label">Noise</span><span class="ps-stat-val">${Math.round(_noiseScore(attrs, armorNoise))}</span></div>` : ""}
     </div>`).join('');
   return _paSection('Stats', content);
 }
@@ -584,7 +585,7 @@ function renderEntityPanel(ref, opts = {}) {
     ${_paSecAbilities(ent, skills, attrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
     ${_paSecArmor(ent)}
-    ${_paSecStats(attrs, ent.baseAttrs)}
+    ${_paSecStats(attrs, ent.baseAttrs, ent.armorNoise)}
     ${_paSecLanguage(ent, isOwnSheet)}
     ${_paSecNotes(ent)}`;
 

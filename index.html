@@ -2544,6 +2544,14 @@ function recalc() {
       card.innerHTML = `<div class="attr-name">${attr.label}</div><div class="attr-value">${Math.round(val)}</div>`;
       container.appendChild(card);
     }
+    if (group === "movement") {
+      const armorNoise = Object.values(_equippedArmorInstances()).reduce((s, i) => s + (i.noise || 0), 0);
+      const card = document.createElement("div");
+      card.className = "attr-card";
+      card.title = NOISE_TIP;
+      card.innerHTML = `<div class="attr-name">Noise</div><div class="attr-value">${Math.round(_noiseScore(attrs, armorNoise))}</div>`;
+      container.appendChild(card);
+    }
   }
 
   // Weight loadout summary
@@ -7594,7 +7602,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261102d';
+const VERSION = 'v0.1.20261102e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16627,9 +16635,14 @@ function _vigilantVisionRangeFt(watcherEnt) {
 // scaled up by their own Target Size — a giant in the same armor, moving at
 // the same speed, is simply louder than a halfling.
 function _infiltratorNoiseScore(moverEnt) {
-  const size = Math.max(0.1, moverEnt.attrs._targetAdj || 1);
-  return ((moverEnt.armorNoise || 0) + (moverEnt.attrs.Speed || 0)) * size;
+  return _noiseScore(moverEnt.attrs, moverEnt.armorNoise);
 }
+// The Noise figure shown on the sheets: (worn armor noise + Speed) x Target Size.
+function _noiseScore(attrs, armorNoise) {
+  const size = Math.max(0.1, (attrs && attrs._targetAdj) || 1);
+  return ((armorNoise || 0) + ((attrs && attrs.Speed) || 0)) * size;
+}
+const NOISE_TIP = "How much noise you make moving: (worn armor Noise + Speed) x Target Size. Used against Vigilant watchers' Hearing.";
 
 // Placeholder odor score — see SMELL_BASE_ODOR's comment above. Bigger
 // bodies smell more; a recent Bathed condition halves it.
