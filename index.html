@@ -6087,10 +6087,10 @@ const ARMOR_SLOTS = {
   Humanoid: [
     { key:'head',  label:'Head/Neck',      parts:['head','neck'] },
     { key:'torso', label:'Torso',          parts:['torso','chest','abdomen'] },
-    { key:'rarm',  label:'Right Arm/Hand', parts:['rarm','rhand','rshoulder'] },
-    { key:'larm',  label:'Left Arm/Hand',  parts:['larm','lhand','lshoulder'] },
-    { key:'rleg',  label:'Right Leg/Foot', parts:['rleg','rfoot','rthigh'] },
-    { key:'lleg',  label:'Left Leg/Foot',  parts:['lleg','lfoot','lthigh'] },
+    { key:'rarm',  label:'Right Arm/Hand', parts:['r_arm','rarm','rhand','rshoulder'] },
+    { key:'larm',  label:'Left Arm/Hand',  parts:['l_arm','larm','lhand','lshoulder'] },
+    { key:'rleg',  label:'Right Leg/Foot', parts:['r_leg','rleg','rfoot','rthigh'] },
+    { key:'lleg',  label:'Left Leg/Foot',  parts:['l_leg','lleg','lfoot','lthigh'] },
   ],
   Quadruped: [
     { key:'head',     label:'Head',     parts:['head','neck'] },
@@ -7603,7 +7603,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261102f';
+const VERSION = 'v0.1.20261103a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
