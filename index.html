@@ -7603,7 +7603,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261103a';
+const VERSION = 'v0.1.20261104a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8972,6 +8972,8 @@ const CONDITION_DEFS = [
     desc:'Watching a 120° sector and listening/smelling all around it for anyone Infiltrating nearby. A successful spot ends their Infiltrate and offers a melee Attack if they’re in reach.' },
   { key:'infiltrating',label:'Infiltrating',icon:'🥷', color:'#4a6a4a',
     desc:'Sneaking — eligible to go unnoticed past a Vigilant watcher (see Vigilant). Noisier armor, higher Speed, and bigger Target Size all make this harder; ends automatically the moment a Vigilant actually spots you.' },
+  { key:'searching',   label:'Searching',   icon:'🔍', color:'#d8c060',
+    desc:'Actively looking, listening and sniffing around — doubles the chance of noticing hidden objects (traps, secret doors, switches) nearby. Ends when you take another action.' },
   { key:'bathed',      label:'Bathed',      icon:'🛁', color:'#5fa8d3',
     desc:'Recently washed up — halves the chance of being smelled while Infiltrating. Clear when the GM judges its effect has worn off.' },
   { key:'stunned',     label:'Stunned',     icon:'💫', color:'#ff5555',
@@ -9030,6 +9032,7 @@ function _defCondFromLabel(label) {
   if (label === 'Target')   return 'target';
   if (label === 'Vigilant') return 'vigilant';
   if (label === 'Infiltrate') return 'infiltrating';
+  if (label === 'Search')   return 'searching';
   return null;
 }
 
@@ -9040,7 +9043,7 @@ function _defCondFromLabel(label) {
 async function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
-  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating']) {
+  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating', 'searching']) {
     if (conds.has(c)) await setCondition(token.id, c, false);
   }
 }
@@ -9082,6 +9085,7 @@ async function setCondition(tokenId, condition, active, opts) {
   t.conditions = newConds;
   _refreshTokenBadges(tokenId);
   drawSentinelRanges();
+  if (active && condition === 'searching') setTimeout(() => _hiddenDetectionCheck(true), 0); // start looking at once
   const { error } = await sb.from('map_tokens').update({ conditions: newConds }).eq('id', tokenId);
   if (error) _writeErrorToast(error, 'map_tokens (condition)');
   // Realtime UPDATE will sync to other clients automatically
@@ -12995,6 +12999,7 @@ const AT_FULLBODY = [
   { label: 'Target',         dur: 99 }, // ranged cousin of Sentinel — see enterTargetAimMode
   { label: 'Vigilant',       dur: 99 }, // watches a sector for Infiltrators — see enterVigilantAimMode
   { label: 'Infiltrate',     dur: 99 }, // sneaking stance a Vigilant watcher can spot — see _vigilantDetects
+  { label: 'Search',         dur: 99 }, // looks for hidden objects — see _hiddenDetectionCheck
   { label: 'Go Prone',       dur: 1 },
   { label: 'Charge',         dur: 3 },
 ];
@@ -14910,6 +14915,15 @@ function subscribeMapRealtime() {
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
       scheduleLights();
+    })
+    // A player's character noticed a hidden object (see _hiddenReveal). Everyone marks it found;
+    // the GM also saves that into the map so it stays found.
+    .on('broadcast', { event: 'hidden-found' }, ({ payload }) => {
+      const w = mapWalls.find(x => x.id === payload.id);
+      if (!w || w.found) return;
+      w.found = true; w.foundBy = payload.who || '';
+      if (isGM()) saveMapWalls();
+      drawWalls();
     })
     // The GM flipped the active map's Day/Dark lighting (see
     // toggleMapLighting) — every Vigilant cone depends on this, so redraw.
@@ -18115,6 +18129,8 @@ enterPlayMode = function() {
          <option value="line">Line</option>
          <option value="rect">Rect</option>
          <option value="circle">Circle</option>
+         <option value="hline">🕵 Hidden line</option>
+         <option value="hpoly">🕵 Hidden area</option>
          <option value="erase">Erase</option>
        </select>
        <label class="btn-sm" style="display:flex;align-items:center;gap:3px;font-size:0.72rem;color:var(--text-dim);cursor:pointer;" title="This wall blocks line of sight">
@@ -18802,6 +18818,8 @@ function exitWallMode() {
 }
 
 function _wallShape() { return document.getElementById('wall-shape-sel')?.value || 'line'; }
+// Shapes drawn by clicking a chain of points (double-click / right-click to finish).
+function _wallIsChain(shape) { return shape === 'line' || shape === 'hline' || shape === 'hpoly'; }
 function _wallBlocksVision()   { return document.getElementById('wall-blocks-vision')?.checked   ?? true; }
 function _wallBlocksMovement() { return document.getElementById('wall-blocks-movement')?.checked ?? true; }
 
@@ -18830,7 +18848,7 @@ function wallMouseDown(e) {
     return true;
   }
 
-  if (shape === 'line') {
+  if (_wallIsChain(shape)) {
     if (e.button === 2) { _wallCommitLine(); return true; }
     if (e.detail === 2 && wallDrawPoints.length >= 1) { _wallCommitLine(); return true; }
     wallDrawPoints.push({ x, y });
@@ -18886,6 +18904,13 @@ function _findWallSegmentAt(vpX, vpY) {
       const r = Math.hypot(pts[1].x - pts[0].x, pts[1].y - pts[0].y);
       const d = Math.abs(Math.hypot(vpX - pts[0].x, vpY - pts[0].y) - r);
       if (d < bestDist) { bestDist = d; best = { wall: w, segIndex: null }; }
+    } else if (w.type === 'hidden') {
+      const n = w.shape === 'poly' ? pts.length : pts.length - 1;
+      for (let i = 0; i < n; i++) {
+        const a = pts[i], b = pts[(i + 1) % pts.length];
+        const d = _ptSegDist(vpX, vpY, a.x, a.y, b.x, b.y);
+        if (d < bestDist) { bestDist = d; best = { wall: w, segIndex: null }; }
+      }
     }
   }
   return best;
@@ -18925,7 +18950,7 @@ function wallMouseMove(e) {
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const x = e.clientX - rect.left, y = e.clientY - rect.top;
-  if (_wallShape() === 'line') {
+  if (_wallIsChain(_wallShape())) {
     if (wallDrawPoints.length === 0) return;
     drawWalls(x, y);
   } else if (wallDragging && wallDragStart) {
@@ -18934,7 +18959,7 @@ function wallMouseMove(e) {
 }
 
 function wallMouseUp(e) {
-  if (!wallMode || _wallShape() === 'line') return;
+  if (!wallMode || _wallIsChain(_wallShape())) return;
   if (!wallDragging || !wallDragStart) return;
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
@@ -18961,8 +18986,16 @@ function wallEscape() {
 }
 
 function _wallCommitLine() {
-  if (wallDrawPoints.length < 2) { wallDrawPoints = []; drawWalls(null, null); return; }
+  const shape = _wallShape();
+  const need = shape === 'hpoly' ? 3 : 2;
+  if (wallDrawPoints.length < need) { wallDrawPoints = []; drawWalls(null, null); return; }
   const points = wallDrawPoints.map(p => _wallVpToPct(p.x, p.y));
+  if (shape === 'hline' || shape === 'hpoly') {
+    wallDrawPoints = [];
+    drawWalls(null, null);
+    _openHiddenModal(shape === 'hpoly' ? 'poly' : 'line', points);
+    return;
+  }
   _wallCommit('line', points);
 }
 
@@ -18977,6 +19010,171 @@ function _wallCommit(type, points) {
   saveMapWalls();
   drawWalls();
 }
+
+// ═══ HIDDEN OBJECTS ═══════════════════════════════════════════════════════════
+// Traps, secret doors, switches: lines or areas the GM draws (Walls tool → 🕵 Hidden line / Hidden area)
+// that only the GM sees until a character notices them. Stored in mapWalls as type 'hidden' (like lit
+// areas), so they save and sync with the walls; they never block sight or movement.
+//   { type:'hidden', shape:'line'|'poly', points, name, vis, hear, smell, found }
+// vis/hear/smell are HIDING factors (0 = that sense can't detect it). A sense's chance to notice is
+// the character's matching stat divided by the hiding factor (Day/Night Vision 10 vs hiding 40 = 25%);
+// the senses combine, and Searching multiplies the chance. Sight needs line of sight and uses Day Vision
+// where the object is lit (or the map isn't dark), Night Vision otherwise; hearing/smell ignore walls.
+var SEARCH_DETECT_MULT  = 2;
+var HIDDEN_RECHECK_MS   = 4000;   // one roll per character per object per this long, while moving or searching
+var _hiddenLastRoll     = {};     // 'tokenId|objectId' → ms of the last roll
+
+function _hiddenObjects() { return mapWalls.filter(w => w.type === 'hidden' && (w.points || []).length >= 2); }
+
+// Closest point of a hidden object to (px,py), all in image px: { x, y, dist }. Inside an area counts as 0.
+function _hiddenNearest(w, px, py) {
+  const pts = (w.points || []).map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH }));
+  if (w.shape === 'poly' && pts.length >= 3 && _fogPointInPolygon(px, py, pts)) return { x: px, y: py, dist: 0 };
+  let best = { x: pts[0].x, y: pts[0].y, dist: Infinity };
+  const n = w.shape === 'poly' ? pts.length : pts.length - 1;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    const dx = b.x - a.x, dy = b.y - a.y, lenSq = dx * dx + dy * dy;
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((px - a.x) * dx + (py - a.y) * dy) / lenSq)) : 0;
+    const x = a.x + t * dx, y = a.y + t * dy, d = Math.hypot(px - x, py - y);
+    if (d < best.dist) best = { x, y, dist: d };
+  }
+  return best;
+}
+
+// Percent chance (0-100) that this viewer notices object w right now, by sense. `attrs` is the viewer's
+// attributes; `searching` multiplies each sense. Returns { total, visual, hearing, smell }.
+function _hiddenChances(w, viewerTok, attrs, searching) {
+  const out = { total: 0, visual: 0, hearing: 0, smell: 0 };
+  if (!mapScalePPF || !attrs) return out;
+  const vx = (viewerTok.x_pct / 100) * mapImgW, vy = (viewerTok.y_pct / 100) * mapImgH;
+  const near = _hiddenNearest(w, vx, vy);
+  const distFt = near.dist / mapScalePPF;
+  const mult = searching ? SEARCH_DETECT_MULT : 1;
+  const stat = v => Math.max(0, Math.min(100, v || 0));
+  const chance = (s, hiding) => hiding > 0 ? Math.min(100, (stat(s) / hiding) * 100 * mult) : 0;
+  if (w.vis > 0) {
+    const lit = _litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(near.x, near.y, poly));
+    const s = (mapIsDark && !lit) ? attrs.NightVision : attrs.DayVision;
+    if (distFt <= stat(s) * VIGILANT_VISION_FT_PER_POINT
+        && _sentinelLineOfSight(viewerTok.x_pct, viewerTok.y_pct, (near.x / mapImgW) * 100, (near.y / mapImgH) * 100)) {
+      out.visual = chance(s, w.vis);
+    }
+  }
+  if (w.hear > 0 && distFt <= VIGILANT_HEARING_RANGE_FT) out.hearing = chance(attrs.Hearing, w.hear);
+  if (w.smell > 0 && distFt <= VIGILANT_SMELL_RANGE_FT)  out.smell   = chance(attrs.Smell, w.smell);
+  out.total = 100 * (1 - (1 - out.visual / 100) * (1 - out.hearing / 100) * (1 - out.smell / 100));
+  return out;
+}
+
+// Runs on the player's own client for their own character: whenever the fog is redrawn after a move, when
+// they start Searching, and every few seconds while they stay Searching. One roll per object per
+// HIDDEN_RECHECK_MS, and only for objects with at least some chance right now (in range, in sight).
+function _hiddenDetectionCheck(force, onlySearching) {
+  if (isGM() || !currentCharacterId || typeof mapScalePPF === 'undefined' || !mapScalePPF) return;
+  const objs = _hiddenObjects().filter(w => !w.found);
+  if (!objs.length) return;
+  const viewer = _fogViewerToken();
+  if (!viewer) return;
+  const conds = getConditions(viewer.id);
+  if (conds.has('dead') || conds.has('unconscious')) return;
+  const searching = conds.has('searching');
+  if (onlySearching && !searching) return;
+  const ent = getEntity(_refForToken(viewer));
+  if (!ent) return;
+  const now = Date.now();
+  for (const w of objs) {
+    const key = viewer.id + '|' + w.id;
+    if (!force && now - (_hiddenLastRoll[key] || 0) < HIDDEN_RECHECK_MS) continue;
+    const c = _hiddenChances(w, viewer, ent.attrs, searching);
+    if (c.total <= 0) continue;
+    _hiddenLastRoll[key] = now;
+    if (Math.random() * 100 < c.total) _hiddenReveal(w, ent.name);
+  }
+}
+setInterval(() => { try { _hiddenDetectionCheck(false, true); } catch (e) {} }, HIDDEN_RECHECK_MS);
+
+function _hiddenReveal(w, who) {
+  if (w.found) return;
+  w.found = true; w.foundBy = who || '';
+  drawWalls();
+  mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who: who || '' } });
+  logCombat(`🔍 ${who || 'Someone'} notices ${w.name ? 'a ' + w.name : 'something hidden'}!`, 'good');
+  showToast(`You notice ${w.name ? 'a ' + w.name : 'something hidden'}!`, 'good');
+}
+
+function _hiddenDrawShape(svg, w) {
+  const pts = (w.points || []).map(_wallPctToVp);
+  if (pts.length < 2) return;
+  const gm = _gmSeesAll();
+  const color = w.found ? '#4de0a0' : '#b070ff';
+  const el = document.createElementNS('http://www.w3.org/2000/svg', w.shape === 'poly' ? 'polygon' : 'polyline');
+  el.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
+  el.setAttribute('fill', w.shape === 'poly' ? (w.found ? 'rgba(77,224,160,0.14)' : 'rgba(176,112,255,0.14)') : 'none');
+  el.setAttribute('stroke', color);
+  el.setAttribute('stroke-width', '2');
+  if (!w.found) el.setAttribute('stroke-dasharray', '3,4');
+  el.setAttribute('stroke-linejoin', 'round');
+  svg.appendChild(el);
+  const tx = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  tx.setAttribute('x', pts[0].x); tx.setAttribute('y', pts[0].y - 7);
+  tx.setAttribute('font-size', '10'); tx.setAttribute('text-anchor', 'middle');
+  tx.setAttribute('fill', color);
+  tx.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+  tx.textContent = gm
+    ? `🕵 ${w.name || 'hidden'} · 👁${w.vis || 0} 👂${w.hear || 0} 👃${w.smell || 0}${w.found ? ' ✓' : ''}`
+    : `🔍 ${w.name || 'Something hidden'}`;
+  svg.appendChild(tx);
+}
+
+// GM's dialog after drawing a hidden line/area: what it is, and how well it's hidden from each sense.
+function _openHiddenModal(shape, points) {
+  document.getElementById('hidden-obj-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'hidden-obj-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  const inp = 'width:70px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);';
+  overlay.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;width:360px;max-width:94vw;display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);">
+    <div style="font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;">🕵 Hidden ${shape === 'poly' ? 'Area' : 'Line'}</div>
+    <label style="font-size:0.78rem;color:var(--text-dim);">What is it? <span style="font-size:0.68rem;">(shown to players once found)</span>
+      <input id="hid-name" type="text" placeholder="e.g. Pit trap, Secret door" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 7px;font-family:var(--ui-font);"></label>
+    <div style="font-size:0.72rem;color:var(--text-dim);">Hiding factors — the higher, the harder to notice. A character's chance for a sense is their stat ÷ the factor (Vision 10 vs 40 = 25%). 0 = that sense can't detect it. Searching doubles the chance.</div>
+    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:0.8rem;">
+      <label>👁 Visual<br><input id="hid-vis" type="number" min="0" value="40" style="${inp}"></label>
+      <label>👂 Hearing<br><input id="hid-hear" type="number" min="0" value="0" style="${inp}"></label>
+      <label>👃 Smell<br><input id="hid-smell" type="number" min="0" value="0" style="${inp}"></label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:4px;">
+      <button class="btn" id="hid-save">Add</button>
+      <button class="btn danger" id="hid-cancel">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  const num = id => Math.max(0, parseFloat(document.getElementById(id).value) || 0);
+  document.getElementById('hid-cancel').onclick = () => overlay.remove();
+  document.getElementById('hid-save').onclick = async () => {
+    mapWalls.push({
+      id: 'hid-' + Date.now() + '-' + Math.round(Math.random() * 9999),
+      type: 'hidden', shape, points,
+      name: document.getElementById('hid-name').value.trim(),
+      vis: num('hid-vis'), hear: num('hid-hear'), smell: num('hid-smell'),
+      found: false, blocksVision: false, blocksMovement: false,
+    });
+    overlay.remove();
+    await saveMapWalls();
+    drawWalls();
+  };
+  document.getElementById('hid-name').focus();
+}
+
+async function _hiddenEdit(id, field, value) {
+  const w = mapWalls.find(x => x.id === id);
+  if (!w || w.type !== 'hidden') return;
+  w[field] = field === 'found' ? !!value : Math.max(0, parseFloat(value) || 0);
+  if (field === 'found' && !w.found) delete w.foundBy;
+  await saveMapWalls();
+  drawWalls();
+}
+// ═══ END HIDDEN OBJECTS ═══════════════════════════════════════════════════════
 
 async function saveMapWalls() {
   if (!activeMapId) return;
@@ -19618,6 +19816,7 @@ function drawFog(fromLights) {
   // viewer's own movement wouldn't update its range circle until something
   // else happened to redraw it.
   if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+  _hiddenDetectionCheck(false); // the viewer may have just moved into range of something hidden
 }
 
 function drawWalls(mouseX, mouseY) {
@@ -19625,13 +19824,15 @@ function drawWalls(mouseX, mouseY) {
   if (!svg) return;
   const showAuthoring = isGM() && wallMode;
   const obstacles = mapWalls.filter(w => w.maxHp);
-  if (!showAuthoring && !obstacles.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  // The GM always sees hidden objects; everyone else only once somebody has noticed them.
+  const hiddenShown = _hiddenObjects().filter(w => _gmSeesAll() || w.found);
+  if (!showAuthoring && !obstacles.length && !hiddenShown.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
   svg.style.display = 'block';
   svg.innerHTML = '';
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
-    if (w.type === 'litarea') return; // drawn by the Lights tool, not a wall
+    if (w.type === 'litarea' || w.type === 'hidden') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
     // Index passed through so the GM can see, right on the map, which wall
     // is which — the Manage Walls list numbers rows the same way (#1, #2,
@@ -19640,10 +19841,11 @@ function drawWalls(mouseX, mouseY) {
     // without deleting/toggling and watching to see what changed.
     else if (showAuthoring) _wallDrawShape(svg, w, color, fill, false, false, i);
   });
+  hiddenShown.forEach(w => _hiddenDrawShape(svg, w));
   if (!showAuthoring) return; // nothing further to preview if not actively drawing
 
   const previewColor = '#4de0c0';
-  if (_wallShape() === 'line' && wallDrawPoints.length) {
+  if (_wallIsChain(_wallShape()) && wallDrawPoints.length) {
     const pts = mouseX != null ? [...wallDrawPoints, { x: mouseX, y: mouseY }] : wallDrawPoints;
     if (pts.length >= 2) {
       const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
@@ -19748,11 +19950,19 @@ async function _openManageWallsModal() {
     const label = w.maxHp
       ? `#${i + 1} ${_paEsc(w.spellName || 'obstacle')} <span style="color:var(--text-dim);font-size:0.74rem;">❄ ${w.hp}/${w.maxHp} HP</span>`
       : w.type === 'litarea' ? `#${i + 1} 💡 lit area`
+      : w.type === 'hidden' ? `#${i + 1} 🕵 ${_paEsc(w.name || 'hidden object')} <span style="color:var(--text-dim);font-size:0.74rem;">${w.shape === 'poly' ? 'area' : 'line'}${w.found ? ' · found' : ''}</span>`
       : `#${i + 1} ${_paEsc(w.type)}`;
     // Obstacles get a damage-entry control instead of the vision/movement
     // toggles — those are fixed (blocks both) for a spell-created barrier;
     // GM-drawn walls keep the toggles since those are the whole point there.
-    const controls = w.type === 'litarea'
+    const hidNum = (f, tip) => `<input type="number" min="0" step="1" value="${w[f] || 0}" title="${tip}" onchange="_hiddenEdit('${safeId}','${f}',this.value)" style="width:46px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 3px;font-family:var(--ui-font);font-size:0.74rem;">`;
+    const controls = w.type === 'hidden'
+      ? `<span title="Hiding factors — higher is harder to notice; 0 means that sense can't detect it" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('vis', 'Visual hiding factor')}
+         <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
+         <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
+         <label style="cursor:pointer;font-size:0.72rem;" title="Already noticed by the party"><input type="checkbox" ${w.found ? 'checked' : ''} onchange="_hiddenEdit('${safeId}','found',this.checked)"> found</label>
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
+      : w.type === 'litarea'
       ? `<button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.maxHp
       ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:var(--ui-font);font-size:0.78rem;">

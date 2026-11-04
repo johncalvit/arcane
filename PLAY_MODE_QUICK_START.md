@@ -20,7 +20,7 @@ These bars show your current Toughness (hit points), Stamina (energy), Blood (li
 This lists the conditions affecting the character. The GM and the game assign and clear them; players can't change them. They fall into groups:
 
 * **Downed:** Unconscious, Dead.
-* **Stances you chose:** Blocking, Parrying, Evading, Sentinel, Target, Vigilant, Infiltrating.
+* **Stances you chose:** Blocking, Parrying, Evading, Sentinel, Target, Vigilant, Infiltrating, Searching.
 * **Effects:** Bleeding, Stunned, Slowed, Blinded, Deafened, Paralyzed, Prone, Burning, Corroding, Regenerating, Bathed.
 * **Grappling:** Held, Holding, Carrying.
 
@@ -47,6 +47,8 @@ Your Final Attributes (Power, Toughness, Speed, and so on). A green or red numbe
 ## Seeing the Map
 
 You only see what your character can see. Walls block sight, dark areas need light (torches, campfires, light spells) or Night Vision, and places you have already explored stay dimly remembered. A foe standing in darkness is harder to hit from range.
+
+The GM may also have hidden things on the map — traps, secret doors, switches. As your character passes near one, they may notice it using sight, hearing or smell (the better your senses and the worse it is hidden, the better the odds). Click **Search** in the Conditions section to look carefully and double your chances; it ends when you take another action. When someone notices something it shows on everyone's map and in the Journal.
 
 ## Journal
 

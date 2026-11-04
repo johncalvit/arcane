@@ -132,17 +132,20 @@ function _paSecConditions(ent) {
   if (!ent.tokenId) return _paSection('Conditions',
     `<div style="font-size:0.75rem;color:var(--text-dim);font-style:italic;">No token on map.</div>`);
   const canEdit = isGM();
+  // Players can switch Searching on and off for their own character (it is a choice, not something done to them).
+  const ownSearch = !canEdit && ent.type === "char" && ent.id === currentCharacterId;
   const active = ent.conditions;
   const chip = (def) => {
     const on = active.has(def.key);
+    const toggle = canEdit || (ownSearch && def.key === "searching");
     const style = on
       ? `background:${def.color}22;border-color:${def.color};color:${def.color};`
       : `background:var(--bg3);border-color:var(--border);color:var(--text-dim);`;
-    const pa = canEdit
+    const pa = toggle
       ? `data-pa="cond" data-token="${_paEsc(ent.tokenId)}" data-key="${def.key}" data-on="${on ? 0 : 1}"`
       : '';
     return `<div title="${_paEsc(def.desc)}" ${pa}
-      style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${style}${canEdit ? 'cursor:pointer;' : 'cursor:default;'}user-select:none;">
+      style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${style}${toggle ? "cursor:pointer;" : "cursor:default;"}user-select:none;">
       <span>${def.icon}</span><span>${_paEsc(def.label)}</span></div>`;
   };
   const activeDefs   = CONDITION_DEFS.filter(d => active.has(d.key));
@@ -163,6 +166,9 @@ function _paSecConditions(ent) {
         <div style="display:flex;flex-wrap:wrap;gap:5px;">${inactiveDefs.map(chip).join('')}</div>
       </div>`;
   } else if (!canEdit) {
+    if (ownSearch && !active.has("searching")) {
+      html += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;">${chip(CONDITION_DEFS.find(d => d.key === "searching"))}</div>`;
+    }
     html += '<div style="font-size:0.65rem;color:var(--text-dim);margin-top:4px;font-style:italic;">GM controls conditions.</div>';
   }
   return _paSection('Conditions', html);
