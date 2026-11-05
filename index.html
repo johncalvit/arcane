@@ -7255,6 +7255,16 @@ async function saveCharacter() {
     // user-owned and join campaigns via the join table; campaign_id is kept
     // in sync as the home campaign for now).
     await _ensureCampaignLink(currentCharacterId, currentCampaignId);
+    // Map tokens keep their own copy of the name (set when added) — keep it in step with a rename.
+    if (data.name) {
+      try {
+        const { error: tlErr } = await sb.from('map_tokens').update({ label: data.name })
+          .eq('entity_type', 'character').eq('entity_id', currentCharacterId).neq('label', data.name);
+        if (!tlErr) Object.values(mapTokens || {}).forEach(t => {
+          if (t.entity_type === 'character' && t.entity_id === currentCharacterId && t.label !== data.name) { t.label = data.name; if (typeof upsertTokenElement === 'function') upsertTokenElement(t); }
+        });
+      } catch (e) {}
+    }
     // refresh cache so token info panel reflects latest data
     if (document.getElementById('play-mode')?.classList.contains('active')) loadPlayCharCache();
   }
@@ -7609,7 +7619,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105b';
+const VERSION = 'v0.1.20261105c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
