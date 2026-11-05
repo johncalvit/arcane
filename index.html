@@ -43,6 +43,7 @@
     background: linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);
     border-bottom: 2px solid var(--gold);
     height: var(--header-h);
+    position: sticky; top: 0; z-index: 900; /* stays put while the page scrolls */
     padding: 0 12px;
     display: flex;
     align-items: center;
@@ -69,6 +70,9 @@
     background: var(--bg2);
     border-right: 1px solid var(--border);
     padding: 8px 0;
+    /* pinned under the title bar; scrolls on its own if the nav is taller than the window */
+    position: sticky; top: var(--header-h); align-self: start;
+    height: calc(100vh - var(--header-h)); overflow-y: auto;
   }
   .nav-btn {
     display: block;
@@ -7619,7 +7623,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105c';
+const VERSION = 'v0.1.20261105d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
