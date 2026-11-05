@@ -7609,7 +7609,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105a';
+const VERSION = 'v0.1.20261105b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10116,6 +10116,7 @@ function _syncOwnBuilder(ref) {
   if (ref !== 'char::' + currentCharacterId) return;
   _rebuildBuilderLoadout(_entityCacheRow(ref));
   if (typeof buildHandSelectors === 'function') buildHandSelectors();
+  if (typeof _syncHandSelectsFromCache === 'function') _syncHandSelectsFromCache();
   if (typeof recalc === 'function') recalc();
 }
 
@@ -14015,9 +14016,29 @@ function renderPlayCharacter() {
   if (el) renderPlayPanel(el); // unified renderer — panels.js
 }
 
+// The hidden #ps-hand-* selects are what saveCharacter() persists, but held items also change through
+// paths that only touch the entity cache (drop, pick up, GM edits). Re-sync the selects from the cache
+// first so saving one hand can never write a stale value back over the other.
+function _syncHandSelectsFromCache() {
+  const row = _entityCacheRow('char::' + currentCharacterId);
+  const held = row && row.held_items;
+  if (!held) return;
+  for (const s of ['right', 'left']) {
+    const el = document.getElementById('ps-hand-' + s);
+    if (!el) continue;
+    const v = held[s] || '';
+    if (v && ![...el.options].some(o => o.value === v)) continue;
+    el.value = v;
+  }
+}
 async function _playSetHand(side, value) {
+  _syncHandSelectsFromCache();
   const sel = document.getElementById('ps-hand-' + side);
   if (sel) { sel.value = value; recalc(); }
+  // keep the cache current immediately (loadPlayCharCache after the save is async) so a quick
+  // follow-up change doesn't re-sync from a stale row
+  const row = _entityCacheRow('char::' + currentCharacterId);
+  if (row) row.held_items = Object.assign({}, row.held_items, getHeldItems());
   await saveCharacter();
 }
 
