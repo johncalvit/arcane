@@ -53,3 +53,5 @@ The GM may also have hidden things on the map — traps, secret doors, switches.
 ## Journal
 
 The Journal (bottom left) records what happens during the session — attacks, damage, spells, and so on — so you can scroll back if you missed something. It is saved for the campaign, so it is still there after a reload or the next session. Only the GM can permanently clear the history (the ✕ button, with a confirmation); for players, ✕ just hides the entries on their own screen until they reload.
+
+**Pinging the map.** To point something out to the whole table (a suspected hidden object, a route, a threat), press and hold the left mouse button on an empty spot of the map for about half a second without moving. A pulsing gold marker with your name appears for everyone, GM included, for a few seconds. Moving the mouse or releasing early just pans the map as usual. Pings don't trigger while a wall, measure, attack or pin tool is active.

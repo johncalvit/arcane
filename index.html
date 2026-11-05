@@ -405,6 +405,12 @@
     user-select: none;
   }
   .map-viewport.dragging { cursor: grabbing; }
+  .map-ping { position:absolute; pointer-events:none; z-index:60; }
+  .map-ping i { position:absolute; left:0; top:0; border-radius:50%; border:4px solid #ffd54a; box-shadow:0 0 10px #ffd54a; transform:translate(-50%,-50%) scale(.2); opacity:0; animation: map-ping-pulse 1.1s ease-out 3; }
+  .map-ping i:nth-child(2) { animation-delay:.25s; }
+  .map-ping b { position:absolute; left:0; top:0; transform:translate(-50%,-50%); border-radius:50%; background:#ffd54a; }
+  .map-ping span { position:absolute; left:0; top:0; transform:translate(-50%,calc(-100% - 8px)); white-space:nowrap; background:rgba(0,0,0,.75); color:#ffd54a; font-size:12px; padding:1px 6px; border-radius:4px; }
+  @keyframes map-ping-pulse { 0%{transform:translate(-50%,-50%) scale(.2);opacity:.95} 100%{transform:translate(-50%,-50%) scale(1);opacity:0} }
   .map-canvas {
     position: absolute;
     top: 0; left: 0;
@@ -7603,7 +7609,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261104a';
+const VERSION = 'v0.1.20261105a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14918,6 +14924,9 @@ function subscribeMapRealtime() {
     })
     // A player's character noticed a hidden object (see _hiddenReveal). Everyone marks it found;
     // the GM also saves that into the map so it stays found.
+    .on('broadcast', { event: 'map-ping' }, ({ payload }) => {
+      if (payload && payload.mapId === activeMapId) _pingShow(payload.x, payload.y, payload.who);
+    })
     .on('broadcast', { event: 'hidden-found' }, ({ payload }) => {
       const w = mapWalls.find(x => x.id === payload.id);
       if (!w || w.found) return;
@@ -15282,6 +15291,55 @@ function applyMapTransform() {
   if (typeof drawPins === 'function') drawPins();
 }
 
+// ═══ MAP PING ═══ hold the mouse still half a second on empty map to ping a spot for everyone
+var PING_HOLD_MS = 500;
+function _pingShow(ix, iy, who) {
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas || !isFinite(ix) || !isFinite(iy)) return;
+  const k = 1 / (mapScale || 1);           // keep the marker a constant on-screen size
+  const d = document.createElement('div');
+  d.className = 'map-ping';
+  d.style.left = ix + 'px'; d.style.top = iy + 'px';
+  const ring = 90 * k;
+  d.innerHTML = '<i style="width:' + ring + 'px;height:' + ring + 'px"></i><i style="width:' + ring + 'px;height:' + ring + 'px"></i>' +
+    '<b style="width:' + (12 * k) + 'px;height:' + (12 * k) + 'px"></b>' +
+    (who ? '<span style="font-size:' + (12 * k) + 'px;padding:' + (k) + 'px ' + (6 * k) + 'px;border-radius:' + (4 * k) + 'px">' + String(who).replace(/[<>&]/g, '') + '</span>' : '');
+  canvas.appendChild(d);
+  setTimeout(() => d.remove(), 3600);
+}
+function _pingWho() {
+  try {
+    if (isGM()) return 'GM';
+    const t = _fogViewerToken();
+    const e = t ? getEntity(_refForToken(t)) : null;
+    return (e && e.name) || (t && t.name) || '';
+  } catch (e) { return ''; }
+}
+function _pingArm(e, vp) {
+  if (typeof wallMode !== 'undefined' && wallMode) return;
+  if (typeof measureMode !== 'undefined' && measureMode) return;
+  if (typeof attackMode !== 'undefined' && attackMode) return;
+  if (typeof pinMode !== 'undefined' && pinMode) return;
+  if (e.target.closest && e.target.closest('.map-token, button, input, select, .map-pin')) return;
+  const sx = e.clientX, sy = e.clientY;
+  let done = false;
+  const cleanup = () => { clearTimeout(timer); window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); };
+  const mv = ev => { if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 6) { done = true; cleanup(); } };
+  const up = () => { done = true; cleanup(); };
+  const timer = setTimeout(() => {
+    if (done) return;
+    cleanup();
+    const rect = vp.getBoundingClientRect();
+    const ix = (sx - rect.left - mapOffsetX) / mapScale, iy = (sy - rect.top - mapOffsetY) / mapScale;
+    if (ix < 0 || iy < 0 || ix > mapImgW || iy > mapImgH) return;
+    const who = _pingWho();
+    _pingShow(ix, iy, who);
+    mapChannel?.send({ type: 'broadcast', event: 'map-ping', payload: { mapId: activeMapId, x: ix, y: iy, who } });
+  }, PING_HOLD_MS);
+  window.addEventListener('mousemove', mv);
+  window.addEventListener('mouseup', up);
+}
+
 function mapZoom(factor, cx, cy) {
   const vp = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
@@ -15336,6 +15394,7 @@ function initMapInteraction() {
 
   vp.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
+    _pingArm(e, vp);
     mapDragging   = true;
     mapDragStartX = e.clientX;
     mapDragStartY = e.clientY;
