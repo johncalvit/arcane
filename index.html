@@ -521,6 +521,11 @@
   }
   .token-ring.type-creature { border-color: #b03030; }
   .token-ring.type-item     { border-color: #708090; border-radius: 4px; }
+  /* light-source art: just the torch — no ring, no backing, soft shadow so it reads on any map */
+  .token-ring.type-light { border-color: transparent; background: transparent; overflow: visible; }
+  .token-ring.type-light img { object-fit: contain; object-position: center; transform: scale(1.5); filter: drop-shadow(0 1px 3px rgba(0,0,0,0.85)); }
+  .map-token.selected .token-ring.type-light { border-color: transparent; box-shadow: none; }
+  .map-token.selected .token-ring.type-light img { filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 6px rgba(255,255,255,0.7)); }
   .map-token.selected .token-ring {
     border-color: #fff;
     box-shadow: 0 0 0 1px rgba(255,255,255,0.5), 0 0 10px rgba(255,255,255,0.4);
@@ -7641,7 +7646,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105f';
+const VERSION = 'v0.1.20261105g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15683,7 +15688,7 @@ function tokenHtml(t) {
     style="left:${t.x_pct}%;top:${t.y_pct}%;${hiddenStyle}"
     onmousedown="startTokenDrag(event,'${t.id}')"
     ondblclick="onTokenDblClick(event,'${t.id}')">
-    <div class="token-ring ${typeClass}" style="width:${size}px;height:${size}px;">${inner}</div>
+    <div class="token-ring ${typeClass}${itemArt === LIGHT_TOKEN_ICON ? ' type-light' : ''}" style="width:${size}px;height:${size}px;">${inner}</div>
     <div class="token-label"><span class="token-label-text">${t.label}</span></div>
   </div>`;
 }
