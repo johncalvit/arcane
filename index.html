@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105h';
+const VERSION = 'v0.1.20261106a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10898,7 +10898,7 @@ function _openSpellPickerModal(combatantId) {
       // cancel. Releasing is what ends the round (see atCompleteCast).
       overlay.remove();
       await atCastSpell(combatantId, spell.name);
-      atOpenActionDialog(combatantId);
+      if (_atIsCombatActive()) atOpenActionDialog(combatantId); else atOpenExploreDialog(combatantId);
     };
     card.appendChild(row);
   });

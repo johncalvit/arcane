@@ -178,6 +178,16 @@ function _paSecConditions(ent) {
 // it's rolled. Everything else (actions, done, queued readout) lives in the
 // persistent active-turn banner. Players can't see the GM's right-panel
 // tracker, so this is their initiative entry point; it vanishes once rolled.
+// Out of combat: the Explore button (stance, cast, gear - all free, untimed).
+function _paSecExplore(ent, canEdit) {
+  if (!canEdit || _atIsCombatActive()) return '';
+  return _paSection('Explore', `
+    <div class="at-action-row">
+      <span style="font-size:0.85rem;color:var(--text);">Stance, spells, gear</span>
+      <button class="pa-view-btn" data-pa="explore" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🧭 Explore</button>
+    </div>`);
+}
+
 function _paSecCombat(ent, canEdit, prefixHtml) {
   const c = atCombatants.find(x => x.id === ent.ref);
   if (!c || !canEdit || c.initiative != null) return '';
@@ -429,6 +439,7 @@ function _paBind(el, ctx) {
       case 'roll-skill': openRoller({ label: d.name, target: +d.pct, targetLabel: 'or less' }); break;
       case 'open-spellbook': _openPlaySpellBookModal(d.cid); break;
       case 'roll-init': atRollInitiative(d.id); break;
+      case 'explore': atOpenExploreDialog(d.id); break;
       case 'open-slot': atOpenSlotModal(d.id, d.slot); break;
       case 'clear-slot': atClearSlot(d.id, d.slot); break;
       case 'drop-hand': dropHeldItem(ctx.ent.ref, d.side); break;
@@ -587,6 +598,7 @@ function renderEntityPanel(ref, opts = {}) {
     ${headerHtml}
     ${_paSecHealth(ent, canEdit)}
     ${_paSecConditions(ent)}
+    ${_paSecExplore(ent, canEdit)}
     ${_paSecCombat(ent, canEdit, opts.combatPrefix)}
     ${_paSecAbilities(ent, skills, attrs)}
     ${_paSecEquip(ent, attrs, canEdit, opts.loadout)}
@@ -836,10 +848,12 @@ function _dlgMaybeReopen() {
   if (_dlgRoundEndPendingId === id) {
     _dlgRoundEndPendingId = null;
     if (_atIsCombatActive() && _atSharedActive()?.id === id) atAcceptAction(id);
+    else if (!_atIsCombatActive()) atOpenExploreDialog(id); // exploring: back to the Explore dialog
     return;
   }
   // Only reopen if it's still meaningfully this combatant's moment
   if (_atIsCombatActive() && _atSharedActive()?.id === id) atOpenActionDialog(id);
+  else if (!_atIsCombatActive()) atOpenExploreDialog(id);
 }
 
 // Sentinel, Evade, Go Prone, Load, a Ranged Attack, Cast, and Target all end
@@ -1357,6 +1371,160 @@ async function _dlgChange(e) {
     note.textContent = 'Could not change item: ' + (err?.message || err);
     body?.appendChild(note);
   }
+}
+
+// === EXPLORE (out-of-combat actions) ===
+// Same dialog shell and chip look as the combat action dialog, but nothing here is timed or costs
+// anything: stances stay until changed, spells are cast from the same picker, and gear swaps are free.
+const EXPLORE_STANCES = [
+  { label: 'Infiltrate', title: 'Move quietly - a watchful Vigilant character may still spot you' },
+  { label: 'Search',     title: 'Look carefully for hidden objects - doubles your chance to notice them' },
+  { label: 'Vigilant',   title: 'Watch a sector of the map (you aim the cone on the map)' },
+  { label: 'Sentinel',   title: 'Guard everything within reach' },
+];
+
+function atOpenExploreDialog(ref) {
+  _dlgCombatantId = ref;
+  const overlay = document.getElementById('at-action-modal');
+  const body    = document.getElementById('at-dialog-body');
+  if (!overlay || !body) return;
+  overlay.style.display = 'flex';
+  _exploreRender(body);
+}
+
+function _exploreRender(body) {
+  const id  = _dlgCombatantId;
+  const ent = getEntity(id);
+  if (!ent) { atCloseModal(); return; }
+  const c = atCombatants.find(x => x.id === id);
+  if (c && !c.slots) c.slots = _newSlots();
+  const conds = ent.conditions || new Set();
+
+  // Stance
+  const cur = c?.slots?.full?.label;
+  const stanceChips = EXPLORE_STANCES.map(s => {
+    const lit = cur === s.label;
+    const noMelee = s.label === 'Sentinel' && !_hasMeleeCapability(ent);
+    const disabled = !c || noMelee;
+    return _dlgChip({
+      label: s.label, lit, disabled,
+      title: !c ? 'Not on the map yet' : noMelee ? 'Needs a melee weapon or a free hand' : s.title,
+      data: lit ? { dact: 'xoff' } : (s.label === 'Vigilant' ? { dact: 'xaim' } : { dact: 'xset', label: s.label }),
+    });
+  }).join('');
+  const stanceHtml = _dlgSection('🧭 Stance - stays until you change it', stanceChips, false);
+
+  // Spells (same states as the combat dialog: cast / release / maintaining)
+  let spellHtml = '';
+  if (typeof SPELLS !== 'undefined' && typeof _knownSpellsFor === 'function' && _knownSpellsFor(ent).length) {
+    const maintaining = typeof _maintainedSpellInfo === 'function' ? _maintainedSpellInfo(id) : null;
+    const inWindup = typeof cur === 'string' && cur.startsWith('Casting: ');
+    let chip;
+    if (maintaining) {
+      chip = _dlgChip({ label: `🔮 ${maintaining.spell.name}`, sub: `active · ${maintaining.spell.cost}q/rd`, lit: true,
+        title: 'Click to stop maintaining this spell', data: { dact: 'xstop' } });
+    } else if (inWindup) {
+      const spellName = cur.slice('Casting: '.length);
+      const spell = SPELLS.find(s => s.name === spellName);
+      const pct = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, 1) : null;
+      chip = _dlgChip({ label: `✨ Release: ${spellName}`, sub: pct != null ? `${pct}%` : 'forming', lit: true,
+          title: 'Release the spell and roll', data: { dact: 'xrelease', spellName } })
+        + _dlgChip({ label: '✕ Cancel', sub: 'abort', title: 'Abandon the casting - no roll, no cost', data: { dact: 'xoff' } });
+    } else {
+      chip = _dlgChip({ label: '🔮 Cast a Spell', disabled: !c, title: c ? 'Choose from spells you know' : 'Not on the map yet',
+        data: { dact: 'xcast' } });
+    }
+    spellHtml = _dlgSection('✨ Spells', chip, false);
+  }
+
+  // Gear: swap what's in each hand - free, no stow/drop choice out of combat
+  const plan = _paBodyPlan(ent.bodyType);
+  const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
+  const handItems = isOwn && typeof getLoadoutItemNames === 'function'
+    ? getLoadoutItemNames()
+    : [...new Set([...(ent.loadout || []), ent.held?.right, ent.held?.left].filter(Boolean))];
+  const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);';
+  const gearRows = plan.filter(ch => ch.key === 'right' || ch.key === 'left').map(ch => {
+    const held = ent.held?.[ch.key] || '';
+    const opts = ['', ...handItems].map(n =>
+      `<option value="${_paEsc(n)}"${n === held ? ' selected' : ''}>${_paEsc(n) || '- Bare Handed -'}</option>`).join('');
+    return `<div style="margin-bottom:6px;"><div style="font-size:0.66rem;color:var(--text-dim);margin-bottom:2px;">${_paEsc(ch.label)}</div>
+      <select style="${selStyle}" data-xhand="${ch.key}">${opts}</select></div>`;
+  }).join('');
+  const gearHtml = gearRows ? `<div style="margin-top:12px;">
+      <div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:5px;">🎒 Gear - swapping is free</div>${gearRows}</div>` : '';
+
+  const blockers = ['dead', 'unconscious', 'paralyzed'].filter(k => conds.has(k));
+  const banner = blockers.length
+    ? `<div style="background:rgba(224,85,85,0.12);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.75rem;color:#e05555;margin-bottom:8px;">${_paEsc(ent.name)} is ${blockers.join(', ')} - actions recorded anyway; the table decides.</div>` : '';
+
+  body.innerHTML = `
+    <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
+    <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
+    ${banner}${stanceHtml}${spellHtml}${gearHtml}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="at-btn" data-dact="close">Close</button>
+    </div>`;
+  body.onclick = _exploreClick;
+  body.onchange = _exploreChange;
+}
+
+async function _exploreClick(e) {
+  const t = e.target.closest('[data-dact]');
+  if (!t) return;
+  const d = t.dataset, id = _dlgCombatantId;
+  const body = document.getElementById('at-dialog-body');
+  try {
+    switch (d.dact) {
+      case 'xset':
+        await atSetSlot(id, 'full', d.label, 99, true); // lock-on stance, free
+        _exploreRender(body);
+        break;
+      case 'xoff':
+        atClearSlot(id, 'full');
+        _exploreRender(body);
+        break;
+      case 'xaim':
+        atCloseModal();
+        enterVigilantAimMode(id, false); // false: don't end anyone's turn
+        break;
+      case 'xcast':
+        _openSpellPickerModal(id); // picks, then comes back here (see _openSpellPickerModal)
+        break;
+      case 'xstop':
+        await atStopMaintaining(id);
+        _exploreRender(body);
+        break;
+      case 'xrelease':
+        await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
+        break;
+      case 'close':
+        atCloseModal();
+        break;
+    }
+  } catch (err) {
+    console.error('explore:', err);
+    const note = document.createElement('div');
+    note.style.cssText = 'background:rgba(224,85,85,0.15);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.72rem;color:#e05555;margin-top:8px;';
+    note.textContent = 'Action failed: ' + (err?.message || err);
+    body?.appendChild(note);
+  }
+}
+
+async function _exploreChange(e) {
+  const sel = e.target.closest('[data-xhand]');
+  if (!sel) return;
+  const side = sel.dataset.xhand, value = sel.value;
+  const id = _dlgCombatantId;
+  const ent = getEntity(id);
+  if (!ent) return;
+  if ((value || '') === (ent.held?.[side] || '')) return;
+  const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
+  try {
+    if (isOwn && document.getElementById('ps-hand-' + side)) await _playSetHand(side, value);
+    else await _acSetHand(ent.type, ent.id, side, value);
+  } catch (err) { console.error('explore gear:', err); showToast('Could not change item.', 'error'); }
+  _exploreRender(document.getElementById('at-dialog-body'));
 }
 
 async function _dlgClick(e) {
