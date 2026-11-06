@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261106d';
+const VERSION = 'v0.1.20261106e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15014,6 +15014,12 @@ function subscribeMapRealtime() {
     })
     // A player's character noticed a hidden object (see _hiddenReveal). Everyone marks it found;
     // the GM also saves that into the map so it stays found.
+    // The GM changed the check difficulty (Explore dialog) - everyone's odds follow.
+    .on('broadcast', { event: 'explore-difficulty' }, ({ payload }) => {
+      if (payload && EXPLORE_DIFFICULTY[payload.level]) _exploreDifficulty = payload.level;
+      const body = document.getElementById('at-dialog-body');
+      if (body && body.dataset.mode === 'explore' && document.getElementById('at-action-modal')?.style.display === 'flex') _exploreRender(body);
+    })
     .on('broadcast', { event: 'map-ping' }, ({ payload }) => {
       if (payload && payload.mapId === activeMapId) _pingShow(payload.x, payload.y, payload.who);
     })

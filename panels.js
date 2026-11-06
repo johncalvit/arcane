@@ -1322,6 +1322,7 @@ function _dlgRender(body) {
       <button class="at-btn primary" data-dact="end-turn">✓ End Turn</button>
     </div>`;
 
+  body.dataset.mode = 'combat';
   body.onclick = _dlgClick;
   body.onchange = _dlgChange;
 }
@@ -1383,6 +1384,56 @@ const EXPLORE_STANCES = [
   { label: 'Sentinel',   title: 'Guard everything within reach' },
 ];
 
+// --- Skill checks -----------------------------------------------------------
+// The GM sets how hard the table's current checks are; it is shared with every player's Explore dialog.
+// Chance multiplier: Easy doubles the odds, Difficult halves them.
+var _exploreDifficulty = 'Normal';
+var _exploreSkillSel = '';
+const EXPLORE_DIFFICULTY = { Easy: 2, Normal: 1, Difficult: 0.5 };
+// Education a character can attempt without any points in it, at half the first-point odds.
+// (A skill can override this with its own `untrained: true/false`.)
+const UNTRAINED_OK = ['Athletics', 'Climbing', 'Swimming', 'Perception', 'Tracking', 'Sneaking', 'Dodge',
+  'Navigation', 'Investigation', 'First Aid', 'Intimidation', 'Streetwise', 'Riding', 'Cooking'];
+const CHECK_SKIP_TYPES = ['Arcane', 'Deific', 'Demonic', 'Nature']; // magic is cast, not rolled as a check
+
+function _exploreChecks(ent) {
+  const attrs = ent.attrs || {};
+  const pts = ent.skills || {};
+  const mult = EXPLORE_DIFFICULTY[_exploreDifficulty] || 1;
+  const out = [];
+  for (const s of (typeof SKILLS !== 'undefined' ? SKILLS : [])) {
+    if (CHECK_SKIP_TYPES.includes(s.type)) continue;
+    const p = pts[s.name] || 0;
+    let base, trained = p > 0;
+    if (trained) base = calcSkillSuccess(s, attrs, p);
+    else {
+      const ok = s.untrained != null ? !!s.untrained : UNTRAINED_OK.includes(s.name);
+      if (!ok) continue;
+      const perPoint = (s.successAttrs || []).reduce((t, k) => t + (attrs[k] || 0), 0);
+      base = Math.round(perPoint * 0.5); // half of what a first point would give
+    }
+    out.push({ name: s.name, trained, base, pct: Math.max(1, Math.min(100, Math.round(base * mult))) });
+  }
+  return out;
+}
+
+function _exploreRollCheck(id, skillName) {
+  const ent = getEntity(id);
+  if (!ent) return;
+  const chk = _exploreChecks(ent).find(c => c.name === skillName);
+  if (!chk) { showToast('That check is not available.', 'warn'); return; }
+  _dlgReopenId = id; // come back to Explore once the roll closes
+  openRoller({
+    label: `${chk.name} check - ${ent.name}`,
+    target: chk.pct,
+    targetLabel: `${_exploreDifficulty}${chk.trained ? '' : ', untrained (half)'}  or less`,
+    onComplete: async (n) => {
+      const ok = n <= 5 || (n < 96 && n <= chk.pct);
+      logCombat(`${ent.name} ${ok ? 'succeeds at' : 'fails'} a ${chk.name} check (${_exploreDifficulty}, ${chk.pct}%).`, ok ? 'good' : 'bad');
+    },
+  });
+}
+
 function atOpenExploreDialog(ref) {
   _dlgCombatantId = ref;
   const overlay = document.getElementById('at-action-modal');
@@ -1437,6 +1488,37 @@ function _exploreRender(body) {
     spellHtml = _dlgSection('✨ Spells - non-combat, best odds (no rush)', chip, false);
   }
 
+  // Checks: skill rolls, scaled by the GM's difficulty setting
+  const chkSelStyle = "font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);";
+  const checks = _exploreChecks(ent);
+  const diffChips = isGM()
+    ? Object.keys(EXPLORE_DIFFICULTY).map(k => _dlgChip({
+        label: k, sub: `x${EXPLORE_DIFFICULTY[k]}`, lit: _exploreDifficulty === k,
+        title: k === 'Easy' ? 'Doubles everyone\'s odds' : k === 'Difficult' ? 'Halves everyone\'s odds' : 'Normal odds',
+        data: { dact: 'xdiff', level: k },
+      })).join('')
+    : `<span style="font-size:0.78rem;color:var(--gold2);">Difficulty: ${_paEsc(_exploreDifficulty)} (set by the GM)</span>`;
+  const optFor = c => `<option value="${_paEsc(c.name)}"${c.name === _exploreSkillSel ? ' selected' : ''}>${_paEsc(c.name)} - ${c.pct}%</option>`;
+  const trainedOpts = checks.filter(c => c.trained).map(optFor).join('');
+  const untrainedOpts = checks.filter(c => !c.trained).map(optFor).join('');
+  const has = n => checks.some(c => c.name === n);
+  const quick = (label, skill, title) => has(skill)
+    ? _dlgChip({ label, sub: checks.find(c => c.name === skill).pct + '%', title, data: { dact: 'xroll', skill } }) : '';
+  const checkHtml = `<div style="margin-top:12px;">
+      <div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:5px;">🎲 Checks</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;align-items:center;">${diffChips}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px;">
+        ${quick('Notice', 'Perception', 'Perception check')}${quick('Avoid a trap', 'Dodge', 'Dodge check to avoid a trap')}
+      </div>
+      <div style="display:flex;gap:6px;">
+        <select id="xchk-skill" style="${chkSelStyle}flex:1;" data-xchk="1">
+          <option value="">- choose a skill -</option>
+          ${trainedOpts ? `<optgroup label="Trained">${trainedOpts}</optgroup>` : ''}
+          ${untrainedOpts ? `<optgroup label="Untrained (half odds)">${untrainedOpts}</optgroup>` : ''}
+        </select>
+        <button class="at-btn primary" data-dact="xrollsel">Roll</button>
+      </div></div>`;
+
   // Gear: swap what's in each hand - free, no stow/drop choice out of combat
   const plan = _paBodyPlan(ent.bodyType);
   const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
@@ -1461,10 +1543,11 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${gearHtml}
+    ${banner}${stanceHtml}${spellHtml}${checkHtml}${gearHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;
+  body.dataset.mode = 'explore';
   body.onclick = _exploreClick;
   body.onchange = _exploreChange;
 }
@@ -1498,6 +1581,23 @@ async function _exploreClick(e) {
       case 'xrelease':
         await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
         break;
+      case 'xdiff':
+        if (!isGM()) break;
+        _exploreDifficulty = d.level;
+        if (typeof mapChannel !== 'undefined' && mapChannel) mapChannel.send({ type: 'broadcast', event: 'explore-difficulty', payload: { level: d.level } });
+        _exploreRender(body);
+        break;
+      case 'xroll':
+        atCloseModal();
+        _exploreRollCheck(id, d.skill);
+        break;
+      case 'xrollsel': {
+        const v = document.getElementById('xchk-skill')?.value;
+        if (!v) { showToast('Choose a skill first.'); break; }
+        atCloseModal();
+        _exploreRollCheck(id, v);
+        break;
+      }
       case 'close':
         atCloseModal();
         break;
@@ -1512,6 +1612,7 @@ async function _exploreClick(e) {
 }
 
 async function _exploreChange(e) {
+  if (e.target.closest('[data-xchk]')) { _exploreSkillSel = e.target.value; return; }
   const sel = e.target.closest('[data-xhand]');
   if (!sel) return;
   const side = sel.dataset.xhand, value = sel.value;
