@@ -1426,7 +1426,7 @@ function _exploreRender(body) {
     } else if (inWindup) {
       const spellName = cur.slice('Casting: '.length);
       const spell = SPELLS.find(s => s.name === spellName);
-      const pct = spell && typeof _spellSuccessRoll === 'function' ? _spellSuccessRoll(ent, spell, 1) : null;
+      const pct = spell && typeof _castOdds === 'function' ? _castOdds(ent, spell, 1) : null;
       chip = _dlgChip({ label: `✨ Release: ${spellName}`, sub: pct != null ? `${pct}%` : 'forming', lit: true,
           title: 'Release the spell and roll', data: { dact: 'xrelease', spellName } })
         + _dlgChip({ label: '✕ Cancel', sub: 'abort', title: 'Abandon the casting - no roll, no cost', data: { dact: 'xoff' } });
@@ -1434,7 +1434,7 @@ function _exploreRender(body) {
       chip = _dlgChip({ label: '🔮 Cast a Spell', disabled: !c, title: c ? 'Choose from spells you know' : 'Not on the map yet',
         data: { dact: 'xcast' } });
     }
-    spellHtml = _dlgSection('✨ Spells', chip, false);
+    spellHtml = _dlgSection('✨ Spells - non-combat, best odds (no rush)', chip, false);
   }
 
   // Gear: swap what's in each hand - free, no stow/drop choice out of combat

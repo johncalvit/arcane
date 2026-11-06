@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261106c';
+const VERSION = 'v0.1.20261106d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10689,6 +10689,16 @@ function _spellRawAccum(ent, spell, roundsWaited) {
 // slip) and floored at 1 (a caster who knows the spell always has a
 // puncher's chance, however remote) regardless of how negative the raw
 // accumulation has gotten.
+// Out of combat there's no clock: a cast is made at leisure, at the best odds the caster can ever have
+// (the same ceiling waiting would eventually reach). Damaging spells are combat-only.
+function _castUnhurried() { return !_atIsCombatActive(); }
+function _spellIsDamaging(spell) {
+  return !!spell && (spell.spellType === 'Attack' || !!spell.damageMax || !!spell.damageStat || !!spell.damageCategory || !!spell.drainAttribute);
+}
+// The odds actually shown/rolled for a cast right now (best odds out of combat, round-based in combat).
+function _castOdds(ent, spell, roundsWaited) {
+  return _castUnhurried() ? _spellSuccessCap(ent, spell) : _spellSuccessRoll(ent, spell, roundsWaited);
+}
 function _spellSuccessRoll(ent, spell, roundsWaited) {
   return Math.max(1, Math.min(_spellSuccessCap(ent, spell), Math.round(_spellRawAccum(ent, spell, roundsWaited))));
 }
@@ -10845,7 +10855,9 @@ function _knownSpellsFor(ent) {
 function _openSpellPickerModal(combatantId) {
   const ent = getEntity(combatantId);
   if (!ent) return;
-  const known = _knownSpellsFor(ent);
+  let known = _knownSpellsFor(ent);
+  const hiddenDamaging = _castUnhurried() ? known.filter(_spellIsDamaging).length : 0;
+  if (_castUnhurried()) known = known.filter(s => !_spellIsDamaging(s));
 
   const existing = document.getElementById('spell-picker-modal');
   if (existing) existing.remove();
@@ -10869,13 +10881,19 @@ function _openSpellPickerModal(combatantId) {
   if (!known.length) {
     const empty = document.createElement('div');
     empty.style.cssText = 'font-size:0.8rem;color:var(--text-dim);text-align:center;';
-    empty.textContent = 'No spells known.';
+    empty.textContent = hiddenDamaging ? 'No non-combat spells known.' : 'No spells known.';
     card.appendChild(empty);
+  }
+  if (hiddenDamaging) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:0.7rem;color:var(--text-dim);text-align:center;font-style:italic;';
+    note.textContent = `Out of combat: no rush, so casting uses your best odds. Damaging spells (${hiddenDamaging}) are combat-only.`;
+    card.appendChild(note);
   }
 
   known.forEach(spell => {
     const notBuilt = spell.targetType === 'Item' || (spell.targetType === 'Area' && !_BUILT_AOE_SHAPES.includes(spell.aoeShape));
-    const round1Pct = _spellSuccessRoll(ent, spell, 1);
+    const round1Pct = _castOdds(ent, spell, 1);
     const costLabel = `${spell.cost}${spell.maintained ? '/rd' : ''}q`;
     const row = document.createElement('button');
     row.disabled = notBuilt;
@@ -10889,7 +10907,7 @@ function _openSpellPickerModal(combatantId) {
     row.title = notBuilt ? `${spell.targetType}-target spells aren't built yet`
                           : `${spell.range} · ${spell.difficultyStat} ${spell.difficultyValue} · builds ~${Math.round(_spellPerRoundBonus(ent, spell))}%/round the longer you concentrate${capNote}`;
     row.innerHTML = `<span>${_paEsc(spell.name)} <span style="font-size:0.68rem;color:var(--text-dim);">(${spell.magicClass} · ${spell.targetType})</span></span>
-      <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}% rd1 · ${costLabel}</span>`;
+      <span style="font-size:0.72rem;white-space:nowrap;">${round1Pct}%${_castUnhurried() ? '' : ' rd1'} · ${costLabel}</span>`;
     row.onclick = async () => {
       if (notBuilt) return;
       // Picking a spell only BEGINS the cast (its windup) and goes back to the
@@ -12371,7 +12389,8 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   if (_wc?.slots?.full?.label === `Casting: ${spellName}`) atClearSlot(casterCid, 'full');
 
   const roundsWaited = _castPendingRounds;
-  const castThreshold = _spellSuccessRoll(casterEnt, spell, roundsWaited);
+  const unhurried = _castUnhurried();
+  const castThreshold = _castOdds(casterEnt, spell, roundsWaited);
 
   // Attack-type spells with a Hit Formula collapse the casting check and the
   // hit roll into ONE roll instead of two sequential ones — the same roll
@@ -12400,7 +12419,7 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
 
   openRoller({
     label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${roundsWaited} rd focus${_impedanceNote(casterEnt, spell)}`,
+    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${unhurried ? 'unhurried, best odds' : roundsWaited + ' rd focus'}${_impedanceNote(casterEnt, spell)}`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= castThreshold);
 
