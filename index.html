@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261106b';
+const VERSION = 'v0.1.20261106c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -19956,7 +19956,8 @@ function drawWalls(mouseX, mouseY) {
   const showAuthoring = isGM() && wallMode;
   const obstacles = mapWalls.filter(w => w.maxHp);
   // The GM always sees hidden objects; everyone else only once somebody has noticed them.
-  const hiddenShown = _hiddenObjects().filter(w => _gmSeesAll() || w.found);
+  // A player with no token on this map (not placed yet) sees none of them.
+  const hiddenShown = _hiddenObjects().filter(w => _gmSeesAll() || (w.found && _fogViewerToken()));
   if (!showAuthoring && !obstacles.length && !hiddenShown.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
   svg.style.display = 'block';
   svg.innerHTML = '';
