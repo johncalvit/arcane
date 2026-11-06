@@ -7641,7 +7641,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105e';
+const VERSION = 'v0.1.20261105f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15585,6 +15585,7 @@ let _dragStartXPct   = null;
 let _dragStartYPct   = null;
 
 const TOKEN_SIZE = 44; // canvas-pixel diameter
+const LIGHT_TOKEN_ICON = 'torch-token.png'; // art for light-source ground items (torch, candle, lantern, campfire, brazier)
 const ITEM_TOKEN_ICON = 'map_items_token.png'; // shared art for dropped ground items (falls back to 📦 if missing)
 // A dropped item (potion, coin, scroll, ...) isn't creature-sized — reported
 // live as rendering at the same default size as an actual character/creature
@@ -15667,7 +15668,7 @@ function tokenHtml(t) {
   const liveAvatar = (t.entity_type === 'character' && t.entity_id && playCharCache[t.entity_id])
     ? resolveAvatarUrl(playCharCache[t.entity_id].avatar_url) : null;
   // Ground items share one piece of art (unless a token carries its own avatar).
-  const itemArt = (t.entity_type === 'item' && !t.avatar_url) ? ITEM_TOKEN_ICON : '';
+  const itemArt = (t.entity_type === 'item' && !t.avatar_url) ? (_lightEntryFor(t.label) ? LIGHT_TOKEN_ICON : ITEM_TOKEN_ICON) : '';
   const displayUrl = liveAvatar || t.avatar_url || speciesAvatar || itemArt;
   const inner = displayUrl
     ? `<img src="${displayUrl}" alt=""
