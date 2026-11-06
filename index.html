@@ -7218,6 +7218,19 @@ async function saveCharacter() {
   // still null then), never again afterward, so this can't clobber a
   // player's own subsequent spending or income. See the Economy Config
   // panel for the tunable baseline/multipliers.
+  // XP is only ever changed by the GM (Finish Combat / Grant XP), which writes straight to the database.
+  // The builder holds whatever XP it loaded, so saving it back would erase XP awarded since — always
+  // keep the stored value for an existing character.
+  if (currentCharacterId && !_savingCopy) {
+    try {
+      const { data: cur } = await sb.from('characters').select('stats').eq('id', currentCharacterId).maybeSingle();
+      if (cur && cur.stats && cur.stats.XP != null) {
+        characterXP = Math.round(cur.stats.XP) || 0;
+        data.xp = characterXP;
+        const xd = document.getElementById('char-xp-display'); if (xd) xd.textContent = characterXP;
+      }
+    } catch (e) { console.warn('XP re-read before save failed', e); }
+  }
   if (currentCharacterId === null && !_savingCopy) {
     characterPence = _startingPenceForFeatures(data.features);
     data.pence = characterPence;
@@ -7646,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261105g';
+const VERSION = 'v0.1.20261105h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8692,7 +8705,7 @@ function applyCharacterData(data) {
   // input here since it's only ever meant to change via that flow. Level is
   // purely derived from this, not read from stats.Level (that key is only
   // ever written for record-keeping now — see saveCharacter).
-  characterXP = Math.round(data.stats?.XP || 0);
+  characterXP = Math.round(data.stats?.XP ?? data.xp ?? 0); // exported files carry xp top-level
   const xpDisplay = document.getElementById('char-xp-display');
   if (xpDisplay) xpDisplay.textContent = characterXP;
   // Purse — same stats piggyback as XP (see characterPence's own comment for
