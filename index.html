@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261106a';
+const VERSION = 'v0.1.20261106b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -22452,6 +22452,6 @@ async function _deleteMapPin(pinId) {
 
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
-<script src="panels.js?v=20261001a"></script>
+<script>document.write('<script src="panels.js?v=' + encodeURIComponent(VERSION) + '"><\/script>');</script>
 </body>
 </html>
