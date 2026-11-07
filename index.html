@@ -7659,7 +7659,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107b';
+const VERSION = 'v0.1.20261107c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15122,10 +15122,12 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'token-request' }, ({ payload }) => {
       if (!isGM() || !payload?.name) return;
       showToast(`🙋 ${payload.name} has no token on this map — asking to be added. See the Tokens tab.`);
+      if (payload.charId) { _tokenRequestIds.add(payload.charId); setTimeout(() => { _tokenRequestIds.delete(payload.charId); renderTokensCharList(); }, 10 * 60 * 1000); }
       // The Characters list is only loaded when the tab opens, so a character the
       // player saved/joined since then wasn't in it. Reload the data cache and the
       // list now so the character is there to "+ Add" when the GM looks.
       refreshTokensCharacters();
+      renderTokensCharList();
     })
     .subscribe(status => {
       if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
@@ -18071,6 +18073,7 @@ function renderOnMapTokens() {
 // character (user_id === the campaign's GM) is treated as an NPC, since
 // players only ever own their own PCs; everything else is a Player character.
 let tokensCharFilter = 'all';
+var _tokenRequestIds = new Set(); // characters whose players asked the GM to be added (highlighted in the list)
 let _tokensCharsCache = []; // raw campaign characters, re-filtered without refetching
 
 function buildTokensCharFilters() {
@@ -18155,12 +18158,18 @@ function renderTokensCharList() {
 
   const onMap = new Set(Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => t.entity_id));
 
-  el.innerHTML = filtered.map(c => {
+  // Requested characters float to the top; same-named characters get a short id so they can be told apart.
+  const nameCount = {};
+  filtered.forEach(c => { nameCount[c.name] = (nameCount[c.name] || 0) + 1; });
+  const ordered = [...filtered].sort((a, b) => (_tokenRequestIds.has(b.id) ? 1 : 0) - (_tokenRequestIds.has(a.id) ? 1 : 0));
+  el.innerHTML = ordered.map(c => {
     const already = onMap.has(c.id);
-    return `<div class="token-add-row">
+    const req = _tokenRequestIds.has(c.id) && !already;
+    const dup = nameCount[c.name] > 1 ? ` · #${String(c.id).slice(-4)}` : '';
+    return `<div class="token-add-row"${req ? ' style="outline:1px solid var(--gold);background:rgba(201,168,76,0.12);"' : ''}>
       <div style="flex:1;min-width:0;">
-        <div class="t-name">${c.name}</div>
-        <div class="t-sub">${c.species || ''}</div>
+        <div class="t-name">${c.name}${req ? ' <span style="color:var(--gold2);font-size:0.7rem;">🙋 requested</span>' : ''}</div>
+        <div class="t-sub">${c.species || ''}${dup}</div>
       </div>
       ${already
         ? `<span style="font-size:0.7rem;color:var(--text-dim);font-style:italic;">on map</span>`
@@ -19580,7 +19589,7 @@ async function _requestMapToken() {
   // since joining this one has no link, so the GM's lists couldn't see it at all.
   // Idempotent; awaited so the GM's reload on receiving the request finds it.
   await _ensureCampaignLink(currentCharacterId, currentCampaignId);
-  mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name } });
+  mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name, charId: currentCharacterId } });
   logCombat(`🙋 ${name} has no token on this map and is requesting to be added.`, 'roll');
   showToast('Request sent to the GM.');
   if (btn) {
