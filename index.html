@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107h';
+const VERSION = 'v0.1.20261107i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9432,7 +9432,9 @@ function getEntity(ref) {
   const token  = _entityToken(ref);
 
   // Memoize computed attributes on the cache row; invalidated by updateEntity
-  if (!row._attrs) {
+  // (also rebuilt when the row's XP changed - a level-up changes every stat)
+  if (!row._attrs || row._attrsXp !== (row.stats?.XP || 0)) {
+    row._attrsXp = row.stats?.XP || 0;
     row._attrs = calcAttributesFromData(isChar ? {
       race: row.species || '', bodyType: row.body_type || '',
       sex: row.sex || '', age: row.age || '',
@@ -13686,7 +13688,9 @@ async function _awardXpToCharacter(characterId, amount) {
     console.warn('award XP: 0 rows updated for', characterId, { cached: !!row, freshRead: !!fresh });
     return `0 rows updated (id ${String(characterId).slice(0, 8)}, ${fresh ? 'row readable' : 'row NOT readable'})`;
   }
-  if (row) row.stats = newStats;
+  if (row) { row.stats = newStats; delete row._attrs; }
+  // Tell every other client (the owning player included) so their cache, sheet and health bars catch up now.
+  mapChannel?.send({ type: 'broadcast', event: 'xp-awarded', payload: { charId: characterId, xp: newStats.XP } });
   return null;
 }
 
@@ -15026,6 +15030,17 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'map-ping' }, ({ payload }) => {
       if (payload && payload.mapId === activeMapId) _pingShow(payload.x, payload.y, payload.who);
+    })
+    .on('broadcast', { event: 'xp-awarded' }, ({ payload }) => {
+      if (!payload || !payload.charId) return;
+      const row = playCharCache[payload.charId];
+      if (row) { row.stats = { ...(row.stats || {}), XP: payload.xp }; delete row._attrs; }
+      if (payload.charId === currentCharacterId) {
+        characterXP = Math.round(payload.xp) || 0;
+        const xd = document.getElementById('char-xp-display'); if (xd) xd.textContent = characterXP;
+        try { _refreshLevelFromXp(); } catch (e) {}
+      }
+      if (typeof refreshUI === 'function') refreshUI();
     })
     .on('broadcast', { event: 'hidden-found' }, ({ payload }) => {
       const w = mapWalls.find(x => x.id === payload.id);
@@ -17743,8 +17758,11 @@ function calcAttributesFromData(data) {
   const mental = data.mental || '';
   const stats  = data.stats  || {};
   const results = {};
+  // Level bonus: +1 to every raw stat per level above 1, same as the Character Builder's calcAttributes
+  // (_levelStatBonus). Without this, play mode showed the un-leveled stats. Only characters carry stats.XP.
+  const lvlBonus = Math.max(0, _levelFromXp(Math.round(stats.XP || 0)) - 1);
   for (const attr of ATTRIBUTES) {
-    const rawVal = stats[attr.rawStat] || 0;
+    const rawVal = (stats[attr.rawStat] || 0) + lvlBonus;
     const rM = (RACE_DATA[race] || {})[attr.raceKey] ?? (attr.raceDefault ?? 1);
     const gM = getModifier(GENDER_DATA, gender, attr.key);
     const aM = getModifier(AGE_DATA,    age,    attr.key);
