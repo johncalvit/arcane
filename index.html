@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107e';
+const VERSION = 'v0.1.20261107f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15691,7 +15691,7 @@ function getTokenSize(t) {
   if (mapScalePPF > 0) {
     const buildTA = (BUILD_DATA[build] || {}).TargetAdj || 1;
     const footprintFeet = Math.max(0.5, (heightIn / 12) * buildTA);
-    return Math.round(Math.max(16, Math.min(600, footprintFeet * mapScalePPF)));
+    return Math.round(Math.max(4, Math.min(600, footprintFeet * mapScalePPF)));
   }
   // Uncalibrated → size relative to a baseline human height (66"), clamp 50%–200%
   const scale = Math.max(0.5, Math.min(2.0, heightIn / 66));
