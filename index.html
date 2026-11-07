@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107d';
+const VERSION = 'v0.1.20261107e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16107,8 +16107,13 @@ async function loadPlayCharCache() {
   const { data: byCamp } = await sb.from('characters')
     .select(CHAR_COLUMNS).eq('campaign_id', currentCampaignId);
   (byCamp || []).forEach(r => { if (!rows.find(x => x.id === r.id)) rows.push(r); });
+  // Token size comes from the character's species/height, so a token drawn before this cache
+  // arrived (or for a character added since) was sized as a default human. Redraw if any size changed.
+  const before = Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => getTokenSize(t));
   playCharCache = {};
   rows.forEach(row => { playCharCache[row.id] = row; });
+  const after = Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => getTokenSize(t));
+  if (before.some((s, i) => s !== after[i]) && document.getElementById('map-canvas')) renderAllTokens();
 }
 
 let sessionCreatureCache = {}; // entity_id → session_creatures row
