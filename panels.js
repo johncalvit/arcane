@@ -1449,6 +1449,29 @@ async function _exploreRest(id, extended, quiet) {
     : `${ent.name} catches their breath (Stamina restored).`, 'good');
 }
 
+// A player's side of the GM's call for a roll: a small prompt with a Roll button for their own character.
+function _showCallForRoll(skill, level) {
+  if (isGM() || !currentCharacterId) return;
+  const ref = 'char::' + currentCharacterId;
+  document.getElementById('cfr-modal')?.remove();
+  const o = document.createElement('div');
+  o.id = 'cfr-modal';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:10050;display:flex;align-items:center;justify-content:center;';
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:18px 22px;max-width:340px;text-align:center;">
+      <div style="font-size:1.6rem;">📣</div>
+      <div style="margin:6px 0 4px;color:var(--text);">The GM calls for a <b>${_paEsc(skill)}</b> check</div>
+      <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">Difficulty: ${_paEsc(level)}</div>
+      <button class="at-btn primary" id="cfr-roll">Roll</button>
+      <button class="at-btn" id="cfr-no" style="margin-left:6px;">Not now</button></div>`;
+  document.body.appendChild(o);
+  o.querySelector('#cfr-no').onclick = () => o.remove();
+  o.querySelector('#cfr-roll').onclick = () => {
+    o.remove();
+    if (EXPLORE_DIFFICULTY[level]) _exploreDifficulty = level;
+    _exploreRollCheck(ref, skill);
+  };
+}
+
 function _exploreRollCheck(id, skillName) {
   const ent = getEntity(id);
   if (!ent) return;
@@ -1549,6 +1572,7 @@ function _exploreRender(body) {
           ${untrainedOpts ? `<optgroup label="Untrained (half odds)">${untrainedOpts}</optgroup>` : ''}
         </select>
         <button class="at-btn primary" data-dact="xrollsel">Roll</button>
+        ${isGM() ? '<button class="at-btn" data-dact="xcall" title="Ask every player to roll this check at the difficulty above">📣 Call</button>' : ''}
       </div></div>`;
 
   // Gear: swap what's in each hand - free, no stow/drop choice out of combat
@@ -1641,6 +1665,15 @@ async function _exploreClick(e) {
         showToast('The party has had an extended rest.');
         _exploreRender(body);
         break;
+      case 'xcall': {
+        if (!isGM()) break;
+        const v = document.getElementById('xchk-skill')?.value;
+        if (!v) { showToast('Choose a skill first.'); break; }
+        if (typeof mapChannel !== 'undefined' && mapChannel) mapChannel.send({ type: 'broadcast', event: 'call-for-roll', payload: { skill: v, level: _exploreDifficulty } });
+        logCombat(`The GM calls for a ${v} check (${_exploreDifficulty}).`, 'info');
+        showToast(`Called for a ${v} check.`);
+        break;
+      }
       case 'xrollsel': {
         const v = document.getElementById('xchk-skill')?.value;
         if (!v) { showToast('Choose a skill first.'); break; }
