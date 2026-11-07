@@ -1445,6 +1445,11 @@ function _exploreRestHtml(ent) {
 async function _exploreRest(id, days, quiet) {
   const ent = getEntity(id);
   if (!ent) return;
+  // The dead stay dead: no rest, recuperation or catching of breath.
+  if (ent.conditions && ent.conditions.has('dead')) {
+    if (!quiet) showToast(`${ent.name} is dead. Rest does not help.`, 'warn');
+    return;
+  }
   days = Math.max(0, Math.round(days || 0));
   const t0 = ent.damage?.toughness || 0, b0 = ent.damage?.blood || 0;
   const t1 = Math.max(0, t0 - days), b1 = Math.max(0, b0 - days);
