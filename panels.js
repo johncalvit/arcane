@@ -183,7 +183,7 @@ function _paSecExplore(ent, canEdit) {
   if (!canEdit || _atIsCombatActive()) return '';
   return _paSection('Explore', `
     <div class="at-action-row">
-      <span style="font-size:0.85rem;color:var(--text);">Stance, spells, gear</span>
+      <span style="font-size:0.85rem;color:var(--text);">Stance, spells, checks, rest, gear</span>
       <button class="pa-view-btn" data-pa="explore" data-id="${_paEsc(ent.ref)}" style="margin-left:auto;">🧭 Explore</button>
     </div>`);
 }
@@ -1417,6 +1417,38 @@ function _exploreChecks(ent) {
   return out;
 }
 
+// --- Rests -------------------------------------------------------------------
+// Catch your breath: anyone, any time out of combat - Stamina back to full.
+// Extended rest: GM only - Stamina and Quintessence back to full (wounds and Blood are untouched).
+function _exploreRestHtml(ent) {
+  const sMax = Math.max(1, Math.round(ent.attrs?.Stamina ?? 10));
+  const sLost = Math.min(sMax, ent.damage?.stamina || 0);
+  let chips = _dlgChip({
+    label: '😮‍💨 Catch your breath', sub: sLost ? `+${sLost} stamina` : 'already fresh', disabled: !sLost,
+    title: 'Rest a moment and recover all Stamina', data: { dact: 'xrest' },
+  });
+  if (isGM()) {
+    chips += _dlgChip({ label: '🏕 Extended rest', sub: 'GM', title: 'Full Stamina and Quintessence for this character', data: { dact: 'xrestlong' } })
+      + _dlgChip({ label: '🏕 Whole party', sub: 'GM', title: 'Extended rest for every character on the map', data: { dact: 'xrestparty' } });
+  }
+  return _dlgSection('🛌 Rest - free, untimed', chips, false);
+}
+
+async function _exploreRest(id, extended, quiet) {
+  const ent = getEntity(id);
+  if (!ent) return;
+  const q = extended ? (ent.damage?.quintessence || 0) : 0;
+  await updateEntity(id, { damage: {
+    toughness:    ent.damage?.toughness || 0,
+    stamina:      0,
+    blood:        ent.damage?.blood || 0,
+    quintessence: extended ? 0 : (ent.damage?.quintessence || 0),
+  }});
+  if (!quiet) logCombat(extended
+    ? `${ent.name} takes an extended rest (Stamina${q ? ' and Quintessence' : ''} restored).`
+    : `${ent.name} catches their breath (Stamina restored).`, 'good');
+}
+
 function _exploreRollCheck(id, skillName) {
   const ent = getEntity(id);
   if (!ent) return;
@@ -1543,7 +1575,7 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${checkHtml}${gearHtml}
+    ${banner}${stanceHtml}${spellHtml}${checkHtml}${_exploreRestHtml(ent)}${gearHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;
@@ -1590,6 +1622,24 @@ async function _exploreClick(e) {
       case 'xroll':
         atCloseModal();
         _exploreRollCheck(id, d.skill);
+        break;
+      case 'xrest':
+        await _exploreRest(id, false);
+        _exploreRender(body);
+        break;
+      case 'xrestlong':
+        if (!isGM()) break;
+        await _exploreRest(id, true);
+        _exploreRender(body);
+        break;
+      case 'xrestparty':
+        if (!isGM()) break;
+        for (const c of atCombatants) {
+          const e = getEntity(c.id);
+          if (e && e.type === 'char') await _exploreRest(c.id, true, true);
+        }
+        showToast('The party has had an extended rest.');
+        _exploreRender(body);
         break;
       case 'xrollsel': {
         const v = document.getElementById('xchk-skill')?.value;
