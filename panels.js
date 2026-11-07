@@ -1419,7 +1419,9 @@ function _exploreChecks(ent) {
 
 // --- Rests -------------------------------------------------------------------
 // Catch your breath: anyone, any time out of combat - Stamina back to full.
-// Extended rest: GM only - Stamina and Quintessence back to full (wounds and Blood are untouched).
+// Recuperate: GM only - the GM sets how many days of rest are available; each day heals 1 Toughness and
+// 1 Blood, and a recuperating character is also back to full Stamina and Quintessence.
+var _recupDays = 1;
 function _exploreRestHtml(ent) {
   const sMax = Math.max(1, Math.round(ent.attrs?.Stamina ?? 10));
   const sLost = Math.min(sMax, ent.damage?.stamina || 0);
@@ -1428,24 +1430,32 @@ function _exploreRestHtml(ent) {
     title: 'Rest a moment and recover all Stamina', data: { dact: 'xrest' },
   });
   if (isGM()) {
-    chips += _dlgChip({ label: '🏕 Extended rest', sub: 'GM', title: 'Full Stamina and Quintessence for this character', data: { dact: 'xrestlong' } })
-      + _dlgChip({ label: '🏕 Whole party', sub: 'GM', title: 'Extended rest for every character on the map', data: { dact: 'xrestparty' } });
+    const d = _recupDays;
+    chips += `<span style="display:inline-flex;align-items:center;gap:4px;font-size:0.78rem;color:var(--text);">Days:
+        <button class="at-btn" data-dact="xdays" data-delta="-1" style="padding:2px 8px;">−</button>
+        <b style="min-width:1.5em;text-align:center;color:var(--gold2);">${d}</b>
+        <button class="at-btn" data-dact="xdays" data-delta="1" style="padding:2px 8px;">+</button></span>`
+      + _dlgChip({ label: '🏕 Recuperate', sub: `${d} day${d === 1 ? '' : 's'}`, title: `Rest ${d} day${d === 1 ? '' : 's'}: +${d} Toughness, +${d} Blood, full Stamina and Quintessence`, data: { dact: 'xrestlong' } })
+      + _dlgChip({ label: '🏕 Whole party', sub: `${d} day${d === 1 ? '' : 's'}`, title: 'Recuperate every character on the map', data: { dact: 'xrestparty' } });
   }
   return _dlgSection('🛌 Rest - free, untimed', chips, false);
 }
 
-async function _exploreRest(id, extended, quiet) {
+// days = 0: catch your breath (Stamina only). days >= 1: recuperate that many days.
+async function _exploreRest(id, days, quiet) {
   const ent = getEntity(id);
   if (!ent) return;
-  const q = extended ? (ent.damage?.quintessence || 0) : 0;
+  days = Math.max(0, Math.round(days || 0));
+  const t0 = ent.damage?.toughness || 0, b0 = ent.damage?.blood || 0;
+  const t1 = Math.max(0, t0 - days), b1 = Math.max(0, b0 - days);
   await updateEntity(id, { damage: {
-    toughness:    ent.damage?.toughness || 0,
+    toughness:    t1,
     stamina:      0,
-    blood:        ent.damage?.blood || 0,
-    quintessence: extended ? 0 : (ent.damage?.quintessence || 0),
+    blood:        b1,
+    quintessence: days ? 0 : (ent.damage?.quintessence || 0),
   }});
-  if (!quiet) logCombat(extended
-    ? `${ent.name} takes an extended rest (Stamina${q ? ' and Quintessence' : ''} restored).`
+  if (!quiet) logCombat(days
+    ? `${ent.name} recuperates for ${days} day${days === 1 ? '' : 's'} (Toughness +${t0 - t1}, Blood +${b0 - b1}).`
     : `${ent.name} catches their breath (Stamina restored).`, 'good');
 }
 
@@ -1648,21 +1658,26 @@ async function _exploreClick(e) {
         _exploreRollCheck(id, d.skill);
         break;
       case 'xrest':
-        await _exploreRest(id, false);
+        await _exploreRest(id, 0);
+        _exploreRender(body);
+        break;
+      case 'xdays':
+        if (!isGM()) break;
+        _recupDays = Math.max(1, Math.min(60, _recupDays + parseInt(d.delta, 10)));
         _exploreRender(body);
         break;
       case 'xrestlong':
         if (!isGM()) break;
-        await _exploreRest(id, true);
+        await _exploreRest(id, _recupDays);
         _exploreRender(body);
         break;
       case 'xrestparty':
         if (!isGM()) break;
         for (const c of atCombatants) {
           const e = getEntity(c.id);
-          if (e && e.type === 'char') await _exploreRest(c.id, true, true);
+          if (e && e.type === 'char') await _exploreRest(c.id, _recupDays);
         }
-        showToast('The party has had an extended rest.');
+        showToast(`The party recuperates for ${_recupDays} day${_recupDays === 1 ? '' : 's'}.`);
         _exploreRender(body);
         break;
       case 'xcall': {
