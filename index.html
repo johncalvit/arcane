@@ -7261,7 +7261,8 @@ async function saveCharacter() {
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
                    CharClass: data.charClass, Techniques: data.techniques,
                    Storage: data.storage, Given: data.given,
-                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language },
+                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language,
+                   PlayerName: (currentUser?.user_metadata?.display_name || '').trim() || data.stats?.PlayerName || '' },
     notes:       data.notes || '',
     features:    data.features,
     skills:      data.skills,
@@ -7659,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107c';
+const VERSION = 'v0.1.20261107d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15122,7 +15123,7 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'token-request' }, ({ payload }) => {
       if (!isGM() || !payload?.name) return;
       showToast(`🙋 ${payload.name} has no token on this map — asking to be added. See the Tokens tab.`);
-      if (payload.charId) { _tokenRequestIds.add(payload.charId); setTimeout(() => { _tokenRequestIds.delete(payload.charId); renderTokensCharList(); }, 10 * 60 * 1000); }
+      if (payload.charId) { _tokenRequestIds.add(payload.charId); if (payload.player) _tokenRequestPlayers[payload.charId] = payload.player; setTimeout(() => { _tokenRequestIds.delete(payload.charId); renderTokensCharList(); }, 10 * 60 * 1000); }
       // The Characters list is only loaded when the tab opens, so a character the
       // player saved/joined since then wasn't in it. Reload the data cache and the
       // list now so the character is there to "+ Add" when the GM looks.
@@ -18073,6 +18074,7 @@ function renderOnMapTokens() {
 // character (user_id === the campaign's GM) is treated as an NPC, since
 // players only ever own their own PCs; everything else is a Player character.
 let tokensCharFilter = 'all';
+var _tokenRequestPlayers = {}; // charId -> player name, learned from requests this session
 var _tokenRequestIds = new Set(); // characters whose players asked the GM to be added (highlighted in the list)
 let _tokensCharsCache = []; // raw campaign characters, re-filtered without refetching
 
@@ -18116,7 +18118,7 @@ async function loadCampaignCharactersForTokens() {
   // character joins) OR its home campaign_id is this one. This list used to check
   // only campaign_id, so a character that had merely been linked in was playable
   // (it was in the GM's cache) but never offered here to add as a token.
-  const cols = 'id, name, species, avatar_url, user_id';
+  const cols = 'id, name, species, avatar_url, user_id, stats';
   const { data: links } = await sb.from('campaign_characters')
     .select('character_id').eq('campaign_id', currentCampaignId);
   const linkedIds = (links || []).map(l => l.character_id);
@@ -18165,10 +18167,11 @@ function renderTokensCharList() {
   el.innerHTML = ordered.map(c => {
     const already = onMap.has(c.id);
     const req = _tokenRequestIds.has(c.id) && !already;
+    const owner = c.user_id === currentCampaignGmId ? 'GM' : ((c.stats && c.stats.PlayerName) || _tokenRequestPlayers[c.id] || '');
     const dup = nameCount[c.name] > 1 ? ` · #${String(c.id).slice(-4)}` : '';
     return `<div class="token-add-row"${req ? ' style="outline:1px solid var(--gold);background:rgba(201,168,76,0.12);"' : ''}>
       <div style="flex:1;min-width:0;">
-        <div class="t-name">${c.name}${req ? ' <span style="color:var(--gold2);font-size:0.7rem;">🙋 requested</span>' : ''}</div>
+        <div class="t-name">${c.name}${owner ? ` <span style="color:var(--text-dim);font-size:0.72rem;font-weight:normal;">(${_escWeaponType(owner)})</span>` : ''}${req ? ' <span style="color:var(--gold2);font-size:0.7rem;">🙋 requested</span>' : ''}</div>
         <div class="t-sub">${c.species || ''}${dup}</div>
       </div>
       ${already
@@ -19580,6 +19583,19 @@ function _fogViewerToken() {
 // the 'token-request' handler in subscribeMapRealtime), and an ordinary
 // Journal entry (via logCombat, already broadcast to everyone) so it's
 // still visible afterward even if the GM steps away mid-request.
+function _myPlayerName() {
+  return ((currentUser && currentUser.user_metadata && currentUser.user_metadata.display_name) || '').trim();
+}
+// Older characters were saved before PlayerName existed: stamp it on (merging into stats) so the GM's lists can show it.
+async function _backfillPlayerName(charId) {
+  const nm = _myPlayerName();
+  if (!nm || !charId) return;
+  try {
+    const { data: cur } = await sb.from('characters').select('stats, user_id').eq('id', charId).maybeSingle();
+    if (!cur || cur.user_id !== currentUser.id || (cur.stats && cur.stats.PlayerName === nm)) return;
+    await sb.from('characters').update({ stats: { ...(cur.stats || {}), PlayerName: nm } }).eq('id', charId);
+  } catch (e) { console.warn('player name backfill failed', e); }
+}
 async function _requestMapToken() {
   if (isGM() || !currentCharacterId) return;
   const btn = document.getElementById('no-token-request-btn');
@@ -19589,7 +19605,8 @@ async function _requestMapToken() {
   // since joining this one has no link, so the GM's lists couldn't see it at all.
   // Idempotent; awaited so the GM's reload on receiving the request finds it.
   await _ensureCampaignLink(currentCharacterId, currentCampaignId);
-  mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name, charId: currentCharacterId } });
+  mapChannel?.send({ type: 'broadcast', event: 'token-request', payload: { name, charId: currentCharacterId, player: _myPlayerName() } });
+  _backfillPlayerName(currentCharacterId);
   logCombat(`🙋 ${name} has no token on this map and is requesting to be added.`, 'roll');
   showToast('Request sent to the GM.');
   if (btn) {
