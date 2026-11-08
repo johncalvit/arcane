@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261107i';
+const VERSION = 'v0.1.20261108a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13634,6 +13634,153 @@ async function _axpConfirmAward() {
 // applyCharacterData) — stats.XP, no schema change needed. Updates the
 // cached row too so the Character Builder/Tokens panel reflect the new
 // total without waiting for a fresh page load.
+// === GM: APPLY EFFECTS ======================================================
+// One dialog to hit any mix of party members and monsters, in or out of combat, with any
+// combination of: a condition (add/remove), a stat change (lasts until the Buffed condition is
+// cleared - the same hidden buff marker potions and drain spells use) and damage (type + random range).
+const _FX_DAMAGE_TYPES = [['slash','Slash'],['pierce','Pierce'],['crush','Crush'],['burn','Burn'],['shock','Shock'],['freeze','Freeze'],['corrode','Corrode']];
+const _FX_SKIP_CONDS = ['held', 'holding', 'carrying']; // relational - they need a second token
+
+function atOpenApplyEffectsModal() {
+  if (!isGM()) return;
+  document.getElementById('fx-modal')?.remove();
+  const toks = Object.values(mapTokens || {}).filter(t => t.entity_type === 'character' || t.entity_type === 'creature');
+  const party = toks.filter(t => t.entity_type === 'character');
+  const mons  = toks.filter(t => t.entity_type === 'creature');
+  const row = t => `<label style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:0.85rem;cursor:pointer;">
+      <input type="checkbox" class="fx-tgt" data-grp="${t.entity_type === 'character' ? 'party' : 'mon'}" value="${_paEsc(t.id)}">
+      <span>${_paEsc(t.label || '?')}</span></label>`;
+  const inp = 'background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:var(--ui-font);';
+  const condOpts = CONDITION_DEFS.filter(d => !_FX_SKIP_CONDS.includes(d.key))
+    .map(d => `<option value="${d.key}">${d.icon} ${_paEsc(d.label)}</option>`).join('');
+  const statOpts = ATTRIBUTES.map(a => `<option value="${a.key}">${_paEsc(a.label)}</option>`).join('');
+  const dmgOpts = _FX_DAMAGE_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+  const sec = (id, title, body) => `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+      <label style="display:flex;align-items:center;gap:8px;font-weight:bold;color:var(--gold2);cursor:pointer;"><input type="checkbox" id="${id}"> ${title}</label>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:0.82rem;">${body}</div></div>`;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'fx-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3300;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:520px;max-width:94vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-family:var(--ui-font);';
+  card.innerHTML = `
+    <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">⚡ Apply Effects</div>
+    <div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+        <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Targets</span>
+        <button class="at-btn" data-fxsel="party">Party</button>
+        <button class="at-btn" data-fxsel="mon">Monsters</button>
+        <button class="at-btn" data-fxsel="all">All</button>
+        <button class="at-btn" data-fxsel="none">None</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px;">
+        <div><div style="font-size:0.72rem;color:var(--text-dim);">Party</div>${party.map(row).join('') || '<i style="font-size:0.78rem;color:var(--text-dim);">none on map</i>'}</div>
+        <div><div style="font-size:0.72rem;color:var(--text-dim);">Monsters</div>${mons.map(row).join('') || '<i style="font-size:0.78rem;color:var(--text-dim);">none on map</i>'}</div>
+      </div>
+    </div>
+    ${sec('fx-cond-on', '🏷 Condition', `
+      <select id="fx-cond-mode" style="${inp}"><option value="add">Add</option><option value="remove">Remove</option></select>
+      <select id="fx-cond" style="${inp}">${condOpts}</select>`)}
+    ${sec('fx-stat-on', '📉 Stat change', `
+      <select id="fx-stat" style="${inp}">${statOpts}</select>
+      <input type="number" id="fx-stat-amt" value="-3" style="${inp}width:70px;" title="Negative lowers the stat, positive raises it">
+      <span style="font-size:0.72rem;color:var(--text-dim);">Lasts until you clear the Buffed condition.</span>`)}
+    ${sec('fx-dmg-on', '💥 Damage', `
+      <select id="fx-dmg-type" style="${inp}">${dmgOpts}</select>
+      <span>Roll</span><input type="number" id="fx-dmg-min" value="1" min="0" style="${inp}width:60px;">
+      <span>to</span><input type="number" id="fx-dmg-max" value="6" min="0" style="${inp}width:60px;">
+      <span style="font-size:0.72rem;color:var(--text-dim);">rolled separately for each target</span>
+      <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="fx-dmg-raw"> Ignore armor</label>`)}
+    <div id="fx-status" style="font-size:0.78rem;color:var(--gold2);min-height:1em;"></div>
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn" id="fx-go">Apply</button><button class="btn danger" id="fx-close">Close</button>
+    </div>`;
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+  document.getElementById('fx-close').onclick = () => overlay.remove();
+  card.querySelectorAll('[data-fxsel]').forEach(b => b.onclick = () => {
+    const w = b.dataset.fxsel;
+    card.querySelectorAll('.fx-tgt').forEach(c => { c.checked = w === 'all' || (w !== 'none' && c.dataset.grp === w); });
+  });
+  document.getElementById('fx-go').onclick = async () => {
+    const ids = [...card.querySelectorAll('.fx-tgt:checked')].map(c => c.value);
+    const fx = {};
+    if (document.getElementById('fx-cond-on').checked) fx.cond = { key: document.getElementById('fx-cond').value, add: document.getElementById('fx-cond-mode').value === 'add' };
+    if (document.getElementById('fx-stat-on').checked) fx.stat = { key: document.getElementById('fx-stat').value, amt: parseInt(document.getElementById('fx-stat-amt').value, 10) || 0 };
+    if (document.getElementById('fx-dmg-on').checked) {
+      let lo = Math.max(0, parseInt(document.getElementById('fx-dmg-min').value, 10) || 0);
+      let hi = Math.max(0, parseInt(document.getElementById('fx-dmg-max').value, 10) || 0);
+      if (lo > hi) [lo, hi] = [hi, lo];
+      fx.dmg = { type: document.getElementById('fx-dmg-type').value, lo, hi, raw: document.getElementById('fx-dmg-raw').checked };
+    }
+    const status = document.getElementById('fx-status');
+    if (!ids.length) { status.textContent = 'Pick at least one target.'; return; }
+    if (!fx.cond && !fx.stat && !fx.dmg) { status.textContent = 'Tick at least one effect.'; return; }
+    const btn = document.getElementById('fx-go');
+    btn.disabled = true; status.textContent = 'Applying...';
+    try {
+      const n = await _fxApply(ids, fx);
+      status.textContent = `Applied to ${n} target${n === 1 ? '' : 's'} (see the Journal).`;
+    } catch (err) {
+      console.error('apply effects:', err);
+      status.textContent = 'Something failed: ' + (err?.message || err);
+    }
+    btn.disabled = false;
+  };
+}
+
+async function _fxApply(tokenIds, fx) {
+  let n = 0;
+  for (const tid of tokenIds) {
+    const t = mapTokens[tid];
+    if (!t) continue;
+    const ref = _refForToken(t);
+    let ent = getEntity(ref);
+    if (!ent) continue;
+    const parts = [];
+
+    if (fx.cond) {
+      const def = CONDITION_DEFS.find(d => d.key === fx.cond.key);
+      if (fx.cond.add) await _applySpellCondition(tid, fx.cond.key); // also sets the hidden "since" markers
+      else await setCondition(tid, fx.cond.key, false);
+      parts.push(`${fx.cond.add ? '' : 'no longer '}${def ? def.label : fx.cond.key}`);
+    }
+
+    if (fx.stat && fx.stat.amt) {
+      const def = ATTRIBUTES.find(a => a.key === fx.stat.key);
+      await setConditions(tid, [[`buff:${fx.stat.key}:${fx.stat.amt}`, true], ['buffed', true]]);
+      parts.push(`${def ? def.label : fx.stat.key} ${fx.stat.amt > 0 ? '+' : ''}${fx.stat.amt}`);
+    }
+
+    if (fx.dmg) {
+      ent = getEntity(ref) || ent;
+      const rolled = fx.dmg.lo + Math.floor(Math.random() * (fx.dmg.hi - fx.dmg.lo + 1));
+      let dr = 0;
+      if (!fx.dmg.raw) {
+        const slot = _armorSlotForPart(ent.bodyType, null);
+        dr = getArmorDR((ent.armor && ent.armor[slot]) || 'None', fx.dmg.type);
+      }
+      const dmg = Math.max(0, Math.round(rolled - dr));
+      if (dmg > 0) {
+        await applyDamage(ent.type === 'char' ? 'character' : 'creature', ent.id, dmg, 0);
+        parts.push(`${dmg} ${fx.dmg.type} damage${dr ? ` (armor stopped ${Math.round(dr)})` : ''}`);
+      } else {
+        parts.push(`armor absorbs the ${fx.dmg.type} damage`);
+      }
+      const downed = await _checkDownedState(tid, getEntity(ref));
+      if (downed === 'unconscious') parts.push('goes unconscious');
+      if (downed === 'dead') parts.push('is dead');
+    }
+
+    logCombat(`GM effect: ${ent.name} - ${parts.join(', ')}.`, fx.dmg ? 'hit' : 'roll');
+    n++;
+  }
+  if (typeof refreshUI === 'function') refreshUI();
+  return n;
+}
+
 // GM: grant (or, with a negative amount, take back) XP for chosen characters outside of combat.
 function atOpenGrantXpModal() {
   if (!isGM()) return;
@@ -22376,6 +22523,7 @@ async function _deleteMapPin(pinId) {
             <button id="at-roll-remaining-btn" class="at-btn primary" onclick="atRollAllRemaining()" title="Roll initiative for every combatant who hasn't rolled yet" style="display:none;">🎲 Roll Remaining</button>
             <button id="at-start-combat-btn" class="at-btn primary" onclick="atStartCombat()" title="Start combat" style="display:none;">⚔ Start</button>
             <button class="at-btn primary" onclick="atOpenAwardXpModal()" title="Mark which foes were actually defeated and award XP to the party">🏆 Finish Combat</button>
+            <button class="at-btn" onclick="atOpenApplyEffectsModal()" title="Apply a condition, stat change and/or damage to chosen party members and monsters - in or out of combat">⚡ Apply Effects</button>
             <button class="at-btn" onclick="atOpenGrantXpModal()" title="Give (or take back) XP for specific characters, outside of combat">🏅 Grant XP</button>
           </div>
         </div>
