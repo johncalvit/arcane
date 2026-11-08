@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261108c';
+const VERSION = 'v0.1.20261109a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16104,8 +16104,10 @@ function onTokenMouseMove(e) {
   const cx   = (e.clientX - rect.left - mapOffsetX) / mapScale;
   const cy   = (e.clientY - rect.top  - mapOffsetY) / mapScale;
 
-  const x_pct = Math.min(100, Math.max(0, (cx - dragOffsetX) / mapImgW * 100));
-  const y_pct = Math.min(100, Math.max(0, (cy - dragOffsetY) / mapImgH * 100));
+  const rawX = Math.min(100, Math.max(0, (cx - dragOffsetX) / mapImgW * 100));
+  const rawY = Math.min(100, Math.max(0, (cy - dragOffsetY) / mapImgH * 100));
+  const clipped = _dragClip(dragTokenId, rawX, rawY); // walls (and the sprint limit) cut the drag short
+  const x_pct = clipped.x_pct, y_pct = clipped.y_pct;
 
   // delta from the token's previous spot — its borne-group moves by the same
   const prevX = mapTokens[dragTokenId]?.x_pct ?? x_pct;
@@ -16120,7 +16122,7 @@ function onTokenMouseMove(e) {
   }
   if (getConditions(dragTokenId).has('sentinel')) drawSentinelRanges();
   scheduleLights();
-  _dragMoveIndicator(dragTokenId, x_pct, y_pct);
+  _dragMoveIndicator(dragTokenId, rawX, rawY); // shows where the cursor is; the indicator marks where the token really stops
 
   // broadcast to others (fast path)
   tokenChannel?.send({ type: 'broadcast', event: 'token-move',
@@ -18812,6 +18814,137 @@ function pathGetSpeed(combId) {
   } catch(e) { return 5; }
 }
 
+// ═══ MOVEMENT: WALLS AND GAITS ═══════════════════════════════════════════════════
+// Walls with blocksMovement stop a token: a move is cut off just short of the first one it would cross
+// (closed doors are walls, open doors are not). The GM can hold Shift to move through walls.
+// In combat a turn's movement is measured in seconds of Speed and falls into four gaits:
+//   up to 1 s = Walk (free), 2 s = Jog (1 Stamina), 3 s = Run (2), 4 s = Sprint (3).
+// 4 s is the most anyone can move in a turn, so a route is cut off there.
+const GAITS = [
+  { name: 'Walk',   cost: 0, color: '#4de080', verb: 'walks' },
+  { name: 'Jog',    cost: 1, color: '#c8e04d', verb: 'jogs' },
+  { name: 'Run',    cost: 2, color: '#f0a040', verb: 'runs' },
+  { name: 'Sprint', cost: 3, color: '#e06060', verb: 'sprints' },
+];
+const MOVE_MAX_SECS = 4;
+function _gaitForSecs(secs) { return Math.max(0, Math.min(3, Math.ceil(secs - 0.02) - 1)); }
+
+var _shiftDown = false;
+window.addEventListener('keydown', e => { if (e.key === 'Shift') _shiftDown = true; });
+window.addEventListener('keyup',   e => { if (e.key === 'Shift') _shiftDown = false; });
+window.addEventListener('blur',    () => { _shiftDown = false; });
+function _moveBypass() { return isGM() && _shiftDown; }
+
+// Every movement-blocking wall edge, in image pixels: [ax, ay, bx, by].
+function _moveBlockers() {
+  const segs = [];
+  const P = p => [p.x_pct / 100 * mapImgW, p.y_pct / 100 * mapImgH];
+  const add = (p, q) => { const a = P(p), b = P(q); segs.push([a[0], a[1], b[0], b[1]]); };
+  for (const w of mapWalls) {
+    if (!w.blocksMovement || w.type === 'hidden' || w.type === 'litarea') continue;
+    if (w.door && w.open) continue;
+    const pts = w.points || [];
+    if (pts.length < 2) continue;
+    if (w.type === 'line') {
+      for (let i = 0; i < pts.length - 1; i++) add(pts[i], pts[i + 1]);
+    } else if (w.type === 'rect') {
+      const x0 = Math.min(pts[0].x_pct, pts[1].x_pct), x1 = Math.max(pts[0].x_pct, pts[1].x_pct);
+      const y0 = Math.min(pts[0].y_pct, pts[1].y_pct), y1 = Math.max(pts[0].y_pct, pts[1].y_pct);
+      const c4 = [{ x_pct: x0, y_pct: y0 }, { x_pct: x1, y_pct: y0 }, { x_pct: x1, y_pct: y1 }, { x_pct: x0, y_pct: y1 }];
+      for (let i = 0; i < 4; i++) add(c4[i], c4[(i + 1) % 4]);
+    } else if (w.type === 'circle') {
+      const c0 = P(pts[0]), e0 = P(pts[1]);
+      const r = Math.hypot(e0[0] - c0[0], e0[1] - c0[1]);
+      const N = 32;
+      for (let i = 0; i < N; i++) {
+        const a1 = (i / N) * Math.PI * 2, a2 = ((i + 1) / N) * Math.PI * 2;
+        segs.push([c0[0] + r * Math.cos(a1), c0[1] + r * Math.sin(a1), c0[0] + r * Math.cos(a2), c0[1] + r * Math.sin(a2)]);
+      }
+    }
+  }
+  return segs;
+}
+
+// Where along a->b (0..1) a move should stop short of the first wall it would cross, or null.
+function _wallStopT(a, b, segs) {
+  const px = a.x_pct / 100 * mapImgW, py = a.y_pct / 100 * mapImgH;
+  const rx = b.x_pct / 100 * mapImgW - px, ry = b.y_pct / 100 * mapImgH - py;
+  const len = Math.hypot(rx, ry);
+  if (len < 1e-6) return null;
+  let best = null;
+  for (const [cx, cy, dx, dy] of segs) {
+    const qx = dx - cx, qy = dy - cy;
+    const den = rx * qy - ry * qx;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((cx - px) * qy - (cy - py) * qx) / den;
+    const u = ((cx - px) * ry - (cy - py) * rx) / den;
+    if (t > 1e-5 && t <= 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+  }
+  return best === null ? null : Math.max(0, best - 1.5 / len);
+}
+
+// Cuts a route (image-percent points) short at the first wall and/or after opts.maxFeet.
+// Returns { points, stop: null | 'wall' | 'limit' }.
+function _clipRoute(pts, opts) {
+  opts = opts || {};
+  if (!pts || pts.length < 2) return { points: pts || [], stop: null };
+  const segs = opts.walls ? _moveBlockers() : [];
+  const lim = (opts.maxFeet != null && mapScalePPF > 0) ? opts.maxFeet : null;
+  const out = [pts[0]];
+  let acc = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    let tStop = null, kind = null;
+    if (segs.length) { const t = _wallStopT(a, b, segs); if (t !== null) { tStop = t; kind = 'wall'; } }
+    if (lim !== null) {
+      const segFeet = _pctDistFt(a.x_pct, a.y_pct, b.x_pct, b.y_pct) || 0;
+      if (segFeet > 0 && acc + segFeet > lim + 0.01) {
+        const tl = Math.max(0, (lim - acc) / segFeet);
+        if (tStop === null || tl < tStop) { tStop = tl; kind = 'limit'; }
+      }
+      acc += segFeet;
+    }
+    if (tStop !== null) {
+      out.push({ x_pct: a.x_pct + (b.x_pct - a.x_pct) * tStop, y_pct: a.y_pct + (b.y_pct - a.y_pct) * tStop });
+      return { points: out, stop: kind };
+    }
+    out.push(b);
+  }
+  return { points: out, stop: null };
+}
+
+function _routeFeet(pts) {
+  if (mapScalePPF <= 0 || !pts || pts.length < 2) return null;
+  let d = 0;
+  for (let i = 1; i < pts.length; i++) d += _pctDistFt(pts[i - 1].x_pct, pts[i - 1].y_pct, pts[i].x_pct, pts[i].y_pct) || 0;
+  return d;
+}
+
+// Feet of movement a combatant still has this turn (4 s of Speed, minus what's already been moved this round).
+function _moveRemainingFeet(combId) {
+  const spd = pathGetSpeed(combId);
+  const c = combId ? atCombatants.find(x => x.id === combId) : null;
+  const prior = (c && c.slots && c.slots.move && c.slots.move.startRound === atRound) ? (c.slots.move.feet || 0) : 0;
+  return Math.max(0, spd * MOVE_MAX_SECS - prior);
+}
+
+// A straight drag of a token: stopped by walls, and (own character, own combat turn) by the sprint limit.
+var _dragStopNoted = false;
+function _dragClip(tokenId, xp, yp) {
+  const t = mapTokens[tokenId];
+  if (!t || _dragStartXPct == null || t.entity_type === 'item') return { x_pct: xp, y_pct: yp, stop: null };
+  const combId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+  const budgeted = !isGM() && t.entity_type === 'character' && t.entity_id === currentCharacterId
+    && _atIsCombatActive() && _atSharedActive()?.id === combId && mapScalePPF > 0;
+  const res = _clipRoute([{ x_pct: _dragStartXPct, y_pct: _dragStartYPct }, { x_pct: xp, y_pct: yp }],
+    { walls: !_moveBypass(), maxFeet: budgeted ? _moveRemainingFeet(combId) : null });
+  const end = res.points[res.points.length - 1];
+  if (res.stop === 'wall') {
+    if (!_dragStopNoted) { _dragStopNoted = true; showToast(isGM() ? 'A wall stops the move (hold Shift to pass).' : 'A wall blocks the way.', 'warn'); }
+  } else _dragStopNoted = false;
+  return { x_pct: end.x_pct, y_pct: end.y_pct, stop: res.stop };
+}
+
 // Straight-line feet between two image-percent points — the same distance
 // math pathTotalFeet does for a multi-point route, just for exactly two
 // points (a single dragged segment; see onTokenMouseUp).
@@ -18872,16 +19005,21 @@ function _commitMoveSlot(combId, feet) {
   const priorFeet = (c.slots.move && c.slots.move.startRound === atRound) ? (c.slots.move.feet || 0) : 0;
   const totalFeet = priorFeet + (feet != null ? feet : 0);
   const secs = totalFeet > 0 ? Math.max(1, Math.round(totalFeet / spd)) : 2;
-  const label = totalFeet > 0 ? `Move (${Math.round(totalFeet)} ft)` : 'Move';
-  const warned = totalFeet > 0 && secs > 3;
+  const gait = _gaitForSecs(totalFeet / spd);
+  const label = totalFeet > 0 ? `Move (${Math.round(totalFeet)} ft${gait > 0 ? ', ' + GAITS[gait].name : ''})` : 'Move';
   const durationRounds = Math.max(1, Math.ceil(secs / 3));
-  c.slots.move = { label: label + (warned ? ' ⚠' : ''), startRound: atRound, durationRounds,
+  c.slots.move = { label, startRound: atRound, durationRounds,
                    locksAll: false, feet: Math.round(totalFeet) };
-  // Going past half a round's movement costs 1 Stamina, once per round (the Path / drag preview shows it coming).
-  if (totalFeet > spd * 1.5 && c._moveStamRound !== atRound) {
-    c._moveStamRound = atRound;
-    _deductStamina(combId, 1);
-    logCombat(`${getEntity(combId)?.name || 'Someone'} moves past half their movement — -1 Stamina.`, 'roll');
+  // Gait Stamina (Jog 1, Run 2, Sprint 3) is for the whole round's movement, so a second move this round
+  // only pays the difference. Only in combat - out of it there's no clock to spend against.
+  if (_atIsCombatActive() && totalFeet > 0) {
+    const paid = c._moveStamRound === atRound ? (c._moveStamPaid || 0) : 0;
+    const owed = GAITS[gait].cost - paid;
+    if (owed > 0) {
+      c._moveStamRound = atRound; c._moveStamPaid = paid + owed;
+      _deductStamina(combId, owed);
+      logCombat(`${getEntity(combId)?.name || 'Someone'} ${GAITS[gait].verb} (-${owed} Stamina).`, 'roll');
+    }
   }
   if (mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
@@ -18917,29 +19055,20 @@ function _pathPointAtDistance(pts, targetDist) {
   return null;
 }
 
-// How far along a combatant's round of movement a total distance is. A full
-// round of movement is Speed × 3 ft (a round is 3 s); half of that is the
-// threshold for the half-move actions (see the half-movement ring below).
-//   green  — at or under half move
-//   yellow — past half, up to and including full move
-//   red    — over full move
-// `bang` is true once full move is reached (a half-foot of slack so landing
-// "exactly" on it, which a mouse never does, still counts). Movement already
-// spent this round (the Move slot) counts toward the total, matching how
-// _commitMoveSlot adds a second move onto the first.
+// The gait a combatant's movement this turn amounts to (see GAITS). Movement already spent this round
+// (the Move slot) counts toward the total, matching how _commitMoveSlot adds a second move onto the first.
+// `bang` is true once the 4-second sprint limit is reached (half a foot of slack for a mouse).
 function _moveTier(segmentFeet, combId) {
   const spd = pathGetSpeed(combId);
   const c = combId ? atCombatants.find(x => x.id === combId) : null;
   const prior = (c && c.slots && c.slots.move && c.slots.move.startRound === atRound) ? (c.slots.move.feet || 0) : 0;
   const total = segmentFeet + prior;
-  const half = spd * 1.5, full = spd * 3;
-  const level = total <= half ? 0 : total <= full + 0.5 ? 1 : 2;
-  const palette = [
-    { color: '#4de080', dim: 'rgba(77,224,128,0.5)' },
-    { color: '#f0d080', dim: 'rgba(240,208,128,0.5)' },
-    { color: '#e06060', dim: 'rgba(224,96,96,0.5)' },
-  ][level];
-  return { ...palette, level, bang: total >= full - 0.5, total, prior, spd, half, full };
+  const level = _gaitForSecs(total / spd);
+  const hex = GAITS[level].color;
+  const rgb = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16));
+  const paid = (c && c._moveStamRound === atRound) ? (c._moveStamPaid || 0) : 0;
+  return { color: hex, dim: `rgba(${rgb.join(',')},0.5)`, level, cost: GAITS[level].cost, owed: Math.max(0, GAITS[level].cost - paid),
+           bang: total >= spd * MOVE_MAX_SECS - 0.5, total, prior, spd, limit: spd * MOVE_MAX_SECS };
 }
 
 // Live movement indicator while dragging the ACTIVE combatant's token during
@@ -18970,119 +19099,98 @@ function pathRenderSvg(mouseX, mouseY, override) {
   const svg = document.getElementById('path-svg');
   if (!svg) return;
   svg.innerHTML = '';
+  const NS = 'http://www.w3.org/2000/svg';
+  const mk = (tag, attrs) => { const el = document.createElementNS(NS, tag); for (const k in attrs) el.setAttribute(k, attrs[k]); svg.appendChild(el); return el; };
 
   const basePts = override ? override.points : pathPoints;
   const cid = override ? override.combId : pathCharId;
-  const pts = mouseX != null ? [...basePts, {x: mouseX, y: mouseY}] : basePts;
+  const pts = mouseX != null ? [...basePts, { x: mouseX, y: mouseY }] : basePts;
   if (pts.length < 1) return;
 
-  // Measure first so the whole indicator (line, dots, label) can take the colour.
-  let feetNow = null;
-  if (pts.length >= 2 && mapScalePPF > 0) {
-    let d = 0;
-    for (let i = 1; i < pts.length; i++) d += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
-    feetNow = (d / mapScale) / mapScalePPF;
+  // Where the move really ends: a wall stops it, and in combat so does the 4-second sprint limit.
+  const gaitOn = !!(cid && mapScalePPF > 0 && _atIsCombatActive());
+  let shown = pts, stop = null;
+  if (pts.length >= 2) {
+    const clip = _clipRoute(pts.map(p => _wallVpToPct(p.x, p.y)),
+      { walls: !_moveBypass(), maxFeet: gaitOn ? _moveRemainingFeet(cid) : null });
+    shown = clip.points.map(_wallPctToVp);
+    stop = clip.stop;
   }
-  // Tiered colours only for a real combatant's move; a free Path outside combat keeps plain green.
-  const tier = (cid && feetNow != null) ? _moveTier(feetNow, cid) : null;
+  let shownPx = 0;
+  for (let i = 1; i < shown.length; i++) shownPx += Math.hypot(shown[i].x - shown[i - 1].x, shown[i].y - shown[i - 1].y);
+  const feetNow = (shown.length >= 2 && mapScalePPF > 0) ? (shownPx / mapScale) / mapScalePPF : null;
+  // Gait colours only for a real combatant's move in combat; a free Path keeps plain green.
+  const tier = (gaitOn && feetNow != null) ? _moveTier(feetNow, cid) : null;
   const color  = tier ? tier.color : '#4de080';
   const dimClr = tier ? tier.dim : 'rgba(77,224,128,0.5)';
+  const lastShown = shown[shown.length - 1];
 
-  // Polyline
-  if (pts.length >= 2) {
-    const polyline = document.createElementNS('http://www.w3.org/2000/svg','polyline');
-    polyline.setAttribute('points', pts.map(p => `${p.x},${p.y}`).join(' '));
-    polyline.setAttribute('stroke', color);
-    polyline.setAttribute('stroke-width', '2');
-    polyline.setAttribute('stroke-dasharray', '8,4');
-    polyline.setAttribute('fill', 'none');
-    polyline.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(polyline);
+  // The part of the route that won't happen (past a wall / the sprint limit)
+  if (stop && pts.length >= 2) {
+    mk('line', { x1: lastShown.x, y1: lastShown.y, x2: pts[pts.length - 1].x, y2: pts[pts.length - 1].y,
+      stroke: 'rgba(200,200,200,0.45)', 'stroke-width': 2, 'stroke-dasharray': '3,5' });
+  }
+  if (shown.length >= 2) {
+    mk('polyline', { points: shown.map(p => `${p.x},${p.y}`).join(' '), stroke: color, 'stroke-width': 2,
+      'stroke-dasharray': '8,4', fill: 'none', 'stroke-linejoin': 'round' });
   }
 
   // Waypoint dots
-  basePts.forEach((p, i) => {
-    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    c.setAttribute('cx', p.x); c.setAttribute('cy', p.y);
-    c.setAttribute('r', i === 0 ? 6 : 4);
-    c.setAttribute('fill', color);
-    c.setAttribute('stroke', '#000'); c.setAttribute('stroke-width', '1');
-    svg.appendChild(c);
-  });
+  basePts.forEach((p, i) => mk('circle', { cx: p.x, cy: p.y, r: i === 0 ? 6 : 4, fill: color, stroke: '#000', 'stroke-width': 1 }));
 
   // Ghost dot at mouse
-  if (mouseX != null && basePts.length >= 1) {
-    const g = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    g.setAttribute('cx', mouseX); g.setAttribute('cy', mouseY);
-    g.setAttribute('r', 4); g.setAttribute('fill', dimClr);
-    g.setAttribute('stroke', color); g.setAttribute('stroke-width', '1');
-    svg.appendChild(g);
+  if (mouseX != null && basePts.length >= 1) mk('circle', { cx: mouseX, cy: mouseY, r: 4, fill: dimClr, stroke: color, 'stroke-width': 1 });
+
+  const outline = 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;';
+  const font = 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif';
+
+  // Where the move stops: an X at a wall, a ring at the sprint limit
+  if (stop === 'wall') {
+    const s = 7;
+    mk('line', { x1: lastShown.x - s, y1: lastShown.y - s, x2: lastShown.x + s, y2: lastShown.y + s, stroke: '#ff5555', 'stroke-width': 3, 'stroke-linecap': 'round' });
+    mk('line', { x1: lastShown.x - s, y1: lastShown.y + s, x2: lastShown.x + s, y2: lastShown.y - s, stroke: '#ff5555', 'stroke-width': 3, 'stroke-linecap': 'round' });
+  } else if (stop === 'limit') {
+    mk('circle', { cx: lastShown.x, cy: lastShown.y, r: 9, fill: 'none', stroke: GAITS[3].color, 'stroke-width': 3 });
   }
 
-  // Distance + time label near last point
-  const lastPt = pts[pts.length - 1];
-  const allPts = pts;
-  if (allPts.length >= 2 && mapScalePPF > 0) {
-    const feet = feetNow;
-    const spd  = tier ? tier.spd : pathGetSpeed(cid);
-    const secs = feet / spd;
-    const secRound = Math.round(secs * 10) / 10;
+  // Gait markers: a dot where each second of movement ends and the next gait (and its Stamina cost) begins
+  if (tier && shown.length >= 2) {
+    for (let k = 1; k <= 3; k++) {
+      const distPx = (k * tier.spd - tier.prior) * mapScalePPF * mapScale;
+      if (distPx <= 2 || distPx >= shownPx - 2) continue;
+      const mp = _pathPointAtDistance(shown, distPx);
+      if (!mp) continue;
+      mk('circle', { cx: mp.x, cy: mp.y, r: 4, fill: GAITS[k].color, stroke: '#000', 'stroke-width': 1 });
+      const tx = mk('text', { x: mp.x + 6, y: mp.y - 6, fill: GAITS[k].color, 'font-size': 10, 'font-family': font, 'font-weight': 'bold', style: outline });
+      tx.textContent = `${GAITS[k].name} −${GAITS[k].cost}`;
+    }
+  }
 
+  // Distance + gait label near the last point of the move
+  if (pts.length >= 2 && mapScalePPF > 0) {
+    const feet = feetNow || 0;
+    const secs = feet / (tier ? tier.spd : pathGetSpeed(cid));
+    const secRound = Math.round(secs * 10) / 10;
     let fillClr, label;
     if (tier) {
-      // Half-move ring: marks WHERE on the path half a round's movement was
-      // used (Sentinel/Evade/Go Prone/Load/Ranged Attack/Cast/Target all allow
-      // up to half a round before picking one). Placed relative to this
-      // segment, so any movement already spent this round shifts it earlier.
-      if (tier.level >= 1) {
-        const halfPx = Math.max(0, tier.half - tier.prior) * mapScalePPF * mapScale;
-        const markerPt = _pathPointAtDistance(allPts, halfPx);
-        if (markerPt) {
-          const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-          ring.setAttribute('cx', markerPt.x); ring.setAttribute('cy', markerPt.y);
-          ring.setAttribute('r', 7);
-          ring.setAttribute('fill', 'none');
-          ring.setAttribute('stroke', '#f0d080');
-          ring.setAttribute('stroke-width', '2');
-          svg.appendChild(ring);
-        }
-      }
       fillClr = tier.color;
-      const note = tier.level === 2 ? ' · over full move' : tier.level === 1 ? ' · past half move' : '';
       const priorNote = tier.prior > 0 ? ` (${Math.round(tier.total)} ft this round)` : '';
-      label = `${Math.round(feet)} ft · ${secRound}s${priorNote}${note}${tier.bang ? ' !' : ''}`;
-      const mover = atCombatants.find(x => x.id === cid);
-      if (tier.level >= 1 && !(mover && mover._moveStamRound === atRound)) label += '  ·  −1 Stamina';
+      label = `${Math.round(feet)} ft · ${secRound}s · ${GAITS[tier.level].name}${priorNote}`;
+      if (tier.owed > 0) label += `  ·  −${tier.owed} Stamina`;
     } else {
       fillClr = '#4de080';
-      label = `${Math.round(feet)} ft · ${secRound <= 3 ? secRound + 's' : secRound + 's ⚠'}`;
+      label = `${Math.round(feet)} ft · ${secRound}s`;
     }
-
-    const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
-    const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
-    tx.setAttribute('x', lastPt.x + 10);
-    tx.setAttribute('y', lastPt.y - 8);
-    tx.setAttribute('fill', fillClr);
-    tx.setAttribute('font-size', '12');
-    tx.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
-    tx.setAttribute('font-weight', 'bold');
-    tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
+    if (stop === 'wall')  label += '  ·  blocked by wall';
+    if (stop === 'limit') label += '  ·  sprint limit';
+    const tx = mk('text', { x: lastShown.x + 10, y: lastShown.y - 8, fill: fillClr, 'font-size': 12, 'font-family': font, 'font-weight': 'bold', style: outline });
     tx.textContent = label;
-    svg.appendChild(tx);
-  } else if (allPts.length >= 2) {
-    // No calibration — just show pixels
+  } else if (pts.length >= 2) {
+    // No calibration - just show pixels
     let dist = 0;
-    for (let i = 1; i < allPts.length; i++)
-      dist += Math.hypot(allPts[i].x - allPts[i-1].x, allPts[i].y - allPts[i-1].y);
-    const tx = document.createElementNS('http://www.w3.org/2000/svg','text');
-    tx.setAttribute('x', lastPt.x + 10);
-    tx.setAttribute('y', lastPt.y - 8);
-    tx.setAttribute('fill', '#4de080');
-    tx.setAttribute('font-size', '12');
-    tx.setAttribute('font-family', 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif');
-    tx.setAttribute('style','paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
-    tx.textContent = Math.round((dist / mapScale)) + ' px (calibrate map for ft/s)';
-    svg.appendChild(tx);
+    for (let i = 1; i < pts.length; i++) dist += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+    const tx = mk('text', { x: lastShown.x + 10, y: lastShown.y - 8, fill: '#4de080', 'font-size': 12, 'font-family': font, style: outline });
+    tx.textContent = Math.round(dist / mapScale) + ' px (calibrate map for ft/s)' + (stop === 'wall' ? '  ·  blocked by wall' : '');
   }
 }
 
@@ -19111,21 +19219,25 @@ function pathMouseMove(e) {
 }
 
 async function pathCommit() {
-  const feet   = pathTotalFeet();
   const combId = pathCharId;
+  let feet = null;
 
   // Move token along the recorded route, pausing at any fresh Sentinel/
   // Target crossing along the way — see _executeMoveWithSentinelChecks.
+  // The route is first cut short at a wall and, in combat, at the 4-second sprint limit.
   if (pathPoints.length >= 2 && combId) {
-    const waypoints = pathPoints.map(p => {
-      const imgX = (p.x - mapOffsetX) / mapScale, imgY = (p.y - mapOffsetY) / mapScale;
-      return { x_pct: Math.min(100, Math.max(0, (imgX / mapImgW) * 100)),
-               y_pct: Math.min(100, Math.max(0, (imgY / mapImgH) * 100)) };
-    });
+    let waypoints = pathPoints.map(p => _wallVpToPct(p.x, p.y));
+    const gaitOn = mapScalePPF > 0 && _atIsCombatActive();
+    const clip = _clipRoute(waypoints, { walls: !_moveBypass(), maxFeet: gaitOn ? _moveRemainingFeet(combId) : null });
+    waypoints = clip.points;
+    feet = _routeFeet(waypoints);
+    if (clip.stop === 'wall')  showToast(isGM() ? 'A wall stops the move (hold Shift to pass).' : 'A wall stops the move.', 'warn');
+    if (clip.stop === 'limit') showToast('That is as far as you can sprint in one turn - the move stops there.', 'warn');
     exitPathMode();
     await _cancelStancesOnMove(combId, feet);
     await _executeMoveWithSentinelChecks(combId, waypoints);
   } else {
+    feet = pathTotalFeet();
     exitPathMode();
   }
 
