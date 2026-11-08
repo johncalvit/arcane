@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261108b';
+const VERSION = 'v0.1.20261108c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13126,6 +13126,10 @@ let atModalTarget = null; // combatant id receiving next action
 let atCombatActive = false;
 let _atStateFromGM = null; // { round, activeId } — received by players from GM broadcast
 
+// A combatant the turn order skips: dropped (dead/unconscious) or set inactive with the ZZZ button
+// (e.g. a monster on the map that isn't part of this encounter).
+function _atSkipped(c) { return !!c && (!!c.dropped || !!c.inactive); }
+
 function atSortedCombatants() {
   return [...atCombatants].sort((a, b) => {
     const aSet = a.initiative != null, bSet = b.initiative != null;
@@ -13185,7 +13189,7 @@ function _atBroadcastFullState() {
     combatants: atCombatants.map(c => ({
       id: c.id, name: c.name, avatar: c.avatar, type: c.type,
       initiative: c.initiative, tieBreak: c.tieBreak, slots: c.slots,
-      dropped: !!c.dropped,
+      dropped: !!c.dropped, inactive: !!c.inactive,
     })),
   }});
 }
@@ -13193,6 +13197,7 @@ function _atBroadcastFullState() {
 function atStartCombat() {
   if (!atCombatants.length) return;
   atActiveIdx = 0;
+  { const s = atSortedCombatants(); let n = 0; while (n++ < s.length && _atSkipped(s[atActiveIdx])) atActiveIdx = (atActiveIdx + 1) % s.length; } // open on someone who is actually in the fight
   atRound = 1;
   atCombatActive = true;
   _atUpdateBlink();
@@ -13219,7 +13224,7 @@ function atStopCombat() {
 async function atNext() {
   const sorted = atSortedCombatants();
   if (!sorted.length) return;
-  if (sorted.every(c => c.dropped)) return; // nobody left to take a turn
+  if (sorted.every(_atSkipped)) return; // nobody left to take a turn
   // Dropped combatants (see atSetDropped — Dead/Unconscious, token stays on
   // the map but skipped in the round) never become active; keep advancing
   // past them. ranEndOfRound guards the once-per-round block below so
@@ -13237,6 +13242,7 @@ async function atNext() {
     // combatant marked dead while still showing 1 blood.
     // Stamina recovery: +1 for combatants who took no actions this round.
     for (const c of atCombatants) {
+      if (c.inactive) continue; // not in this encounter
       if (!c.slots || Object.values(c.slots).every(s => !s)) {
         const [type, rawId] = c.id.split('::');
         if (type === 'char') {
@@ -13249,11 +13255,12 @@ async function atNext() {
     }
     // Ongoing hit-effects (bleeding drains Blood) tick once per round, after
     // recovery has committed. GM-only path; writes sync out.
-    for (const c of atCombatants) { await _tickHitEffects(c.id); }
+    for (const c of atCombatants) { if (!c.inactive) await _tickHitEffects(c.id); }
     // Quintessence regen: 1 point every 3 rounds, unconditional — no "took no
     // action" gate like Stamina; magical reserves are a slow passive trickle.
     if (atRound % 3 === 0) {
       for (const c of atCombatants) {
+        if (c.inactive) continue;
         const [type, rawId] = c.id.split('::');
         if (type === 'char') {
           await recoverQuintessence('character', rawId, 1);
@@ -13307,7 +13314,7 @@ async function atNext() {
       }
     });
   }
-  } while (sorted[atActiveIdx]?.dropped);
+  } while (_atSkipped(sorted[atActiveIdx]));
   _atUpdateBlink();
   renderAtList();
   renderPlayCharacter();
@@ -13435,7 +13442,7 @@ async function atRollInitiative(combatantId) {
 // bulk action (e.g. an AFK player, or just wanting to get combat moving),
 // distinct from atRollInitiative's own per-character interactive roll.
 async function atRollAllRemaining() {
-  for (const c of atCombatants.filter(x => x.initiative == null)) {
+  for (const c of atCombatants.filter(x => x.initiative == null && !x.inactive)) {
     const base = Math.max(1, await _atInitBase(c.id));
     c.initiative = Math.floor(Math.random() * base) + 1;
     c.tieBreak   = Math.floor(Math.random() * base) + 1;
@@ -14068,6 +14075,21 @@ function atClearSlot(combatantId, slot) {
 // combatant's turn without touching their token or slots — reversible any
 // time (e.g. a Resuscitate brings them back), so this is a toggle, not a
 // one-way action.
+// ZZZ: sit a combatant out of this combat (skipped in the turn order, never asked for or auto-rolled
+// initiative, no end-of-round upkeep). The token stays on the map. Toggle it back on to bring them in.
+function atSetInactive(combatantId, inactive) {
+  if (!isGM()) return;
+  const c = atCombatants.find(x => x.id === combatantId);
+  if (!c) return;
+  c.inactive = !!inactive;
+  if (mapChannel)
+    mapChannel.send({ type: 'broadcast', event: 'at-set-inactive', payload: { combatantId, inactive: c.inactive } });
+  // if it was their turn, move on
+  if (c.inactive && atCombatActive && _atActiveCombatant() === c && !atSortedCombatants().every(_atSkipped)) atNext();
+  else renderAtList();
+  renderPlayCharacter();
+}
+
 function atSetDropped(combatantId, dropped) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c) return;
@@ -14081,7 +14103,7 @@ function renderAtList() {
   document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
   const rollRemainingBtn = document.getElementById('at-roll-remaining-btn');
-  if (rollRemainingBtn) rollRemainingBtn.style.display = (isGM() && atCombatants.some(c => c.initiative == null)) ? '' : 'none';
+  if (rollRemainingBtn) rollRemainingBtn.style.display = (isGM() && atCombatants.some(c => c.initiative == null && !c.inactive)) ? '' : 'none';
   const startBtn = document.getElementById('at-start-combat-btn');
   if (startBtn) {
     startBtn.style.display = (isGM() && atCombatants.length > 0) ? '' : 'none';
@@ -14116,6 +14138,7 @@ function renderAtList() {
 
   for (let i = 0; i < sorted.length; i++) {
     const c        = sorted[i];
+    if (c.inactive && !isGM()) continue; // players do not see who is sitting this one out
     const safeId   = c.id.replace(/'/g, "\\'");
     const isActive = c === activeC;
     if (!c.slots) c.slots = _newSlots();
@@ -14127,9 +14150,13 @@ function renderAtList() {
       ? `<span class="at-comb-init">Init ${c.initiative}</span>`
       : `<span class="at-comb-init" style="color:var(--text-dim)">—</span>`;
     const dropped = !!c.dropped;
-    const nameEl = `<span class="at-comb-name"${dropped ? ' style="opacity:0.55;text-decoration:line-through;"' : ''}>${isActive ? '▶ ' : ''}${c.name}${dropped ? ' (dropped)' : ''}</span>`;
+    const inactive = !!c.inactive;
+    const nameEl = `<span class="at-comb-name"${dropped ? ' style="opacity:0.55;text-decoration:line-through;"' : inactive ? ' style="opacity:0.5;"' : ''}>${isActive ? '▶ ' : ''}${c.name}${dropped ? ' (dropped)' : ''}${inactive ? ' (inactive)' : ''}</span>`;
+    const zzzBtn = isGM()
+      ? `<button class="at-btn${inactive ? ' primary' : ''}" onclick="atSetInactive('${safeId}', ${!inactive})" title="${inactive ? 'Bring back into this combat' : 'Sit this one out - skipped in the turn order and initiative'}">💤 ZZZ</button>`
+      : '';
 
-    const rollBtn  = c.initiative == null
+    const rollBtn  = (c.initiative == null && !inactive)
       ? `<button class="at-btn primary" style="margin-left:auto;" onclick="atRollInitiative('${safeId}')">🎲 Roll</button>`
       : '';
     // Dead/Unconscious combatants can be dropped from the turn order without
@@ -14145,7 +14172,7 @@ function renderAtList() {
     const removeBtn = isGM() ? `<button class="at-btn danger" onclick="atRemoveCombatant('${safeId}')">✕</button>` : '';
 
     div.innerHTML = `
-      <div class="at-comb-header">${nameEl}${initBadge}${dropBtn}${rollBtn}${removeBtn}</div>`;
+      <div class="at-comb-header">${nameEl}${initBadge}${zzzBtn}${dropBtn}${rollBtn}${removeBtn}</div>`;
 
     list.appendChild(div);
   }
@@ -15149,6 +15176,10 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'at-clear-slot' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c && c.slots) { c.slots[payload.slot] = null; renderAtList(); renderPlayCharacter(); }
+    })
+    .on('broadcast', { event: 'at-set-inactive' }, ({ payload }) => {
+      const c = atCombatants.find(x => x.id === payload.combatantId);
+      if (c) { c.inactive = !!payload.inactive; renderAtList(); renderPlayCharacter(); }
     })
     .on('broadcast', { event: 'at-set-dropped' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);

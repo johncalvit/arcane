@@ -190,7 +190,7 @@ function _paSecExplore(ent, canEdit) {
 
 function _paSecCombat(ent, canEdit, prefixHtml) {
   const c = atCombatants.find(x => x.id === ent.ref);
-  if (!c || !canEdit || c.initiative != null) return '';
+  if (!c || !canEdit || c.initiative != null || c.inactive) return ''; // sitting this combat out: no initiative prompt
   return _paSection('Combat', `
     <div class="at-action-row">
       <span style="font-size:0.85rem;color:var(--text);">Initiative not rolled</span>
