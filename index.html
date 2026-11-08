@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109a';
+const VERSION = 'v0.1.20261109b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16195,9 +16195,8 @@ async function onTokenMouseUp(e) {
   // see its comment) is a tracked Move, not a free reposition: same
   // feet/time bookkeeping a Path-mode waypoint route gives, just for the
   // single straight segment actually dragged.
-  const isBudgetedMove = draggedTok && !isGM() && draggedTok.entity_type === 'character'
-      && draggedTok.entity_id === currentCharacterId && _atIsCombatActive() && _dragStartXPct != null
-      && _atSharedActive()?.id === draggedCombId;
+  const isBudgetedMove = draggedTok && (isGM() || (draggedTok.entity_type === 'character' && draggedTok.entity_id === currentCharacterId))
+      && _atIsCombatActive() && _dragStartXPct != null && _atSharedActive()?.id === draggedCombId;
 
   // ANY drag of a token that's actually in the tracker, during active
   // combat, can trip a Sentinel/Target watch — not just a player's own
@@ -18833,7 +18832,8 @@ var _shiftDown = false;
 window.addEventListener('keydown', e => { if (e.key === 'Shift') _shiftDown = true; });
 window.addEventListener('keyup',   e => { if (e.key === 'Shift') _shiftDown = false; });
 window.addEventListener('blur',    () => { _shiftDown = false; });
-function _moveBypass() { return isGM() && _shiftDown; }
+// The GM ignores walls outside combat (set up and reposition freely); in combat walls bind everyone unless the GM holds Shift.
+function _moveBypass() { return isGM() && (_shiftDown || !_atIsCombatActive()); }
 
 // Every movement-blocking wall edge, in image pixels: [ax, ay, bx, by].
 function _moveBlockers() {
@@ -18934,8 +18934,9 @@ function _dragClip(tokenId, xp, yp) {
   const t = mapTokens[tokenId];
   if (!t || _dragStartXPct == null || t.entity_type === 'item') return { x_pct: xp, y_pct: yp, stop: null };
   const combId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
-  const budgeted = !isGM() && t.entity_type === 'character' && t.entity_id === currentCharacterId
-    && _atIsCombatActive() && _atSharedActive()?.id === combId && mapScalePPF > 0;
+  // The active combatant's move in combat is budgeted: their own player's drag, or the GM moving them (monsters included).
+  const controls = isGM() || (t.entity_type === 'character' && t.entity_id === currentCharacterId);
+  const budgeted = controls && _atIsCombatActive() && _atSharedActive()?.id === combId && mapScalePPF > 0;
   const res = _clipRoute([{ x_pct: _dragStartXPct, y_pct: _dragStartYPct }, { x_pct: xp, y_pct: yp }],
     { walls: !_moveBypass(), maxFeet: budgeted ? _moveRemainingFeet(combId) : null });
   const end = res.points[res.points.length - 1];
