@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261108a';
+const VERSION = 'v0.1.20261108b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -18470,6 +18470,7 @@ enterPlayMode = function() {
          <option value="line">Line</option>
          <option value="rect">Rect</option>
          <option value="circle">Circle</option>
+         <option value="door">🚪 Door</option>
          <option value="hline">🕵 Hidden line</option>
          <option value="hpoly">🕵 Hidden area</option>
          <option value="erase">Erase</option>
@@ -19183,6 +19184,8 @@ function wallMouseDown(e) {
   const y    = e.clientY - rect.top;
   const shape = _wallShape();
 
+  if (shape === 'door') { _wallPlaceDoor(x, y); return true; }
+
   if (shape === 'erase') {
     const hit = _findWallSegmentAt(x, y);
     if (hit) _eraseWallSegment(hit);
@@ -19351,6 +19354,108 @@ function _wallCommit(type, points) {
   saveMapWalls();
   drawWalls();
 }
+
+// ═══ DOORS ════════════════════════════════════════════════════════════════════
+// A door is a short 2-point 'line' wall with door:true and an open flag. Dropped onto an existing line (or
+// Rect) wall with the Door tool: the wall is split and the door takes the gap, about 5 ft wide. Closed it
+// blocks sight like the wall it replaced; open it blocks nothing. Everyone sees doors (open/closed), the
+// GM flips them by double-clicking on the map or from Manage Walls.
+const DOOR_FEET = 5;
+function _doorLenImgPx() { return mapScalePPF > 0 ? DOOR_FEET * mapScalePPF : 40; }
+
+function _wallPlaceDoor(vpX, vpY) {
+  // find the nearest segment of a plain line wall (a Rect counts as its four edges)
+  let best = null, bestDist = 14;
+  for (const w of mapWalls) {
+    if (w.maxHp || w.door || (w.type !== 'line' && w.type !== 'rect')) continue;
+    let pts = (w.points || []);
+    if (pts.length < 2) continue;
+    if (w.type === 'rect') {
+      const x0 = Math.min(pts[0].x_pct, pts[1].x_pct), x1 = Math.max(pts[0].x_pct, pts[1].x_pct);
+      const y0 = Math.min(pts[0].y_pct, pts[1].y_pct), y1 = Math.max(pts[0].y_pct, pts[1].y_pct);
+      pts = [{ x_pct: x0, y_pct: y0 }, { x_pct: x1, y_pct: y0 }, { x_pct: x1, y_pct: y1 }, { x_pct: x0, y_pct: y1 }, { x_pct: x0, y_pct: y0 }];
+    }
+    const vp = pts.map(_wallPctToVp);
+    for (let i = 0; i < vp.length - 1; i++) {
+      const d = _ptSegDist(vpX, vpY, vp[i].x, vp[i].y, vp[i + 1].x, vp[i + 1].y);
+      if (d < bestDist) { bestDist = d; best = { wall: w, pts, i }; }
+    }
+  }
+  if (!best) { showToast('Drop the door right on a Line or Rect wall.'); return; }
+  const { wall, pts, i } = best;
+  const A = pts[i], B = pts[i + 1];
+  const ax = A.x_pct / 100 * mapImgW, ay = A.y_pct / 100 * mapImgH;
+  const bx = B.x_pct / 100 * mapImgW, by = B.y_pct / 100 * mapImgH;
+  const L = Math.hypot(bx - ax, by - ay);
+  if (L < 1) return;
+  const click = _wallVpToPct(vpX, vpY);
+  const cx = click.x_pct / 100 * mapImgW, cy = click.y_pct / 100 * mapImgH;
+  const s = Math.max(0, Math.min(L, ((cx - ax) * (bx - ax) + (cy - ay) * (by - ay)) / L));
+  const dl = Math.min(L, _doorLenImgPx());
+  let s0 = Math.max(0, Math.min(L - dl, s - dl / 2));
+  const s1 = s0 + dl;
+  const at = u => ({ x_pct: (ax + (bx - ax) * u / L) / mapImgW * 100, y_pct: (ay + (by - ay) * u / L) / mapImgH * 100 });
+  const dA = at(s0), dB = at(s1);
+  const before = pts.slice(0, i + 1); if (s0 > 0.5) before.push(dA);
+  const after  = pts.slice(i + 1);    if (s1 < L - 0.5) after.unshift(dB);
+  const stamp = Date.now() + '-' + Math.round(Math.random() * 9999);
+  const next = [];
+  if (before.length >= 2) next.push({ ...wall, id: 'wall-' + stamp + 'a', type: 'line', points: before });
+  next.push({ id: 'door-' + stamp, type: 'line', door: true, open: false, points: [dA, dB], blocksVision: true, blocksMovement: true });
+  if (after.length >= 2)  next.push({ ...wall, id: 'wall-' + stamp + 'b', type: 'line', points: after });
+  mapWalls = mapWalls.filter(w => w !== wall).concat(next);
+  saveMapWalls();
+  drawWalls(); drawFog();
+  showToast('Door placed. Double-click it on the map to open or close it.');
+}
+
+function _doorNearest(vpX, vpY) {
+  let best = null, bestDist = 14;
+  for (const w of mapWalls) {
+    if (!w.door || (w.points || []).length < 2) continue;
+    const p = w.points.map(_wallPctToVp);
+    const d = _ptSegDist(vpX, vpY, p[0].x, p[0].y, p[1].x, p[1].y);
+    if (d < bestDist) { bestDist = d; best = w; }
+  }
+  return best;
+}
+
+async function toggleDoor(wallId) {
+  const w = mapWalls.find(x => x.id === wallId);
+  if (!w || !w.door) return;
+  w.open = !w.open;
+  w.blocksVision = !w.open;
+  w.blocksMovement = !w.open;
+  await saveMapWalls();
+  drawWalls(); drawFog();
+  logCombat(`A door ${w.open ? 'opens' : 'closes'}.`, 'roll');
+  if (document.getElementById('manage-walls-modal')) _openManageWallsModal();
+}
+
+function _doorDraw(svg, w) {
+  const p = (w.points || []).map(_wallPctToVp);
+  if (p.length < 2) return;
+  const mk = (stroke, width, dash, op) => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    el.setAttribute('x1', p[0].x); el.setAttribute('y1', p[0].y); el.setAttribute('x2', p[1].x); el.setAttribute('y2', p[1].y);
+    el.setAttribute('stroke', stroke); el.setAttribute('stroke-width', width); el.setAttribute('stroke-linecap', 'round');
+    if (dash) el.setAttribute('stroke-dasharray', dash);
+    if (op) el.setAttribute('opacity', op);
+    svg.appendChild(el);
+  };
+  if (w.open) { mk('#000', 5, '', 0.35); mk('#d9b36c', 3, '2,6', 0.95); }
+  else        { mk('#000', 8, '', 0.6);  mk('#8b5a2b', 5, '', 1); mk('#d9a85c', 1.5, '', 0.9); }
+}
+
+// GM: double-click a door on the map (outside any drawing mode, not on a token) to open or close it
+document.addEventListener('dblclick', e => {
+  if (!isGM() || wallMode || lightMode || pathMode || (typeof measureMode !== 'undefined' && measureMode) || (typeof calMode !== 'undefined' && calMode)) return;
+  const vp = document.getElementById('map-viewport');
+  if (!vp || !vp.contains(e.target) || e.target.closest?.('.map-token')) return;
+  const rect = vp.getBoundingClientRect();
+  const d = _doorNearest(e.clientX - rect.left, e.clientY - rect.top);
+  if (d) { e.preventDefault(); toggleDoor(d.id); }
+});
 
 // ═══ HIDDEN OBJECTS ═══════════════════════════════════════════════════════════
 // Traps, secret doors, switches: lines or areas the GM draws (Walls tool → 🕵 Hidden line / Hidden area)
@@ -20182,13 +20287,15 @@ function drawWalls(mouseX, mouseY) {
   // The GM always sees hidden objects; everyone else only once somebody has noticed them.
   // A player with no token on this map (not placed yet) sees none of them.
   const hiddenShown = _hiddenObjects().filter(w => _gmSeesAll() || (w.found && _fogViewerToken()));
-  if (!showAuthoring && !obstacles.length && !hiddenShown.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
+  const doors = mapWalls.filter(w => w.door);
+  if (!showAuthoring && !obstacles.length && !hiddenShown.length && !doors.length) { svg.style.display = 'none'; svg.innerHTML = ''; return; }
   svg.style.display = 'block';
   svg.innerHTML = '';
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
     if (w.type === 'litarea' || w.type === 'hidden') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
+    if (w.door) { _doorDraw(svg, w); return; }  // doors are visible to everyone, open or closed
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
     // Index passed through so the GM can see, right on the map, which wall
     // is which — the Manage Walls list numbers rows the same way (#1, #2,
@@ -20305,6 +20412,7 @@ async function _openManageWallsModal() {
     const safeId = w.id.replace(/'/g, "\\'");
     const label = w.maxHp
       ? `#${i + 1} ${_paEsc(w.spellName || 'obstacle')} <span style="color:var(--text-dim);font-size:0.74rem;">❄ ${w.hp}/${w.maxHp} HP</span>`
+      : w.door ? `#${i + 1} 🚪 Door <span style="color:var(--text-dim);font-size:0.74rem;">${w.open ? 'open' : 'closed'}</span>`
       : w.type === 'litarea' ? `#${i + 1} 💡 lit area`
       : w.type === 'hidden' ? `#${i + 1} 🕵 ${_paEsc(w.name || 'hidden object')} <span style="color:var(--text-dim);font-size:0.74rem;">${w.shape === 'poly' ? 'area' : 'line'}${w.found ? ' · found' : ''}</span>`
       : `#${i + 1} ${_paEsc(w.type)}`;
@@ -20312,7 +20420,10 @@ async function _openManageWallsModal() {
     // toggles — those are fixed (blocks both) for a spell-created barrier;
     // GM-drawn walls keep the toggles since those are the whole point there.
     const hidNum = (f, tip) => `<input type="number" min="0" step="1" value="${w[f] || 0}" title="${tip}" onchange="_hiddenEdit('${safeId}','${f}',this.value)" style="width:46px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 3px;font-family:var(--ui-font);font-size:0.74rem;">`;
-    const controls = w.type === 'hidden'
+    const controls = w.door
+      ? `<button onclick="toggleDoor('${safeId}')" style="border:1px solid var(--border);background:var(--bg);color:var(--gold2);border-radius:3px;padding:2px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.78rem;">${w.open ? 'Close' : 'Open'}</button>
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
+      : w.type === 'hidden'
       ? `<span title="Hiding factors — higher is harder to notice; 0 means that sense can't detect it" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('vis', 'Visual hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
