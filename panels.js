@@ -962,7 +962,7 @@ function _dlgRender(body) {
   const _spd     = typeof _effectiveSpeed === 'function'
     ? _effectiveSpeed(attrs, _carried, _mvTok) : calcMaxSpeed(attrs, 0);
   const maxFeet  = Math.max(1, Math.round((_spd || 5) * 4)); // 4 s of Speed is the most you can move in a turn (sprint)
-  const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft\)/) || [])[1] || '0', 10)) : 0;
+  const usedFeet = mv ? (mv.feet != null ? mv.feet : parseInt((mv.label.match(/\((\d+) ft/) || [])[1] || '0', 10)) : 0;
   const movePct  = Math.min(100, Math.round((usedFeet / maxFeet) * 100));
   const halfUsed = usedFeet >= maxFeet / 2;
   const moveHtml = `
