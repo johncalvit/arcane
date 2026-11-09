@@ -2122,7 +2122,7 @@
         <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
         <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
       </div>
-      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Multiplier on the armor's gap % for stabs (2 = doubled; 1 = none)">Gap x</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
       <tbody id="techmgr-list"></tbody></table>
     </div>
 
@@ -5688,21 +5688,25 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 2; // 2 = + Shield Block I-III
+const TECHNIQUE_EXTRAS_VERSION = 3; // 2 = + Shield Block I-III, 3 = + Gap Target
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
 ];
 // Shield: +10 to the reduction of a Block made with a shield, per tier (they stack, like Technique I-III).
 const SHIELD_TECHNIQUES = [1, 2, 3].map(n => ({ id: 'shield-block-' + n, name: 'Shield Block ' + _ROMAN[n], weaponType: 'Shield', minLevel: n, hit: 0, damage: 0, parry: 0, block: 10 }));
-const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES);
+// Gap Target (level 4): doubles the armor's gap % (the to-hit roll at or below which an attack skips the armor's DR)
+// on a stab. One per stabbing weapon type - not Axe/Hammer/Club etc. Add or remove rows in Game Config > Techniques.
+const GAP_TARGET_TYPES = ['Knife', 'Short Sword', 'Longsword', 'Greatsword', 'Rapier', 'Scimitar', 'Spear', 'Polearm', 'Lance'];
+const GAP_TARGET_TECHNIQUES = GAP_TARGET_TYPES.map(type => ({ id: _techSlug(type) + '-gap-target', name: type + ' Gap Target', weaponType: type, minLevel: 4, hit: 0, damage: 0, parry: 0, gapMult: 2 }));
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES);
 const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(TECHNIQUE_EXTRAS.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
 
 // Techniques picked by `techIds` that apply to a weapon (by its Weapon Type).
 function _techniqueBonus(techIds, weaponName) {
-  const b = { hit: 0, damage: 0, parry: 0, block: 0, hitNames: [], dmgNames: [], parryNames: [], blockNames: [] };
+  const b = { hit: 0, damage: 0, parry: 0, block: 0, gapMult: 1, hitNames: [], dmgNames: [], parryNames: [], blockNames: [], gapNames: [] };
   const type = weaponName ? getWeaponType(weaponName) : '';
   if (!type || !Array.isArray(techIds)) return b;
   for (const id of techIds) {
@@ -5710,6 +5714,7 @@ function _techniqueBonus(techIds, weaponName) {
     if (!t || t.weaponType !== type) continue;
     b.hit += t.hit || 0; b.damage += t.damage || 0; b.parry += t.parry || 0; b.block += t.block || 0;
     if (t.block) b.blockNames.push(t.name);
+    if (t.gapMult > 1) { b.gapMult = Math.max(b.gapMult, t.gapMult); b.gapNames.push(t.name); }
     if (t.hit) b.hitNames.push(t.name);
     if (t.damage) b.dmgNames.push(t.name);
     if (t.parry) b.parryNames.push(t.name);
@@ -5744,6 +5749,7 @@ function _techniqueSummary(t) {
   if (t.damage) parts.push(`${t.damage > 0 ? '+' : ''}${t.damage} damage`);
   if (t.parry)  parts.push(`${t.parry > 0 ? '+' : ''}${t.parry} parry`);
   if (t.block)  parts.push(`${t.block > 0 ? '+' : ''}${t.block} block`);
+  if (t.gapMult > 1) parts.push(`×${t.gapMult} armor gap chance on stabs`);
   if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
 }
@@ -5781,7 +5787,7 @@ function buildTechniqueManager() {
   tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
     <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
     <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
-    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
+    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'gapMult', 1)}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
     <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
   _refreshWeaponTypeList();
 }
@@ -5792,7 +5798,7 @@ function setTechniqueAllowance(cls, v) {
 function editTechnique(i, key, v) {
   const t = TECHNIQUES[i]; if (!t) return;
   if (key === 'name' || key === 'weaponType') t[key] = String(v).trim();
-  else if (key === 'aimSec' || key === 'rangeMult') t[key] = Math.max(0, parseFloat(v) || 0);
+  else if (key === 'aimSec' || key === 'rangeMult' || key === 'gapMult') t[key] = Math.max(0, parseFloat(v) || 0);
   else t[key] = key === 'minLevel' ? Math.max(1, parseInt(v, 10) || 1) : (parseInt(v, 10) || 0);
   writeConfigToDisk();
 }
@@ -7674,7 +7680,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109g';
+const VERSION = 'v0.1.20261109h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13043,7 +13049,11 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // value, same as before this existed.
   const equippedPiece = targetArmorOwned.find(o => o.id === targetArmorEquipped[armorSlot]);
   const armorMat  = ARMOR_TYPE_DATA[armorType] || DEFAULT_ARMOR_TYPE_DATA[armorType];
-  const armorGap  = equippedPiece?.gap ?? armorMat?.gap ?? 5;
+  const baseGap   = equippedPiece?.gap ?? armorMat?.gap ?? 5;
+  // Gap Target technique: a stab with a matching weapon type multiplies the armor's gap chance.
+  const gapTech   = (category === 'pierce' && weaponRow.weapon) ? _combatantTechBonus(ctx.attackerCombatantId, weaponRow.weapon) : null;
+  const gapMult   = gapTech && gapTech.gapMult > 1 && armorType !== 'None' ? gapTech.gapMult : 1;
+  const armorGap  = baseGap * gapMult;
   const gapHit    = hitRoll != null && hitRoll <= armorGap && armorType !== 'None';
   const dr        = gapHit ? 0 : getArmorDR(armorType, category);
 
@@ -13095,7 +13105,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
             ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
             : `Roll ${rawDisplay}${capNote}`;
       dmgEl.innerHTML = `
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${techDmg ? ` · 🥋 +${techDmg} ${techDmgB.dmgNames.join(', ')}` : ''}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${techDmg ? ` · 🥋 +${techDmg} ${techDmgB.dmgNames.join(', ')}` : ''}</div>
         <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
