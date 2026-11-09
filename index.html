@@ -832,6 +832,15 @@
   .points-bar .value { font-size: 1.2rem; color: var(--gold2); font-weight: bold; min-width: 32px; }
   .points-bar .value.warn { color: #e05555; }
   .points-bar .value.ok { color: #5cbb6e; }
+  /* Health bars: slide from the old level to the new one and glow once when a value changes.
+     Red glow = lost, green glow = gained. --from/--glow are set inline by healthBarsHtml. */
+  @keyframes hpSlide { from { width: var(--from); } }
+  @keyframes hpGlow  {
+    0%   { box-shadow: 0 0 0 0 transparent; filter: brightness(1); }
+    25%  { box-shadow: 0 0 10px 3px var(--glow); filter: brightness(1.6); }
+    100% { box-shadow: 0 0 0 0 transparent; filter: brightness(1); }
+  }
+  .hp-fill-changed { animation: hpSlide 0.5s ease-out both, hpGlow 0.9s ease-out both; }
   .progress-track {
     flex: 1;
     height: 6px;
@@ -7660,7 +7669,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109e';
+const VERSION = 'v0.1.20261109f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10061,6 +10070,7 @@ function _hpEditClick(el, entityType, entityId, stat, curVal, statMax) {
   inp.addEventListener('keydown', e => { if (e.key === 'Enter') { inp.blur(); } else if (e.key === 'Escape') { refreshUI(); } });
 }
 
+var _hpBarSeen = {}; // 'type:id:Stat' -> { pct, prev, at } for the change animation in healthBarsHtml
 function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, quintMax, bloodMult) {
   damage = damage || {};
   const tMax = Math.max(1, Math.round(toughnessMax || 10));
@@ -10082,15 +10092,34 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, 
   };
   // Toughness blue · Stamina green · Quintessence yellow · Blood red. Blood
   // equals max Toughness, so every track is full width.
-  const bar = (label, valSpan, pct, color, trackWidthPct) => `
+  // The bars are re-rendered from scratch on every refresh, so a CSS transition never fires. Instead remember each
+  // bar's last level (per entity+stat) and, when it changed in the last second, give the fill a slide+glow animation
+  // (a negative delay resumes it if the same bar is drawn again mid-animation, e.g. in a second panel).
+  const _hpKey = label => (editable ? entityType + ':' + entityId + ':' + label : null);
+  const bar = (label, valSpan, pct, color, trackWidthPct) => {
+    let cls = '', vars = '';
+    const key = _hpKey(label);
+    if (key) {
+      const now = Date.now();
+      let e = _hpBarSeen[key];
+      if (!e) e = _hpBarSeen[key] = { pct, prev: pct, at: 0 };
+      else if (e.pct !== pct) { e.prev = e.pct; e.pct = pct; e.at = now; }
+      const age = now - e.at;
+      if (e.at && age < 900) {
+        cls = ' class="hp-fill-changed"';
+        vars = `--from:${e.prev}%;--glow:${pct < e.prev ? '#ff5a4a' : '#6fe08a'};animation-delay:-${age}ms;`;
+      }
+    }
+    return `
     <div style="margin-bottom:4px;">
       <div style="display:flex;justify-content:space-between;font-size:0.65rem;color:var(--text-dim);margin-bottom:2px;">
         <span>${label}</span>${valSpan}
       </div>
       <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden;width:${trackWidthPct}%;">
-        <div style="width:${pct}%;height:100%;background:${color};transition:width 0.3s;"></div>
+        <div${cls} style="${vars}width:${pct}%;height:100%;background:${color};"></div>
       </div>
     </div>`;
+  };
   // Quintessence only shown for casters (qMax > 0) — a non-magical character
   // shouldn't carry a permanently-empty bar on their sheet.
   return bar('Toughness', valHtml('toughness', tCur, tMax), tPct, '#4070c9', 100)
