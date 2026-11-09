@@ -55,3 +55,7 @@ Play Mode is where your character moves around the map, fights, and casts spells
 - **Seeing the map:** you only see what your character can see — walls block sight, dark areas need light (torches, campfires, light spells) or Night Vision, and places you've explored stay dimly remembered.
 - **Journal:** the Journal (bottom left) logs everything that happens, and is saved for the campaign, so you can scroll back if you missed something.
 - **Menu (☰):** top right — switch campaign, join one, edit your profile, report a bug, or sign out.
+
+# Forgot your password?
+
+On the sign-in screen choose **Forgot your password?**, enter your account email and press **Send reset link**. Open the email (check spam), click the link, and choose a new password when the game opens.

@@ -7660,11 +7660,13 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109c';
+const VERSION = 'v0.1.20261109d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
 const SUPABASE_KEY  = 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';      // replace with your Supabase anon/public key
+// Arriving from a password-reset email? Remember it now - supabase-js clears the URL once it reads the link.
+var _recoveryMode = /[#&?]type=recovery/.test(location.href);
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let currentUser       = null;
@@ -7672,20 +7674,74 @@ let currentCampaignId = null;
 let currentConfigId   = null;
 
 // ─── AUTH UI ─────────────────────────────────────────────────────────────────
-function showLogin()  {
-  document.getElementById('login-form').style.display  = '';
-  document.getElementById('signup-form').style.display = 'none';
+function _showAuthForm(id) {
+  for (const f of ['login-form', 'signup-form', 'reset-form', 'newpass-form'])
+    document.getElementById(f).style.display = (f === id) ? '' : 'none';
   document.getElementById('login-error').style.display = 'none';
 }
-function showSignup() {
-  document.getElementById('login-form').style.display  = 'none';
-  document.getElementById('signup-form').style.display = '';
-  document.getElementById('login-error').style.display = 'none';
+function showLogin()  { _showAuthForm('login-form'); }
+function showSignup() { _showAuthForm('signup-form'); }
+function showReset() {
+  _showAuthForm('reset-form');
+  const typed = document.getElementById('auth-email')?.value.trim();
+  if (typed) document.getElementById('auth-reset-email').value = typed; // carry over what they already typed
 }
 function showAuthError(msg) {
   const el = document.getElementById('login-error');
   el.textContent = msg;
   el.style.display = '';
+  el.style.color = '#e06060'; el.style.background = 'rgba(180,30,30,0.15)';
+}
+function showAuthInfo(msg) {
+  const el = document.getElementById('login-error');
+  el.textContent = msg;
+  el.style.display = '';
+  el.style.color = 'var(--gold2)'; el.style.background = 'rgba(201,168,76,0.12)';
+}
+
+// ── Forgot password ──
+// Emails a reset link (Supabase sends it; this site's address must be in Supabase's Redirect URLs).
+// The link brings the player back here, where onAuthStateChange shows the "choose a new password" form.
+function _authReturnUrl() { return location.href.split('#')[0].split('?')[0]; }
+async function submitReset() {
+  const email = document.getElementById('auth-reset-email').value.trim();
+  if (!email) { showAuthError('Enter the email address you signed up with.'); return; }
+  const btn = document.getElementById('reset-send-btn');
+  btn.disabled = true;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: _authReturnUrl() });
+  btn.disabled = false;
+  if (error) {
+    showAuthError(/rate|seconds|too many/i.test(error.message)
+      ? 'Too many requests - wait a minute and try again.' : error.message);
+    return;
+  }
+  // Same answer whether or not the address has an account, so this can't be used to find out who plays.
+  showAuthInfo('If that email has an account, a reset link is on its way. Check your inbox (and spam), then click the link.');
+}
+
+// Shown when the player arrives from the emailed link (they hold a short-lived recovery session).
+function showNewPassword() {
+  document.getElementById('modal-login').style.display = 'flex';
+  const landing = document.getElementById('modal-landing'); if (landing) landing.style.display = 'none';
+  _showAuthForm('newpass-form');
+}
+async function submitNewPassword() {
+  const p1 = document.getElementById('auth-newpass').value;
+  const p2 = document.getElementById('auth-newpass2').value;
+  if (p1.length < 6) { showAuthError('Use at least 6 characters.'); return; }
+  if (p1 !== p2)     { showAuthError('The two passwords do not match.'); return; }
+  const btn = document.getElementById('newpass-btn');
+  btn.disabled = true;
+  const { error } = await sb.auth.updateUser({ password: p1 });
+  btn.disabled = false;
+  if (error) {
+    showAuthError(/expired|invalid|session/i.test(error.message)
+      ? 'This reset link has expired or was already used. Request a new one from the sign-in screen.' : error.message);
+    return;
+  }
+  _recoveryMode = false;
+  showAuthInfo('Password changed. Taking you in...');
+  setTimeout(() => location.replace(_authReturnUrl()), 900); // reload cleanly, signed in
 }
 
 async function submitLogin() {
@@ -8827,6 +8883,13 @@ _updateBuilderTitle(); // the app opens in Character Builder mode by default
 // Handle auth state changes — login shows app, logout shows login screen
 sb.auth.onAuthStateChange(async (event, session) => {
   const $ = id => document.getElementById(id);
+  if (event === 'PASSWORD_RECOVERY') _recoveryMode = true;
+  if (session?.user && _recoveryMode) {
+    // They followed a reset link: let them choose a new password before anything else.
+    currentUser = session.user;
+    showNewPassword();
+    return;
+  }
   if (session?.user) {
     currentUser = session.user;
     if ($('modal-login'))   $('modal-login').style.display   = 'none';
@@ -22527,10 +22590,38 @@ async function _deleteMapPin(pinId) {
         <input type="password" id="auth-password" name="password" autocomplete="current-password" placeholder="Password" style="width:100%;">
       </div>
       <button type="submit" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Sign In</button>
+      <div style="text-align:center; margin-top:12px; font-size:0.78rem;">
+        <button type="button" onclick="showReset()" style="background:none; border:none; color:var(--gold2); font-family:var(--ui-font); font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Forgot your password?</button>
+      </div>
       <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
         No account?
         <button type="button" onclick="showSignup()" style="background:none; border:none; color:var(--gold2); font-family:var(--ui-font); font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Create one</button>
       </div>
+    </form>
+
+    <form id="reset-form" style="display:none;" onsubmit="event.preventDefault();submitReset()" autocomplete="on">
+      <div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px;">Enter your account email and we will send you a link to choose a new password.</div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="auth-reset-email" name="email" autocomplete="username" placeholder="your@email.com" style="width:100%;">
+      </div>
+      <button type="submit" id="reset-send-btn" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Send reset link</button>
+      <div style="text-align:center; margin-top:16px; font-size:0.78rem; color:var(--text-dim);">
+        <button type="button" onclick="showLogin()" style="background:none; border:none; color:var(--gold2); font-family:var(--ui-font); font-size:0.78rem; cursor:pointer; padding:0 2px; text-decoration:underline; text-underline-offset:3px;">Back to sign in</button>
+      </div>
+    </form>
+
+    <form id="newpass-form" style="display:none;" onsubmit="event.preventDefault();submitNewPassword()" autocomplete="on">
+      <div style="font-size:0.82rem;color:var(--text-dim);margin-bottom:12px;">Choose a new password for your account.</div>
+      <div class="field">
+        <label>New password</label>
+        <input type="password" id="auth-newpass" name="password" autocomplete="new-password" placeholder="Min 6 characters" style="width:100%;">
+      </div>
+      <div class="field">
+        <label>Confirm new password</label>
+        <input type="password" id="auth-newpass2" name="password2" autocomplete="new-password" placeholder="Type it again" style="width:100%;">
+      </div>
+      <button type="submit" id="newpass-btn" class="btn" style="width:100%; margin-top:10px; padding:9px; font-size:0.85rem; letter-spacing:0.08em;">Save new password</button>
     </form>
 
     <form id="signup-form" style="display:none;" onsubmit="event.preventDefault();submitSignup()" autocomplete="on">
