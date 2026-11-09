@@ -1103,7 +1103,24 @@ function _dlgRender(body) {
         data: { dact: 'attack', slot: chKey, label: aimLbl, dur: dur * 3 + aim.aimSec,
                 item: itemName, action: r.action, ranged: 1, aimed: 1, range: r.rangeIncrement || 5 },
       }) : '';
-      return normalChip + aimedChip;
+      // Heavy Blow technique: a variant of each melee damage attack per tier owned - spend Stamina before the
+      // roll for extra damage on a hit. Disabled when the combatant can't afford it.
+      let heavyChips = '';
+      if (!ranged && r.damageMax > 0 && !defensive && typeof _techniqueHeavy === 'function') {
+        const haveStam = Math.max(0, Math.round(ent?.attrs?.Stamina || 0) - (ent?.damage?.stamina || 0));
+        for (const h of _techniqueHeavy(ent?.stats?.Techniques, itemName)) {
+          const hLbl = `Heavy ${r.action} (+${h.dmg}) — ${itemName}`;
+          if (cur?.label === hLbl) continue;
+          heavyChips += _dlgChip({
+            label: `💪 Heavy ${r.action}`, sub: `−${h.stam} Stam · +${h.dmg} dmg`,
+            disabled: haveStam < h.stam,
+            title: `${h.name}: spend ${h.stam} Stamina before you roll (lost even on a miss) for +${h.dmg} damage if the attack hits`,
+            data: { dact: 'attack', slot: chKey, label: hLbl, dur: dur * 3,
+                    item: itemName, action: r.action, ranged: 0, range: r.reach ?? 0, hstam: h.stam, hdmg: h.dmg, hname: h.name },
+          });
+        }
+      }
+      return normalChip + aimedChip + heavyChips;
     }).join('');
   };
 
@@ -1792,7 +1809,8 @@ async function _dlgAct(d, id, body) {
       _dlgReopenId = id; // reopen once targeting + the roll resolve
       if (endsRound) _dlgRoundEndPendingId = id; // ...or auto-advance instead, see _dlgMaybeReopen
       atCloseModal();
-      enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range, d.aimed === '1');
+      enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range, d.aimed === '1',
+        +d.hstam > 0 ? { stam: +d.hstam, dmg: +d.hdmg, name: d.hname } : null);
       break;
     }
     case 'custom': {

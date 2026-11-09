@@ -2122,7 +2122,7 @@
         <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
         <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
       </div>
-      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Multiplier on the armor's gap % for stabs (2 = doubled; 1 = none)">Gap x</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Multiplier on the armor's gap % for stabs (2 = doubled; 1 = none)">Gap x</th><th title="Heavy Blow: Stamina spent before the hit roll (0 = not a Heavy Blow)">Heavy Stam</th><th title="Heavy Blow: damage added if the attack hits">Heavy Dmg</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
       <tbody id="techmgr-list"></tbody></table>
     </div>
 
@@ -5688,7 +5688,7 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 3; // 2 = + Shield Block I-III, 3 = + Gap Target
+const TECHNIQUE_EXTRAS_VERSION = 4; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
@@ -5699,7 +5699,15 @@ const SHIELD_TECHNIQUES = [1, 2, 3].map(n => ({ id: 'shield-block-' + n, name: '
 // on a stab. One per stabbing weapon type - not Axe/Hammer/Club etc. Add or remove rows in Game Config > Techniques.
 const GAP_TARGET_TYPES = ['Knife', 'Short Sword', 'Longsword', 'Greatsword', 'Rapier', 'Scimitar', 'Spear', 'Polearm', 'Lance'];
 const GAP_TARGET_TECHNIQUES = GAP_TARGET_TYPES.map(type => ({ id: _techSlug(type) + '-gap-target', name: type + ' Gap Target', weaponType: type, minLevel: 4, hit: 0, damage: 0, parry: 0, gapMult: 2 }));
-const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES);
+// Heavy Blow I/II/III (levels 3/4/5): declared with an attack - spend heavyStam Stamina BEFORE the hit roll (lost
+// on a miss too) for +heavyDmg damage if it hits. Owning a tier offers that option; they don't stack.
+const HEAVY_BLOW_TYPES = ['Axe', 'Hammer', 'Flail', 'Mace', 'Staff'];
+const HEAVY_BLOW_TECHNIQUES = [];
+for (const type of HEAVY_BLOW_TYPES)
+  for (const n of [1, 2, 3])
+    HEAVY_BLOW_TECHNIQUES.push({ id: _techSlug(type) + '-heavy-blow-' + n, name: type + ' Heavy Blow ' + _ROMAN[n], weaponType: type,
+      minLevel: n + 2, hit: 0, damage: 0, parry: 0, heavyStam: n, heavyDmg: n * 2 });
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES);
 const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(TECHNIQUE_EXTRAS.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
@@ -5739,6 +5747,17 @@ function _techniqueAim(techIds, weaponName) {
   }
   return best;
 }
+// Heavy Blow options a set of chosen techniques gives for a weapon: [{stam, dmg, name}] (cheapest first).
+function _techniqueHeavy(techIds, weaponName) {
+  const type = weaponName ? getWeaponType(weaponName) : '';
+  if (!type || !Array.isArray(techIds)) return [];
+  const out = [];
+  for (const id of techIds) {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (t && t.weaponType === type && t.heavyStam > 0 && t.heavyDmg > 0) out.push({ stam: t.heavyStam, dmg: t.heavyDmg, name: t.name });
+  }
+  return out.sort((a, b) => a.stam - b.stam);
+}
 function _combatantAim(cid, weaponName) {
   const [kind, id] = String(cid || '').split('::');
   return kind === 'char' ? _techniqueAim(playCharCache[id]?.stats?.Techniques, weaponName) : null;
@@ -5750,6 +5769,7 @@ function _techniqueSummary(t) {
   if (t.parry)  parts.push(`${t.parry > 0 ? '+' : ''}${t.parry} parry`);
   if (t.block)  parts.push(`${t.block > 0 ? '+' : ''}${t.block} block`);
   if (t.gapMult > 1) parts.push(`×${t.gapMult} armor gap chance on stabs`);
+  if (t.heavyStam > 0) parts.push(`Heavy Blow: spend ${t.heavyStam} Stamina for +${t.heavyDmg} damage on a hit`);
   if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
 }
@@ -5787,7 +5807,7 @@ function buildTechniqueManager() {
   tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
     <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
     <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
-    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'gapMult', 1)}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
+    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'gapMult', 1)}</td><td>${num(i, 'heavyStam')}</td><td>${num(i, 'heavyDmg')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
     <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
   _refreshWeaponTypeList();
 }
@@ -7680,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109h';
+const VERSION = 'v0.1.20261109i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13063,7 +13083,9 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   const baseCap     = weaponRow.damageMax  ?? 10;
   // Technique damage (techniques chosen for this weapon type) raises the roll and the cap alike, before armor.
   const techDmgB    = baseCap > 0 ? _combatantTechBonus(ctx.attackerCombatantId, weaponRow.weapon) : null;
-  const techDmg     = techDmgB ? techDmgB.damage : 0;
+  // Heavy Blow: its damage bonus rides along only because this runs on a hit (the Stamina was spent before the roll).
+  const heavyDmg    = baseCap > 0 && ctx.heavy ? ctx.heavy.dmg : 0;
+  const techDmg     = (techDmgB ? techDmgB.damage : 0) + heavyDmg;
   const dmgCap      = baseCap + techDmg;
   const powerMod    = weaponRow.maxPowerMod ?? 0.5;
   const maxRoll     = Math.max(1, (atkPower || 1) * powerMod) + techDmg;
@@ -13105,7 +13127,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
             ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
             : `Roll ${rawDisplay}${capNote}`;
       dmgEl.innerHTML = `
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${techDmg ? ` · 🥋 +${techDmg} ${techDmgB.dmgNames.join(', ')}` : ''}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${techDmg ? ` · 🥋 +${techDmg} ${[...(techDmgB ? techDmgB.dmgNames : []), ...(heavyDmg ? [ctx.heavy.name] : [])].join(', ')}` : ''}</div>
         <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
@@ -16466,8 +16488,9 @@ let attackActionLabel = null;
 let attackIsRanged    = false;
 let attackRangeFt     = 0;
 let attackAimed       = false; // an Aimed shot (Marksmen technique) - scales the range penalty
+let attackHeavy       = null;  // a declared Heavy Blow: {stam, dmg, name}
 
-function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt, aimed) {
+function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt, aimed, heavy) {
   if (attackMode) exitAttackMode();
   if (pathMode)   exitPathMode();
   if (targetAimMode) exitTargetAimMode();
@@ -16478,6 +16501,7 @@ function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt
   attackIsRanged    = isRanged;
   attackRangeFt     = rangeFt;
   attackAimed       = !!aimed;
+  attackHeavy       = heavy && heavy.stam > 0 ? heavy : null;
 
   document.getElementById('map-viewport').classList.add('attack-mode');
 
@@ -16489,6 +16513,7 @@ function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt
 function exitAttackMode() {
   attackMode        = false;
   attackAimed       = false;
+  attackHeavy       = null;
   attackCombatantId = null;
   attackWeaponName  = null;
   attackActionLabel = null;
@@ -16672,6 +16697,7 @@ function attackTokenClick(tokenId) {
     weaponRow:   attackWeaponRow,
     actionLabel: attackActionLabel,
     attackerCombatantId: attackCombatantId,
+    heavy: attackHeavy,
   };
 
   // ── Range penalty (ranged weapons only) ───────────────────────────────────
@@ -16726,6 +16752,19 @@ function attackTokenClick(tokenId) {
   const techHit = techB.hit;
   const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult + techHit : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null; // before range — the modal subtracts it
+
+  // Heavy Blow: the Stamina is committed now, before the roll, and is gone whether the swing hits or misses.
+  // Checked first so a refused one leaves the hand and the attack untouched.
+  if (attackHeavy) {
+    const he = getEntity(attackCombatantId);
+    const haveStam = he ? Math.max(0, Math.round(he.attrs.Stamina || 0) - (he.damage?.stamina || 0)) : 0;
+    if (haveStam < attackHeavy.stam) {
+      alert(`Not enough Stamina for a Heavy Blow (needs ${attackHeavy.stam}, has ${haveStam}). Choose a plain attack.`);
+      return false;
+    }
+    _deductStamina(attackCombatantId, attackHeavy.stam);
+    logCombat(`${he?.name || 'Someone'} puts their weight behind a Heavy Blow (-${attackHeavy.stam} Stamina, +${attackHeavy.dmg} damage if it hits).`, 'roll');
+  }
 
   // ── Log action to tracker ─────────────────────────────────────────────────
   // Charges the hand actually holding the weapon (not always 'right' — that
