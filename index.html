@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109d';
+const VERSION = 'v0.1.20261109e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16283,8 +16283,12 @@ async function onTokenMouseUp(e) {
   // see its comment) is a tracked Move, not a free reposition: same
   // feet/time bookkeeping a Path-mode waypoint route gives, just for the
   // single straight segment actually dragged.
-  const isBudgetedMove = draggedTok && (isGM() || (draggedTok.entity_type === 'character' && draggedTok.entity_id === currentCharacterId))
-      && _atIsCombatActive() && _dragStartXPct != null && _atSharedActive()?.id === draggedCombId;
+  // The GM's move of ANY combatant in the tracker is budgeted (gait Stamina, 4 s limit), on or off its turn;
+  // a player's own is budgeted on their own turn (startTokenDrag blocks off-turn drags).
+  const isBudgetedMove = draggedTok && _atIsCombatActive() && _dragStartXPct != null
+      && atCombatants.some(c => c.id === draggedCombId)
+      && (isGM() || (draggedTok.entity_type === 'character' && draggedTok.entity_id === currentCharacterId
+                     && _atSharedActive()?.id === draggedCombId));
 
   // ANY drag of a token that's actually in the tracker, during active
   // combat, can trip a Sentinel/Target watch — not just a player's own
@@ -16303,7 +16307,7 @@ async function onTokenMouseUp(e) {
     await _executeMoveWithSentinelChecks(draggedCombId, [from, to]);
     if (isBudgetedMove) {
       _commitMoveSlot(draggedCombId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
-      atOpenSlotModal(draggedCombId, 'right');
+      if (_atSharedActive()?.id === draggedCombId) atOpenSlotModal(draggedCombId, 'right');
     }
   } else {
     if (mapTokens[movedId]) {
@@ -19024,7 +19028,8 @@ function _dragClip(tokenId, xp, yp) {
   const combId = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
   // The active combatant's move in combat is budgeted: their own player's drag, or the GM moving them (monsters included).
   const controls = isGM() || (t.entity_type === 'character' && t.entity_id === currentCharacterId);
-  const budgeted = controls && _atIsCombatActive() && _atSharedActive()?.id === combId && mapScalePPF > 0;
+  const budgeted = controls && _atIsCombatActive() && mapScalePPF > 0 && atCombatants.some(c => c.id === combId)
+    && (isGM() || _atSharedActive()?.id === combId);
   const res = _clipRoute([{ x_pct: _dragStartXPct, y_pct: _dragStartYPct }, { x_pct: xp, y_pct: yp }],
     { walls: !_moveBypass(), maxFeet: budgeted ? _moveRemainingFeet(combId) : null });
   const end = res.points[res.points.length - 1];
