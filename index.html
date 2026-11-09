@@ -2116,13 +2116,13 @@
     <!-- TECHNIQUES (GM config) -->
     <div id="panel-techmgr" class="panel">
       <h2>Techniques</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">Techniques characters can choose per Weapon Type. Hit = added to the attack's hit chance; Damage = added to the damage roll; Parry = added to a Parry made with that weapon type. Allowance is techniques gained per level, by class.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">Techniques characters can choose per Weapon Type. Hit = added to the attack's hit chance; Damage = added to the damage roll; Parry = added to a Parry made with that weapon type; Block = added to a Block made with a shield. Allowance is techniques gained per level, by class.</p>
       <div id="techmgr-allowance" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:14px;"></div>
       <div style="display:flex;gap:8px;margin-bottom:12px;">
         <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
         <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
       </div>
-      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
       <tbody id="techmgr-list"></tbody></table>
     </div>
 
@@ -5688,24 +5688,28 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 1;
+const TECHNIQUE_EXTRAS_VERSION = 2; // 2 = + Shield Block I-III
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
 ];
-const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(MARKSMEN_TECHNIQUES.map(t => ({ ...t })));
+// Shield: +10 to the reduction of a Block made with a shield, per tier (they stack, like Technique I-III).
+const SHIELD_TECHNIQUES = [1, 2, 3].map(n => ({ id: 'shield-block-' + n, name: 'Shield Block ' + _ROMAN[n], weaponType: 'Shield', minLevel: n, hit: 0, damage: 0, parry: 0, block: 10 }));
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES);
+const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(TECHNIQUE_EXTRAS.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
 
 // Techniques picked by `techIds` that apply to a weapon (by its Weapon Type).
 function _techniqueBonus(techIds, weaponName) {
-  const b = { hit: 0, damage: 0, parry: 0, hitNames: [], dmgNames: [], parryNames: [] };
+  const b = { hit: 0, damage: 0, parry: 0, block: 0, hitNames: [], dmgNames: [], parryNames: [], blockNames: [] };
   const type = weaponName ? getWeaponType(weaponName) : '';
   if (!type || !Array.isArray(techIds)) return b;
   for (const id of techIds) {
     const t = TECHNIQUES.find(x => x.id === id);
     if (!t || t.weaponType !== type) continue;
-    b.hit += t.hit || 0; b.damage += t.damage || 0; b.parry += t.parry || 0;
+    b.hit += t.hit || 0; b.damage += t.damage || 0; b.parry += t.parry || 0; b.block += t.block || 0;
+    if (t.block) b.blockNames.push(t.name);
     if (t.hit) b.hitNames.push(t.name);
     if (t.damage) b.dmgNames.push(t.name);
     if (t.parry) b.parryNames.push(t.name);
@@ -5739,7 +5743,8 @@ function _techniqueSummary(t) {
   if (t.hit)    parts.push(`${t.hit > 0 ? '+' : ''}${t.hit} hit`);
   if (t.damage) parts.push(`${t.damage > 0 ? '+' : ''}${t.damage} damage`);
   if (t.parry)  parts.push(`${t.parry > 0 ? '+' : ''}${t.parry} parry`);
-  if (t.aimSec)  parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
+  if (t.block)  parts.push(`${t.block > 0 ? '+' : ''}${t.block} block`);
+  if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
 }
 
@@ -5776,7 +5781,7 @@ function buildTechniqueManager() {
   tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
     <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
     <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
-    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
+    <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
     <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
   _refreshWeaponTypeList();
 }
@@ -5803,7 +5808,7 @@ function deleteTechnique(i) {
 }
 function addMissingTechniques() {
   const add = _techniquesForTypes(getWeaponTypes(), TECHNIQUES);
-  add.push(...MARKSMEN_TECHNIQUES.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
+  add.push(...TECHNIQUE_EXTRAS.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
   TECHNIQUES.push(...add);
   writeConfigToDisk(); buildTechniqueManager();
   showToast(add.length ? `Added ${add.length} technique${add.length === 1 ? '' : 's'}.` : 'Every weapon type already has its techniques.', 'info');
@@ -7669,7 +7674,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109f';
+const VERSION = 'v0.1.20261109g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8688,7 +8693,7 @@ function applyConfigData(data) {
   if (data.techniques && data.techniques.length && data.techniqueTiers !== TECHNIQUE_TIERS)
     TECHNIQUES.push(..._techniquesForTypes(getWeaponTypes(), TECHNIQUES, [2, 3]));
   if (data.techniques && data.techniques.length && data.techniqueExtras !== TECHNIQUE_EXTRAS_VERSION)
-    TECHNIQUES.push(...MARKSMEN_TECHNIQUES.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
+    TECHNIQUES.push(...TECHNIQUE_EXTRAS.filter(m => !TECHNIQUES.some(t => t.id === m.id)).map(t => ({ ...t })));
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
@@ -16834,9 +16839,11 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
-        const parryB = r.action === 'Parry' ? _combatantTechBonus(defCid, itemName) : null;
-        const reduction = Math.round(defVal * defSize) + (parryB ? parryB.parry : 0);
-        const parryNote = parryB && parryB.parry ? ` incl. +${parryB.parry} ${parryB.parryNames.join(', ')}` : '';
+        const parryB = _combatantTechBonus(defCid, itemName);
+        const techPts = r.action === 'Parry' ? parryB.parry : parryB.block;
+        const techNames = r.action === 'Parry' ? parryB.parryNames : parryB.blockNames;
+        const reduction = Math.round(defVal * defSize) + techPts;
+        const parryNote = techPts ? ` incl. +${techPts} ${techNames.join(', ')}` : '';
         defenseOptions.push({
           label: `${r.action} — ${itemName} (−${reduction}${parryNote})`,
           reduction,
@@ -16907,9 +16914,11 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
             const wRow  = wRows.find(r => r.action === keyword);
             if (wRow) {
               const defVal   = calcHitValue(wRow.hitFormula, defAttrs);
-              const _pB = keyword === 'Parry' ? _combatantTechBonus(defCid, weaponName) : null;
-              const reduction = defVal != null ? Math.round(defVal * defSize) + (_pB ? _pB.parry : 0) : 0;
-              best = { label: `${keyword} — ${weaponName} (−${reduction}${_pB && _pB.parry ? ` incl. +${_pB.parry} ${_pB.parryNames.join(', ')}` : ''})`, reduction,
+              const _pB = _combatantTechBonus(defCid, weaponName);
+              const _pts = keyword === 'Parry' ? _pB.parry : _pB.block;
+              const _pn  = keyword === 'Parry' ? _pB.parryNames : _pB.blockNames;
+              const reduction = defVal != null ? Math.round(defVal * defSize) + _pts : 0;
+              best = { label: `${keyword} — ${weaponName} (−${reduction}${_pts ? ` incl. +${_pts} ${_pn.join(', ')}` : ''})`, reduction,
                         onSelect: () => {
                           atSetSlot(defCid, slotKey, `${keyword} — ${weaponName}`, 1, false);
                           if (keyword === 'Parry') _maybeRollCastingFocus(defCid);
