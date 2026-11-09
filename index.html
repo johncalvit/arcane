@@ -7660,7 +7660,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109b';
+const VERSION = 'v0.1.20261109c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13738,8 +13738,27 @@ function atOpenApplyEffectsModal() {
   };
 }
 
+// A dialog on the affected player's own screen, so a change the GM applied is not missed. Several in a row
+// stack into the same open dialog instead of covering each other.
+function _showEffectsDialog(parts) {
+  if (!parts || !parts.length) return;
+  const li = parts.map(p => `<li style="margin:3px 0;">${_paEsc(p)}</li>`).join('');
+  const open = document.getElementById('fx-notice');
+  if (open) { open.querySelector('ul').insertAdjacentHTML('beforeend', li); return; }
+  const o = document.createElement('div');
+  o.id = 'fx-notice';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10060;display:flex;align-items:center;justify-content:center;';
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:18px 24px;max-width:380px;font-family:var(--ui-font);color:var(--text);">
+      <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;margin-bottom:8px;">⚡ The GM has affected your character</div>
+      <ul style="margin:0 0 14px;padding-left:20px;font-size:0.9rem;">${li}</ul>
+      <div style="text-align:center;"><button class="btn" id="fx-notice-ok">OK</button></div></div>`;
+  document.body.appendChild(o);
+  o.querySelector('#fx-notice-ok').onclick = () => o.remove();
+}
+
 async function _fxApply(tokenIds, fx) {
   let n = 0;
+  const notices = []; // one per affected player character, sent to everyone; each client keeps only its own
   for (const tid of tokenIds) {
     const t = mapTokens[tid];
     if (!t) continue;
@@ -13782,8 +13801,10 @@ async function _fxApply(tokenIds, fx) {
     }
 
     logCombat(`GM effect: ${ent.name} - ${parts.join(', ')}.`, fx.dmg ? 'hit' : 'roll');
+    if (t.entity_type === 'character' && t.entity_id) notices.push({ charId: t.entity_id, parts });
     n++;
   }
+  if (notices.length && mapChannel) mapChannel.send({ type: 'broadcast', event: 'fx-applied', payload: { notices } });
   if (typeof refreshUI === 'function') refreshUI();
   return n;
 }
@@ -15176,6 +15197,10 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'at-clear-slot' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c && c.slots) { c.slots[payload.slot] = null; renderAtList(); renderPlayCharacter(); }
+    })
+    .on('broadcast', { event: 'fx-applied' }, ({ payload }) => {
+      if (isGM() || !currentCharacterId || !payload || !Array.isArray(payload.notices)) return;
+      for (const nt of payload.notices) if (nt.charId === currentCharacterId) _showEffectsDialog(nt.parts);
     })
     .on('broadcast', { event: 'at-set-inactive' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
