@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110h';
+const VERSION = 'v0.1.20261110i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16104,7 +16104,7 @@ function getTokenSize(t) {
 // Per-item art for dropped ground items (icons/items/<slug>.png). Lookup order:
 // exact item name -> weapon type -> light source -> potion colour -> generic token.
 const ITEM_ICON_DIR = 'icons/items/';
-const ITEM_ICON_ALIAS = { 'oil': 'oil-flask', 'crossbow-bolts': 'bolts', 'sling-pellet': 'sling-pellet', 'bare-handed': 'type-unarmed' };
+const ITEM_ICON_ALIAS = { 'oil': 'oil-flask', 'crossbow-bolts': 'bolts', 'lance-heavy-cavalry': 'lance-heavy', 'lance-light-cavalry': 'lance-light', 'bare-handed': 'type-unarmed' };
 const ITEM_ICON_SLUGS = new Set(('axe-hatchet,battleaxe,greataxe,hammer-carpenters,hammer-sledge,hammer-war,club,greatclub,mace,morningstar,flail,knife,sword-short,sword-long,greatsword,rapier,scimitar,glaive,halberd,pike,spear-long,spear-short-long,javelin,trident,lance-heavy,lance-light,staff,whip,net,shield-small,shield-large,shield-buckler,bow-horse,bow-hunting,bow-light,bow-war,crossbow-hand,crossbow-light,crossbow-heavy,sling-pellet,sling-stone,blowgun,dart,'
   + 'backpack,bedroll,blanket,canteen,candle,chalk,climbing-gear,crowbar,flint-steel,grappling-hook,hammer,healers-kit,lantern,lock,manacles,mirror,oil-flask,pick-miners,piton,pole,pouch,rations,rope-hemp,rope-silk,sack,shovel,thieves-tools,torch,waterskin,writing-kit,arrows,bolts').split(','));
 function _itemSlug(s) {
