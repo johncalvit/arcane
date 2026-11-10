@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109j';
+const VERSION = 'v0.1.20261109k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17867,7 +17867,10 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
-    else if (_sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
+    // "Fresh entry only" suits Sentinel/Target (a trigger when someone steps into reach). Vigilant is a sense
+    // check with a long range (the vision cone can cover a whole room), so nobody ever enters it fresh: a mover
+    // already inside still gets a notice roll when it moves (see _resolveSentinelCheck/_vigilantDetects).
+    else if (!conds.has('vigilant') && _sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
     if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/')}): SKIPPED — ${why}`); continue; }
     let hit = false;
     for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
