@@ -1652,7 +1652,7 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${checkHtml}${consumeHtml}${_exploreRestHtml(ent)}${gearHtml}
+    ${banner}${stanceHtml}${spellHtml}${checkHtml}${_exploreRestHtml(ent)}${gearHtml}${consumeHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;

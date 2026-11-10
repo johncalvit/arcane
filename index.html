@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110d';
+const VERSION = 'v0.1.20261110e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16253,6 +16253,7 @@ function startTokenDrag(e, tokenId) {
   if (!t || !canMoveToken(t)) return;
   e.preventDefault();
 
+  _dragStanceDropped = false;
   dragTokenId = tokenId;
   _dragStartXPct = t.x_pct;
   _dragStartYPct = t.y_pct;
@@ -16283,6 +16284,16 @@ function onTokenMouseMove(e) {
     if (Math.hypot(dx, dy) > 5) _tokenDragMoved = true;
   }
   if (!dragTokenId) return;
+  // A real drag has begun: a stance that moving breaks (Sentinel, Evade, Target, Vigilant) ends NOW, so its
+  // ring doesn't trail along or linger at the old spot (this used to wait for the drop, and only in combat).
+  if (_tokenDragMoved && !_dragStanceDropped) {
+    _dragStanceDropped = true;
+    const dt = mapTokens[dragTokenId];
+    if (dt && dt.entity_type !== 'item') {
+      const cid = dt.entity_type === 'character' ? 'char::' + dt.entity_id : 'creature::' + dt.id;
+      _cancelStancesOnMove(cid, null).then(() => { if (typeof drawSentinelRanges === 'function') drawSentinelRanges(); });
+    }
+  }
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const cx   = (e.clientX - rect.left - mapOffsetX) / mapScale;
@@ -19201,6 +19212,7 @@ function _pctDistFt(x1Pct, y1Pct, x2Pct, y2Pct) {
 // (Block/Parry and Infiltrate are untouched - sneaking IS moving). Clears just those stances' slots and
 // their condition badges, and says so in the Journal. `feet` null means unknown distance (uncalibrated map).
 const MOVE_CANCELS_STANCE = ['Sentinel', 'Evade', 'Target', 'Vigilant'];
+var _dragStanceDropped = false; // set once the current drag has already ended its stance (see onTokenMouseMove)
 async function _cancelStancesOnMove(combId, feet) {
   if (feet != null && feet < 0.5) return; // a nudge, not a move
   const c = atCombatants.find(x => x.id === combId);
