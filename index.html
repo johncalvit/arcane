@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109i';
+const VERSION = 'v0.1.20261109j';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9861,6 +9861,13 @@ async function updateEntity(ref, patch) {
     delete row._attrs;
     _writeErrorToast(error, table);
     refreshUI();
+  } else if (mapChannel) {
+    // Tell the other clients directly, too. The database's realtime feed has been unreliable for this
+    // (a heal one player gave another never showed on the GM's screen), so don't rely on it alone.
+    try {
+      if (JSON.stringify(patch).length < 30000)
+        mapChannel.send({ type: 'broadcast', event: 'entity-patch', payload: { table, id: row.id, patch } });
+    } catch (e) {}
   }
   return !error;
 }
@@ -15460,6 +15467,19 @@ function subscribeMapRealtime() {
     })
     .on('broadcast', { event: 'combat-log' }, ({ payload }) => { _logReceive(payload); })
     .on('broadcast', { event: 'combat-log-clear' }, () => { _combatLog = []; renderCombatLog(); })
+    // Another client changed a character/creature (damage, held items...): apply the same patch to our cache.
+    // Mirrors what the postgres_changes UPDATE handlers do, but doesn't depend on the realtime publication.
+    .on('broadcast', { event: 'entity-patch' }, ({ payload }) => {
+      if (!payload || !payload.id || !payload.patch || typeof payload.patch !== 'object') return;
+      const cache = payload.table === 'characters' ? playCharCache : payload.table === 'session_creatures' ? sessionCreatureCache : null;
+      const row = cache && cache[payload.id];
+      if (!row) return;
+      const p = { ...payload.patch };
+      for (const k of ['id', 'campaign_id', 'user_id', 'owner_id']) delete p[k];
+      Object.assign(row, p);
+      delete row._attrs;
+      refreshUI();
+    })
     .on('broadcast', { event: 'item-gift' }, ({ payload }) => { if (payload && payload.to === currentCharacterId) _collectIncomingItems(); })
     // A player with no token on the active map asked to be added (see the
     // "no token yet" banner in drawFog's no-viewer branch / _requestMapToken)
