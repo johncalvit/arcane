@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109m';
+const VERSION = 'v0.1.20261110a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -13474,6 +13474,9 @@ function atReset() {
 
 function atResetFull() {
   if (!confirm('Reset everything including initiative?')) return;
+  _atDoResetFull();
+}
+function _atDoResetFull() {
   atRound = 1;
   atActiveIdx = 0;
   atCombatants.forEach(c => {
@@ -13771,6 +13774,12 @@ async function _axpConfirmAward() {
   }
 
   document.getElementById('award-xp-modal')?.remove();
+
+  // Finishing the fight ends it: stop the clock and wipe round, actions and initiative, so everyone gets
+  // their Roll Initiative prompt back for the next encounter (previously this needed a separate "↺ All").
+  if (atCombatActive) atStopCombat();
+  _atDoResetFull();
+  logCombat('Combat finished - initiative cleared for the next encounter.', 'good');
 }
 
 // Piggybacks on the same stats JSONB blob as Level (see saveCharacter/
