@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109l';
+const VERSION = 'v0.1.20261109m';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17293,16 +17293,30 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   // has no acoustic wall-blocking model, so sound and scent are treated as
   // carrying around corners freely, unlike vision. They apply to every mover, not only Infiltrators: someone
   // walking openly in heavy armor makes MORE noise than one sneaking, so their Noise counts double.
+  // Faster movement is louder (walk x1 ... sprint x2); _vigMoveGait is set for the move being resolved.
+  const gaitMult = VIGILANT_GAIT_NOISE[_vigMoveGait] || 1;
+  const tries = []; // what was rolled, for the one Journal line below (so a miss isn't silent)
+  const log = res => {
+    if (tries.length) logCombat(`[vigilant] ${watcherTok.label} vs ${moverTok.label}${sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
+    return res;
+  };
   if (distFt <= VIGILANT_HEARING_RANGE_FT) {
-    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, _infiltratorNoiseScore(moverEnt) * (sneaking ? 1 : VIGILANT_OPEN_NOISE_MULT), VIGILANT_HEARING_PIVOT);
-    if (Math.random() * 100 < chance) return { detected: true, sense: 'hearing' };
+    const noise = _infiltratorNoiseScore(moverEnt) * (sneaking ? 1 : VIGILANT_OPEN_NOISE_MULT) * gaitMult;
+    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, noise, VIGILANT_HEARING_PIVOT);
+    const hit = Math.random() * 100 < chance;
+    tries.push(`hearing ${chance}% (noise ${Math.round(noise)}) ${hit ? 'HEARD' : 'missed'}`);
+    if (hit) return log({ detected: true, sense: 'hearing' });
   }
   if (distFt <= VIGILANT_SMELL_RANGE_FT) {
     const chance = _vigilantSenseChance(watcherEnt.attrs.Smell, _infiltratorOdorScore(moverTok, moverEnt), VIGILANT_SMELL_PIVOT);
-    if (Math.random() * 100 < chance) return { detected: true, sense: 'smell' };
+    const hit = Math.random() * 100 < chance;
+    tries.push(`smell ${chance}% ${hit ? 'SMELLED' : 'missed'}`);
+    if (hit) return log({ detected: true, sense: 'smell' });
   }
-  return { detected: false, sense: null };
+  return log({ detected: false, sense: null });
 }
+const VIGILANT_GAIT_NOISE = [1, 1.25, 1.5, 2]; // by gait: Walk, Jog, Run, Sprint
+var _vigMoveGait = 0; // gait of the move currently being resolved (set in _executeMoveWithSentinelChecks)
 
 // ── Wall-aware trimming for Sentinel/Target zones ─────────────────────────
 // Reuses the exact same raycasting primitives _fogVisibilityPolygon already
@@ -18118,6 +18132,15 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
   if (!moverTok || !waypoints.length) return;
   if (waypoints.length < 2) { await _moveTokenTo(moverTok, waypoints[0].x_pct, waypoints[0].y_pct); return; }
 
+  // The move's gait (how far this round, vs the mover's Speed) sets how loud it is to a Vigilant watcher.
+  try {
+    const feet = _routeFeet(waypoints);
+    const c = atCombatants.find(x => x.id === combId);
+    const prior = (c && c.slots && c.slots.move && c.slots.move.startRound === atRound) ? (c.slots.move.feet || 0) : 0;
+    const spd = pathGetSpeed(combId);
+    _vigMoveGait = (feet != null && spd > 0) ? _gaitForSecs((prior + feet) / spd) : 0;
+  } catch (e) { _vigMoveGait = 0; }
+
   for (let i = 1; i < waypoints.length; i++) {
     const from = waypoints[i - 1], to = waypoints[i];
     for (const cross of _findSentinelCrossings(combId, from, to, true)) {
@@ -18125,6 +18148,7 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
       await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct);
     }
   }
+  _vigMoveGait = 0;
   const last = waypoints[waypoints.length - 1];
   await _moveTokenTo(moverTok, last.x_pct, last.y_pct);
 }
