@@ -1624,6 +1624,24 @@ function _exploreRender(body) {
   const gearHtml = gearRows ? `<div style="margin-top:12px;">
       <div style="font-size:0.66rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:5px;">🎒 Gear - swapping is free</div>${gearRows}</div>` : '';
 
+  // Consume: potions and the like carried in the loadout. Taking one is a common downtime action, so it's free
+  // and untimed here (the hand/slot cost only applies in combat). Drink = yourself; Give = click someone else.
+  let consumeHtml = '';
+  if (typeof CONSUMABLES !== 'undefined') {
+    const counts = isOwn && typeof getLoadoutItemCounts === 'function' ? getLoadoutItemCounts() : {};
+    const mine = handItems.filter(n => CONSUMABLES.some(cn => normalizeWeaponName(cn.name) === normalizeWeaponName(n)));
+    if (mine.length) {
+      const rows = mine.map(n => {
+        const cn = CONSUMABLES.find(x => normalizeWeaponName(x.name) === normalizeWeaponName(n));
+        const qty = counts[n] > 1 ? ` x${counts[n]}` : '';
+        const tip = cn.description ? ` - ${cn.description}` : '';
+        return _dlgChip({ label: `🧪 Drink ${n}${qty}`, title: `Use ${n} on yourself${tip}`, data: { dact: 'xdrink', item: n } })
+             + _dlgChip({ label: '→ Give', sub: 'to someone', title: `Administer ${n} to another character on the map`, data: { dact: 'xgive', item: n } });
+      }).join('');
+      consumeHtml = _dlgSection('🧪 Consume - free, untimed', rows, false);
+    }
+  }
+
   const blockers = ['dead', 'unconscious', 'paralyzed'].filter(k => conds.has(k));
   const banner = blockers.length
     ? `<div style="background:rgba(224,85,85,0.12);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.75rem;color:#e05555;margin-bottom:8px;">${_paEsc(ent.name)} is ${blockers.join(', ')} - actions recorded anyway; the table decides.</div>` : '';
@@ -1631,7 +1649,7 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${checkHtml}${_exploreRestHtml(ent)}${gearHtml}
+    ${banner}${stanceHtml}${spellHtml}${checkHtml}${consumeHtml}${_exploreRestHtml(ent)}${gearHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;
@@ -1678,6 +1696,20 @@ async function _exploreClick(e) {
       case 'xroll':
         atCloseModal();
         _exploreRollCheck(id, d.skill);
+        break;
+      case 'xdrink': {
+        const cn = CONSUMABLES.find(x => normalizeWeaponName(x.name) === normalizeWeaponName(d.item));
+        const tok = typeof _entityToken === 'function' ? _entityToken(id) : null;
+        if (!cn) { showToast('Unknown consumable.', 'error'); break; }
+        if (!tok) { showToast('Not on the map - nothing to administer to.', 'warn'); break; }
+        await applyConsumable(cn, tok, d.item, id); // restores, clears conditions, uses the item up, logs it
+        _exploreRender(body);
+        break;
+      }
+      case 'xgive':
+        atCloseModal(); // Explore reopens itself once it's administered (see attackTokenClick's Consume branch)
+        showToast(`Click who should receive the ${d.item}.`);
+        enterAttackMode(id, d.item, 'Consume', false, 5);
         break;
       case 'xrest':
         await _exploreRest(id, 0);

@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110a';
+const VERSION = 'v0.1.20261110b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16643,7 +16643,10 @@ function attackTokenClick(tokenId) {
     const holderRef = attackCombatantId, itemName = attackWeaponName;
     exitAttackMode();
     if (!consumable) { showToast('Unknown consumable.', 'error'); return true; }
-    applyConsumable(consumable, target, itemName, holderRef);
+    Promise.resolve(applyConsumable(consumable, target, itemName, holderRef)).then(() => {
+      // Out of combat this came from the Explore dialog - go back to it (a Consume has no roll to close).
+      if (!_atIsCombatActive() && typeof atOpenExploreDialog === 'function' && atCombatants.some(c => c.id === holderRef)) atOpenExploreDialog(holderRef);
+    });
     return true;
   }
   // Cast (Individual-target spell): touching/aiming the finished pattern at
