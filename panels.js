@@ -482,7 +482,8 @@ function _paStowOrDrop(oldItem, newItem) {
     if (existing) existing.remove();
     const overlay = document.createElement('div');
     overlay.id = 'stow-drop-modal';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:1600;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+    // Above the action dialog (z-index 3000): at 1600 this was hidden behind it until the dialog closed.
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:3600;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
     const what = newItem ? `to ${_paEsc(newItem)}` : 'to an empty hand';
     overlay.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;max-width:94vw;width:340px;display:flex;flex-direction:column;gap:12px;font-family:var(--ui-font);">
       <div style="font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;">Change ${_paEsc(oldItem)} ${what}</div>
