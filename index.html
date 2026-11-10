@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110b';
+const VERSION = 'v0.1.20261110c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10160,10 +10160,11 @@ function healthBarsHtml(toughnessMax, staminaMax, damage, entityType, entityId, 
   };
   // Quintessence only shown for casters (qMax > 0) — a non-magical character
   // shouldn't carry a permanently-empty bar on their sheet.
+  // Order: Toughness, Blood (it tracks Toughness), then Stamina and Quintessence.
   return bar('Toughness', valHtml('toughness', tCur, tMax), tPct, '#4070c9', 100)
+       + bar('Blood',     valHtml('blood',     bCur, bMax), bPct, '#c04040', 100)
        + bar('Stamina',   valHtml('stamina',   sCur, sMax), sPct, '#3f9d4f', 100)
-       + (qMax > 0 ? bar('Quintessence', valHtml('quintessence', qCur, qMax), qPct, '#d4b83f', 100) : '')
-       + bar('Blood',     valHtml('blood',     bCur, bMax), bPct, '#c04040', 100);
+       + (qMax > 0 ? bar('Quintessence', valHtml('quintessence', qCur, qMax), qPct, '#d4b83f', 100) : '');
 }
 
 // Called from roller after a successful attack hit resolves location
