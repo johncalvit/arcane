@@ -1629,7 +1629,10 @@ function _exploreRender(body) {
   let consumeHtml = '';
   if (typeof CONSUMABLES !== 'undefined') {
     const counts = isOwn && typeof getLoadoutItemCounts === 'function' ? getLoadoutItemCounts() : {};
-    const mine = handItems.filter(n => CONSUMABLES.some(cn => normalizeWeaponName(cn.name) === normalizeWeaponName(n)));
+    // Like the action dialog: only what's actually in a hand (swap it in under Gear first), so this section
+    // doesn't fill up with every potion in the pack.
+    const mine = [...new Set([ent.held?.right, ent.held?.left].filter(Boolean))]
+      .filter(n => CONSUMABLES.some(cn => normalizeWeaponName(cn.name) === normalizeWeaponName(n)));
     if (mine.length) {
       const rows = mine.map(n => {
         const cn = CONSUMABLES.find(x => normalizeWeaponName(x.name) === normalizeWeaponName(n));
@@ -1638,7 +1641,7 @@ function _exploreRender(body) {
         return _dlgChip({ label: `🧪 Drink ${n}${qty}`, title: `Use ${n} on yourself${tip}`, data: { dact: 'xdrink', item: n } })
              + _dlgChip({ label: '→ Give', sub: 'to someone', title: `Administer ${n} to another character on the map`, data: { dact: 'xgive', item: n } });
       }).join('');
-      consumeHtml = _dlgSection('🧪 Consume - free, untimed', rows, false);
+      consumeHtml = _dlgSection('🧪 Consume - held item, free & untimed', rows, false);
     }
   }
 
