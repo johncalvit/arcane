@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261109k';
+const VERSION = 'v0.1.20261109l';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -17153,6 +17153,7 @@ const VIGILANT_CONE_DEG = 120;
 // easily tunable here if a GM's table wants a quieter or louder world.
 const VIGILANT_HEARING_RANGE_FT = 60;
 const VIGILANT_SMELL_RANGE_FT   = 20;
+const VIGILANT_OPEN_NOISE_MULT  = 2; // noise multiplier for a mover who is NOT sneaking
 // Pivot for the hearing/smell "chance" curve below — roughly the noise/odor
 // score of an average, unarmored, average-speed, human-sized target. Below
 // it a watcher's real chance stays well under their raw Hearing/Smell stat;
@@ -17288,12 +17289,12 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
       if (Math.random() * 100 < _vigilantVisionStat(watcherEnt)) return { detected: true, sense: 'sight' };
     }
   }
-  if (!sneaking) return { detected: false, sense: null };
   // Hearing/smell are omnidirectional and ignore line of sight — this game
   // has no acoustic wall-blocking model, so sound and scent are treated as
-  // carrying around corners freely, unlike vision.
+  // carrying around corners freely, unlike vision. They apply to every mover, not only Infiltrators: someone
+  // walking openly in heavy armor makes MORE noise than one sneaking, so their Noise counts double.
   if (distFt <= VIGILANT_HEARING_RANGE_FT) {
-    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, _infiltratorNoiseScore(moverEnt), VIGILANT_HEARING_PIVOT);
+    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, _infiltratorNoiseScore(moverEnt) * (sneaking ? 1 : VIGILANT_OPEN_NOISE_MULT), VIGILANT_HEARING_PIVOT);
     if (Math.random() * 100 < chance) return { detected: true, sense: 'hearing' };
   }
   if (distFt <= VIGILANT_SMELL_RANGE_FT) {
@@ -17782,7 +17783,7 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
       if (diff > 180) diff = 360 - diff;
       if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) return true;
     }
-    if (!sneaking) return false;
+    // Hearing and smell apply to everyone, sneaking or not (a loud walker is heard even more readily).
     if (distFt <= VIGILANT_HEARING_RANGE_FT) return true;
     if (distFt <= VIGILANT_SMELL_RANGE_FT) return true;
   }
