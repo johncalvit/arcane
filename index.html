@@ -7700,7 +7700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110f';
+const VERSION = 'v0.1.20261110g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11052,7 +11052,33 @@ function _openSpellPickerModal(combatantId) {
       await atCastSpell(combatantId, spell.name);
       if (_atIsCombatActive()) atOpenActionDialog(combatantId); else atOpenExploreDialog(combatantId);
     };
-    card.appendChild(row);
+    row.style.flex = '1';
+    // ⓘ: expands the full spell details (same card as the Spell Book) so the player can decide what to cast.
+    const info = document.createElement('button');
+    info.type = 'button';
+    info.textContent = 'i';
+    info.title = 'Show spell details';
+    info.setAttribute('aria-label', `Details for ${spell.name}`);
+    info.style.cssText = `flex:none;width:24px;height:24px;border-radius:50%;cursor:pointer;padding:0;
+      border:1px solid var(--gold);background:transparent;color:var(--gold2);font-family:Georgia,serif;
+      font-style:italic;font-weight:bold;font-size:0.85rem;line-height:1;`;
+    const detail = document.createElement('div');
+    detail.style.display = 'none';
+    const perRound = Math.round(_spellPerRoundBonus(ent, spell));
+    detail.innerHTML = _spellDetailCardHTML(spell)
+      + `<div style="font-size:0.72rem;color:var(--text-dim);margin:-4px 0 6px;">Your odds: ${round1Pct}%${_castUnhurried() ? '' : ' on the first round'}, about +${perRound}% for each extra round you concentrate${capNote}.</div>`;
+    info.onclick = (ev) => {
+      ev.stopPropagation();
+      const open = detail.style.display === 'none';
+      detail.style.display = open ? '' : 'none';
+      info.style.background = open ? 'rgba(201,168,76,0.25)' : 'transparent';
+    };
+    const line = document.createElement('div');
+    line.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    line.appendChild(row);
+    line.appendChild(info);
+    card.appendChild(line);
+    card.appendChild(detail);
   });
 
   const cancel = document.createElement('button');
