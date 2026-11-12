@@ -7704,7 +7704,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261112b';
+const VERSION = 'v0.1.20261112c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -7869,8 +7869,8 @@ async function loadCampaignList() { _landingLoadCampaigns(); }
 
 // ── Landing modal data loaders ────────────────────────────────────────────────
 // Step switcher for the landing dialog: 1 = pick a campaign, 2 = pick/create a character in it.
-// Banner per step: the necromancer while choosing a campaign, the goblin while choosing a character.
-const _LANDING_ART = { 1: ['grim-toll3-banner.jpg', '50% 45%'], 2: ['grim-toll5-banner.jpg', '50% 30%'] };
+// Banner per step: the necromancer while choosing a campaign, the goblin while choosing a character (now the fallen knight).
+const _LANDING_ART = { 1: ['grim-toll3-banner.jpg', '50% 45%'], 2: ['failedquest2-banner.jpg', '50% 8%'] };
 function _landingShowStep(n) {
   const art = document.getElementById('landing-hero-img');
   if (art && _LANDING_ART[n]) { art.style.display = ''; art.src = _LANDING_ART[n][0]; art.style.objectPosition = _LANDING_ART[n][1]; }
