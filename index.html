@@ -5321,6 +5321,10 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Rear Claws",  action:"Rake",  naturalSlot:"hindlegs", minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
   { weapon:"Tail Slam",   action:"Slam",  naturalSlot:"tail",     minReach:0, reach:1,   hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:8, maxPowerMod:0.5 },
   { weapon:"Stinger",     action:"Sting", naturalSlot:"tail",     minReach:0, reach:0.5, hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.3 },
+  // Humanoid extras (see HUMANOID_NATURAL in panels.js): a humanoid with one of these set as a species
+  // default gets an extra attack slot beside its two arms — Fangs (head) bite, Hand Claws rake, Kick.
+  { weapon:"Hand Claws",  action:"Rake",  naturalSlot:"hands",    minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
+  { weapon:"Kick",        action:"Kick",  naturalSlot:"feet",     minReach:0, reach:0.5, hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.5 },
 ].map(r => ({ ...r, price: DEFAULT_MELEE_WEAPON_PRICES[r.weapon] || 0, weaponType: _defaultWeaponType(r.weapon, r.naturalSlot) }));
 let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
 let editingMeleeIndex = null;
@@ -6945,6 +6949,9 @@ const NATURAL_SLOTS = [
   { key: 'forelegs', raceKey: 'NaturalForelegs', label: 'Forelegs' },
   { key: 'hindlegs', raceKey: 'NaturalHindlegs', label: 'Hindlegs' },
   { key: 'tail',     raceKey: 'NaturalTail',     label: 'Tail' },
+  // Humanoids: Head (Fangs) above plus these two give an extra attack slot beside the arms.
+  { key: 'hands',    raceKey: 'NaturalHands',    label: 'Hands (humanoid)' },
+  { key: 'feet',     raceKey: 'NaturalFeet',     label: 'Feet (humanoid)' },
 ];
 
 let speciesMgrShowMonsters = true;
@@ -7672,6 +7679,7 @@ function gatherConfigData() {
     techniqueAllowance: TECHNIQUE_ALLOWANCE,
     techniqueTiers: TECHNIQUE_TIERS,
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
+    humanoidNaturals: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
@@ -7704,7 +7712,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261112c';
+const VERSION = 'v0.1.20261112d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8708,6 +8716,9 @@ function applyConfigData(data) {
       r.reload = d ? d.reload : 'N/A';
     }
   });
+  // Configs saved before humanoid natural weapons: add Hand Claws and Kick once (a GM who later deletes them keeps them gone).
+  if (data.meleeWeapons && data.meleeWeapons.length && data.humanoidNaturals !== 1)
+    MELEE_WEAPONS.push(...DEFAULT_MELEE_WEAPONS.filter(d => (d.naturalSlot === 'hands' || d.naturalSlot === 'feet') && !MELEE_WEAPONS.some(m => m.weapon === d.weapon)).map(d => ({ ...d })));
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
   _migrateSpearShortLong(); // see its comment
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
@@ -9555,6 +9566,8 @@ function _speciesNaturalDefaults(species) {
   if (rd.NaturalForelegs) d.forelegs = rd.NaturalForelegs;
   if (rd.NaturalHindlegs) d.hindlegs = rd.NaturalHindlegs;
   if (rd.NaturalTail)     d.tail     = rd.NaturalTail;
+  if (rd.NaturalHands)    d.hands    = rd.NaturalHands;
+  if (rd.NaturalFeet)     d.feet     = rd.NaturalFeet;
   return d;
 }
 

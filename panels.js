@@ -822,6 +822,14 @@ const BODY_PLANS = {
   'Winged Humanoid': NATURAL_BODY_PLAN,
   Centaur: NATURAL_BODY_PLAN,
 };
+// Extra attack slots a Humanoid can have on top of its two arms. They only appear
+// (in the action dialog) when a species default has put something in them — see
+// _speciesNaturalDefaults — so ordinary humanoids see no change.
+const HUMANOID_NATURAL = [
+  { key: 'head',  label: 'Head (Bite)', icon: '🦷' },
+  { key: 'hands', label: 'Hands',       icon: '🐾' },
+  { key: 'feet',  label: 'Feet',        icon: '🦶' },
+];
 function _paBodyPlan(bodyType) { return BODY_PLANS[bodyType] || BODY_PLANS.Humanoid; }
 
 let _dlgCombatantId = null;
@@ -1138,7 +1146,11 @@ function _dlgRender(body) {
     return `<select style="${handSelStyle}" data-dchange="held" data-side="${side}"${fullActive ? ' disabled' : ''} title="Swap what's equipped here — costs this channel's action">${opts}</select>`;
   };
 
-  const channelHtml = plan.map(ch => {
+  // A humanoid with a natural weapon set (species default) gets that slot as an extra channel.
+  const dlgPlan = plan === BODY_PLANS.Humanoid
+    ? [...plan, ...HUMANOID_NATURAL.filter(ch => ent?.held?.[ch.key])]
+    : plan;
+  const channelHtml = dlgPlan.map(ch => {
     const isArm = ch.key === 'right' || ch.key === 'left';
     if (twoHanded && ch.key === 'left') return ''; // merged into the Both Hands section
     const cur = c.slots[ch.key];
