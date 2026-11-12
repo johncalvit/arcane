@@ -1264,6 +1264,14 @@ function _dlgRender(body) {
         title: 'Opposed Power + Coordination roll to wrestle the held target Prone (spends your action)',
         data: { dact: 'takedown' },
       });
+    if (conds.has('holding') && typeof _drainBloodRow === 'function') {
+      const dr = _drainBloodRow(ent);
+      if (dr) gchips += _dlgChip({
+        label: 'Drain Blood', sub: `up to ${dr.drainsBlood}`, iconHtml: _condIco('bleeding'),
+        title: `Feed on the held target: takes up to ${dr.drainsBlood} Blood (no roll, ignores armor) and heals your Toughness by the same amount. Spends your action.`,
+        data: { dact: 'drainblood' },
+      });
+    }
     const gtitle = conds.has('held') && conds.has('holding') ? '🤼 Grappling'
                  : conds.has('held') ? '✊ Held — grabbed' : '🤚 Holding';
     escapeHtml = _dlgSection(gtitle, gchips, false);
@@ -1901,6 +1909,10 @@ async function _dlgAct(d, id, body) {
     case 'escape':
       atCloseModal();
       await atResolveEscape(id); // spends the action only when the roll lands
+      break;
+    case 'drainblood':
+      atCloseModal();
+      await atResolveDrainBlood(id);
       break;
     case 'takedown':
       atCloseModal();

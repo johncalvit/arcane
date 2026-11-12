@@ -1682,6 +1682,8 @@
               <option value="forelegs">Forelegs</option>
               <option value="hindlegs">Hindlegs</option>
               <option value="tail">Tail</option>
+              <option value="hands">Hands (humanoid)</option>
+              <option value="feet">Feet (humanoid)</option>
             </select>
           </div>
         </div>
@@ -5324,6 +5326,9 @@ const DEFAULT_MELEE_WEAPONS = [
   // Humanoid extras (see HUMANOID_NATURAL in panels.js): a humanoid with one of these set as a species
   // default gets an extra attack slot beside its two arms — Fangs (head) bite, Hand Claws rake, Kick.
   { weapon:"Hand Claws",  action:"Rake",  naturalSlot:"hands",    minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:5, maxPowerMod:0.4 },
+  // drainsBlood: while this wielder is Holding someone, the dialog offers "Drain Blood" — takes up to that
+  // much Blood from the held target (no armor, no roll) and heals the drinker's Toughness by the same.
+  { weapon:"Vampire Fangs", action:"Bite", naturalSlot:"head",    minReach:0, reach:0,   hitFormula:"Physical Coordination",   material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.4, drainsBlood:3 },
   { weapon:"Kick",        action:"Kick",  naturalSlot:"feet",     minReach:0, reach:0.5, hitFormula:"Power",                    material:"Flesh; Bone", minStr:0, damageMax:6, maxPowerMod:0.5 },
 ].map(r => ({ ...r, price: DEFAULT_MELEE_WEAPON_PRICES[r.weapon] || 0, weaponType: _defaultWeaponType(r.weapon, r.naturalSlot) }));
 let MELEE_WEAPONS = [...DEFAULT_MELEE_WEAPONS];
@@ -5422,6 +5427,8 @@ function saveMeleeWeapon() {
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
     weaponType: document.getElementById('mf-weapontype').value.trim(),
   };
+  // Fields this form has no input for (drainsBlood on Vampire Fangs) must survive an edit.
+  if (editingMeleeIndex !== null && MELEE_WEAPONS[editingMeleeIndex]?.drainsBlood) row.drainsBlood = MELEE_WEAPONS[editingMeleeIndex].drainsBlood;
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
@@ -7679,7 +7686,7 @@ function gatherConfigData() {
     techniqueAllowance: TECHNIQUE_ALLOWANCE,
     techniqueTiers: TECHNIQUE_TIERS,
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
-    humanoidNaturals: 1,
+    humanoidNaturals: 2,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
@@ -7712,7 +7719,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261112d';
+const VERSION = 'v0.1.20261112e';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8717,8 +8724,8 @@ function applyConfigData(data) {
     }
   });
   // Configs saved before humanoid natural weapons: add Hand Claws and Kick once (a GM who later deletes them keeps them gone).
-  if (data.meleeWeapons && data.meleeWeapons.length && data.humanoidNaturals !== 1)
-    MELEE_WEAPONS.push(...DEFAULT_MELEE_WEAPONS.filter(d => (d.naturalSlot === 'hands' || d.naturalSlot === 'feet') && !MELEE_WEAPONS.some(m => m.weapon === d.weapon)).map(d => ({ ...d })));
+  if (data.meleeWeapons && data.meleeWeapons.length && data.humanoidNaturals !== 2)
+    MELEE_WEAPONS.push(...DEFAULT_MELEE_WEAPONS.filter(d => (d.naturalSlot === 'hands' || d.naturalSlot === 'feet' || d.drainsBlood) && !MELEE_WEAPONS.some(m => m.weapon === d.weapon)).map(d => ({ ...d })));
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
   _migrateSpearShortLong(); // see its comment
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
@@ -12833,6 +12840,39 @@ async function atResolveTakedown(grabberCid) {
     onWin:  { label: 'TAKEN DOWN', toast: '🤼 Taken down!', act: () => setCondition(targetTok.id, 'prone', true) },
     onLose: { label: 'STAYS UP',   toast: 'Stays standing.' },
   });
+}
+
+// Drain Blood: a grabber with a drainsBlood natural weapon (Vampire Fangs) feeds on the
+// target it is Holding. No roll — the hold is the cost. Takes up to N Blood (never more than
+// the target has), ignores armor, and heals the drinker's Toughness by the amount taken.
+function _drainBloodRow(ent) {
+  for (const w of Object.values(ent?.held || {})) {
+    const row = w && MELEE_WEAPONS.find(r => r.weapon === w && r.drainsBlood);
+    if (row) return row;
+  }
+  return null;
+}
+async function atResolveDrainBlood(grabberCid) {
+  const gEnt = getEntity(grabberCid);
+  const row = _drainBloodRow(gEnt);
+  if (!row) return;
+  const targetTok = Object.values(mapTokens).find(t =>
+    (Array.isArray(t.conditions) ? t.conditions : []).includes('heldby:' + grabberCid));
+  if (!targetTok) { showToast('No one held to drain.', 'warn'); return; }
+  const tRef = _tokenCid(targetTok);
+  if (String(tRef).startsWith('char::')) await ensureEntityLoaded(tRef);
+  const tEnt = getEntity(tRef);
+  if (!tEnt) { showToast('Could not load target.', 'error'); return; }
+  const bMax = _bloodMax(Math.round(tEnt.baseAttrs.Toughness ?? 10), tEnt.baseAttrs._bloodMult);
+  const room = Math.max(0, bMax - (tEnt.damage.blood || 0));
+  const amount = Math.min(room, Math.floor(Math.random() * row.drainsBlood) + 1);
+  await atSetSlot(grabberCid, 'full', 'Drain Blood', 3, true);
+  if (amount <= 0) { showToast(`${tEnt.name} has no Blood left to drain.`, 'warn'); return; }
+  await applyBloodLoss(tEnt, amount);
+  await applyRegenTick(getEntity(grabberCid), amount, 0);
+  await _checkDownedState(targetTok.id, getEntity(tRef));
+  logCombat(`${gEnt.name} drains ${amount} Blood from ${tEnt.name} and heals ${amount} Toughness.`, 'hit');
+  showToast(`🩸 ${gEnt.name} drained ${amount} Blood from ${tEnt.name}`, 'good');
 }
 
 // ── Carry / Mount / Grab — the "borne-by" relationship ───────────────────────
