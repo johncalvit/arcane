@@ -146,7 +146,7 @@ function _paSecConditions(ent) {
       : '';
     return `<div title="${_paEsc(def.desc)}" ${pa}
       style="display:flex;align-items:center;gap:5px;padding:4px 8px;border-radius:4px;border:1px solid;font-size:0.72rem;${style}${toggle ? "cursor:pointer;" : "cursor:default;"}user-select:none;">
-      <span>${def.icon}</span><span>${_paEsc(def.label)}</span></div>`;
+      <span>${_condIco(def.key)}</span><span>${_paEsc(def.label)}</span></div>`;
   };
   const activeDefs   = CONDITION_DEFS.filter(d => active.has(d.key));
   const inactiveDefs = CONDITION_DEFS.filter(d => !active.has(d.key));
@@ -906,7 +906,7 @@ function _slotCountdownLabel(slot) {
 }
 
 // One selectable chip. data-dact carries the click behavior.
-function _dlgChip({ label, sub, lit, disabled, title, data }) {
+function _dlgChip({ label, sub, lit, disabled, title, data, iconHtml }) {
   const base = 'display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:4px;font-size:0.78rem;font-family:var(--ui-font);user-select:none;border:1px solid ';
   const style = disabled
     ? base + 'var(--border);background:var(--bg3);color:var(--text-dim);opacity:0.4;cursor:not-allowed;'
@@ -916,7 +916,7 @@ function _dlgChip({ label, sub, lit, disabled, title, data }) {
   const attrs = disabled ? '' : Object.entries(data || {})
     .map(([k, v]) => `data-${k}="${_paEsc(v)}"`).join(' ');
   return `<div ${attrs} title="${_paEsc(title || '')}" style="${style}">
-    ${_paEsc(label)}${sub ? `<span style="font-size:0.68rem;color:${lit ? 'var(--gold2)' : 'var(--text-dim)'};">${_paEsc(sub)}</span>` : ''}${lit ? ' ✓' : ''}
+    ${iconHtml || ''}${_paEsc(label)}${sub ? `<span style="font-size:0.68rem;color:${lit ? 'var(--gold2)' : 'var(--text-dim)'};">${_paEsc(sub)}</span>` : ''}${lit ? ' ✓' : ''}
   </div>`;
 }
 
@@ -1264,23 +1264,23 @@ function _dlgRender(body) {
   // (blood loss makes it harder) via the same calc the roller itself uses.
   let recoverHtml = '';
   const recoverable = [];
-  if (conds.has('stunned'))     recoverable.push({ key: 'stunned',     label: '💫 Shake Off Stun' });
-  if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: '🩸 Stanch Bleeding' });
-  if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: '🩼 Shake Off Slow' });
-  if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: '🧪 Neutralize Acid' });
-  if (conds.has('burning'))     recoverable.push({ key: 'burning',     label: '🔥 Quench Flame' });
+  if (conds.has('stunned'))     recoverable.push({ key: 'stunned',     label: 'Shake Off Stun' });
+  if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: 'Stanch Bleeding' });
+  if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: 'Shake Off Slow' });
+  if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: 'Neutralize Acid' });
+  if (conds.has('burning'))     recoverable.push({ key: 'burning',     label: 'Quench Flame' });
   // Resuscitate is only for a Toughness knockout — _checkDownedState (index.html)
   // sets unconscious AND dead together once Blood also maxes out (the real
   // death trigger, separate from Toughness), and this action only ever fixed
   // Toughness. Offering it on an already-dead token let a successful roll
   // produce a broken half-revived state: Toughness reset, still flagged dead.
-  if (conds.has('unconscious') && !conds.has('dead')) recoverable.push({ key: 'unconscious', label: '💤 Resuscitate' });
+  if (conds.has('unconscious') && !conds.has('dead')) recoverable.push({ key: 'unconscious', label: 'Resuscitate' });
   if (recoverable.length) {
     recoverHtml = _dlgSection('🎲 Recover', recoverable.map(r => {
       const t = (typeof _recoverTarget === 'function' && ent && ent.tokenId) ? _recoverTarget(ent, ent.tokenId, r.key) : null;
       const sub = t ? `${t.pct}%${r.key !== 'unconscious' ? ` (rd ${t.rounds})` : ''}` : 'save';
       return _dlgChip({
-        label: r.label, sub,
+        label: r.label, sub, iconHtml: _condIco(r.key),
         title: 'Roll a percentile save to shake off this condition',
         data: { dact: 'recover', key: r.key },
       });

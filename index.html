@@ -7704,7 +7704,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261112a';
+const VERSION = 'v0.1.20261112b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9183,6 +9183,20 @@ const CONDITION_DEFS = [
 
 // Painted art for every default condition (icons/conditions/<key>.png).
 CONDITION_DEFS.forEach(d => { d.art = 'icons/conditions/' + d.key + '.png'; });
+
+// One place that draws a condition's icon as HTML, so every panel, dialog and
+// log line shows the same painted art as the map token (emoji if it fails).
+function _condIco(key, size) {
+  const d = CONDITION_DEFS.find(x => x.key === key);
+  if (!d) return '';
+  if (!d.art) return d.icon || '';
+  return `<img class="cond-ico-inline" src="${d.art}" alt="${d.label}" style="height:${size || '1.25em'};width:auto;vertical-align:-0.25em;" onerror="this.replaceWith(document.createTextNode('${d.icon}'))">`;
+}
+// Same, starting from an emoji (hit-effect entries carry the emoji, not the key).
+function _condIcoFromEmoji(emoji) {
+  const d = CONDITION_DEFS.find(x => x.icon === emoji);
+  return d ? _condIco(d.key) : (emoji || '');
+}
 
 function getConditions(tokenId) {
   const t = mapTokens[tokenId];
@@ -13042,7 +13056,7 @@ async function _runHitEffects(ctx, dmgEl) {
       const pct  = Math.round(eff.chance(ctx) * 100);
       const roll = Math.floor(Math.random() * 100) + 1; // 1..100
       applied = roll <= pct;
-      line = `${label} ${pct}% · rolled ${roll} → ${applied ? (icon || '•') + ' ' + label : 'no ' + label.toLowerCase()}`;
+      line = `${label} ${pct}% · rolled ${roll} → ${applied ? (_condIcoFromEmoji(icon) || '•') + ' ' + label : 'no ' + label.toLowerCase()}`;
     } else if (eff.save) {
       // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
       applied = false; line = '';
@@ -13225,7 +13239,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
       if (downed === 'dead' && dmgEl)
         dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#cc2222;font-weight:bold;margin-top:4px;">☠ DEAD</div>`;
       else if (downed === 'unconscious' && dmgEl)
-        dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">💤 UNCONSCIOUS</div>`;
+        dmgEl.innerHTML += `<div style="font-size:0.8rem;color:#e05555;font-weight:bold;margin-top:4px;">${_condIco('unconscious')} UNCONSCIOUS</div>`;
 
       // Journal entry for the hit
       const atkName = _logName(ctx.attackerCombatantId);
@@ -13850,7 +13864,7 @@ function atOpenApplyEffectsModal() {
       <span>${_paEsc(t.label || '?')}</span></label>`;
   const inp = 'background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:var(--ui-font);';
   const condOpts = CONDITION_DEFS.filter(d => !_FX_SKIP_CONDS.includes(d.key))
-    .map(d => `<option value="${d.key}">${d.icon} ${_paEsc(d.label)}</option>`).join('');
+    .map(d => `<option value="${d.key}">${_paEsc(d.label)}</option>`).join('');
   const statOpts = ATTRIBUTES.map(a => `<option value="${a.key}">${_paEsc(a.label)}</option>`).join('');
   const dmgOpts = _FX_DAMAGE_TYPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
   const sec = (id, title, body) => `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
