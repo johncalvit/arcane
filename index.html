@@ -599,6 +599,10 @@
     text-shadow: 0 0 3px #000, 0 0 5px #000;
     flex-shrink: 0;
   }
+  .token-label-icons .cond-ico {
+    height: 1.6em; width: auto; vertical-align: middle; margin: 0 0.5px;
+    filter: drop-shadow(0 0 1px #000);
+  }
   .token-label-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7700,7 +7704,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261110i';
+const VERSION = 'v0.1.20261112a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9177,6 +9181,9 @@ const CONDITION_DEFS = [
     desc:'Lighting a 40-foot radius around this token (Mage Sun spell). The light moves with it. Clear when the GM judges the spell has faded.' },
 ];
 
+// Painted art for every default condition (icons/conditions/<key>.png).
+CONDITION_DEFS.forEach(d => { d.art = 'icons/conditions/' + d.key + '.png'; });
+
 function getConditions(tokenId) {
   const t = mapTokens[tokenId];
   return new Set(Array.isArray(t?.conditions) ? t.conditions : []);
@@ -9390,7 +9397,17 @@ function _refreshTokenBadges(tokenId) {
     const def = CONDITION_DEFS.find(d => d.key === topCrit);
     const overlay = document.createElement('div');
     overlay.className = 'token-cond-overlay';
-    if (def.svg) {
+    if (def.art) {
+      const img = document.createElement('img');
+      img.alt = def.label;
+      img.className = 'token-cond-overlay-img';
+      const px = Math.round(getTokenSize(mapTokens[tokenId]) * 0.85);
+      img.style.width = px + 'px';
+      img.style.height = px + 'px';
+      img.onerror = () => { overlay.textContent = def.icon; };
+      img.src = def.art;
+      overlay.appendChild(img);
+    } else if (def.svg) {
       overlay.innerHTML = _condOverlaySvg(def.svg, getTokenSize(mapTokens[tokenId]));
     } else if (def.iconImg) {
       const img = document.createElement('img');
@@ -9428,7 +9445,9 @@ function _refreshTokenBadges(tokenId) {
       iconsEl.className = 'token-label-icons';
       label.insertBefore(iconsEl, label.firstChild);
     }
-    if (iconsEl) iconsEl.textContent = others.map(d => d.icon).join('');
+    if (iconsEl) iconsEl.innerHTML = others.map(d => d.art
+      ? `<img class="cond-ico" src="${d.art}" alt="${d.label}" title="${d.label}" onerror="this.replaceWith(document.createTextNode('${d.icon}'))">`
+      : d.icon).join('');
   } else {
     iconsEl?.remove();
   }
