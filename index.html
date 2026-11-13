@@ -1675,6 +1675,10 @@
             <input type="text" id="mf-quintessence" placeholder="0" title="How magical this item is — the stronger the enchantment, the higher the number. A creature with Quintessence can perceive an enchanted item as if it were a light source. 0 = mundane. Per weapon, same as Weight/Price.">
           </div>
           <div class="field">
+            <label>Drains Blood (max)</label>
+            <input type="text" id="mf-drainsblood" placeholder="0" title="Natural weapons only. Above 0, a wielder who is Holding someone gets a Drain Blood action: takes up to this much Blood from the held target (no roll, ignores armor) and heals its own Toughness by the same amount. 0 = none.">
+          </div>
+          <div class="field">
             <label>Natural Weapon Slot</label>
             <select id="mf-naturalslot">
               <option value="">— Held weapon (not natural) —</option>
@@ -5373,6 +5377,7 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-wt').value          = row ? (row.wt || 0) : 0;
   document.getElementById('mf-price').value       = row ? (row.price || 0) : 0;
   document.getElementById('mf-quintessence').value = row ? (row.quintessence || 0) : 0;
+  document.getElementById('mf-drainsblood').value = row ? (row.drainsBlood || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
   document.getElementById('mf-weapontype').value  = row ? (row.weaponType || '') : '';
   _refreshWeaponTypeList();
@@ -5427,8 +5432,8 @@ function saveMeleeWeapon() {
     naturalSlot: document.getElementById('mf-naturalslot').value || '',
     weaponType: document.getElementById('mf-weapontype').value.trim(),
   };
-  // Fields this form has no input for (drainsBlood on Vampire Fangs) must survive an edit.
-  if (editingMeleeIndex !== null && MELEE_WEAPONS[editingMeleeIndex]?.drainsBlood) row.drainsBlood = MELEE_WEAPONS[editingMeleeIndex].drainsBlood;
+  const drainsBlood = parseFloat(document.getElementById('mf-drainsblood').value) || 0;
+  if (drainsBlood > 0) row.drainsBlood = Math.round(drainsBlood);
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
@@ -7719,7 +7724,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261112e';
+const VERSION = 'v0.1.20261113a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10794,7 +10799,10 @@ async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, on
       // that way the roll's outcome is never gated behind a step that could
       // stall, even if some future call ends up waiting on user input too.
       const aDeg = actorMax - aRoll;
-      const win  = tiesToActor ? aDeg >= oDeg : aDeg > oDeg;
+      // A side that rolled over its number has failed: it can't win just by failing LESS than the other
+      // side (that let a 8-Power victim "escape" a 93-strength vampire by rolling 47 vs the vampire's 93).
+      // The actor must actually succeed, and a failed opposing roll counts as zero, not negative.
+      const win  = aDeg > 0 && (tiesToActor ? aDeg >= Math.max(0, oDeg) : aDeg > Math.max(0, oDeg));
       const resultLabel = win ? onWin.label : onLose.label;
       const resultClass = win ? 'success' : 'fail';
       const resultEl = document.getElementById('roller-result-label');
@@ -12845,10 +12853,12 @@ async function atResolveTakedown(grabberCid) {
 // Drain Blood: a grabber with a drainsBlood natural weapon (Vampire Fangs) feeds on the
 // target it is Holding. No roll — the hold is the cost. Takes up to N Blood (never more than
 // the target has), ignores armor, and heals the drinker's Toughness by the amount taken.
+// A natural weapon drains if its row says so (Drains Blood in Melee Weapons Manager) — or, so a
+// GM-made "Vampire Bite" works out of the box, if it's named Vampire-something with no value set.
 function _drainBloodRow(ent) {
   for (const w of Object.values(ent?.held || {})) {
-    const row = w && MELEE_WEAPONS.find(r => r.weapon === w && r.drainsBlood);
-    if (row) return row;
+    const row = w && MELEE_WEAPONS.find(r => r.weapon === w && r.naturalSlot && (r.drainsBlood || /^vampire/i.test(r.weapon)));
+    if (row) return row.drainsBlood ? row : { ...row, drainsBlood: 3 };
   }
   return null;
 }
