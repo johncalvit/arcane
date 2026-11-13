@@ -7724,7 +7724,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113c';
+const VERSION = 'v0.1.20261113d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -14936,6 +14936,8 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   }
 
   _rollerUpdateTarget();
+  const quickCb = document.getElementById('roller-quick');
+  if (quickCb) quickCb.checked = _rollerQuick();
   document.getElementById('roller-overlay').style.display = 'flex';
   _rollerStartSpin();
   if (mirror) document.getElementById('roller-status').textContent = (by || 'Someone') + ' is rolling…';
@@ -15008,9 +15010,21 @@ function _rollerRand() {
   return Math.floor(Math.random() * (_roller.max - _roller.min + 1)) + _roller.min;
 }
 
+// Quick roll: a per-device preference (some players dislike the slot-machine spin). With it on, the number
+// is revealed after a short fixed delay instead of the spin + slow-down. If the roll offers defense choices
+// it still waits for the click (so a defense can be picked first), then reveals at once.
+function _rollerQuick() { try { return localStorage.getItem('gt_quickroll') === '1'; } catch (e) { return false; } }
+function _rollerQuickChanged(cb) { try { localStorage.setItem('gt_quickroll', cb.checked ? '1' : '0'); } catch (e) {} }
 function _rollerStartSpin() {
   _roller.phase = 'spinning';
-  document.getElementById('roller-status').textContent = 'Click to stop';
+  const quick = _rollerQuick();
+  const hasDefense = document.getElementById('roller-defense')?.style.display === 'block';
+  document.getElementById('roller-status').textContent = quick ? (hasDefense ? 'Click to roll' : 'Rolling…') : 'Click to stop';
+  if (quick && !_roller.mirror && !hasDefense) {
+    const r = _roller;
+    setTimeout(() => { if (_roller === r && r.phase === 'spinning') _rollerBeginStop(); }, 350);
+    return;
+  }
   _rollerTick(45);
 }
 
@@ -15047,9 +15061,10 @@ function _rollerBeginStop() {
   if (_roller.finalNum == null) _roller.finalNum = _rollerRand();
   document.getElementById('roller-status').textContent = 'Stopping…';
   // Deceleration steps: delays in ms, last step reveals the final number
-  const steps = [80, 120, 170, 230, 300, 380, 460];
+  const quick = _rollerQuick();
+  const steps = quick ? [60, 100] : [80, 120, 170, 230, 300, 380, 460]; // the last entry is never waited on (see step())
   // Pitch drops as steps slow down (1.0 → 0.55)
-  const pitches = [0.95, 0.88, 0.80, 0.72, 0.65, 0.58, 0.55];
+  const pitches = quick ? [0.8, 0.7] : [0.95, 0.88, 0.80, 0.72, 0.65, 0.58, 0.55];
   let i = 0;
   function step() {
     if (!_roller) return; // cancelled mid-deceleration
@@ -22771,6 +22786,9 @@ async function _deleteMapPin(pinId) {
     <div id="roller-result-label"></div>
     <div id="roller-hit-location" style="font-size:1.05rem;font-weight:bold;margin-top:4px;min-height:1.4em;"></div>
     <div id="roller-damage-display" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;text-align:center;"></div>
+    <label onclick="event.stopPropagation()" style="display:block;margin-top:12px;font-size:0.7rem;color:var(--text-dim);cursor:pointer;font-family:var(--ui-font);" title="Skip the slot-machine spin: show the number after a short delay. Saved on this device.">
+      <input type="checkbox" id="roller-quick" onchange="_rollerQuickChanged(this)" style="vertical-align:-2px;"> Quick roll
+    </label>
     <button id="roller-cancel" onclick="event.stopPropagation(); cancelRoller()" style="display:none;">Cancel</button>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
