@@ -7724,7 +7724,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113a';
+const VERSION = 'v0.1.20261113b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10788,11 +10788,20 @@ function _combinedGrappleMax(targetToken) {
 // pre-rolled, the acting side rolls live. Degree of success = threshold − roll;
 // higher wins. `win` decides the acting side's victory (used for both escape
 // and takedown, which share the math but flip who acts and the outcome).
-async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, onLose, actorName, oppName, actorCid, actionLabel }) {
+async function _grappleContest({ label, actorMax, oppMax, tiesToActor, onWin, onLose, actorName, oppName, actorCid, actionLabel, goal = 'win' }) {
   const oRoll = Math.floor(Math.random() * 100) + 1;
   const oDeg  = oppMax - oRoll;
+  // The other side has already rolled, so the exact number the actor must roll (or lower) is known:
+  // it has to be a real success (under actorMax) AND beat the opposing degree of success (a miss counts as 0).
+  const oDegC = Math.max(0, oDeg);
+  const need  = Math.max(0, Math.min(actorMax - 1, actorMax - oDegC - (tiesToActor ? 0 : 1)));
+  const oppLine = oDeg > 0
+    ? `${oppName} rolled ${oRoll} vs ${oppMax} (${oDeg} to beat)`
+    : `${oppName} rolled ${oRoll} vs ${oppMax} (failed)`;
   openRoller({
     label,
+    target: need,
+    targetLabel: need > 0 ? `roll ${need} or lower to ${goal}  ·  ${oppLine}` : `no chance this round  ·  ${oppLine}`,
     onComplete: async (aRoll) => {
       // Show the result FIRST, before anything that might await a blocking
       // confirm (atSetSlot's "cancel movement?" prompt below can pop one) —
@@ -12821,7 +12830,7 @@ async function atResolveEscape(combatantId) {
     label: `Escape Grab — ${targetEnt?.name || 'Target'} vs ${oppName}`,
     actorMax: targetMax, oppMax: hold.max, tiesToActor: false,
     actorName: targetEnt?.name || 'Target', oppName,
-    actorCid: combatantId, actionLabel: 'Escape',
+    actorCid: combatantId, actionLabel: 'Escape', goal: 'break free',
     onWin:  { label: 'BROKE FREE', toast: '✊ Broke free!', act: () => atReleaseHold(token.id) },
     onLose: { label: 'STILL HELD',  toast: '✊ Still held.' },
   });
@@ -12844,7 +12853,7 @@ async function atResolveTakedown(grabberCid) {
     label: `Takedown — ${actorName} vs ${targetEnt?.name || 'Target'}`,
     actorMax: hold.max, oppMax: targetMax, tiesToActor: true,
     actorName, oppName: targetEnt?.name || 'Target',
-    actorCid: grabberCid, actionLabel: 'Takedown',
+    actorCid: grabberCid, actionLabel: 'Takedown', goal: 'take them down',
     onWin:  { label: 'TAKEN DOWN', toast: '🤼 Taken down!', act: () => setCondition(targetTok.id, 'prone', true) },
     onLose: { label: 'STAYS UP',   toast: 'Stays standing.' },
   });
