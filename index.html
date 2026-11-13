@@ -7724,7 +7724,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113b';
+const VERSION = 'v0.1.20261113c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12825,7 +12825,7 @@ async function atResolveEscape(combatantId) {
   const targetEnt = getEntity(combatantId);
   const targetMax = _grappleMax(targetEnt);
   const hold = _combinedGrappleMax(token);
-  const oppName = hold.count > 1 ? `${hold.count} grapplers` : 'Hold';
+  const oppName = hold.count > 1 ? `${hold.count} grapplers` : 'Holder';
   await _grappleContest({
     label: `Escape Grab — ${targetEnt?.name || 'Target'} vs ${oppName}`,
     actorMax: targetMax, oppMax: hold.max, tiesToActor: false,
