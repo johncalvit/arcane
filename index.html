@@ -1940,6 +1940,10 @@
           <div class="field"><label>Hit Formula (Individual Attack, ranged)</label><input type="text" id="spf-hitformula" placeholder="e.g. Day Vision + Logic"></div>
           <div class="field"><label>Save Formula (Area spells)</label><input type="text" id="spf-saveformula" placeholder="e.g. Power + Speed + Physical Coordination"></div>
           <div class="field"><label>Drain Attribute (Area, on failed save)</label><input type="text" id="spf-drainattribute" placeholder="e.g. Quintessence, Power, Speed — blank = normal damage roll"></div>
+          <div class="field"><label>Half Damage on Save (Area)</label>
+            <select id="spf-halfonsave"><option value="0">No - a save negates it</option><option value="1">Yes - a save halves it (explosions)</option></select>
+          </div>
+          <div class="field"><label>Blowback (ft, Area explosions)</label><input type="text" id="spf-blowback" placeholder="e.g. 20 - how far a 150 lb person is thrown at the centre; blank = none"></div>
           <div class="field"><label>Obstacle HP (Creation spells)</label><input type="text" id="spf-obstaclehp" placeholder="e.g. 200 — a Line obstacle this durable, blocking vision+movement, until destroyed or unmaintained"></div>
           <div class="field"><label>Restore Toughness</label><input type="text" id="spf-toughness" placeholder="0"></div>
           <div class="field"><label>Restore Stamina</label><input type="text" id="spf-stamina" placeholder="0"></div>
@@ -5644,6 +5648,16 @@ const DEFAULT_SPELLS = [
     damageStat:"", damageCategory:"", damageMax:6, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"Quintessence",
     restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
     description:"A narrow, needle-thin lance of raw quintessence streaks out in a straight line, unraveling the magical reserves of anyone it passes through. Everyone in the 40-foot line who fails a Power+Speed+Coordination save loses up to 6 Quintessence — a real threat to other casters, and no threat at all to a target with none to lose." },
+  // Explosion: a Circle that does damage falling off with distance from the centre (half on a successful
+  // save), and hurls everyone caught directly away from it - see _applyBlast / _applyBlastPushes.
+  // blowback = how many feet a 150 lb person would be thrown at point-blank range.
+  { name:"Arcane Blast", range:"80 feet", castingTime:1, cost:6, maintained:false,
+    difficultyStat:"Logic", difficultyValue:15, magicClass:"Arcane", targetType:"Area",
+    aoeShape:"Circle", aoeSize:"15 ft radius", spellType:"Attack",
+    damageStat:"", damageCategory:"crush", damageMax:14, hitFormula:"", saveFormula:"Power + Speed + Physical Coordination", drainAttribute:"",
+    halfOnSave:true, blowback:20,
+    restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"", setsCondition:"", secondaryChance:0, obstacleHp:0, buffAttr:"", buffAmount:0, buffMinutes:"",
+    description:"The caster hurls a knot of raw quintessence that detonates in a 15-foot radius. Everyone caught takes up to d14 Crush damage, strongest at the centre and fading toward the edge; a successful Power+Speed+Coordination save halves it. The blast also throws bodies directly away from the centre - light creatures fly furthest, heavy or armored ones barely move, and anyone lying Prone takes half damage and is thrown half as far. Anything hurled into a wall or another body takes slam damage. Friends in the area are hit just the same." },
   // Light spells: Self-cast, sets a condition that makes the caster's token
   // emit light (see LIGHT_CONDITIONS / _lightEmitters) — the light travels with
   // them like a carried torch. Not maintained, so no per-round drain; the GM
@@ -6631,6 +6645,8 @@ function openSpellForm(index) {
   document.getElementById('spf-hitformula').value      = row ? (row.hitFormula || '') : '';
   document.getElementById('spf-saveformula').value     = row ? (row.saveFormula || '') : '';
   document.getElementById('spf-drainattribute').value  = row ? (row.drainAttribute || '') : '';
+  document.getElementById('spf-halfonsave').value      = row && row.halfOnSave ? '1' : '0';
+  document.getElementById('spf-blowback').value        = row && row.blowback ? row.blowback : '';
   document.getElementById('spf-obstaclehp').value      = row && row.obstacleHp ? row.obstacleHp : '';
   document.getElementById('spf-toughness').value       = row ? row.restoreToughness : '';
   document.getElementById('spf-stamina').value         = row ? row.restoreStamina : '';
@@ -6673,6 +6689,8 @@ function saveSpell() {
     hitFormula: document.getElementById('spf-hitformula').value.trim(),
     saveFormula: document.getElementById('spf-saveformula').value.trim(),
     drainAttribute: document.getElementById('spf-drainattribute').value.trim(),
+    halfOnSave: document.getElementById('spf-halfonsave').value === '1',
+    blowback: parseFloat(document.getElementById('spf-blowback').value) || 0,
     obstacleHp: parseFloat(document.getElementById('spf-obstaclehp').value) || 0,
     restoreToughness: parseFloat(document.getElementById('spf-toughness').value) || 0,
     restoreStamina: parseFloat(document.getElementById('spf-stamina').value) || 0,
@@ -7692,6 +7710,7 @@ function gatherConfigData() {
     techniqueTiers: TECHNIQUE_TIERS,
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
     humanoidNaturals: 2,
+    arcaneBlast: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
@@ -7724,7 +7743,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113g';
+const VERSION = 'v0.1.20261113h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8728,6 +8747,11 @@ function applyConfigData(data) {
       r.reload = d ? d.reload : 'N/A';
     }
   });
+  // Configs saved before Arcane Blast existed: add it once (a GM who later deletes it keeps it gone).
+  if (data.spells && data.spells.length && data.arcaneBlast !== 1) {
+    const ab = DEFAULT_SPELLS.find(s => s.name === 'Arcane Blast');
+    if (ab && !data.spells.some(s => s.name === ab.name)) data.spells = [...data.spells, { ...ab }];
+  }
   // Configs saved before humanoid natural weapons: add Hand Claws and Kick once (a GM who later deletes them keeps them gone).
   if (data.meleeWeapons && data.meleeWeapons.length && data.humanoidNaturals !== 2)
     MELEE_WEAPONS.push(...DEFAULT_MELEE_WEAPONS.filter(d => (d.naturalSlot === 'hands' || d.naturalSlot === 'feet' || d.drainsBlood) && !MELEE_WEAPONS.some(m => m.weapon === d.weapon)).map(d => ({ ...d })));
@@ -11896,7 +11920,9 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
   if (!targets.length) { showToast(`${spell.name} catches no one.`, 'warn'); return; }
   logCombat(`${spell.name} catches ${targets.length} in the area.`, 'roll');
 
-  await _resolveAoeFlagged(casterEnt, spell, targets);
+  // An explosion radiates from the clicked point (Circle); a cone or beam radiates from the caster.
+  const center = spell.aoeShape === 'Circle' ? { xPct: aoePoint.xPct, yPct: aoePoint.yPct } : { xPct: casterToken.x_pct, yPct: casterToken.y_pct };
+  await _resolveAoeFlagged(casterEnt, spell, targets, center);
 }
 
 // Unified GM-driven resolution for a successful Area spell cast: every
@@ -11929,19 +11955,19 @@ async function _resolveSpellAoe(casterEnt, spell, aoePoint) {
 // client actually IS the GM can pick it up and drive the resolution, and
 // this client just waits for that GM's "done" signal instead of trying to
 // resolve saves itself.
-async function _resolveAoeFlagged(casterEnt, spell, targets) {
+async function _resolveAoeFlagged(casterEnt, spell, targets, center) {
   aoeFlaggedIds = new Set(targets.map(t => t.id));
   _aoeBroadcastFlags();
 
   if (isGM()) {
     return new Promise(resolve => {
-      aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve };
+      aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve, center, pushes: [] };
       _renderAoeResolvePanel();
     });
   }
 
   mapChannel?.send({ type: 'broadcast', event: 'aoe-resolve-start', payload: {
-    spellName: spell.name, casterCid: casterEnt.ref, targetIds: targets.map(t => t.id),
+    spellName: spell.name, casterCid: casterEnt.ref, targetIds: targets.map(t => t.id), center,
   }});
   return new Promise(resolve => { _aoePendingCastResolve = resolve; });
 }
@@ -11952,6 +11978,139 @@ let _aoePendingCastResolve = null;
 function _aoeBroadcastFlags() {
   Object.keys(mapTokens).forEach(_refreshTokenBadges);
   mapChannel?.send({ type: 'broadcast', event: 'aoe-flags', payload: { ids: [...aoeFlaggedIds] } });
+}
+
+// ═══ EXPLOSIONS: distance-scaled damage + blowback ═══════════════════════════
+// An Area spell with halfOnSave and/or blowback is an explosion. Damage is strongest at the centre and
+// fades toward the edge; a successful save halves it (it doesn't negate); a Prone target takes half again.
+// Blowback hurls each caught body directly away from the centre. spell.blowback is how many feet a person
+// of BLAST.refWeight lbs would fly at point-blank range; it scales down with distance and with how heavy
+// the target is (body weight plus carried gear), and Prone halves it. Everything is measured in feet off
+// the map scale - there is no grid. Pushes are applied after every save has resolved (see
+// _aoeResolveFinish), nearest to the centre first. A body stopped short by a wall, a closed door, the map
+// edge or another creature takes slam damage for the force it still had left.
+const BLAST = {
+  edgeDamage:  0.5,  // damage multiplier at the very edge of the radius (1.0 at the centre)
+  edgePush:    0.2,  // push multiplier at the very edge (1.0 at the centre)
+  proneDamage: 0.5,  // lying Prone: damage multiplier
+  pronePush:   0.5,  // lying Prone: push multiplier
+  refWeight:   150,  // lbs a 'normal' body weighs for blowback purposes
+  minPushFt:   2,    // pushes shorter than this are shrugged off
+  slamPerFt:   0.2,  // slam damage per foot of push the body still had when it stopped (1 per 5 ft)
+  contactFt:   3,    // how close two bodies' centres get before one blocks the other
+};
+function _isBlastSpell(spell) { return !!(spell && spell.targetType === 'Area' && (spell.halfOnSave || spell.blowback > 0)); }
+
+function _blastTokenWeight(ent, token) {
+  let w = 0;
+  try { w = _entityCarried(ent, ent.attrs) || 0; } catch (e) {}
+  if (!(w > 0)) w = _entityBodyWeight(_tokenCid(token));
+  return Math.max(10, w);
+}
+
+// Damage for one caught token, and queue its push. Returns the text shown beside its save.
+async function _applyBlast(st, ent, token, saved) {
+  const spell = st.spell;
+  const { radius } = _parseAoeGeometry(spell);
+  const c = st.center;
+  const distFt = (c && radius > 0) ? (_pctDistFt(c.xPct, c.yPct, token.x_pct, token.y_pct) || 0) : 0;
+  const frac = radius > 0 ? Math.min(1, distFt / radius) : 0;
+  const prone = ent.conditions?.has('prone');
+  const dmgMult = (1 - (1 - BLAST.edgeDamage) * frac) * (saved ? 0.5 : 1) * (prone ? BLAST.proneDamage : 1);
+  const parts = [];
+  if ((spell.damageMax || spell.damageStat) && !spell.drainAttribute) {
+    const t = await _applyAoeFailure(st.casterEnt, spell, ent, token, { dmgMult, skipCondition: saved });
+    if (t) parts.push(saved ? `${t} (saved: half)` : t);
+  }
+  if (spell.blowback > 0 && c) {
+    const stuck = ['held', 'holding', 'carrying'].some(k => ent.conditions?.has(k))
+      || (Array.isArray(token.conditions) && token.conditions.some(x => x.startsWith('borneby:')));
+    const weight = _blastTokenWeight(ent, token);
+    const pushFt = spell.blowback * (1 - (1 - BLAST.edgePush) * frac) * (BLAST.refWeight / weight) * (prone ? BLAST.pronePush : 1);
+    if (!stuck && pushFt >= BLAST.minPushFt) {
+      st.pushes = st.pushes || [];
+      st.pushes.push({ token, ent, pushFt, distFt, weight, center: c });
+      parts.push(`thrown ~${Math.round(pushFt)} ft`);
+    }
+  }
+  return parts.join(', ') || (saved ? 'unharmed' : '');
+}
+
+// Move every queued token away from the blast, stopping at walls / the map edge / other bodies, then
+// slam damage for whatever force was left.
+async function _applyBlastPushes(st) {
+  const pushes = (st.pushes || []).sort((a, b) => a.distFt - b.distFt);
+  if (!pushes.length || mapScalePPF <= 0 || !mapImgW || !mapImgH) return;
+  const toFt = t => ({ x: t.x_pct / 100 * mapImgW / mapScalePPF, y: t.y_pct / 100 * mapImgH / mapScalePPF });
+  const pctPerFtX = mapScalePPF / mapImgW * 100, pctPerFtY = mapScalePPF / mapImgH * 100;
+  for (const p of pushes) {
+    const tok = mapTokens[p.token.id];
+    if (!tok) continue;
+    const from = toFt(tok), cFt = toFt({ x_pct: p.center.xPct, y_pct: p.center.yPct });
+    let ux = from.x - cFt.x, uy = from.y - cFt.y;
+    const len = Math.hypot(ux, uy);
+    if (len < 0.5) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
+    else { ux /= len; uy /= len; }
+    let travel = p.pushFt, stop = null, hitTok = null;
+    // map edge
+    const edgeT = [
+      ux > 0 ? (100 - tok.x_pct) / (ux * pctPerFtX) : ux < 0 ? (0 - tok.x_pct) / (ux * pctPerFtX) : Infinity,
+      uy > 0 ? (100 - tok.y_pct) / (uy * pctPerFtY) : uy < 0 ? (0 - tok.y_pct) / (uy * pctPerFtY) : Infinity,
+    ].reduce((a, b) => Math.min(a, b), Infinity);
+    if (edgeT < travel) { travel = Math.max(0, edgeT); stop = 'edge'; }
+    // walls and closed doors
+    const dest = { x_pct: tok.x_pct + ux * travel * pctPerFtX, y_pct: tok.y_pct + uy * travel * pctPerFtY };
+    const clipped = _clipRoute([{ x_pct: tok.x_pct, y_pct: tok.y_pct }, dest], { walls: true });
+    if (clipped.stop === 'wall') {
+      const e = clipped.points[clipped.points.length - 1];
+      travel = Math.min(travel, _pctDistFt(tok.x_pct, tok.y_pct, e.x_pct, e.y_pct) || 0); stop = 'wall';
+    }
+    // other bodies in the way
+    for (const o of Object.values(mapTokens)) {
+      if (o.id === tok.id || !o.entity_type || o.entity_type === 'item' || !o.entity_id) continue;
+      const of_ = toFt(o), vx = of_.x - from.x, vy = of_.y - from.y;
+      const along = vx * ux + vy * uy, perp = Math.abs(vx * uy - vy * ux);
+      if (along <= 0.5 || perp >= BLAST.contactFt) continue;
+      const contactAt = Math.max(0, along - Math.sqrt(BLAST.contactFt ** 2 - perp ** 2));
+      if (contactAt < travel) { travel = contactAt; stop = 'creature'; hitTok = o; }
+    }
+    // slide the token
+    if (travel > 0.25) {
+      const nx = tok.x_pct + ux * travel * pctPerFtX, ny = tok.y_pct + uy * travel * pctPerFtY;
+      tok.x_pct = nx; tok.y_pct = ny;
+      const el = document.getElementById('token-' + tok.id);
+      if (el) { el.style.transition = 'left 0.4s ease-out, top 0.4s ease-out'; el.style.left = nx + '%'; el.style.top = ny + '%'; setTimeout(() => { el.style.transition = ''; }, 600); }
+      tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny } });
+      await sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', tok.id);
+    }
+    // slam
+    const left = p.pushFt - travel;
+    let slamText = '';
+    if (stop && left >= BLAST.minPushFt) {
+      const slam = Math.max(1, Math.round(left * BLAST.slamPerFt * Math.sqrt(p.weight / BLAST.refWeight)));
+      const hit = async (ent2, tok2, amount) => {
+        const slot = _armorSlotForPart(ent2.bodyType, null);
+        const dr = getArmorDR((ent2.armor && ent2.armor[slot]) || 'None', 'crush');
+        const dmg = Math.max(0, amount - dr);
+        if (dmg > 0) {
+          await applyDamage(ent2.type === 'char' ? 'character' : 'creature', ent2.id, dmg, 0);
+          await _checkDownedState(tok2.id, getEntity(ent2.ref));
+        }
+        return dmg;
+      };
+      const ent = getEntity(p.ent.ref) || p.ent;
+      const d1 = await hit(ent, tok, slam);
+      slamText = stop === 'creature' ? ` and slams into ${hitTok.label || 'someone'} for ${d1}` : ` and slams into ${stop === 'edge' ? 'the edge of the map' : 'a wall'} for ${d1}`;
+      if (hitTok) {
+        const ref2 = _tokenCid(hitTok);
+        if (hitTok.entity_type === 'character') await ensureEntityLoaded(ref2);
+        const ent2 = getEntity(ref2);
+        if (ent2) { const d2 = await hit(ent2, hitTok, Math.max(1, Math.round(slam / 2))); slamText += ` (${ent2.name} takes ${d2})`; }
+      }
+    }
+    logCombat(`${p.ent.name} is thrown ${Math.round(travel)} ft by ${st.spell.name}${slamText}.`, 'hit');
+  }
+  refreshUI();
 }
 
 function _aoeResolveSaveTarget(spell, ent) {
@@ -12008,11 +12167,12 @@ async function _aoeResolveClick(tokenId) {
     target, targetLabel: 'roll under to resist',
     onComplete: async (n) => {
       const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
-      const effectText = saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token);
+      const blast = _isBlastSpell(st.spell);
+      const effectText = blast ? await _applyBlast(st, ent, token, saved) : (saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token));
       const dmgEl = document.getElementById('roller-damage-display');
       if (dmgEl) {
         dmgEl.style.display = 'block';
-        dmgEl.innerHTML = saved
+        dmgEl.innerHTML = saved && !blast
           ? `<div style="font-size:0.9rem;color:var(--gold2);">Resisted — no effect.</div>`
           : `<div style="font-size:0.9rem;color:#e05555;">${_paEsc(effectText || 'Failed the save.')}</div>`;
       }
@@ -12041,18 +12201,20 @@ async function _aoeResolveRemainingFast() {
     const target = _aoeResolveSaveTarget(st.spell, ent);
     const n = Math.floor(Math.random() * 100) + 1;
     const saved = n <= 5 || (n < 96 && n <= target);
-    const effectText = saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token);
-    logCombat(`${ent.name} rolls ${n} vs ${target}% — ${saved ? 'saves' : `fails${effectText ? ' (' + effectText + ')' : ''}`}.`, saved ? 'roll' : 'hit');
+    const blast = _isBlastSpell(st.spell);
+    const effectText = blast ? await _applyBlast(st, ent, token, saved) : (saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token));
+    logCombat(`${ent.name} rolls ${n} vs ${target}% — ${saved ? 'saves' : 'fails'}${effectText ? ' (' + effectText + ')' : ''}.`, saved && !blast ? 'roll' : 'hit');
     await new Promise(res => setTimeout(res, 180));
   }
   _aoeResolveFinish();
 }
 
-function _aoeResolveFinish() {
+async function _aoeResolveFinish() {
   const st = aoeResolveState;
   if (!st) return;
   aoeResolveState = null;
   document.getElementById('aoe-resolve-panel')?.remove();
+  try { await _applyBlastPushes(st); } catch (e) { console.error('blowback:', e); }
   refreshUI();
   if (st.remoteCasterCid) mapChannel?.send({ type: 'broadcast', event: 'aoe-resolve-done', payload: { casterCid: st.remoteCasterCid } });
   st.resolve();
@@ -12069,7 +12231,7 @@ function _aoeReceiveResolveStart(payload) {
   const casterEnt = getEntity(payload.casterCid);
   const targets = (payload.targetIds || []).map(id => mapTokens[id]).filter(Boolean);
   if (!spell || !casterEnt || !targets.length) return;
-  aoeResolveState = { casterEnt, spell, remaining: targets, remoteCasterCid: payload.casterCid, resolve: () => {} };
+  aoeResolveState = { casterEnt, spell, remaining: targets, remoteCasterCid: payload.casterCid, resolve: () => {}, center: payload.center || null, pushes: [] };
   _renderAoeResolvePanel();
 }
 
@@ -12156,7 +12318,7 @@ async function _applyAttributeDrain(spell, ent, token) {
 // Corroding, unconscious") so a caller can show it next to the roll itself —
 // see _resolveAoeFlagged's roller-damage-display, instead of leaving the GM
 // to go dig it out of the combat log.
-async function _applyAoeFailure(casterEnt, spell, ent, token) {
+async function _applyAoeFailure(casterEnt, spell, ent, token, opts = {}) {
   let effectText = '';
   if (spell.drainAttribute) {
     effectText = await _applyAttributeDrain(spell, ent, token);
@@ -12169,7 +12331,7 @@ async function _applyAoeFailure(casterEnt, spell, ent, token) {
       const armorSlot = _armorSlotForPart(ent.bodyType, null);
       const armorType = (ent.armor && ent.armor[armorSlot]) || 'None';
       const dr  = getArmorDR(armorType, spell.damageCategory || '');
-      const raw = Math.random() * (dmgCap - 1) + 1;
+      const raw = (Math.random() * (dmgCap - 1) + 1) * (opts.dmgMult ?? 1);
       const dmg = Math.max(0, Math.round(Math.max(0, raw - dr)));
       if (dmg > 0) {
         const entityType = ent.type === 'char' ? 'character' : 'creature';
@@ -12183,7 +12345,7 @@ async function _applyAoeFailure(casterEnt, spell, ent, token) {
     }
   }
   let condText = '';
-  if (spell.setsCondition) {
+  if (spell.setsCondition && !opts.skipCondition) {
     const roll = Math.floor(Math.random() * 100) + 1;
     if (roll <= (spell.secondaryChance || 100)) {
       await _applySpellCondition(token.id, spell.setsCondition);
