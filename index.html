@@ -520,6 +520,16 @@
     gap: 2px;
   }
   .map-token.dragging { cursor: grabbing; z-index: 30; }
+  /* Health rings: blue = Toughness, green = Stamina, red (only once Blood is being lost); they drain as damage mounts */
+  .token-hp { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 21; }
+  .token-hp svg { display: block; overflow: visible; }
+  /* Floating damage / healing numbers over a token */
+  .dmg-pop { position: absolute; left: 50%; top: 0; transform: translate(-50%, -50%); pointer-events: none; z-index: 40; font-weight: bold;
+    text-shadow: 0 0 3px #000, 0 0 5px #000, 0 0 8px #000; animation: dmg-rise 1.8s ease-out forwards; }
+  .dmg-pop.dmg-hurt { color: #ff5a4a; }
+  .dmg-pop.dmg-heal { color: #5adf7a; }
+  @keyframes dmg-rise { 0% { opacity: 0; transform: translate(-50%, -30%) scale(.7); } 12% { opacity: 1; transform: translate(-50%, -60%) scale(1.15); }
+    70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -200%) scale(1); } }
   .token-ring {
     border-radius: 50%;
     border: var(--token-ring-width, 1px) solid var(--gold); /* one number to tune the token ring thickness */
@@ -7778,7 +7788,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114c';
+const VERSION = 'v0.1.20261114d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9476,9 +9486,61 @@ function _condOverlaySvg(kind, sizePx) {
   </svg>`;
 }
 
+var _hpSeen = {}; // tokenId -> HP lost (Toughness + Blood) the last time we looked; a change fires a floating number
+function _hpPopup(el, t, delta) {
+  const p = document.createElement('div');
+  p.className = 'dmg-pop ' + (delta > 0 ? 'dmg-hurt' : 'dmg-heal');
+  p.textContent = (delta > 0 ? '-' : '+') + (Math.round(Math.abs(delta) * 10) / 10);
+  p.style.fontSize = Math.max(14, Math.round(getTokenSize(t) * 0.55)) + 'px';
+  el.appendChild(p);
+  setTimeout(() => p.remove(), 2000);
+}
+// Health rings around a character/creature token + floating damage numbers. Called from refreshUI (which every
+// damage/heal path ends in, locally and from other clients) and when a token is drawn, so it needs no hooks of
+// its own. Players see their party's rings; monster rings are the GM's.
+function _updateTokenRing(tokenId) {
+  const el = document.getElementById('token-' + tokenId);
+  const t = mapTokens[tokenId];
+  if (!el || !t || !t.entity_type || t.entity_type === 'item') return;
+  if (t.entity_type === 'creature' && !isGM()) { el.querySelector('.token-hp')?.remove(); return; }
+  let ent = null;
+  try { ent = getEntity(_tokenCid(t)); } catch (e) {}
+  if (!ent || !ent.baseAttrs || !ent.damage) return;
+  const tMax = Math.max(1, Math.round(ent.baseAttrs.Toughness ?? 10));
+  const sMax = Math.max(1, Math.round(ent.baseAttrs.Stamina ?? 10));
+  const bMax = _bloodMax(tMax, ent.baseAttrs._bloodMult);
+  const dT = ent.damage.toughness || 0, dS = ent.damage.stamina || 0, dB = ent.damage.blood || 0;
+  const lost = dT + dB, prev = _hpSeen[tokenId];
+  _hpSeen[tokenId] = lost;
+  if (prev !== undefined && lost !== prev) _hpPopup(el, t, lost - prev);
+  const S = getTokenSize(t);
+  const key = [dT, dS, dB, tMax, sMax, bMax, S].join('|');
+  let box = el.querySelector('.token-hp');
+  if (box && box.dataset.k === key) return;
+  const pad = 17, W = S + pad * 2, c = W / 2;
+  const ring = (r, frac, color) => {
+    const C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac));
+    return '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="3.5"/>' +
+      (f > 0 ? '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3.5" stroke-dasharray="' + (f * C) + ' ' + C + '" transform="rotate(-90 ' + c + ' ' + c + ')"/>' : '');
+  };
+  const tip = 'Toughness ' + (tMax - dT) + '/' + tMax + ' - Stamina ' + (sMax - dS) + '/' + sMax + (dB > 0 ? ' - Blood ' + (bMax - dB) + '/' + bMax : '');
+  const svg = '<svg width="' + W + '" height="' + W + '" viewBox="0 0 ' + W + ' ' + W + '"><title>' + tip + '</title>' +
+    ring(S / 2 + 3, 1 - dT / tMax, '#4a9cf0') + ring(S / 2 + 7.5, 1 - dS / sMax, '#4cc24f') +
+    (dB > 0 ? ring(S / 2 + 12, 1 - dB / bMax, '#e04848') : '') + '</svg>';
+  if (!box) { box = document.createElement('div'); box.className = 'token-hp'; el.appendChild(box); }
+  box.style.top = (-pad) + 'px';
+  box.dataset.k = key;
+  box.innerHTML = svg;
+}
+function _updateAllTokenRings() {
+  if (typeof mapTokens === 'undefined') return;
+  Object.keys(mapTokens).forEach(_updateTokenRing);
+}
+
 function _refreshTokenBadges(tokenId) {
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
+  _updateTokenRing(tokenId);
   el.classList.toggle('aoe-flagged', typeof aoeFlaggedIds !== 'undefined' && aoeFlaggedIds.has(tokenId));
   if (typeof _fogApplyTokenVisibility === 'function') _fogApplyTokenVisibility(tokenId);
   scheduleLights(); // a light-spell condition may have just been added or cleared
@@ -10001,6 +10063,7 @@ function backToMyCharacter() {
 
 // Re-render the left panel in place after any entity data change.
 function refreshUI() {
+  _updateAllTokenRings();
   scheduleLights(); // a held item changing (picking up/dropping a Torch) moves a light with it
   if (_tokenInfoViewId && mapTokens[_tokenInfoViewId]) {
     showTokenInfo(_tokenInfoViewId);
@@ -10775,7 +10838,7 @@ const HIT_EFFECTS = [
       let ux = ftX, uy = ftY; const len = Math.hypot(ux, uy);
       if (len < 0.1) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); } else { ux /= len; uy /= len; }
       const r = await _blowbackSlide(tok, ref, ux, uy, pushFt, weight, 'knocked back');
-      const txt = `Knocked back ${Math.round(r.travel)} ft${r.slamText}`;
+      const txt = `Knocked back ${Math.round(r.travel)} ft${r.slamText}${r.proneText}`;
       logCombat(`${ent.name} is ${txt.charAt(0).toLowerCase() + txt.slice(1)}.`, 'hit');
       if (ctx.dmgEl) ctx.dmgEl.innerHTML += `<div style="font-size:0.72rem;color:#e05555;margin-top:3px;">💥 ${_paEsc(txt)}</div>`;
     },
@@ -12188,8 +12251,18 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight, verb) {
       }
     }
   }
-  if (travel > 0.25 || slamFx) _blowbackFx(tok, startPct, `${tok.label ? tok.label + ' ' : ''}${verb || 'thrown'} ${Math.round(travel)} ft`, slamFx);
-  return { travel, slamText };
+  // Being thrown breaks any held stance (Sentinel, Evade, Target, Vigilant) and may knock the body prone: a
+  // slam always does; otherwise about 20% + 4% per foot, up to 90%.
+  let proneText = '';
+  if (travel >= BLAST.minPushFt || slamFx) {
+    await _cancelStancesOnMove(entRef, null, 'is thrown');
+    if (!getConditions(tok.id).has('prone') && (slamFx || Math.random() < Math.min(0.9, 0.2 + 0.04 * travel))) {
+      await setCondition(tok.id, 'prone', true);
+      proneText = ' and lands prone';
+    }
+  }
+  if (travel > 0.25 || slamFx) _blowbackFx(tok, startPct, `${tok.label ? tok.label + ' ' : ''}${verb || 'thrown'} ${Math.round(travel)} ft${proneText ? ' - prone!' : ''}`, slamFx);
+  return { travel, slamText, proneText };
 }
 
 // Move every queued blast victim away from the centre (nearest first).
@@ -12206,7 +12279,7 @@ async function _applyBlastPushes(st) {
     if (len < 0.5) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
     else { ux /= len; uy /= len; }
     const r = await _blowbackSlide(tok, p.ent.ref, ux, uy, p.pushFt, p.weight);
-    logCombat(`${p.ent.name} is thrown ${Math.round(r.travel)} ft by ${st.spell.name}${r.slamText}.`, 'hit');
+    logCombat(`${p.ent.name} is thrown ${Math.round(r.travel)} ft by ${st.spell.name}${r.slamText}${r.proneText}.`, 'hit');
   }
   refreshUI();
 }
@@ -19717,7 +19790,7 @@ function _pctDistFt(x1Pct, y1Pct, x2Pct, y2Pct) {
 // their condition badges, and says so in the Journal. `feet` null means unknown distance (uncalibrated map).
 const MOVE_CANCELS_STANCE = ['Sentinel', 'Evade', 'Target', 'Vigilant'];
 var _dragStanceDropped = false; // set once the current drag has already ended its stance (see onTokenMouseMove)
-async function _cancelStancesOnMove(combId, feet) {
+async function _cancelStancesOnMove(combId, feet, reason) {
   if (feet != null && feet < 0.5) return; // a nudge, not a move
   const c = atCombatants.find(x => x.id === combId);
   if (!c || !c.slots) return;
@@ -19735,7 +19808,7 @@ async function _cancelStancesOnMove(combId, feet) {
     const badge = { Sentinel: 'sentinel', Evade: 'evading', Target: 'target', Vigilant: 'vigilant' };
     for (const label of ended) if (getConditions(token.id).has(badge[label])) await setCondition(token.id, badge[label], false);
   }
-  logCombat(`${getEntity(combId)?.name || token?.label || 'Someone'} moves — ${[...ended].join(' / ')} ends.`, 'roll');
+  logCombat(`${getEntity(combId)?.name || token?.label || 'Someone'} ${reason || 'moves'} — ${[...ended].join(' / ')} ends.`, 'roll');
   renderAtList();
 }
 
