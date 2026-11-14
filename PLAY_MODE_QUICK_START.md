@@ -28,6 +28,8 @@ This lists the conditions affecting the character. The GM and the game assign an
 
 When combat starts, press **Roll** under Combat to roll your initiative. When it's your turn, the banner at the top of the panel shows **Actions** (choose what to do) and **Done**. The action dialog covers moving, attacking, defending, casting spells, and stances such as Sentinel (react to anyone who steps into melee range), Target (the same at range), and Vigilant (watch a cone for movement). Moving ends Sentinel, Evade, Target and Vigilant (Infiltrate is for sneaking, so it carries on). Shake Off Stun and Resuscitate (under Recover) each use up your whole turn, win or lose; a character who falls unconscious is no longer stunned.
 
+**Knockback:** explosions (such as Arcane Blast) and heavy smashing blows (clubs, maces, hammers, some monster slams) can throw a creature backward, directly away from the blast or the attacker. A streak and floating text on the map show who was thrown and how far. Lighter creatures fly further, heavy or armored ones barely move, and anyone lying Prone is thrown half as far (and takes half damage from an explosion). Anything thrown into a wall or another creature takes slam damage — and so does whoever it hits. Grabbing, grabbed and carried creatures stay put.
+
 ### Abilities
 
 Click **View** next to **Education** to see your subjects with their success percentages — click a percentage to roll it. **Spell Book** (casters) shows the spells you have memorized, and **Techniques** shows the weapon techniques you have chosen. Spells are memorized in Character Mode; magic education isn't needed to learn a spell, it only improves your chance of casting it.

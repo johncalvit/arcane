@@ -1095,8 +1095,10 @@ function _dlgRender(body) {
                 : r.action.toLowerCase().includes('aim') ? 2 : 1;
       const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
       const defensive = r.action === 'Block' || r.action === 'Parry';
+      const kb = (!ranged && typeof _knockbackFor === 'function') ? _knockbackFor(r) : 0;
       const normalChip = _dlgChip({
         label: r.action, sub,
+        title: kb > 0 ? `Knocks the target back (up to ~${kb} ft at full damage; lighter targets fly further, and hitting a wall or another body hurts)` : '',
         data: defensive
           ? { dact: 'set', slot: chKey, label: lbl, dur: 99, locks: 0 } // lock-on stance
           : { dact: 'attack', slot: chKey, label: lbl, dur: dur * 3,

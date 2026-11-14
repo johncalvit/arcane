@@ -409,6 +409,17 @@
     user-select: none;
   }
   .map-viewport.dragging { cursor: grabbing; }
+  /* Forced movement (blast / knockback): a streak from where the token was, floating text, impact burst */
+  .bb-streak { position:absolute; transform-origin:0 50%; pointer-events:none; z-index:55; border-radius:6px;
+    background:linear-gradient(90deg, rgba(255,190,70,0) 0%, rgba(255,170,60,.9) 100%); animation:bb-fade 1.6s ease-out forwards; }
+  .bb-text { position:absolute; pointer-events:none; z-index:61; white-space:nowrap; text-align:center; font-weight:bold; line-height:1.25;
+    color:#ffcf5a; text-shadow:0 0 4px #000, 0 0 2px #000, 0 0 6px #000; transform:translate(-50%,-100%); animation:bb-rise 2.8s ease-out forwards; }
+  .bb-text .bb-slam { color:#ff6a5a; }
+  .bb-burst { position:absolute; pointer-events:none; z-index:60; border-radius:50%; border:3px solid #ff8a4a; box-shadow:0 0 10px #ff8a4a;
+    transform:translate(-50%,-50%) scale(.2); opacity:0; animation:bb-burst 0.9s ease-out forwards; }
+  @keyframes bb-fade  { 0%{opacity:1} 100%{opacity:0} }
+  @keyframes bb-rise  { 0%{opacity:0; margin-top:0} 12%{opacity:1} 70%{opacity:1} 100%{opacity:0; margin-top:-26px} }
+  @keyframes bb-burst { 0%{transform:translate(-50%,-50%) scale(.2); opacity:.95} 100%{transform:translate(-50%,-50%) scale(1); opacity:0} }
   .map-ping { position:absolute; pointer-events:none; z-index:60; }
   .map-ping i { position:absolute; left:0; top:0; border-radius:50%; border:4px solid #ffd54a; box-shadow:0 0 10px #ffd54a; transform:translate(-50%,-50%) scale(.2); opacity:0; animation: map-ping-pulse 1.1s ease-out 3; }
   .map-ping i:nth-child(2) { animation-delay:.25s; }
@@ -7749,7 +7760,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113i';
+const VERSION = 'v0.1.20261114a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10745,7 +10756,7 @@ const HIT_EFFECTS = [
       const ftX = (tok.x_pct - atk.x_pct) / 100 * mapImgW / mapScalePPF, ftY = (tok.y_pct - atk.y_pct) / 100 * mapImgH / mapScalePPF;
       let ux = ftX, uy = ftY; const len = Math.hypot(ux, uy);
       if (len < 0.1) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); } else { ux /= len; uy /= len; }
-      const r = await _blowbackSlide(tok, ref, ux, uy, pushFt, weight);
+      const r = await _blowbackSlide(tok, ref, ux, uy, pushFt, weight, 'knocked back');
       const txt = `Knocked back ${Math.round(r.travel)} ft${r.slamText}`;
       logCombat(`${ent.name} is ${txt.charAt(0).toLowerCase() + txt.slice(1)}.`, 'hit');
       if (ctx.dmgEl) ctx.dmgEl.innerHTML += `<div style="font-size:0.72rem;color:#e05555;margin-top:3px;">💥 ${_paEsc(txt)}</div>`;
@@ -12094,7 +12105,8 @@ function _knockbackFor(row) {
 
 // Slide one token pushFt feet along the unit vector (ux, uy), stopping at the map edge, a wall or closed
 // door, or another body, then slam damage for the force it still had. Returns { travel, slamText }.
-async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight) {
+async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight, verb) {
+  const startPct = { x_pct: tok.x_pct, y_pct: tok.y_pct };
   const toFt = t => ({ x: t.x_pct / 100 * mapImgW / mapScalePPF, y: t.y_pct / 100 * mapImgH / mapScalePPF });
   const pctPerFtX = mapScalePPF / mapImgW * 100, pctPerFtY = mapScalePPF / mapImgH * 100;
   const from = toFt(tok);
@@ -12127,12 +12139,12 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight) {
     tok.x_pct = nx; tok.y_pct = ny;
     const el = document.getElementById('token-' + tok.id);
     if (el) { el.style.transition = 'left 0.4s ease-out, top 0.4s ease-out'; el.style.left = nx + '%'; el.style.top = ny + '%'; setTimeout(() => { el.style.transition = ''; }, 600); }
-    tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny } });
+    tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny, forced: true } });
     await sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', tok.id);
   }
   // slam
   const left = pushFt - travel;
-  let slamText = '';
+  let slamText = '', slamFx = '';
   if (stop && left >= BLAST.minPushFt) {
     const slam = Math.max(1, Math.round(left * BLAST.slamPerFt * Math.sqrt(weight / BLAST.refWeight)));
     const hit = async (ent2, tok2, amount) => {
@@ -12148,6 +12160,7 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight) {
     const ent = getEntity(entRef);
     if (ent) {
       const d1 = await hit(ent, tok, slam);
+      slamFx = `Slam${stop === 'creature' ? ' into ' + (hitTok.label || 'a body') : stop === 'wall' ? ' into a wall' : ''}! ${d1 > 0 ? '-' + d1 : 'no damage'}`;
       slamText = stop === 'creature' ? ` and slams into ${hitTok.label || 'someone'} for ${d1}` : ` and slams into ${stop === 'edge' ? 'the edge of the map' : 'a wall'} for ${d1}`;
       if (hitTok) {
         const ref2 = _tokenCid(hitTok);
@@ -12157,6 +12170,7 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight) {
       }
     }
   }
+  if (travel > 0.25 || slamFx) _blowbackFx(tok, startPct, `${tok.label ? tok.label + ' ' : ''}${verb || 'thrown'} ${Math.round(travel)} ft`, slamFx);
   return { travel, slamText };
 }
 
@@ -15764,6 +15778,9 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'map-ping' }, ({ payload }) => {
       if (payload && payload.mapId === activeMapId) _pingShow(payload.x, payload.y, payload.who);
     })
+    .on('broadcast', { event: 'blowback-fx' }, ({ payload }) => {
+      if (payload && payload.mapId === activeMapId) _blowbackFxShow(payload);
+    })
     .on('broadcast', { event: 'xp-awarded' }, ({ payload }) => {
       if (!payload || !payload.charId) return;
       const row = playCharCache[payload.charId];
@@ -16152,6 +16169,55 @@ function applyMapTransform() {
   drawSentinelRanges();
   if (typeof drawWalls === 'function') drawWalls();
   if (typeof drawPins === 'function') drawPins();
+}
+
+// ═══ FORCED MOVEMENT FEEDBACK ═══ every client sees a streak from where the token was, floating text with
+// the distance, and an impact burst if it slammed into something - so a token that slides away is never
+// a mystery. The resolving client draws it and broadcasts the same payload (see _blowbackFx).
+function _blowbackFxShow(fx) {
+  const canvas = document.getElementById('map-canvas');
+  if (!canvas || !fx) return;
+  const k = 1 / (mapScale || 1); // constant on-screen size
+  const len = Math.hypot(fx.x2 - fx.x1, fx.y2 - fx.y1);
+  const add = (el, ms) => { canvas.appendChild(el); setTimeout(() => el.remove(), ms); };
+  if (len > 4) {
+    const st = document.createElement('div');
+    st.className = 'bb-streak';
+    const h = 8 * k;
+    st.style.cssText = 'left:' + fx.x1 + 'px;top:' + (fx.y1 - h / 2) + 'px;width:' + len + 'px;height:' + h + 'px;transform:rotate(' + Math.atan2(fx.y2 - fx.y1, fx.x2 - fx.x1) + 'rad);';
+    add(st, 1800);
+  }
+  const tx = document.createElement('div');
+  tx.className = 'bb-text';
+  tx.style.cssText = 'left:' + fx.x2 + 'px;top:' + (fx.y2 - 18 * k) + 'px;font-size:' + (14 * k) + 'px;';
+  const esc = v => String(v == null ? '' : v).replace(/[<>&]/g, '');
+  tx.innerHTML = '<div>💥 ' + esc(fx.text) + '</div>' + (fx.slam ? '<div class="bb-slam">' + esc(fx.slam) + '</div>' : '');
+  add(tx, 3000);
+  if (fx.slam) {
+    const b = document.createElement('div');
+    b.className = 'bb-burst';
+    const d = 70 * k;
+    b.style.cssText = 'left:' + fx.x2 + 'px;top:' + fx.y2 + 'px;width:' + d + 'px;height:' + d + 'px;border-width:' + (3 * k) + 'px;';
+    add(b, 1100);
+  }
+  // First time on this device: say what is going on.
+  try {
+    if (!localStorage.getItem('gt_seen_knockback')) {
+      localStorage.setItem('gt_seen_knockback', '1');
+      showToast('💥 Knockback: explosions and heavy smashing blows can hurl lighter creatures backward. Walls and bodies stop them - and hurt.', 'info');
+    }
+  } catch (e) {}
+}
+function _blowbackFx(tok, fromPct, text, slam) {
+  if (!mapImgW || !mapImgH) return;
+  const fx = {
+    mapId: activeMapId, id: tok.id,
+    x1: fromPct.x_pct / 100 * mapImgW, y1: fromPct.y_pct / 100 * mapImgH,
+    x2: tok.x_pct / 100 * mapImgW,     y2: tok.y_pct / 100 * mapImgH,
+    text, slam,
+  };
+  _blowbackFxShow(fx);
+  mapChannel?.send({ type: 'broadcast', event: 'blowback-fx', payload: fx });
 }
 
 // ═══ MAP PING ═══ hold the mouse still half a second on empty map to ping a spot for everyone
@@ -18714,6 +18780,7 @@ function subscribeTokenRealtime() {
     .on('broadcast', { event: 'token-move' }, ({ payload }) => {
       if (payload.id === dragTokenId) return; // we're the dragger
       const el = document.getElementById('token-' + payload.id);
+      if (el && payload.forced) { el.style.transition = 'left 0.4s ease-out, top 0.4s ease-out'; setTimeout(() => { el.style.transition = ''; }, 600); }
       if (el) { el.style.left = payload.x_pct + '%'; el.style.top = payload.y_pct + '%'; }
       if (mapTokens[payload.id]) {
         mapTokens[payload.id].x_pct = payload.x_pct;
