@@ -7760,7 +7760,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114a';
+const VERSION = 'v0.1.20261114b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16895,7 +16895,7 @@ async function onTokenMouseUp(e) {
     await _executeMoveWithSentinelChecks(draggedCombId, [from, to]);
     if (isBudgetedMove) {
       _commitMoveSlot(draggedCombId, _pctDistFt(from.x_pct, from.y_pct, to.x_pct, to.y_pct));
-      if (_atSharedActive()?.id === draggedCombId) atOpenSlotModal(draggedCombId, 'right');
+      if (_atSharedActive()?.id === draggedCombId && !(typeof _dlgReopenId !== 'undefined' && _dlgReopenId === draggedCombId)) atOpenSlotModal(draggedCombId, 'right');
     }
   } else {
     if (mapTokens[movedId]) {
@@ -18480,6 +18480,10 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
     // another monster's watch, or solo testing, with no network round trip.
     _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense });
   }).then((reactionStarted) => {
+    // A reaction shot is now mid-resolution (Called Shot modal, then the roller): hand the mover's dialog
+    // to _dlgMaybeReopen so it comes back after that attack - whether or not it was open when the move
+    // began. The move-commit code that runs right after this checks _dlgReopenId and stays out of the way.
+    if (reactionStarted && _atIsCombatActive() && _atSharedActive()?.id === moverCid && typeof _dlgReopenId !== 'undefined') { _dlgReopenId = moverCid; return; }
     if (!wasOpen || !_atIsCombatActive() || _atSharedActive()?.id !== moverCid) return;
     // A reaction shot is mid-resolution (Called Shot modal, then the roller) — don't
     // throw the mover's action dialog up in front of it. Hand it to _dlgMaybeReopen,
@@ -19981,8 +19985,9 @@ async function pathCommit() {
 
   _commitMoveSlot(combId, feet);
 
-  // Open action dialog after movement
-  atOpenSlotModal(combId, 'right');
+  // Open action dialog after movement - unless a Sentinel reaction attack is still resolving, in which
+  // case _dlgMaybeReopen brings it back once that attack is done.
+  if (!(typeof _dlgReopenId !== 'undefined' && _dlgReopenId === combId)) atOpenSlotModal(combId, 'right');
 }
 
 // ─── Walls / obstacles ────────────────────────────────────────────────────────
