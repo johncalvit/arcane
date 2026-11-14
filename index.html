@@ -7724,7 +7724,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113f';
+const VERSION = 'v0.1.20261113g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10405,6 +10405,15 @@ async function dropHeldItem(ref, side, nearTokenId, scatterMaxFt) {
   const name = ent?.held?.[side];
   if (!name) return;
   const patch = { held_items: Object.assign({}, ent.held, { [side]: null }) };
+  // One item held in both hands (a two-handed grip): letting go with one hand just frees that hand -
+  // the item stays in the other and does NOT land on the ground.
+  const otherSide = side === 'right' ? 'left' : side === 'left' ? 'right' : null;
+  if (otherSide && typeof _twoHandedGrip === 'function' && _twoHandedGrip(ent) && ent.held?.[otherSide] === name) {
+    await updateEntity(ref, patch);
+    _syncOwnBuilder(ref);
+    showToast(`Let go of ${name} with one hand`);
+    return;
+  }
   let payload = { kind: _lookupItemKind(name), record: { name } };
   const row = _entityCacheRow(ref);
   // Pull from the inventory array if this entity keeps one (characters always;
