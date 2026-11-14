@@ -1666,6 +1666,24 @@ function _exploreRender(body) {
     }
   }
 
+  // Grab: seize someone with a free hand (same bare-handed Grab as in combat, no timing). Once holding or
+  // held, the follow-ups (escape / takedown / drain blood) are here too.
+  const freeHand = ['right', 'left'].some(s => !ent.held?.[s]);
+  let gchips = _dlgChip({
+    label: '🤚 Grab', sub: 'pick a target', disabled: !c || !freeHand,
+    title: !c ? 'Not on the map yet' : !freeHand ? 'Needs a free hand' : 'Seize another token - click who to grab',
+    data: { dact: 'xgrab' },
+  });
+  if (conds.has('held'))
+    gchips += _dlgChip({ label: 'Escape', sub: 'contest', title: 'Opposed Power + Coordination roll to break free', data: { dact: 'xescape' } });
+  if (conds.has('holding')) {
+    gchips += _dlgChip({ label: 'Takedown', sub: 'contest', title: 'Opposed roll to wrestle the held target Prone', data: { dact: 'xtakedown' } });
+    const dr = typeof _drainBloodRow === 'function' ? _drainBloodRow(ent) : null;
+    if (dr) gchips += _dlgChip({ label: 'Drain Blood', sub: `up to ${dr.drainsBlood}`, iconHtml: _condIco('bleeding'),
+      title: 'Feed on the held target', data: { dact: 'xdrainblood' } });
+  }
+  const grabHtml = _dlgSection('🤚 Grab', gchips, false);
+
   const blockers = ['dead', 'unconscious', 'paralyzed'].filter(k => conds.has(k));
   const banner = blockers.length
     ? `<div style="background:rgba(224,85,85,0.12);border:1px solid #e05555;border-radius:4px;padding:5px 8px;font-size:0.75rem;color:#e05555;margin-bottom:8px;">${_paEsc(ent.name)} is ${blockers.join(', ')} - actions recorded anyway; the table decides.</div>` : '';
@@ -1673,7 +1691,7 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${checkHtml}${_exploreRestHtml(ent)}${gearHtml}${consumeHtml}
+    ${banner}${stanceHtml}${spellHtml}${checkHtml}${grabHtml}${_exploreRestHtml(ent)}${gearHtml}${consumeHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;
@@ -1734,6 +1752,21 @@ async function _exploreClick(e) {
         atCloseModal(); // Explore reopens itself once it's administered (see attackTokenClick's Consume branch)
         showToast(`Click who should receive the ${d.item}.`);
         enterAttackMode(id, d.item, 'Consume', false, 5);
+        break;
+      case 'xgrab':
+        _dlgReopenId = id; // back to Explore once the grab resolves
+        atCloseModal();
+        showToast('Click who to grab.');
+        enterAttackMode(id, 'Bare Handed', 'Grab', false, 0);
+        break;
+      case 'xescape':
+        _dlgReopenId = id; atCloseModal(); await atResolveEscape(id);
+        break;
+      case 'xtakedown':
+        _dlgReopenId = id; atCloseModal(); await atResolveTakedown(id);
+        break;
+      case 'xdrainblood':
+        _dlgReopenId = id; atCloseModal(); await atResolveDrainBlood(id);
         break;
       case 'xrest':
         await _exploreRest(id, 0);
