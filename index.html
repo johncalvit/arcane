@@ -1994,7 +1994,16 @@
         <div class="label">Your Purse</div><div class="value" id="shop-purse-display">—</div>
       </div>
 
-      <h3 class="collapsible" onclick="toggleCollapse('shop-melee')">⚔ Melee Weapons<span class="collapse-arrow" id="arrow-shop-melee">▼</span></h3>
+      <div id="shop-jump" style="position:sticky;top:0;z-index:5;background:var(--bg);padding:6px 0 8px;margin-bottom:6px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;border-bottom:1px solid var(--border);">
+        <span style="font-size:0.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">Jump to</span>
+        <a href="#" class="pa-view-btn" style="margin-left:0;text-decoration:none;" onclick="shopJump('shop-melee');return false;">⚔ Melee</a>
+        <a href="#" class="pa-view-btn" style="margin-left:0;text-decoration:none;" onclick="shopJump('shop-ranged');return false;">🏹 Ranged</a>
+        <a href="#" class="pa-view-btn" style="margin-left:0;text-decoration:none;" onclick="shopJump('shop-armor');return false;">🪖 Armor</a>
+        <a href="#" class="pa-view-btn" style="margin-left:0;text-decoration:none;" onclick="shopJump('shop-equip');return false;">🎒 Equipment</a>
+        <a href="#" class="pa-view-btn" style="margin-left:0;text-decoration:none;" onclick="shopJump('shop-consum');return false;">🧪 Consumables</a>
+      </div>
+
+      <h3 class="collapsible" id="head-shop-melee" onclick="toggleCollapse('shop-melee')">⚔ Melee Weapons<span class="collapse-arrow" id="arrow-shop-melee">▼</span></h3>
       <div class="collapse-body" id="body-shop-melee">
         <table class="loadout-table">
           <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
@@ -2002,7 +2011,7 @@
         </table>
       </div>
 
-      <h3 class="collapsible" onclick="toggleCollapse('shop-ranged')">🏹 Ranged Weapons<span class="collapse-arrow" id="arrow-shop-ranged">▼</span></h3>
+      <h3 class="collapsible" id="head-shop-ranged" onclick="toggleCollapse('shop-ranged')">🏹 Ranged Weapons<span class="collapse-arrow" id="arrow-shop-ranged">▼</span></h3>
       <div class="collapse-body" id="body-shop-ranged">
         <table class="loadout-table">
           <thead><tr><th>Weapon</th><th>Damage Type</th><th>Max Dmg</th><th>Min Power</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
@@ -2010,7 +2019,7 @@
         </table>
       </div>
 
-      <h3 class="collapsible" onclick="toggleCollapse('shop-equip')">🎒 Equipment<span class="collapse-arrow" id="arrow-shop-equip">▼</span></h3>
+      <h3 class="collapsible" id="head-shop-equip" onclick="toggleCollapse('shop-equip')">🎒 Equipment<span class="collapse-arrow" id="arrow-shop-equip">▼</span></h3>
       <div class="collapse-body" id="body-shop-equip">
         <table class="loadout-table">
           <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
@@ -2018,7 +2027,7 @@
         </table>
       </div>
 
-      <h3 class="collapsible" onclick="toggleCollapse('shop-consum')">🧪 Consumables<span class="collapse-arrow" id="arrow-shop-consum">▼</span></h3>
+      <h3 class="collapsible" id="head-shop-consum" onclick="toggleCollapse('shop-consum')">🧪 Consumables<span class="collapse-arrow" id="arrow-shop-consum">▼</span></h3>
       <div class="collapse-body" id="body-shop-consum">
         <table class="loadout-table">
           <thead><tr><th>Item</th><th>Wt</th><th>Price</th><th title="How many you already have (carried + in storage)">Owned</th><th></th></tr></thead>
@@ -2026,7 +2035,7 @@
         </table>
       </div>
 
-      <h3 class="collapsible" onclick="toggleCollapse('shop-armor')">🪖 Armor Pieces<span class="collapse-arrow" id="arrow-shop-armor">▼</span></h3>
+      <h3 class="collapsible" id="head-shop-armor" onclick="toggleCollapse('shop-armor')">🪖 Armor Pieces<span class="collapse-arrow" id="arrow-shop-armor">▼</span></h3>
       <div class="collapse-body" id="body-shop-armor">
         <p style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;">
           Priced at whatever size you buy it — defaults to your own Target Size.
@@ -6769,6 +6778,15 @@ function buildRangedWeaponsManagerTable() {
 }
 
 // ─── COLLAPSIBLE SECTIONS ───────────────────────────────────────────────────
+// Shop quick-links: open the section if it's collapsed, then scroll it to the top (below the sticky link bar).
+function shopJump(id) {
+  const body = document.getElementById('body-' + id);
+  if (body && body.classList.contains('collapsed')) toggleCollapse(id);
+  const head = document.getElementById('head-' + id);
+  if (!head) return;
+  head.style.scrollMarginTop = ((document.getElementById('shop-jump')?.offsetHeight || 0) + 8) + 'px';
+  head.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 function toggleCollapse(id) {
   document.getElementById('body-'+id).classList.toggle('collapsed');
   document.getElementById('arrow-'+id).classList.toggle('collapsed');
@@ -7760,7 +7778,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114b';
+const VERSION = 'v0.1.20261114c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
