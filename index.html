@@ -1679,6 +1679,10 @@
             <input type="text" id="mf-drainsblood" placeholder="0" title="Natural weapons only. Above 0, a wielder who is Holding someone gets a Drain Blood action: takes up to this much Blood from the held target (no roll, ignores armor) and heals its own Toughness by the same amount. 0 = none.">
           </div>
           <div class="field">
+            <label>Knockback (ft)</label>
+            <input type="text" id="mf-knockback" placeholder="0" title="How far a hit at full damage throws a 150 lb target straight back. Lighter targets fly further, heavier or armored ones less, Prone targets half as far; hitting a wall or another body does slam damage. 0 = none. Smashing weapons have sensible defaults.">
+          </div>
+          <div class="field">
             <label>Natural Weapon Slot</label>
             <select id="mf-naturalslot">
               <option value="">— Held weapon (not natural) —</option>
@@ -5382,6 +5386,7 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-price').value       = row ? (row.price || 0) : 0;
   document.getElementById('mf-quintessence').value = row ? (row.quintessence || 0) : 0;
   document.getElementById('mf-drainsblood').value = row ? (row.drainsBlood || 0) : 0;
+  document.getElementById('mf-knockback').value = row ? _knockbackFor(row) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
   document.getElementById('mf-weapontype').value  = row ? (row.weaponType || '') : '';
   _refreshWeaponTypeList();
@@ -5438,6 +5443,7 @@ function saveMeleeWeapon() {
   };
   const drainsBlood = parseFloat(document.getElementById('mf-drainsblood').value) || 0;
   if (drainsBlood > 0) row.drainsBlood = Math.round(drainsBlood);
+  row.knockback = Math.max(0, parseFloat(document.getElementById('mf-knockback').value) || 0); // explicit, so a GM can set 0 to turn the default off
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
@@ -7743,7 +7749,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261113h';
+const VERSION = 'v0.1.20261113i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10717,6 +10723,35 @@ const HIT_EFFECTS = [
     },
   },
   {
+    // Smashing weapons knock a body back: the weapon row's knockback (see _knockbackFor) x how hard the hit
+    // landed x 150/weight (x half if Prone), directly away from the attacker, with the same wall / creature
+    // slam rules as an explosion (see _blowbackSlide). Silent in the generic effect list - it writes its own line.
+    key: 'knockback', label: 'Knockback', icon: '💥', silent: true,
+    gate: ctx => ctx.finalDamage > 0 && _knockbackFor(ctx.weaponRow) > 0 && !!ctx.attackerCombatantId,
+    onHit: async ctx => {
+      const tok = mapTokens[ctx.targetTokenId], atk = _pathFindToken(ctx.attackerCombatantId);
+      if (!tok || !atk || mapScalePPF <= 0 || !mapImgW || !mapImgH) return;
+      const ref = _entityRef(ctx.targetEntityType, ctx.targetEntityId);
+      const ent = getEntity(ref);
+      if (!ent) return;
+      const stuck = ['held', 'holding', 'carrying'].some(k => ctx.conds.has(k))
+        || (Array.isArray(tok.conditions) && tok.conditions.some(x => x.startsWith('borneby:')));
+      if (stuck) return;
+      const weight = _blastTokenWeight(ent, tok);
+      const cap = Math.max(1, ctx.weaponRow.damageMax || 1);
+      const pushFt = _knockbackFor(ctx.weaponRow) * Math.min(1.5, ctx.finalDamage / cap) * _weightFactor(weight)
+        * (ctx.conds.has('prone') ? BLAST.pronePush : 1);
+      if (pushFt < BLAST.minPushFt) return;
+      const ftX = (tok.x_pct - atk.x_pct) / 100 * mapImgW / mapScalePPF, ftY = (tok.y_pct - atk.y_pct) / 100 * mapImgH / mapScalePPF;
+      let ux = ftX, uy = ftY; const len = Math.hypot(ux, uy);
+      if (len < 0.1) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); } else { ux /= len; uy /= len; }
+      const r = await _blowbackSlide(tok, ref, ux, uy, pushFt, weight);
+      const txt = `Knocked back ${Math.round(r.travel)} ft${r.slamText}`;
+      logCombat(`${ent.name} is ${txt.charAt(0).toLowerCase() + txt.slice(1)}.`, 'hit');
+      if (ctx.dmgEl) ctx.dmgEl.innerHTML += `<div style="font-size:0.72rem;color:#e05555;margin-top:3px;">💥 ${_paEsc(txt)}</div>`;
+    },
+  },
+  {
     // Head hit → chance to stun. Cleared by a manual recovery save (Shake Off
     // Stun in the action dialog → atResolveRecovery): roll-under Toughness ×
     // rounds-stunned, which grows each round so it always ends. stunsince: marks
@@ -11998,7 +12033,9 @@ const BLAST = {
   minPushFt:   2,    // pushes shorter than this are shrugged off
   slamPerFt:   0.2,  // slam damage per foot of push the body still had when it stopped (1 per 5 ft)
   contactFt:   3,    // how close two bodies' centres get before one blocks the other
+  maxLightBonus: 4,  // the lightest bodies fly at most this many times the reference distance
 };
+function _weightFactor(weight) { return Math.min(BLAST.maxLightBonus, BLAST.refWeight / weight); }
 function _isBlastSpell(spell) { return !!(spell && spell.targetType === 'Area' && (spell.halfOnSave || spell.blowback > 0)); }
 
 function _blastTokenWeight(ent, token) {
@@ -12026,7 +12063,7 @@ async function _applyBlast(st, ent, token, saved) {
     const stuck = ['held', 'holding', 'carrying'].some(k => ent.conditions?.has(k))
       || (Array.isArray(token.conditions) && token.conditions.some(x => x.startsWith('borneby:')));
     const weight = _blastTokenWeight(ent, token);
-    const pushFt = spell.blowback * (1 - (1 - BLAST.edgePush) * frac) * (BLAST.refWeight / weight) * (prone ? BLAST.pronePush : 1);
+    const pushFt = spell.blowback * (1 - (1 - BLAST.edgePush) * frac) * _weightFactor(weight) * (prone ? BLAST.pronePush : 1);
     if (!stuck && pushFt >= BLAST.minPushFt) {
       st.pushes = st.pushes || [];
       st.pushes.push({ token, ent, pushFt, distFt, weight, center: c });
@@ -12036,69 +12073,80 @@ async function _applyBlast(st, ent, token, saved) {
   return parts.join(', ') || (saved ? 'unharmed' : '');
 }
 
-// Move every queued token away from the blast, stopping at walls / the map edge / other bodies, then
-// slam damage for whatever force was left.
-async function _applyBlastPushes(st) {
-  const pushes = (st.pushes || []).sort((a, b) => a.distFt - b.distFt);
-  if (!pushes.length || mapScalePPF <= 0 || !mapImgW || !mapImgH) return;
+// Knockback from a smashing weapon is the same physics as a blast, just from a point-blank source: the
+// weapon row's knockback (ft a 150 lb person is thrown by a full-damage blow) scales with how hard the hit
+// landed (damage dealt / the row's damage cap), target weight, and Prone. A weapon row can set its own
+// `knockback`; rows that never did fall back to these defaults, keyed by weapon (smashing weapons only).
+const KNOCKBACK_DEFAULTS = {
+  'Club': 6, 'Greatclub': 12, 'Hammer, Sledge': 10, 'Mace': 6, 'Morningstar': 5, 'Staff': 4,
+  'Bare Handed': 2, 'Tail Slam': 10, 'Hind Hooves': 6, 'Fore Hooves': 5, 'Kick': 4,
+};
+function _knockbackFor(row) {
+  if (!row) return 0;
+  if (row.knockback !== undefined && row.knockback !== null) return Math.max(0, +row.knockback || 0);
+  if (typeof MELEE_WEAPONS === 'undefined' || !MELEE_WEAPONS.includes(row)) return 0;
+  if (row.weapon === 'Bare Handed') return row.action === 'Crush' ? 8 : row.action === 'Smash' ? 2 : 0;
+  if (/pommel/i.test(row.action)) return 1;
+  if (/bash/i.test(row.action) && /shield/i.test(row.weapon)) return 5;
+  if (/^(smash|slam|stomp|kick)/i.test(row.action)) return KNOCKBACK_DEFAULTS[row.weapon] ?? 0;
+  return 0;
+}
+
+// Slide one token pushFt feet along the unit vector (ux, uy), stopping at the map edge, a wall or closed
+// door, or another body, then slam damage for the force it still had. Returns { travel, slamText }.
+async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight) {
   const toFt = t => ({ x: t.x_pct / 100 * mapImgW / mapScalePPF, y: t.y_pct / 100 * mapImgH / mapScalePPF });
   const pctPerFtX = mapScalePPF / mapImgW * 100, pctPerFtY = mapScalePPF / mapImgH * 100;
-  for (const p of pushes) {
-    const tok = mapTokens[p.token.id];
-    if (!tok) continue;
-    const from = toFt(tok), cFt = toFt({ x_pct: p.center.xPct, y_pct: p.center.yPct });
-    let ux = from.x - cFt.x, uy = from.y - cFt.y;
-    const len = Math.hypot(ux, uy);
-    if (len < 0.5) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
-    else { ux /= len; uy /= len; }
-    let travel = p.pushFt, stop = null, hitTok = null;
-    // map edge
-    const edgeT = [
-      ux > 0 ? (100 - tok.x_pct) / (ux * pctPerFtX) : ux < 0 ? (0 - tok.x_pct) / (ux * pctPerFtX) : Infinity,
-      uy > 0 ? (100 - tok.y_pct) / (uy * pctPerFtY) : uy < 0 ? (0 - tok.y_pct) / (uy * pctPerFtY) : Infinity,
-    ].reduce((a, b) => Math.min(a, b), Infinity);
-    if (edgeT < travel) { travel = Math.max(0, edgeT); stop = 'edge'; }
-    // walls and closed doors
-    const dest = { x_pct: tok.x_pct + ux * travel * pctPerFtX, y_pct: tok.y_pct + uy * travel * pctPerFtY };
-    const clipped = _clipRoute([{ x_pct: tok.x_pct, y_pct: tok.y_pct }, dest], { walls: true });
-    if (clipped.stop === 'wall') {
-      const e = clipped.points[clipped.points.length - 1];
-      travel = Math.min(travel, _pctDistFt(tok.x_pct, tok.y_pct, e.x_pct, e.y_pct) || 0); stop = 'wall';
-    }
-    // other bodies in the way
-    for (const o of Object.values(mapTokens)) {
-      if (o.id === tok.id || !o.entity_type || o.entity_type === 'item' || !o.entity_id) continue;
-      const of_ = toFt(o), vx = of_.x - from.x, vy = of_.y - from.y;
-      const along = vx * ux + vy * uy, perp = Math.abs(vx * uy - vy * ux);
-      if (along <= 0.5 || perp >= BLAST.contactFt) continue;
-      const contactAt = Math.max(0, along - Math.sqrt(BLAST.contactFt ** 2 - perp ** 2));
-      if (contactAt < travel) { travel = contactAt; stop = 'creature'; hitTok = o; }
-    }
-    // slide the token
-    if (travel > 0.25) {
-      const nx = tok.x_pct + ux * travel * pctPerFtX, ny = tok.y_pct + uy * travel * pctPerFtY;
-      tok.x_pct = nx; tok.y_pct = ny;
-      const el = document.getElementById('token-' + tok.id);
-      if (el) { el.style.transition = 'left 0.4s ease-out, top 0.4s ease-out'; el.style.left = nx + '%'; el.style.top = ny + '%'; setTimeout(() => { el.style.transition = ''; }, 600); }
-      tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny } });
-      await sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', tok.id);
-    }
-    // slam
-    const left = p.pushFt - travel;
-    let slamText = '';
-    if (stop && left >= BLAST.minPushFt) {
-      const slam = Math.max(1, Math.round(left * BLAST.slamPerFt * Math.sqrt(p.weight / BLAST.refWeight)));
-      const hit = async (ent2, tok2, amount) => {
-        const slot = _armorSlotForPart(ent2.bodyType, null);
-        const dr = getArmorDR((ent2.armor && ent2.armor[slot]) || 'None', 'crush');
-        const dmg = Math.max(0, amount - dr);
-        if (dmg > 0) {
-          await applyDamage(ent2.type === 'char' ? 'character' : 'creature', ent2.id, dmg, 0);
-          await _checkDownedState(tok2.id, getEntity(ent2.ref));
-        }
-        return dmg;
-      };
-      const ent = getEntity(p.ent.ref) || p.ent;
+  const from = toFt(tok);
+  let travel = pushFt, stop = null, hitTok = null;
+  // map edge
+  const edgeT = [
+    ux > 0 ? (100 - tok.x_pct) / (ux * pctPerFtX) : ux < 0 ? (0 - tok.x_pct) / (ux * pctPerFtX) : Infinity,
+    uy > 0 ? (100 - tok.y_pct) / (uy * pctPerFtY) : uy < 0 ? (0 - tok.y_pct) / (uy * pctPerFtY) : Infinity,
+  ].reduce((a, b) => Math.min(a, b), Infinity);
+  if (edgeT < travel) { travel = Math.max(0, edgeT); stop = 'edge'; }
+  // walls and closed doors
+  const dest = { x_pct: tok.x_pct + ux * travel * pctPerFtX, y_pct: tok.y_pct + uy * travel * pctPerFtY };
+  const clipped = _clipRoute([{ x_pct: tok.x_pct, y_pct: tok.y_pct }, dest], { walls: true });
+  if (clipped.stop === 'wall') {
+    const e = clipped.points[clipped.points.length - 1];
+    travel = Math.min(travel, _pctDistFt(tok.x_pct, tok.y_pct, e.x_pct, e.y_pct) || 0); stop = 'wall';
+  }
+  // other bodies in the way
+  for (const o of Object.values(mapTokens)) {
+    if (o.id === tok.id || !o.entity_type || o.entity_type === 'item' || !o.entity_id) continue;
+    const of_ = toFt(o), vx = of_.x - from.x, vy = of_.y - from.y;
+    const along = vx * ux + vy * uy, perp = Math.abs(vx * uy - vy * ux);
+    if (along <= 0.5 || perp >= BLAST.contactFt) continue;
+    const contactAt = Math.max(0, along - Math.sqrt(BLAST.contactFt ** 2 - perp ** 2));
+    if (contactAt < travel) { travel = contactAt; stop = 'creature'; hitTok = o; }
+  }
+  // slide the token
+  if (travel > 0.25) {
+    const nx = tok.x_pct + ux * travel * pctPerFtX, ny = tok.y_pct + uy * travel * pctPerFtY;
+    tok.x_pct = nx; tok.y_pct = ny;
+    const el = document.getElementById('token-' + tok.id);
+    if (el) { el.style.transition = 'left 0.4s ease-out, top 0.4s ease-out'; el.style.left = nx + '%'; el.style.top = ny + '%'; setTimeout(() => { el.style.transition = ''; }, 600); }
+    tokenChannel?.send({ type: 'broadcast', event: 'token-move', payload: { id: tok.id, x_pct: nx, y_pct: ny } });
+    await sb.from('map_tokens').update({ x_pct: nx, y_pct: ny }).eq('id', tok.id);
+  }
+  // slam
+  const left = pushFt - travel;
+  let slamText = '';
+  if (stop && left >= BLAST.minPushFt) {
+    const slam = Math.max(1, Math.round(left * BLAST.slamPerFt * Math.sqrt(weight / BLAST.refWeight)));
+    const hit = async (ent2, tok2, amount) => {
+      const slot = _armorSlotForPart(ent2.bodyType, null);
+      const dr = getArmorDR((ent2.armor && ent2.armor[slot]) || 'None', 'crush');
+      const dmg = Math.max(0, amount - dr);
+      if (dmg > 0) {
+        await applyDamage(ent2.type === 'char' ? 'character' : 'creature', ent2.id, dmg, 0);
+        await _checkDownedState(tok2.id, getEntity(ent2.ref));
+      }
+      return dmg;
+    };
+    const ent = getEntity(entRef);
+    if (ent) {
       const d1 = await hit(ent, tok, slam);
       slamText = stop === 'creature' ? ` and slams into ${hitTok.label || 'someone'} for ${d1}` : ` and slams into ${stop === 'edge' ? 'the edge of the map' : 'a wall'} for ${d1}`;
       if (hitTok) {
@@ -12108,7 +12156,25 @@ async function _applyBlastPushes(st) {
         if (ent2) { const d2 = await hit(ent2, hitTok, Math.max(1, Math.round(slam / 2))); slamText += ` (${ent2.name} takes ${d2})`; }
       }
     }
-    logCombat(`${p.ent.name} is thrown ${Math.round(travel)} ft by ${st.spell.name}${slamText}.`, 'hit');
+  }
+  return { travel, slamText };
+}
+
+// Move every queued blast victim away from the centre (nearest first).
+async function _applyBlastPushes(st) {
+  const pushes = (st.pushes || []).sort((a, b) => a.distFt - b.distFt);
+  if (!pushes.length || mapScalePPF <= 0 || !mapImgW || !mapImgH) return;
+  const toFt = t => ({ x: t.x_pct / 100 * mapImgW / mapScalePPF, y: t.y_pct / 100 * mapImgH / mapScalePPF });
+  for (const p of pushes) {
+    const tok = mapTokens[p.token.id];
+    if (!tok) continue;
+    const from = toFt(tok), cFt = toFt({ x_pct: p.center.xPct, y_pct: p.center.yPct });
+    let ux = from.x - cFt.x, uy = from.y - cFt.y;
+    const len = Math.hypot(ux, uy);
+    if (len < 0.5) { const a = Math.random() * Math.PI * 2; ux = Math.cos(a); uy = Math.sin(a); }
+    else { ux /= len; uy /= len; }
+    const r = await _blowbackSlide(tok, p.ent.ref, ux, uy, p.pushFt, p.weight);
+    logCombat(`${p.ent.name} is thrown ${Math.round(r.travel)} ft by ${st.spell.name}${r.slamText}.`, 'hit');
   }
   refreshUI();
 }
@@ -13286,6 +13352,7 @@ async function _checkDownedState(tokenId, ent) {
 
 // Resolve every applicable effect for a hit; apply and announce. dmgEl optional.
 async function _runHitEffects(ctx, dmgEl) {
+  ctx.dmgEl = dmgEl;
   for (const eff of HIT_EFFECTS) {
     if (eff.parts && !eff.parts.includes(ctx.hitPart)) continue;
     if (eff.gate && !eff.gate(ctx)) continue;
@@ -13304,7 +13371,7 @@ async function _runHitEffects(ctx, dmgEl) {
       // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
       applied = false; line = '';
     } else {
-      applied = true; line = eff.label;
+      applied = true; line = eff.silent ? '' : eff.label;
     }
     if (applied && eff.onHit) {
       await eff.onHit(ctx);
@@ -13462,7 +13529,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
       await _runHitEffects({
         hitPart, category, finalDamage, toughnessMax, bodyType: ent.bodyType,
         targetTokenId, targetEntityType, targetEntityId,
-        actionLabel, attackerCombatantId: ctx.attackerCombatantId,
+        actionLabel, attackerCombatantId: ctx.attackerCombatantId, weaponRow,
         conds: getConditions(targetTokenId),
         // Elemental categories (shock/freeze/corrode/burn) would otherwise
         // collapse to 'smashbash' inside _damageType's slash/stab/smashbash-
