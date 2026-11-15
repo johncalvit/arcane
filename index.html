@@ -7788,7 +7788,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114e';
+const VERSION = 'v0.1.20261114f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9514,10 +9514,10 @@ function _updateTokenRing(tokenId) {
   _hpSeen[tokenId] = lost;
   if (prev !== undefined && lost !== prev) _hpPopup(el, t, lost - prev);
   const S = getTokenSize(t);
-  const key = [dT, dS, dB, tMax, sMax, bMax, S].join('|');
+  const key = [dT, dB, tMax, bMax, S].join('|');
   let box = el.querySelector('.token-hp');
   if (box && box.dataset.k === key) return;
-  const pad = 9, W = S + pad * 2, c = W / 2;
+  const pad = 6, W = S + pad * 2, c = W / 2;
   const ring = (r, frac, color) => {
     const C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, frac));
     return '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="1"/>' +
@@ -9525,8 +9525,8 @@ function _updateTokenRing(tokenId) {
   };
   const tip = 'Toughness ' + (tMax - dT) + '/' + tMax + ' - Stamina ' + (sMax - dS) + '/' + sMax + (dB > 0 ? ' - Blood ' + (bMax - dB) + '/' + bMax : '');
   const svg = '<svg width="' + W + '" height="' + W + '" viewBox="0 0 ' + W + ' ' + W + '"><title>' + tip + '</title>' +
-    ring(S / 2 + 2, 1 - dT / tMax, '#4a9cf0') + ring(S / 2 + 4, 1 - dS / sMax, '#4cc24f') +
-    (dB > 0 ? ring(S / 2 + 6, 1 - dB / bMax, '#e04848') : '') + '</svg>';
+    ring(S / 2 + 1.5, 1 - dT / tMax, '#4a9cf0') +
+    (dB > 0 ? ring(S / 2 + 2.5, 1 - dB / bMax, '#e04848') : '') + '</svg>';
   if (!box) { box = document.createElement('div'); box.className = 'token-hp'; el.appendChild(box); }
   box.style.top = (-pad) + 'px';
   box.dataset.k = key;
