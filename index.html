@@ -1828,6 +1828,10 @@
           <div class="field"><label>Buff Attribute</label><input type="text" id="cf-buffattr" placeholder="e.g. Night Vision"></div>
           <div class="field"><label>Buff Amount</label><input type="text" id="cf-buffamount" placeholder="0"></div>
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="cf-buffminutes" placeholder="e.g. 10-100"></div>
+          <div class="field"><label>Blast Radius (ft)</label><input type="text" id="cf-blastradius" placeholder="0" title="Above 0 makes this a thrown explosive (a grenade) instead of something you drink"></div>
+          <div class="field"><label>Blast Max Damage</label><input type="text" id="cf-blastdamage" placeholder="0"></div>
+          <div class="field"><label>Blowback (ft)</label><input type="text" id="cf-blowback" placeholder="0" title="Feet a 150 lb person is thrown at the centre of the blast"></div>
+          <div class="field"><label>Throw Range (ft)</label><input type="text" id="cf-throwrange" placeholder="40"></div>
         </div>
         <div class="field" style="margin-top:10px;">
           <label>Description <span style="color:var(--text-dim);font-weight:normal;">(shown to players so they know what it does)</span></label>
@@ -5624,6 +5628,11 @@ const DEFAULT_CONSUMABLES = [
     description:"A ruby-red draft that knits flesh back together. Restores 5 Toughness and stanches any active bleeding." },
   { name:"Night Vision Potion",wt:0.5, price:800,  restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"Night Vision", buffAmount:10, buffMinutes:"10-100",
     description:"A murky brew that makes the drinker's eyes glint faintly in the dark. Grants a temporary +10 Night Vision for 10-100 minutes (GM tracks when it fades)." },
+  // Explosive: thrown at a spot rather than drunk (blastRadius > 0 makes a consumable a grenade - see
+  // _grenadeSpell). A little weaker than the Arcane Blast spell in every respect.
+  { name:"Arcane Grenade",     wt:1,   price:1500, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    blastRadius:12, blastDamage:11, blastCategory:"crush", blowback:15, throwRange:40,
+    description:"A sealed glass sphere of unstable arcane force. Throw it (up to 40 ft): it bursts in a 12 ft radius for up to 11 crushing damage (a save halves it) and hurls everyone caught away from the blast. A bad throw scatters. Don't stand too close." },
 ];
 let CONSUMABLES = [...DEFAULT_CONSUMABLES];
 let editingConsumableIndex = null;
@@ -6482,6 +6491,10 @@ function openConsumableForm(index) {
   document.getElementById('cf-buffattr').value    = row ? (row.buffAttr || '') : '';
   document.getElementById('cf-buffamount').value  = row ? row.buffAmount : '';
   document.getElementById('cf-buffminutes').value = row ? (row.buffMinutes || '') : '';
+  document.getElementById('cf-blastradius').value = row ? (row.blastRadius || '') : '';
+  document.getElementById('cf-blastdamage').value = row ? (row.blastDamage || '') : '';
+  document.getElementById('cf-blowback').value    = row ? (row.blowback || '') : '';
+  document.getElementById('cf-throwrange').value  = row ? (row.throwRange || '') : '';
   document.getElementById('cf-description').value = row ? (row.description || '') : '';
   document.getElementById('consumable-form').style.display = 'block';
 }
@@ -6506,8 +6519,15 @@ function saveConsumable() {
     buffAmount: parseFloat(document.getElementById('cf-buffamount').value) || 0,
     buffMinutes: document.getElementById('cf-buffminutes').value.trim(),
     description: document.getElementById('cf-description').value.trim(),
+    blastRadius: parseFloat(document.getElementById('cf-blastradius').value) || 0,
+    blastDamage: parseFloat(document.getElementById('cf-blastdamage').value) || 0,
+    blowback:    parseFloat(document.getElementById('cf-blowback').value) || 0,
+    throwRange:  parseFloat(document.getElementById('cf-throwrange').value) || 0,
   };
   if (editingConsumableIndex !== null) {
+    const old = CONSUMABLES[editingConsumableIndex] || {}; // keep fields the form has no input for
+    if (old.blastCategory) row.blastCategory = old.blastCategory;
+    if (old.blastSave) row.blastSave = old.blastSave;
     CONSUMABLES[editingConsumableIndex] = row;
   } else {
     CONSUMABLES.push(row);
@@ -7788,6 +7808,7 @@ function gatherConfigData() {
     techniqueExtras: TECHNIQUE_EXTRAS_VERSION,
     humanoidNaturals: 2,
     arcaneBlast: 1,
+    arcaneGrenade: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
@@ -7820,7 +7841,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114i';
+const VERSION = 'v0.1.20261115a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8835,6 +8856,11 @@ function applyConfigData(data) {
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
   _migrateSpearShortLong(); // see its comment
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
+  // Configs saved before the Arcane Grenade existed: add it once (a GM who later deletes it keeps it gone).
+  if (data.consumables && data.consumables.length && data.arcaneGrenade !== 1) {
+    const ag = DEFAULT_CONSUMABLES.find(c => c.name === 'Arcane Grenade');
+    if (ag && !data.consumables.some(c => c.name === ag.name)) data.consumables = [...data.consumables, { ...ag }];
+  }
   replaceArrayContents(CONSUMABLES,     data.consumables   && data.consumables.length   ? data.consumables   : DEFAULT_CONSUMABLES);
   replaceArrayContents(SPELLS,          data.spells        && data.spells.length        ? data.spells        : DEFAULT_SPELLS);
   // A config saved before prices/weights existed (or with them blank) gets the defaults, once - the flag
@@ -11600,7 +11626,7 @@ function enterAoeCastMode(casterCid, spell) {
   _aoeRedraw(null, null);
   mapChannel?.send({ type: 'broadcast', event: 'aoe-preview-start', payload: {
     casterCid, rangeFt: aoeRangeFt,
-    spell: { name: spell.name, aoeShape: spell.aoeShape, aoeSize: spell.aoeSize },
+    spell: { name: spell.name, aoeShape: spell.aoeShape, aoeSize: spell.aoeSize, _grenade: !!spell._grenade },
   }});
 }
 
@@ -11804,6 +11830,7 @@ function aoeMouseDown(e) {
   }
 
   exitAoeCastMode();
+  if (spell._grenade) { _resolveGrenadeThrow(casterCid, spell, { xPct, yPct }); return true; }
   _resolveSpellCast(casterCid, spell.name, casterCid, { xPct, yPct });
   return true;
 }
@@ -12048,7 +12075,7 @@ function _aoeAffectedTokens(casterCid, spell, aimXPct, aimYPct) {
   const ux = (centerFt.x - casterFt.x) / dirLen, uy = (centerFt.y - casterFt.y) / dirLen; // unit vector, Line only
 
   return Object.values(mapTokens).filter(t => {
-    if (t.id === casterToken.id) return false;
+    if (t.id === casterToken.id && !spell._grenade) return false; // a grenade catches its own thrower too
     if (!t.entity_type || !t.entity_id) return false;
     const tFt = toFt(t.x_pct, t.y_pct);
     if (shape === 'Sector') {
@@ -12319,6 +12346,78 @@ async function _applyBlastPushes(st) {
   refreshUI();
 }
 
+// ── Grenades: a consumable with blastRadius > 0 is thrown at a spot and resolves as an explosion ──────────
+// It is turned into a spell-shaped object so the whole Area/blast pipeline (aim preview, saves, damage
+// falloff, blowback, slams) is reused unchanged. No casting roll and no Quintessence: instead a throw roll,
+// and a miss lands the grenade somewhere else nearby.
+function _grenadeSpell(c) {
+  if (!c || !(c.blastRadius > 0)) return null;
+  return {
+    name: c.name, _grenade: true, targetType: 'Area', aoeShape: 'Circle', spellType: 'Attack',
+    aoeSize: c.blastRadius + ' ft radius', range: (c.throwRange > 0 ? c.throwRange : 40) + ' feet',
+    damageMax: c.blastDamage || 0, damageCategory: c.blastCategory || 'crush',
+    saveFormula: c.blastSave || 'Power + Speed + Physical Coordination',
+    halfOnSave: true, blowback: c.blowback || 0,
+  };
+}
+function _grenadeByName(name) {
+  if (typeof CONSUMABLES === 'undefined' || !name) return null;
+  const norm = normalizeWeaponName(name);
+  return _grenadeSpell(CONSUMABLES.find(c => normalizeWeaponName(c.name) === norm));
+}
+const GRENADE_THROW_FORMULA = 'Physical Coordination + Manual Dexterity';
+// Chance to land it on the chosen spot: twice the throw value + 20, less 1 per 2 ft thrown (5-95%).
+function _grenadeThrowTarget(ent, distFt) {
+  const base = calcHitValue(GRENADE_THROW_FORMULA, ent.attrs);
+  return Math.max(5, Math.min(95, Math.round((base ?? 25) * 2 + 20 - (distFt || 0) / 2)));
+}
+async function _resolveGrenadeThrow(throwerCid, g, pt) {
+  const ent = getEntity(throwerCid);
+  const tok = _pathFindToken(throwerCid);
+  if (!ent || !tok || mapScalePPF <= 0 || !mapImgW || !mapImgH) { showToast('No map/scale to throw on.', 'error'); return; }
+  const itemName = g._item || g.name;
+  const distFt = _pctDistFt(tok.x_pct, tok.y_pct, pt.xPct, pt.yPct) || 0;
+  const target = _grenadeThrowTarget(ent, distFt);
+  openRoller({
+    label: `Throw: ${g.name} — ${ent.name}`,
+    target, targetLabel: `${GRENADE_THROW_FORMULA} · ${Math.round(distFt)} ft throw · a miss scatters`,
+    onComplete: async (n) => {
+      const onTarget = n <= 5 || (n < 96 && n <= target);
+      let land = { x_pct: pt.xPct, y_pct: pt.yPct }, wideFt = 0;
+      if (!onTarget) {
+        // Goes wide: 20-50% of the throw distance (at least 3 ft) in a random direction.
+        wideFt = Math.max(3, distFt * (0.2 + 0.3 * Math.random()));
+        const a = Math.random() * Math.PI * 2;
+        land = {
+          x_pct: Math.max(0, Math.min(100, land.x_pct + Math.cos(a) * wideFt * mapScalePPF / mapImgW * 100)),
+          y_pct: Math.max(0, Math.min(100, land.y_pct + Math.sin(a) * wideFt * mapScalePPF / mapImgH * 100)),
+        };
+      }
+      // A wall or closed door in the way stops it there.
+      let wallNote = '';
+      const clipped = _clipRoute([{ x_pct: tok.x_pct, y_pct: tok.y_pct }, land], { walls: true });
+      if (clipped.stop === 'wall') { land = clipped.points[clipped.points.length - 1]; wallNote = ' and bursts against a wall'; }
+      const center = { xPct: land.x_pct, yPct: land.y_pct };
+      await _expendHeldItem(throwerCid, itemName);
+      logCombat(`${ent.name} throws ${g.name}${onTarget ? '' : ` - it goes wide by ${Math.round(wideFt)} ft`}${wallNote}.`, onTarget ? 'good' : 'roll');
+      const { radius } = _parseAoeGeometry(g);
+      const px = { x: center.xPct / 100 * mapImgW, y: center.yPct / 100 * mapImgH };
+      const fx = { mapId: activeMapId, x1: px.x, y1: px.y, x2: px.x, y2: px.y, text: g.name + '!', slam: onTarget ? ' ' : 'wide of the mark', burstFt: radius };
+      _blowbackFxShow(fx);
+      mapChannel?.send({ type: 'broadcast', event: 'blowback-fx', payload: fx });
+      const targets = _aoeAffectedTokens(throwerCid, g, center.xPct, center.yPct);
+      if (!targets.length) showToast(`${g.name} catches no one.`, 'warn');
+      else {
+        logCombat(`${g.name} catches ${targets.length} in the blast.`, 'roll');
+        await _resolveAoeFlagged(ent, g, targets, center);
+      }
+      refreshUI();
+      // Out of combat this came from the Explore dialog - go back to it.
+      if (!_atIsCombatActive() && typeof atOpenExploreDialog === 'function' && atCombatants.some(c => c.id === throwerCid)) atOpenExploreDialog(throwerCid);
+    },
+  });
+}
+
 function _aoeResolveSaveTarget(spell, ent) {
   const saveVal = calcHitValue(spell.saveFormula, ent.attrs);
   return saveVal != null ? Math.max(1, Math.min(99, saveVal)) : 50;
@@ -12433,7 +12532,7 @@ async function _aoeResolveFinish() {
 // player's client to stop waiting once every target's save is resolved.
 function _aoeReceiveResolveStart(payload) {
   if (!isGM()) return;
-  const spell = SPELLS.find(s => s.name === payload.spellName);
+  const spell = SPELLS.find(s => s.name === payload.spellName) || _grenadeByName(payload.spellName);
   const casterEnt = getEntity(payload.casterCid);
   const targets = (payload.targetIds || []).map(id => mapTokens[id]).filter(Boolean);
   if (!spell || !casterEnt || !targets.length) return;
@@ -16322,7 +16421,7 @@ function _blowbackFxShow(fx) {
   if (fx.slam) {
     const b = document.createElement('div');
     b.className = 'bb-burst';
-    const d = 70 * k;
+    const d = fx.burstFt > 0 ? fx.burstFt * 2 * mapScalePPF : 70 * k;
     b.style.cssText = 'left:' + fx.x2 + 'px;top:' + fx.y2 + 'px;width:' + d + 'px;height:' + d + 'px;border-width:' + (3 * k) + 'px;';
     add(b, 1100);
   }
@@ -17139,6 +17238,11 @@ let attackAimed       = false; // an Aimed shot (Marksmen technique) - scales th
 let attackHeavy       = null;  // a declared Heavy Blow: {stam, dmg, name}
 
 function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt, aimed, heavy) {
+  // A grenade is aimed at a spot on the map, not at a token - it uses the area-spell aiming instead.
+  if (actionLabel === 'Throw Grenade') {
+    const g = _grenadeByName(weaponName);
+    if (g) { enterAoeCastMode(combatantId, { ...g, _item: weaponName }); return; }
+  }
   if (attackMode) exitAttackMode();
   if (pathMode)   exitPathMode();
   if (targetAimMode) exitTargetAimMode();

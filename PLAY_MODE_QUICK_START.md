@@ -30,6 +30,8 @@ When combat starts, press **Roll** under Combat to roll your initiative. When it
 
 **Knockback:** explosions (such as Arcane Blast) and heavy smashing blows (clubs, maces, hammers, some monster slams) can throw a creature backward, directly away from the blast or the attacker. A streak and floating text on the map show who was thrown and how far. Lighter creatures fly further, heavy or armored ones barely move, and anyone lying Prone is thrown half as far (and takes half damage from an explosion). Anything thrown into a wall or another creature takes slam damage — and so does whoever it hits. Grabbing, grabbed and carried creatures stay put.
 
+**Arcane Grenade:** a throwable explosive from the Shop. Hold it in a hand, choose **💣 Throw** in the Actions (or Explore) dialog and click where it should land (up to 40 ft). A throw roll decides whether it lands on the spot or scatters, and a wall in the way sets it off early. It bursts like a smaller Arcane Blast, and it catches the thrower too if they are inside the radius.
+
 ### Abilities
 
 Click **View** next to **Education** to see your subjects with their success percentages — click a percentage to roll it. **Spell Book** (casters) shows the spells you have memorized, and **Techniques** shows the weapon techniques you have chosen. Spells are memorized in Character Mode; magic education isn't needed to learn a spell, it only improves your chance of casting it.

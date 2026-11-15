@@ -1073,6 +1073,19 @@ function _dlgRender(body) {
     // Consumables (potions etc.) aren't weapons — one Consume chip, grab-style
     // targeting picks who receives it (including the holder).
     const consumable = (typeof CONSUMABLES !== 'undefined') ? CONSUMABLES.find(c => normalizeWeaponName(c.name) === norm) : null;
+    if (consumable && consumable.blastRadius > 0) {
+      // A grenade: thrown at a spot on the map (area aiming), ends the round like any ranged attack.
+      const cur = c.slots[chKey];
+      const lbl = `Throw — ${itemName}`;
+      if (cur?.label === lbl) return '';
+      const rng = consumable.throwRange > 0 ? consumable.throwRange : 40;
+      return _dlgChip({
+        label: '💣 Throw', sub: `${rng} ft`,
+        title: `Throw ${itemName} at a spot within ${rng} ft - click where it should land. A bad throw scatters.${consumable.description ? ' — ' + consumable.description : ''}`,
+        data: { dact: 'attack', slot: chKey, label: lbl, dur: 3,
+                item: itemName, action: 'Throw Grenade', ranged: 1, range: rng },
+      });
+    }
     if (consumable) {
       const cur = c.slots[chKey];
       const lbl = `Consume — ${itemName}`;
@@ -1679,6 +1692,8 @@ function _exploreRender(body) {
         const cn = CONSUMABLES.find(x => normalizeWeaponName(x.name) === normalizeWeaponName(n));
         const qty = counts[n] > 1 ? ` x${counts[n]}` : '';
         const tip = cn.description ? ` - ${cn.description}` : '';
+        if (cn.blastRadius > 0) return _dlgChip({ label: `💣 Throw ${n}${qty}`, sub: 'pick a spot', disabled: !c,
+          title: (!c ? 'Not on the map yet' : `Throw ${n} - click where it should land`) + tip, data: { dact: 'xthrow', item: n } });
         return _dlgChip({ label: `🧪 Drink ${n}${qty}`, title: `Use ${n} on yourself${tip}`, data: { dact: 'xdrink', item: n } })
              + _dlgChip({ label: '→ Give', sub: 'to someone', title: `Administer ${n} to another character on the map`, data: { dact: 'xgive', item: n } });
       }).join('');
@@ -1768,6 +1783,11 @@ async function _exploreClick(e) {
         _exploreRender(body);
         break;
       }
+      case 'xthrow':
+        atCloseModal(); // Explore reopens itself once the throw has resolved (see _resolveGrenadeThrow)
+        showToast(`Click where to throw the ${d.item}.`);
+        enterAttackMode(id, d.item, 'Throw Grenade', true, 0);
+        break;
       case 'xgive':
         atCloseModal(); // Explore reopens itself once it's administered (see attackTokenClick's Consume branch)
         showToast(`Click who should receive the ${d.item}.`);
