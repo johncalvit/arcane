@@ -1,0 +1,212 @@
+// Smoke tests for the reaction stances: Sentinel, Target, Vigilant (and Infiltrate). Loaded by tests.html
+// after tests.js - see that file for how tests run and what the helper object T offers.
+//
+// Conventions here: T.geo() makes a 100 ft x 100 ft map where 1% = 1 ft, tokens are points (no radius),
+// there are no walls and melee reach is 5 ft. Facing 0 degrees points along +x. Tokens are creatures
+// unless stated, so their combatant id is 'creature::<token id>'. A token flagged 'foe' is on the other
+// side from one flagged 'friendly'.
+
+// ── Sentinel & Target (reaction zones) ───────────────────────────────────────
+test('Sentinel', 'the zone is the melee reach around the watcher, and a wall blocks it', async T => {
+  T.geo();
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['sentinel', 'friendly']), m = T.token('m', 0, 0, 'creature', 'Em', ['foe']);
+  T.ok(_sentinelZoneCheck(w, 54, 50, m), '4 ft away is inside a 5 ft reach');
+  T.ok(_sentinelZoneCheck(w, 50, 45, m), 'reach is a full circle');
+  T.ok(!_sentinelZoneCheck(w, 56, 50, m), '6 ft away is outside');
+  T.stub('_sentinelLineOfSight', () => false);
+  T.ok(!_sentinelZoneCheck(w, 54, 50, m), 'no reaction through a wall');
+});
+test('Sentinel', 'reach is measured edge to edge, so big tokens trigger sooner', async T => {
+  T.geo();
+  T.stub('getTokenSize', () => 20); // 20 px across = 1 ft radius
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['sentinel']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  T.ok(_sentinelZoneCheck(w, 57, 50, m), 'centres 7 ft apart, edges 5 ft apart');
+  T.ok(!_sentinelZoneCheck(w, 57.5, 50, m));
+  T.ok(!_sentinelZoneCheck(w, 57, 50), "without a mover only the watcher's own radius comes off");
+});
+test('Sentinel', 'a token without the stance has no zone; no map scale means no checks', async T => {
+  T.geo();
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['friendly']), m = T.token('m', 0, 0, 'creature', 'Em', ['foe']);
+  T.ok(!_sentinelZoneCheck(w, 51, 50, m));
+  w.conditions = ['sentinel']; mapScalePPF = 0;
+  T.ok(!_sentinelZoneCheck(w, 51, 50, m));
+});
+test('Sentinel', 'Target watches a narrow cone along its facing, out to weapon range', async T => {
+  T.geo();
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['target', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  const at = (deg, ft) => [50 + ft * Math.cos(deg * Math.PI / 180), 50 + ft * Math.sin(deg * Math.PI / 180)];
+  T.ok(_sentinelZoneCheck(w, ...at(0, 20), m), 'straight ahead');
+  T.ok(_sentinelZoneCheck(w, ...at(TARGET_CONE_DEG / 2 - 1, 20), m), 'just inside the edge of the cone');
+  T.ok(!_sentinelZoneCheck(w, ...at(TARGET_CONE_DEG / 2 + 1, 20), m), 'just outside the cone');
+  T.ok(!_sentinelZoneCheck(w, ...at(180, 3), m), "behind, even at arm's length");
+  T.ok(!_sentinelZoneCheck(w, ...at(0, 31), m), 'beyond weapon range');
+  w.conditions = ['target', 'facing:90'];
+  T.ok(_sentinelZoneCheck(w, 50, 70, m), 'the cone turns with the facing');
+  T.ok(!_sentinelZoneCheck(w, 70, 50, m));
+});
+test('Sentinel', 'an enemy walking into reach is caught at the point it enters', async T => {
+  T.geo();
+  T.token('w', 50, 50, 'creature', 'Ew', ['sentinel', 'friendly']); T.token('m', 30, 50, 'creature', 'Em', ['foe']);
+  const hits = _findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 50 }, { x_pct: 47, y_pct: 50 });
+  T.eq(hits.length, 1); T.eq(hits[0].sentinelCid, 'creature::w');
+  T.ok(hits[0].x_pct >= 45 && hits[0].x_pct <= 45.5, 'should stop about 5 ft short of the watcher, got x=' + hits[0].x_pct);
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 50 }, { x_pct: 40, y_pct: 50 }), [], 'a move that stays outside triggers nothing');
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 40 }, { x_pct: 70, y_pct: 40 }), [], 'passing 10 ft away triggers nothing');
+});
+test('Sentinel', 'no reaction for allies, for a watcher who cannot act, or for a mover already inside', async T => {
+  T.geo();
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['sentinel', 'friendly']), m = T.token('m', 30, 50, 'creature', 'Em', ['friendly']);
+  const walkIn = () => _findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 50 }, { x_pct: 47, y_pct: 50 });
+  T.eq(walkIn(), [], 'same side');
+  m.conditions = ['foe'];
+  T.eq(walkIn().length, 1, 'enemy (control case)');
+  for (const k of ['dead', 'unconscious', 'stunned', 'paralyzed']) { w.conditions = ['sentinel', 'friendly', k]; T.eq(walkIn(), [], k); }
+  w.conditions = ['sentinel', 'friendly', 'prone'];
+  T.eq(walkIn().length, 1, 'a prone sentinel can still react');
+  w.conditions = ['sentinel', 'friendly'];
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 46, y_pct: 50 }, { x_pct: 48, y_pct: 50 }), [], 'shuffling around inside the zone is not a fresh entry');
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 46, y_pct: 50 }, { x_pct: 30, y_pct: 50 }), [], 'walking out is not an entry');
+});
+test('Sentinel', 'the mover never triggers its own stance, and two sentinels react in the order they are reached', async T => {
+  T.geo();
+  T.token('far', 70, 50, 'creature', 'E1', ['sentinel', 'friendly']); T.token('near', 50, 50, 'creature', 'E2', ['sentinel', 'friendly']);
+  T.token('m', 30, 50, 'creature', 'Em', ['foe', 'sentinel']);
+  const hits = _findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 50 }, { x_pct: 66, y_pct: 50 });
+  T.eq(hits.map(h => h.sentinelCid), ['creature::near', 'creature::far']);
+  T.ok(hits[0].frac < hits[1].frac);
+});
+test('Sentinel', 'a character sentinel is reported by its character ref', async T => {
+  T.geo();
+  T.token('w', 50, 50, 'character', 'Hero', ['sentinel', 'friendly']); T.token('m', 30, 50, 'creature', 'Em', ['foe']);
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 30, y_pct: 50 }, { x_pct: 47, y_pct: 50 }).map(h => h.sentinelCid), ['char::Hero']);
+});
+test('Sentinel', "a triggered check waits for an answer and tells the watcher's client", async T => {
+  T.geo();
+  T.token('w', 50, 50, 'creature', 'Ew', ['sentinel', 'friendly']); T.token('m', 46, 50, 'creature', 'Em', ['foe']);
+  let shown = null; T.stub('_maybeShowSentinelPrompt', p => { shown = p; });
+  T.stub('_atIsCombatActive', () => false);
+  const p = _resolveSentinelCheck('creature::w', 'creature::m', 46, 50);
+  T.ok(_sentinelCheckPending, 'the move should be waiting on the sentinel');
+  T.eq([shown.sentinelCid, shown.moverCid, shown.vigilantSense], ['creature::w', 'creature::m', null]);
+  T.eq(_sentinelCheckPending.checkId, shown.checkId);
+  _sentinelCheckPending.resolve(false); await p; // "let it pass"
+});
+test('Sentinel', 'moving ends Sentinel, Evade, Target and Vigilant - but not Block or Infiltrate, and not for a nudge', async T => {
+  T.geo(); const rec = T.fakeWrites(); T.senses();
+  const w = T.token('w', 50, 50, 'creature', 'Ew', []);
+  T.stub('renderAtList', () => {});
+  T.stub('setCondition', async (id, k, on) => { if (!on) mapTokens[id].conditions = mapTokens[id].conditions.filter(c => c !== k); });
+  const badge = { Sentinel: 'sentinel', Evade: 'evading', Target: 'target', Vigilant: 'vigilant' };
+  for (const label of Object.keys(badge)) {
+    w.conditions = [badge[label], 'blocking', 'infiltrating'];
+    atCombatants = [{ id: 'creature::w', slots: { full: { label }, right: { label: 'Block' }, left: { label: 'Infiltrate' } } }];
+    await _cancelStancesOnMove('creature::w', 0.2);
+    T.eq(atCombatants[0].slots.full && atCombatants[0].slots.full.label, label, label + ' should survive a 0.2 ft nudge');
+    await _cancelStancesOnMove('creature::w', 10);
+    T.eq(atCombatants[0].slots.full, null, label + ' should end');
+    T.eq([atCombatants[0].slots.right.label, atCombatants[0].slots.left.label], ['Block', 'Infiltrate']);
+    T.eq(w.conditions, ['blocking', 'infiltrating'], label + ' badge');
+  }
+  T.eq(rec.log.length, 4, 'one Journal line per ended stance');
+  atCombatants = [{ id: 'creature::w', slots: { full: { label: 'Sentinel' }, right: null, left: null } }];
+  await _cancelStancesOnMove('creature::w', null, 'is thrown'); // unknown distance (blowback, uncalibrated map)
+  T.eq(atCombatants[0].slots.full, null);
+  T.ok(/is thrown/.test(rec.log[4]));
+});
+
+// ── Vigilant & Infiltrate (noticing movement) ────────────────────────────────
+test('Vigilant', 'sense chance: silent is never heard, the pivot gives half the stat, and it never exceeds the stat', async T => {
+  T.eq(_vigilantSenseChance(50, 0, 20), 0);
+  T.eq(_vigilantSenseChance(50, 20, 20), 25);
+  T.eq(_vigilantSenseChance(50, 1e9, 20), 50);
+  T.eq(_vigilantSenseChance(250, 1e9, 20), 100);
+  T.eq(_vigilantSenseChance(0, 1e9, 20), 0, 'a deaf watcher hears nothing');
+});
+test('Vigilant', 'sight range follows Day Vision by day and Night Vision in the dark', async T => {
+  const ent = { attrs: { DayVision: 10, NightVision: 2 } };
+  mapIsDark = false; T.eq(_vigilantVisionRangeFt(ent), 10 * VIGILANT_VISION_FT_PER_POINT);
+  mapIsDark = true;  T.eq(_vigilantVisionRangeFt(ent), 2 * VIGILANT_VISION_FT_PER_POINT);
+});
+test('Vigilant', 'zone: a 120 degree sight cone ahead, hearing all around to 60 ft; walls stop sight but not sound', async T => {
+  T.geo(); T.senses(); mapIsDark = false; // Day Vision 10 -> 80 ft of sight
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  const at = (deg, ft) => [50 + ft * Math.cos(deg * Math.PI / 180), 50 + ft * Math.sin(deg * Math.PI / 180)];
+  T.ok(_sentinelZoneCheck(w, ...at(0, 70), m), 'ahead at 70 ft: seen');
+  T.ok(_sentinelZoneCheck(w, ...at(VIGILANT_CONE_DEG / 2 - 2, 70), m), 'inside the cone edge');
+  T.ok(!_sentinelZoneCheck(w, ...at(VIGILANT_CONE_DEG / 2 + 2, 70), m), 'outside the cone and beyond hearing');
+  T.ok(!_sentinelZoneCheck(w, ...at(180, 70), m), 'behind at 70 ft: nothing');
+  T.ok(_sentinelZoneCheck(w, ...at(180, 55), m), 'behind at 55 ft: within hearing');
+  T.ok(!_sentinelZoneCheck(w, ...at(0, 85), m), 'ahead but past sight range');
+  T.ok(!_sentinelZoneCheck(w, ...at(0, 30)), 'needs a mover to judge');
+  T.stub('_sentinelLineOfSight', () => false);
+  T.ok(!_sentinelZoneCheck(w, ...at(0, 70), m), 'a wall hides someone 70 ft ahead');
+  T.ok(_sentinelZoneCheck(w, ...at(0, 50), m), 'but at 50 ft they can still be heard through it');
+});
+test('Vigilant', 'unlike Sentinel, a mover already inside the watched area still gets a notice check', async T => {
+  T.geo(); T.senses(); mapIsDark = false;
+  T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0', 'friendly']); T.token('m', 60, 50, 'creature', 'Em', ['foe']);
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 60, y_pct: 50 }, { x_pct: 62, y_pct: 50 }).length, 1);
+  mapTokens.m.conditions = ['friendly'];
+  T.eq(_findSentinelCrossings('creature::m', { x_pct: 60, y_pct: 50 }, { x_pct: 62, y_pct: 50 }), [], 'allies are not checked');
+});
+test('Vigilant', 'walking openly into the cone is always seen; a sneaker has to be rolled for', async T => {
+  T.geo(); T.senses(); T.fakeWrites(); mapIsDark = false;
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  T.random(0.999);
+  T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'in plain view, even on the worst roll');
+  m.conditions = ['infiltrating'];
+  T.eq(_vigilantDetects(w, m, 80, 50), { detected: false, sense: null }, 'sneaking, watcher rolls badly');
+  T.random(0);
+  T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'sneaking, watcher rolls well');
+});
+test('Vigilant', 'behind the watcher it comes down to hearing, then smell up close', async T => {
+  T.geo(); T.fakeWrites(); mapIsDark = false;
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
+  T.senses(); T.random(0);
+  T.eq(_vigilantDetects(w, m, 20, 50).sense, 'hearing', '30 ft behind, a normal mover is heard');
+  T.senses({ 'creature::m': { Speed: 0 } }); // makes no noise at all
+  T.eq(_vigilantDetects(w, m, 20, 50), { detected: false, sense: null }, 'silent and 30 ft behind: unnoticed');
+  T.eq(_vigilantDetects(w, m, 35, 50).sense, 'smell', 'silent but 15 ft behind: smelled');
+  T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0 } });
+  T.eq(_vigilantDetects(w, m, 35, 50).detected, false, 'a watcher with no sense of smell');
+});
+test('Vigilant', 'a wall blocks sight, so an open walker behind it can only be heard', async T => {
+  T.geo(); T.senses(); T.fakeWrites(); mapIsDark = false;
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  T.stub('_sentinelLineOfSight', () => false);
+  T.random(0.999);
+  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'not seen through the wall, and not heard on a bad roll');
+  T.random(0);
+  T.eq(_vigilantDetects(w, m, 80, 50).sense, 'hearing');
+});
+test('Vigilant', 'noise: walking openly is twice as loud as sneaking, faster gaits are louder, Silent Step halves it', async T => {
+  T.geo(); T.fakeWrites(); mapIsDark = false; T.random(0.999);
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+  let mult = 1;
+  T.stub('getEntity', ref => ({ ref, attrs: { DayVision: 10, Hearing: 50, Smell: 50, Speed: 10, _targetAdj: 1 }, armorNoise: 0, noiseMult: ref === 'creature::m' ? mult : 1 }));
+  const scores = [];
+  T.stub('_vigilantSenseChance', (stat, score, pivot) => { if (pivot === VIGILANT_HEARING_PIVOT) scores.push(score); return 0; });
+  const noise = () => { scores.length = 0; _vigilantDetects(w, m, 20, 50); return scores[0]; }; // 30 ft behind
+  m.conditions = ['infiltrating']; _vigMoveGait = 0;
+  const sneak = noise();
+  T.near(sneak, 10, 0.001, 'Speed 10, size 1, no armor');
+  m.conditions = [];
+  T.near(noise(), sneak * VIGILANT_OPEN_NOISE_MULT, 0.001, 'walking openly');
+  m.conditions = ['infiltrating']; _vigMoveGait = 3;
+  T.near(noise(), sneak * VIGILANT_GAIT_NOISE[3], 0.001, 'sprinting');
+  _vigMoveGait = 0; mult = 0.5;
+  T.near(noise(), sneak * 0.5, 0.001, 'Silent Step boots');
+});
+test('Vigilant', 'an unnoticed mover passes silently: no prompt, nothing pending', async T => {
+  T.geo(); T.senses();
+  T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0', 'friendly']); T.token('m', 60, 50, 'creature', 'Em', ['foe']);
+  let shown = 0; T.stub('_maybeShowSentinelPrompt', () => { shown++; });
+  T.stub('_atIsCombatActive', () => false);
+  T.stub('_vigilantDetects', () => ({ detected: false, sense: null }));
+  await _resolveSentinelCheck('creature::w', 'creature::m', 60, 50);
+  T.eq(shown, 0); T.eq(_sentinelCheckPending, null);
+  T.stub('_vigilantDetects', () => ({ detected: true, sense: 'hearing' }));
+  const p = _resolveSentinelCheck('creature::w', 'creature::m', 60, 50);
+  T.eq(shown, 1); T.eq(_sentinelCheckPending.vigilantSense, 'hearing');
+  _sentinelCheckPending.resolve(false); await p;
+});

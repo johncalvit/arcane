@@ -14,6 +14,8 @@
 //   T.token(id, x, y, type, entityId, conditions)   adds a token to mapTokens and returns it
 //   T.char(id, extra)           adds a character row to the cache, returns its ref ('char::T_<id>')
 //   T.row(ref)                  the cached row behind a ref
+//   T.geo()                     point-sized tokens, no walls, 5 ft reach; cids resolve to T.token tokens
+//   T.senses(byRef)             every entity gets average senses (override per ref)
 //   T.fakeWrites()              updateEntity etc. only touch the cache; returns { log:[], toasts:[] }
 // Stubs, tokens, cache rows and the globals the helpers touch are all put back after each test.
 
@@ -48,6 +50,24 @@ function TEST_PRELUDE() {
       return 'char::' + rid;
     },
     row(ref) { return _entityCacheRow(ref); },
+    // Flat geometry for stance tests: tokens are points (no radius), no walls, 5 ft melee reach, and
+    // 'creature::<tokenId>' / 'char::<entityId>' resolve to the tokens added with T.token.
+    geo() {
+      T.map();
+      T.stub('getTokenSize', () => 0);
+      T.stub('_sentinelLineOfSight', () => true);
+      T.stub('_sentinelMeleeReachFt', () => 5);
+      T.stub('_targetWeaponRangeFt', () => 30);
+      T.stub('_pathFindToken', cid => {
+        const [type, id] = String(cid).split('::');
+        return type === 'creature' ? (mapTokens[id] || null) : (Object.values(mapTokens).find(t => t.entity_type === 'character' && t.entity_id === id) || null);
+      });
+    },
+    // Every entity gets these senses unless byRef names one: byRef = { 'creature::m': { Speed: 0 } }.
+    senses(byRef) {
+      const base = { DayVision: 10, NightVision: 2, Hearing: 50, Smell: 50, Speed: 10, _targetAdj: 1 };
+      T.stub('getEntity', ref => ({ ref, name: ref, attrs: Object.assign({}, base, (byRef || {})[ref] || {}), armorNoise: 0, noiseMult: 1 }));
+    },
     fakeWrites() {
       const rec = { log: [], toasts: [] };
       T.stub('updateEntity', async (ref, patch) => { const r = _entityCacheRow(ref); if (!r) return false; Object.assign(r, patch); delete r._attrs; return true; });
@@ -58,17 +78,17 @@ function TEST_PRELUDE() {
       return rec;
     },
     _begin() {
-      saved = { mapTokens, mapImgW, mapImgH, mapScalePPF, known: characterKnownSpells, quick: characterQuickSpells, worn: characterWorn };
+      saved = { mapTokens, mapImgW, mapImgH, mapScalePPF, known: characterKnownSpells, quick: characterQuickSpells, worn: characterWorn, dark: mapIsDark, combatants: atCombatants };
       mapTokens = {};
     },
     _end() {
       while (stubs.length) { const [o, k, v] = stubs.pop(); o[k] = v; }
       mapTokens = saved.mapTokens; mapImgW = saved.mapImgW; mapImgH = saved.mapImgH; mapScalePPF = saved.mapScalePPF;
-      characterKnownSpells = saved.known; characterQuickSpells = saved.quick; characterWorn = saved.worn;
+      characterKnownSpells = saved.known; characterQuickSpells = saved.quick; characterWorn = saved.worn; mapIsDark = saved.dark; atCombatants = saved.combatants;
       for (const k of Object.keys(playCharCache)) if (k.startsWith('T_')) delete playCharCache[k];
       document.getElementById('loot-modal')?.remove();
       document.querySelectorAll('[id^="token-T_"]').forEach(e => e.remove());
-      _lootState = null; _enchantCast = null; _dlgReopenId = null; _dlgRoundEndPendingId = null;
+      _lootState = null; _enchantCast = null; _sentinelCheckPending = null; _vigMoveGait = 0; _dlgReopenId = null; _dlgRoundEndPendingId = null;
     },
   };
 }
