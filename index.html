@@ -7788,7 +7788,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114g';
+const VERSION = 'v0.1.20261114h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9538,6 +9538,7 @@ function _updateAllTokenRings() {
 }
 
 function _refreshTokenBadges(tokenId) {
+  _dlgRefreshIfOpenFor(tokenId); // an open action/explore dialog must not keep showing stale conditions
   const el = document.getElementById('token-' + tokenId);
   if (!el) return;
   _updateTokenRing(tokenId);

@@ -936,6 +936,24 @@ function _dlgSection(title, chipsHtml, dimmed) {
     </div>`;
 }
 
+// A condition changed on a token: if its owner's action/explore dialog is open, redraw it so it never keeps
+// offering (or hiding) things based on conditions that have since changed - e.g. a combatant killed by a
+// reaction attack while their dialog was already up. Debounced so a burst of changes redraws once.
+var _dlgRefreshTimer = null;
+function _dlgRefreshIfOpenFor(tokenId) {
+  const modal = document.getElementById('at-action-modal');
+  if (!modal || modal.style.display !== 'flex' || !_dlgCombatantId) return;
+  const tok = typeof _pathFindToken === 'function' ? _pathFindToken(_dlgCombatantId) : null;
+  if (!tok || tok.id !== tokenId) return;
+  clearTimeout(_dlgRefreshTimer);
+  _dlgRefreshTimer = setTimeout(() => {
+    const m = document.getElementById('at-action-modal'), body = document.getElementById('at-dialog-body');
+    if (!m || m.style.display !== 'flex' || !body) return;
+    if (body.dataset.mode === 'combat') _dlgRender(body);
+    else if (body.dataset.mode === 'explore') _exploreRender(body);
+  }, 60);
+}
+
 function _dlgRender(body) {
   const combatantId = _dlgCombatantId;
   const c = atCombatants.find(x => x.id === combatantId);
