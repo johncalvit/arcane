@@ -540,7 +540,7 @@
     justify-content: center;
     flex-shrink: 0;
   }
-  .token-ring.type-creature { border-color: #b03030; }
+  .token-ring.type-creature { border-color: #0c0c10; } /* near-black so it can't be mistaken for the red Blood ring */
   .token-ring.type-item     { border-color: #708090; border-radius: 4px; }
   /* light-source art: just the torch — no ring, no backing, soft shadow so it reads on any map */
   .token-ring.type-light { border-color: transparent; background: transparent; overflow: visible; }
@@ -7788,7 +7788,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114f';
+const VERSION = 'v0.1.20261114g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9525,8 +9525,8 @@ function _updateTokenRing(tokenId) {
   };
   const tip = 'Toughness ' + (tMax - dT) + '/' + tMax + ' - Stamina ' + (sMax - dS) + '/' + sMax + (dB > 0 ? ' - Blood ' + (bMax - dB) + '/' + bMax : '');
   const svg = '<svg width="' + W + '" height="' + W + '" viewBox="0 0 ' + W + ' ' + W + '"><title>' + tip + '</title>' +
-    ring(S / 2 + 1.5, 1 - dT / tMax, '#4a9cf0') +
-    (dB > 0 ? ring(S / 2 + 2.5, 1 - dB / bMax, '#e04848') : '') + '</svg>';
+    ring(S / 2 + 0.5, 1 - dT / tMax, '#4a9cf0') +
+    (dB > 0 ? ring(S / 2 + 1.5, 1 - dB / bMax, '#e04848') : '') + '</svg>';
   if (!box) { box = document.createElement('div'); box.className = 'token-hp'; el.appendChild(box); }
   box.style.top = (-pad) + 'px';
   box.dataset.k = key;
