@@ -44,6 +44,10 @@ Equipment shows what is in your **right** and **left** hand. Want to use your sw
 
 This lists the armor you are wearing. To change it, go to Character Mode: buy pieces in the **Shop** (get the size that fits your character), then open **Armor** and equip them on the body — head, torso, arms, and legs. Armor reduces damage but is heavy and can slow you down, and some pieces are noisy. Some pieces also have an Arcane Impedance that lowers a caster's maximum spell success.
 
+### Enchanted Items
+
+Some items carry an enchantment. A **passive** one is always on while you wear the item (armor in a body slot; a ring on each hand, a necklace and a belt under **Jewelry & Accessories** on the Character Mode Armor tab) or, for anything else, hold it in a hand. An **activated** one (a wand, say) casts a spell on demand: with the item worn or in hand, the Actions and Explore dialogs show an **Enchanted Items** section. It works at a fixed chance no matter who uses it, and a failure can miscast. It costs Quintessence; if you're short, each missing point costs 4 Stamina instead (some items insist on Quintessence). In combat, activating an item ends your round.
+
 ### Stats
 
 Your Final Attributes (Power, Toughness, Speed, and so on). A green or red number in brackets means the stat is currently raised or lowered, for example by blood loss or a potion.

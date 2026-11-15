@@ -940,6 +940,26 @@ function _dlgSection(title, chipsHtml, dimmed) {
 // offering (or hiding) things based on conditions that have since changed - e.g. a combatant killed by a
 // reaction attack while their dialog was already up. Debounced so a burst of changes redraws once.
 var _dlgRefreshTimer = null;
+// "Enchanted Items" section for the combat and Explore dialogs: one Activate chip per activated enchantment
+// on an item the entity is wearing or holding, plus a line naming the passive ones in effect.
+function _enchantSectionHtml(ent, dact, dim) {
+  if (!ent || !Array.isArray(ent.enchants) || !ent.enchants.length || typeof _entityActivations !== 'function') return '';
+  const chips = _entityActivations(ent).map(x => {
+    const cost = _enchantCostFor(ent, x.ench);
+    const costTxt = cost ? [cost.quint ? cost.quint + 'q' : '', cost.stamina ? cost.stamina + ' stam' : ''].filter(Boolean).join(' + ') || 'free' : 'no power';
+    return _dlgChip({
+      label: `💍 ${x.item}`, sub: `${_enchantPct(x.ench)}% · ${costTxt}`, disabled: !cost,
+      title: (cost ? `Activate: casts ${x.ench.spell} at a fixed ${_enchantPct(x.ench)}% (a failure can miscast). Costs ${costTxt}.`
+        : `Not enough ${x.ench.quintOnly ? 'Quintessence' : 'Quintessence or Stamina'} to power it.`) + (x.ench.description ? ' — ' + x.ench.description : ''),
+      data: { dact, item: x.item },
+    });
+  }).join('');
+  const passive = [...new Set(ent.enchants.filter(x => x.ench.kind !== 'active').map(x => `${x.item} (${x.ench.effects || x.ench.name})`))];
+  const note = passive.length ? `<div style="font-size:0.7rem;color:var(--text-dim);margin-top:4px;">Always on: ${passive.map(_paEsc).join(' · ')}</div>` : '';
+  if (!chips && !note) return '';
+  return _dlgSection('💍 Enchanted Items', chips + note, !!dim);
+}
+
 function _dlgRefreshIfOpenFor(tokenId) {
   const modal = document.getElementById('at-action-modal');
   if (!modal || modal.style.display !== 'flex' || !_dlgCombatantId) return;
@@ -1381,7 +1401,7 @@ function _dlgRender(body) {
     ${_dlgSection('⚡ Full Body — replaces arm and movement actions', fullChips, false)}
     ${channelHtml}
     ${carryHtml}
-    ${arcaneHtml}
+    ${arcaneHtml}${_enchantSectionHtml(ent, 'enchact', fullActive)}
     <div style="display:flex;gap:6px;margin-top:14px;">
       <input type="text" id="dlg-custom-label" placeholder="Custom action…" style="${selStyle}flex:1;">
       <select id="dlg-custom-slot" style="${selStyle}">${channelOpts}</select>
@@ -1726,7 +1746,7 @@ function _exploreRender(body) {
   body.innerHTML = `
     <h3 style="margin:0 0 2px;">${_paEsc(ent.name)} - Explore</h3>
     <div style="font-size:0.72rem;color:var(--text-dim);margin-bottom:8px;">Out of combat: free and untimed.</div>
-    ${banner}${stanceHtml}${spellHtml}${checkHtml}${grabHtml}${_exploreRestHtml(ent)}${gearHtml}${consumeHtml}
+    ${banner}${stanceHtml}${spellHtml}${c ? _enchantSectionHtml(ent, 'xenchact', false) : ''}${checkHtml}${grabHtml}${_exploreRestHtml(ent)}${gearHtml}${consumeHtml}
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
       <button class="at-btn" data-dact="close">Close</button>
     </div>`;
@@ -1763,6 +1783,9 @@ async function _exploreClick(e) {
         break;
       case 'xrelease':
         await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
+        break;
+      case 'xenchact':
+        await atActivateEnchant(id, d.item); // like a released spell: may enter map targeting and close the dialog
         break;
       case 'xdiff':
         if (!isGM()) break;
@@ -1979,6 +2002,12 @@ async function _dlgAct(d, id, body) {
     case 'completecast':
       await atCompleteCast(id, d.spellname); // may enter map targeting and close the dialog itself
       break;
+    case 'enchact': {
+      const ok = await styledConfirm('Activating this item will end your round.');
+      if (!ok) { _dlgRender(body); break; }
+      await atActivateEnchant(id, d.item); // like a released spell: may enter map targeting and close the dialog
+      break;
+    }
     case 'escape':
       atCloseModal();
       await atResolveEscape(id); // spends the action only when the roll lands

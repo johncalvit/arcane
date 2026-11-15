@@ -1168,6 +1168,7 @@
       <button class="nav-btn" onclick="showPanel('rangedmgr')">🏹 Ranged Weapons</button>
       <button class="nav-btn" onclick="showPanel('consumablesmgr')">🧪 Consumables</button>
       <button class="nav-btn" onclick="showPanel('equipmgr')">🎒 Equipment</button>
+      <button class="nav-btn" onclick="showPanel('enchantmgr')">💍 Enchantments</button>
       <button class="nav-btn" onclick="showPanel('spellmgr')">✨ Spells</button>
       <button class="nav-btn" onclick="showPanel('techmgr')">🥋 Techniques</button>
       <button class="nav-btn" onclick="showPanel('economymgr')">💰 Economy</button>
@@ -1612,6 +1613,10 @@
             <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling. Applies to every kind of spell except Deific — a prayer asks for the effect rather than casting it.">
           </div>
           <div class="field">
+            <label>Enchantment</label>
+            <select id="apf-enchant" style="width:100%;" title="Applies while the piece is equipped in a body slot. Defined under Enchantments."></select>
+          </div>
+          <div class="field">
             <label>Price per Size (Crowns)</label>
             <input type="text" id="apf-costpermod" placeholder="e.g. 4" title="In Crowns, not pence — an owned instance's actual price is area weight (for the piece's body slot) × its own size × this (e.g. a Kettle Hat at 4cr per size point, bought at size 5, costs 20cr). This IS what the Shop charges.">
           </div>
@@ -1865,6 +1870,8 @@
           <div class="field"><label>Name</label><input type="text" id="ef-name" placeholder="e.g. Backpack"></div>
           <div class="field"><label>Weight (lbs)</label><input type="text" id="ef-wt" placeholder="0"></div>
           <div class="field"><label>Price (pence)</label><input type="text" id="ef-price" placeholder="0" title="100 pence = 1 Crown"></div>
+          <div class="field"><label>Worn as</label><select id="ef-wear" style="width:100%;" title="Jewelry and belts are worn in their own slot on the character's Armor tab. Anything else works while held in a hand."><option value="">— Not worn (held) —</option><option value="ring">Ring</option><option value="necklace">Necklace</option><option value="belt">Belt</option></select></div>
+          <div class="field"><label>Enchantment</label><select id="ef-enchant" style="width:100%;"></select></div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
           <button class="btn" onclick="saveEquip()">Save Equipment</button>
@@ -1873,8 +1880,49 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Name</th><th>Wt</th><th>Price</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Wt</th><th>Price</th><th>Worn as</th><th>Enchantment</th><th></th></tr></thead>
         <tbody id="equipmgr-list"></tbody>
+      </table>
+    </div>
+
+    <!-- ENCHANTMENT MANAGER -->
+    <div id="panel-enchantmgr" class="panel">
+      <h2>Enchantments</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:16px;font-style:italic;">
+        An enchantment is defined once here and then attached to items (Equipment and Armor Pieces each have an Enchantment field), so the same one can be reused.
+        <b>Passive</b> enchantments are always on while the item is worn (armor, ring, necklace, belt) or held (anything else). <b>Activated</b> ones cast a spell on demand at a fixed success chance; a failed roll can miscast.
+        Activation costs Quintessence; a wielder without enough pays 4 Stamina per missing point unless the enchantment requires Quintessence. Two copies of the same enchantment don't stack.
+      </p>
+      <button class="btn" onclick="openEnchantForm(null)" style="margin-bottom:16px;">+ Add Enchantment</button>
+      <div id="enchant-form" style="display:none;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:18px 20px;margin-bottom:20px;">
+        <h3 id="enchant-form-title" style="margin-top:0;">New Enchantment</h3>
+        <div class="grid-3">
+          <div class="field"><label>Name</label><input type="text" id="enf-name" placeholder="e.g. Silent Step"></div>
+          <div class="field"><label>Kind</label><select id="enf-kind" onchange="_enchantFormKind()" style="width:100%;"><option value="passive">Passive (always on)</option><option value="active">Activated (casts a spell)</option></select></div>
+        </div>
+        <div id="enf-passive" class="field" style="margin-top:10px;">
+          <label>Effects <span style="color:var(--text-dim);font-weight:normal;">(comma-separated: an attribute or Noise, then +/- an amount, optionally %)</span></label>
+          <input type="text" id="enf-effects" style="width:100%;" placeholder="e.g. Noise -50%, Night Vision +5, Power +10%">
+          <div id="enf-effects-help" style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;"></div>
+        </div>
+        <div id="enf-active" class="grid-3" style="margin-top:10px;display:none;">
+          <div class="field"><label>Spell cast</label><select id="enf-spell" style="width:100%;"></select></div>
+          <div class="field"><label>Success %</label><input type="text" id="enf-pct" placeholder="80" title="Fixed chance the item works - the wielder's own casting ability doesn't matter. A failed roll can miscast."></div>
+          <div class="field"><label>Cost (Quintessence)</label><input type="text" id="enf-cost" placeholder="1" title="Paid in Quintessence. A wielder who is short pays 4 Stamina per missing point, unless Requires Quintessence is ticked."></div>
+          <div class="field"><label><input type="checkbox" id="enf-quintonly"> Requires Quintessence</label><div style="color:var(--text-dim);font-size:0.72rem;">Stamina can't be used to power it</div></div>
+        </div>
+        <div class="field" style="margin-top:10px;">
+          <label>Description <span style="color:var(--text-dim);font-weight:normal;">(shown to players)</span></label>
+          <textarea id="enf-description" rows="2" style="width:100%;"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:10px;">
+          <button class="btn" onclick="saveEnchant()">Save Enchantment</button>
+          <button class="btn danger" onclick="closeEnchantForm()">Cancel</button>
+        </div>
+      </div>
+      <table class="loadout-table">
+        <thead><tr><th>Name</th><th>Kind</th><th>Effect</th><th>On items</th><th></th></tr></thead>
+        <tbody id="enchantmgr-list"></tbody>
       </table>
     </div>
 
@@ -2138,6 +2186,10 @@
       <h2>Armor</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip a piece you're carrying (see Loadout) into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
+      <h3 style="margin-top:22px;">Jewelry &amp; Accessories</h3>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Wear a ring on each hand, a necklace and a belt from what you're carrying (see Loadout). Boots, gloves and clothing go in the body slots above.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="worn-fields"></div>
+      <div id="worn-enchant-summary" style="margin-top:16px;"></div>
     </div>
 
     <!-- SPELL BOOK -->
@@ -3961,6 +4013,12 @@ const DEFAULT_EQUIPMENT = [
   { name:"Thieves' Tools",      wt:1,   price:500  },
   { name:"Torch",               wt:1,   price:5    },
   { name:"Waterskin",           wt:4,   price:50   },
+  // Jewelry (worn in its own slot on the Armor tab) and example enchanted items - see ENCHANTMENTS.
+  { name:"Ring, Plain",         wt:0,   price:300,  wearSlot:"ring" },
+  { name:"Necklace, Plain",     wt:0.1, price:500,  wearSlot:"necklace" },
+  { name:"Belt, Leather",       wt:0.5, price:50,   wearSlot:"belt" },
+  { name:"Wand of Fire Rose",   wt:0.5, price:0,    enchant:"Fire Rose" },
+  { name:"Ring of Night Eyes",  wt:0,   price:0,    wearSlot:"ring", enchant:"Night Eyes" },
   { name:"Writing Kit",         wt:1,   price:300  },
   { name:"Arrows (×20)",        wt:2,   price:100  },
   { name:"Crossbow Bolts (×20)",wt:2.5, price:150  },
@@ -4704,6 +4762,7 @@ const DEFAULT_ARMOR_PIECES = [
   { name: 'Full Helmet',   slot: 'head',  material: 'Steel Plate',  gap: 4,  noise: 0,  visionMod: -50, hearingMod: -50, costPerMod: 8 },
   { name: 'Kettle Hat',    slot: 'head',  material: 'Steel Plate',  gap: 40, noise: 0,  visionMod: -10, hearingMod: -10, costPerMod: 4 },
   { name: 'Scale Hauberk', slot: 'torso', material: 'Bronze Scale', gap: 20, noise: 15, visionMod: 0,   hearingMod: 0,   costPerMod: 3 },
+  { name: "Thieves' Enchanted Boots", slot: null, material: 'Leather/Hide', gap: 5, noise: 0, visionMod: 0, hearingMod: 0, costPerMod: 0, enchant: 'Silent Step' },
   ...Object.keys(DEFAULT_ARMOR_TYPE_DATA).map(mat => ({
     name: `${mat} (Generic)`, slot: null, material: mat,
     gap: DEFAULT_ARMOR_TYPE_DATA[mat].gap, noise: 0, visionMod: 0, hearingMod: 0,
@@ -4761,6 +4820,7 @@ function buildArmorFields() {
     const prev = prevSelections[area.key];
     if (prev && [...el.options].some(o => o.value === prev && !o.disabled)) el.value = prev;
   }
+  buildWornFields();
 }
 
 function updateArmorWeightDisplay(attrs) {
@@ -5041,6 +5101,7 @@ function _fillArmorPieceForm(row) {
   document.getElementById('apf-hearingmod').value = row ? (row.hearingMod || 0) : 0;
   document.getElementById('apf-impedance').value  = row ? (row.impedance || 0) : 0;
   document.getElementById('apf-costpermod').value = row ? (row.costPerMod || 0) : 0;
+  document.getElementById('apf-enchant').innerHTML = _enchantOptionsHTML(row ? row.enchant : '');
 }
 
 function openArmorPieceForm(index) {
@@ -5109,6 +5170,7 @@ function saveArmorPiece() {
     hearingMod: parseFloat(document.getElementById('apf-hearingmod').value) || 0,
     impedance: parseFloat(document.getElementById('apf-impedance').value) || 0,
     costPerMod: parseFloat(document.getElementById('apf-costpermod').value) || 0,
+    enchant: document.getElementById('apf-enchant').value || '',
   };
   if (editingArmorPieceIndex !== null) ARMOR_PIECES[editingArmorPieceIndex] = row;
   else ARMOR_PIECES.push(row);
@@ -5136,7 +5198,7 @@ function buildArmorPieceManagerTable() {
   tbody.innerHTML = '';
   ARMOR_PIECES.forEach((p, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${p.name}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
+    tr.innerHTML = `<td>${p.name}${p.enchant ? ' <span title="Enchantment: ' + _paEsc(p.enchant) + '">✨</span>' : ''}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
       <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.impedance || 0}</td><td>${p.costPerMod || 0}cr</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
@@ -6567,6 +6629,287 @@ function buildConsumablesManagerTable() {
   });
 }
 
+// ═══ ENCHANTMENTS ═════════════════════════════════════════════════════════════
+// Defined once (Game Config > Enchantments) and attached to catalog items by name: an Equipment row or an
+// Armor Piece row carries `enchant: '<enchantment name>'`. Items are stored on characters and creatures by
+// name, so nothing per-instance is needed - a GM makes "Wand of Fire Rose" as an Equipment item and hands
+// it out. One enchantment per item for now.
+//   passive: `effects` text, e.g. "Noise -50%, Night Vision +5, Power +10%" (final attributes, or Noise).
+//            On while the item is worn (armor piece equipped; ring/necklace/belt in its Worn slot) or,
+//            for anything else, held in a hand.
+//   active:  casts `spell` on demand at a fixed `successPct`; costs `cost` Quintessence. A wielder short of
+//            Quintessence pays ENCHANT_STAMINA_PER_QUINT Stamina per missing point unless `quintOnly`.
+const DEFAULT_ENCHANTMENTS = [
+  { name:'Silent Step', kind:'passive', effects:'Noise -50%', description:'Muffles every footfall: the wearer makes half the noise when moving.' },
+  { name:'Night Eyes',  kind:'passive', effects:'Night Vision +10', description:'The wearer sees far better in the dark (+10 Night Vision).' },
+  { name:'Fire Rose',   kind:'active',  spell:'Fire Rose', successPct:80, cost:1, quintOnly:false, description:'Casts Fire Rose on demand (80%). A failure can miscast.' },
+];
+let ENCHANTMENTS = DEFAULT_ENCHANTMENTS.map(e => ({ ...e }));
+const ENCHANT_STAMINA_PER_QUINT = 4;
+const WEAR_SLOTS = [
+  { key:'ringR',    label:'Ring (right hand)', type:'ring' },
+  { key:'ringL',    label:'Ring (left hand)',  type:'ring' },
+  { key:'necklace', label:'Necklace',          type:'necklace' },
+  { key:'belt',     label:'Belt',              type:'belt' },
+];
+var characterWorn = {}; // builder: { ringR, ringL, necklace, belt } -> carried equipment name (saved as stats.Worn)
+
+function _enchantByName(n) { return n ? (ENCHANTMENTS.find(e => e.name === n) || null) : null; }
+function _equipRow(name) { return name ? (EQUIPMENT.find(e => e.name === name) || null) : null; }
+function _armorPieceEnchantName(inst) {
+  const tpl = ARMOR_PIECES.find(p => p.name === inst.name);
+  return (tpl ? tpl.enchant : inst.enchant) || '';
+}
+function _enchantPct(ench) { return Math.max(1, Math.min(99, Math.round(ench.successPct || 0))); }
+function _enchantOptionsHTML(selected) {
+  return '<option value="">— None —</option>' + ENCHANTMENTS.map(e =>
+    `<option value="${_paEsc(e.name)}"${e.name === selected ? ' selected' : ''}>${_paEsc(e.name)} (${e.kind === 'active' ? 'activated' : 'passive'})</option>`).join('');
+}
+function _enchantSummary(e) {
+  if (!e) return '';
+  if (e.kind === 'active') return `casts ${e.spell || '?'} · ${_enchantPct(e)}% · ${Math.round(e.cost || 0)} Quintessence${e.quintOnly ? ' (required)' : ' (or ' + Math.round((e.cost || 0) * ENCHANT_STAMINA_PER_QUINT) + ' Stamina)'}`;
+  return e.effects || '';
+}
+
+// "Noise -50%, Night Vision +5" -> { attrs:[{key,amt,pct}], noisePct, bad:[unparsed parts] }
+const _enchFxCache = {};
+function _parseEnchantEffects(str) {
+  str = String(str || '');
+  if (_enchFxCache[str]) return _enchFxCache[str];
+  const out = { attrs: [], noisePct: 0, bad: [] };
+  for (const part of str.split(',').map(p => p.trim()).filter(Boolean)) {
+    const m = part.match(/^(.+?)\s*([+-]\s*\d+(?:\.\d+)?)\s*(%?)$/);
+    if (!m) { out.bad.push(part); continue; }
+    const label = m[1].trim().toLowerCase(), amt = parseFloat(m[2].replace(/\s/g, '')), pct = !!m[3];
+    if (label === 'noise') { if (pct) out.noisePct += amt; else out.bad.push(part); continue; }
+    const a = ATTRIBUTES.find(x => x.label.toLowerCase() === label || x.key.toLowerCase() === label.replace(/\s/g, ''));
+    if (!a) { out.bad.push(part); continue; }
+    out.attrs.push({ key: a.key, amt, pct });
+  }
+  return (_enchFxCache[str] = out);
+}
+
+// Every enchanted item currently in effect for an entity row: [{ item, ench, where:'worn'|'held' }].
+function _entityEnchantItems(row, isChar) {
+  if (!ENCHANTMENTS.length) return [];
+  const out = [];
+  const add = (item, enchName, where) => { const e = _enchantByName(enchName); if (e) out.push({ item, ench: e, where }); };
+  // Armor pieces equipped in a body slot (one piece can fill several slots - count it once).
+  const owned = Array.isArray(row.stats?.ArmorOwned) ? row.stats.ArmorOwned : [], eq = row.stats?.ArmorEquipped || {};
+  const seenPiece = new Set();
+  for (const k of Object.keys(eq)) {
+    const inst = owned.find(o => o.id === eq[k]);
+    if (!inst || seenPiece.has(inst.id)) continue;
+    seenPiece.add(inst.id);
+    add(inst.name, _armorPieceEnchantName(inst), 'worn');
+  }
+  // Rings / necklace / belt. Characters choose on the Armor tab (stats.Worn); a creature simply wears what
+  // it carries, up to two rings, one necklace and one belt.
+  const qty = {};
+  for (const e of (row.equipment || [])) if (e && e.name) qty[e.name] = (qty[e.name] || 0) + (parseFloat(e.qty) || 1);
+  const worn = row.stats?.Worn;
+  if (worn && typeof worn === 'object') {
+    for (const sl of WEAR_SLOTS) {
+      const n = worn[sl.key], r = _equipRow(n);
+      if (!r || r.wearSlot !== sl.type || !(qty[n] > 0)) continue;
+      qty[n]--;
+      add(n, r.enchant, 'worn');
+    }
+  } else if (!isChar) {
+    const room = { ring: 2, necklace: 1, belt: 1 };
+    for (const n of Object.keys(qty)) {
+      const r = _equipRow(n);
+      if (!r || !r.wearSlot || !(r.wearSlot in room)) continue;
+      for (let i = 0; i < qty[n] && room[r.wearSlot] > 0; i++) { room[r.wearSlot]--; add(n, r.enchant, 'worn'); }
+    }
+  }
+  // Anything else enchanted works while it is in a hand.
+  const held = row.held_items || {};
+  for (const n of new Set([held.right, held.left].filter(Boolean))) {
+    const r = _equipRow(n);
+    if (r && !r.wearSlot) add(n, r.enchant, 'held');
+  }
+  return out;
+}
+
+// Activated enchantments this entity can use right now (item worn or in hand, spell still exists).
+function _entityActivations(ent) {
+  return (ent?.enchants || []).filter(x => x.ench.kind === 'active' && SPELLS.some(s => s.name === x.ench.spell));
+}
+function _enchantPools(ent) {
+  return {
+    q: Math.max(0, _quintMax(ent.attrs.Quintessence) - (ent.damage.quintessence || 0)),
+    s: Math.max(0, Math.round(ent.baseAttrs.Stamina ?? 10) - (ent.damage.stamina || 0)),
+  };
+}
+// What activating would cost this wielder: { quint, stamina } or null if they can't power it.
+function _enchantCostFor(ent, ench) {
+  const cost = Math.max(0, Math.round(ench.cost || 0));
+  const { q, s } = _enchantPools(ent);
+  if (q >= cost) return { quint: cost, stamina: 0 };
+  if (ench.quintOnly) return null;
+  const stam = (cost - q) * ENCHANT_STAMINA_PER_QUINT;
+  return s >= stam ? { quint: q, stamina: stam } : null;
+}
+async function _payEnchantCost(ent, ench) {
+  const c = _enchantCostFor(ent, ench) || { quint: 0, stamina: 0 };
+  const paid = { quint: c.quint, stamina: c.stamina, toughness: 0, blood: 0 };
+  await updateEntity(ent.ref, { damage: {
+    quintessence: (ent.damage.quintessence || 0) + paid.quint,
+    stamina:      (ent.damage.stamina      || 0) + paid.stamina,
+    toughness:    (ent.damage.toughness    || 0),
+    blood:        (ent.damage.blood        || 0),
+  }});
+  return paid;
+}
+async function _paySpellCost(ent, spell) {
+  return spell && spell._ench ? _payEnchantCost(ent, spell._ench.ench) : _payQuintessence(ent, spell.cost || 0);
+}
+
+// The pending item activation, picked up by _resolveSpellCast once a target is chosen.
+let _enchantCast = null; // { casterCid, spellName, item, ench }
+function _takeEnchantCast(casterCid, spellName) {
+  const x = _enchantCast;
+  if (x && x.casterCid === casterCid && x.spellName === spellName) { _enchantCast = null; return x; }
+  return null;
+}
+// Trigger an enchanted item: no windup, straight to targeting (like releasing a finished spell).
+async function atActivateEnchant(cid, itemName) {
+  const ent = getEntity(cid);
+  const hit = ent && _entityActivations(ent).find(x => x.item === itemName);
+  if (!hit) { showToast(`${itemName} can't be activated right now.`, 'warn'); return false; }
+  const ench = hit.ench, spell = SPELLS.find(s => s.name === ench.spell);
+  if (spell.targetType === 'Item' || (spell.targetType === 'Area' && !_BUILT_AOE_SHAPES.includes(spell.aoeShape))) {
+    showToast(`${spell.name} isn't buildable yet.`, 'error'); return false;
+  }
+  if (!_enchantCostFor(ent, ench)) {
+    showToast(`Not enough ${ench.quintOnly ? 'Quintessence' : 'Quintessence or Stamina'} to power ${itemName}.`, 'error'); return false;
+  }
+  _enchantCast = { casterCid: cid, spellName: spell.name, item: itemName, ench };
+  _castPendingRounds = 1;
+  _dlgReopenId = cid;
+  _dlgRoundEndPendingId = cid;
+  if (spell.targetType === 'Self') { await _resolveSpellCast(cid, spell.name, cid); return true; }
+  atCloseModal();
+  if (spell.targetType === 'Area') {
+    if (spell.spellType === 'Creation') enterObstacleCastMode(cid, spell); else enterAoeCastMode(cid, spell);
+    return true;
+  }
+  enterAttackMode(cid, spell.name, 'Cast', _spellIsRanged(spell), _parseSpellRangeFt(spell.range));
+  return true;
+}
+
+// ── Character builder: Jewelry & Accessories on the Armor tab ──
+function _carriedEquipNames() {
+  return [...document.querySelectorAll('#equip-list tr')].map(tr => tr.cells[0]?.textContent || '').filter(Boolean);
+}
+function setWorn(key, value) { if (value) characterWorn[key] = value; else delete characterWorn[key]; buildWornFields(); recalc(); }
+function buildWornFields() {
+  const box = document.getElementById('worn-fields');
+  if (!box) return;
+  const carried = _carriedEquipNames();
+  box.innerHTML = WEAR_SLOTS.map(sl => {
+    const names = [...new Set(carried)].filter(n => _equipRow(n)?.wearSlot === sl.type);
+    const cur = names.includes(characterWorn[sl.key]) ? characterWorn[sl.key] : '';
+    const e = _enchantByName(_equipRow(cur)?.enchant);
+    return `<div class="field"><label>${sl.label}</label>
+      <select data-worn="${sl.key}" onchange="setWorn(this.dataset.worn, this.value)" style="width:100%;">
+        <option value="">— None —</option>
+        ${names.map(n => `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n)}${_equipRow(n)?.enchant ? ' ✨' : ''}</option>`).join('')}
+      </select>
+      <div style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">${e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (names.length ? '' : 'Nothing to wear here in your Loadout')}</div></div>`;
+  }).join('');
+  // Everything enchanted this character has on right now.
+  const sum = document.getElementById('worn-enchant-summary');
+  if (!sum) return;
+  const rows = [];
+  const insts = typeof _equippedArmorInstances === 'function' ? _equippedArmorInstances() : {};
+  const seen = new Set();
+  for (const inst of Object.values(insts)) {
+    if (seen.has(inst.id)) continue; seen.add(inst.id);
+    const e = _enchantByName(_armorPieceEnchantName(inst)); if (e) rows.push([inst.name, e, 'worn']);
+  }
+  for (const sl of WEAR_SLOTS) { const n = characterWorn[sl.key]; const e = carried.includes(n) ? _enchantByName(_equipRow(n)?.enchant) : null; if (e) rows.push([n, e, 'worn']); }
+  const held = typeof getHeldItems === 'function' ? (getHeldItems() || {}) : {};
+  for (const n of new Set([held.right, held.left].filter(Boolean))) { const r = _equipRow(n); const e = r && !r.wearSlot ? _enchantByName(r.enchant) : null; if (e) rows.push([n, e, 'held']); }
+  sum.innerHTML = rows.length ? `<h3 style="margin-bottom:6px;">Active Enchantments</h3>` + rows.map(([n, e, w]) =>
+    `<div class="ps-row"><span class="ps-label">✨ ${_paEsc(n)} <span style="color:var(--text-dim);">(${w})</span></span><span class="ps-val" title="${_paEsc(e.description || '')}">${_paEsc(e.name)} — ${_paEsc(_enchantSummary(e))}</span></div>`).join('')
+    + `<div style="color:var(--text-dim);font-size:0.72rem;margin-top:4px;">Passive effects apply in Play Mode; activated items appear in the Actions and Explore dialogs.</div>` : '';
+}
+
+// ── Game Config: Enchantments ──
+let editingEnchantIndex = null;
+function _enchantFormKind() {
+  const active = document.getElementById('enf-kind').value === 'active';
+  document.getElementById('enf-passive').style.display = active ? 'none' : '';
+  document.getElementById('enf-active').style.display = active ? '' : 'none';
+}
+function openEnchantForm(index) {
+  editingEnchantIndex = index;
+  const row = index !== null ? ENCHANTMENTS[index] : null;
+  document.getElementById('enchant-form-title').textContent = row ? 'Edit Enchantment' : 'New Enchantment';
+  document.getElementById('enf-name').value = row ? row.name : '';
+  document.getElementById('enf-kind').value = row && row.kind === 'active' ? 'active' : 'passive';
+  document.getElementById('enf-effects').value = row ? (row.effects || '') : '';
+  document.getElementById('enf-effects-help').textContent = 'Attributes: ' + ATTRIBUTES.map(a => a.label).join(', ') + '. Noise takes a % only.';
+  document.getElementById('enf-spell').innerHTML = SPELLS.map(sp => `<option value="${_paEsc(sp.name)}"${row && row.spell === sp.name ? ' selected' : ''}>${_paEsc(sp.name)}</option>`).join('');
+  document.getElementById('enf-pct').value = row ? (row.successPct || '') : 80;
+  document.getElementById('enf-cost').value = row ? (row.cost ?? '') : 1;
+  document.getElementById('enf-quintonly').checked = !!(row && row.quintOnly);
+  document.getElementById('enf-description').value = row ? (row.description || '') : '';
+  _enchantFormKind();
+  document.getElementById('enchant-form').style.display = 'block';
+}
+function closeEnchantForm() { editingEnchantIndex = null; document.getElementById('enchant-form').style.display = 'none'; }
+function saveEnchant() {
+  const name = document.getElementById('enf-name').value.trim();
+  if (!name) { alert('Enchantment name is required.'); return; }
+  if (ENCHANTMENTS.some((e, i) => e.name === name && i !== editingEnchantIndex)) { alert('There is already an enchantment with that name.'); return; }
+  const kind = document.getElementById('enf-kind').value;
+  const row = { name, kind, description: document.getElementById('enf-description').value.trim() };
+  if (kind === 'active') {
+    row.spell = document.getElementById('enf-spell').value;
+    row.successPct = parseFloat(document.getElementById('enf-pct').value) || 0;
+    row.cost = Math.max(0, parseFloat(document.getElementById('enf-cost').value) || 0);
+    row.quintOnly = document.getElementById('enf-quintonly').checked;
+    if (!row.spell) { alert('Pick the spell this enchantment casts.'); return; }
+  } else {
+    row.effects = document.getElementById('enf-effects').value.trim();
+    const bad = _parseEnchantEffects(row.effects).bad;
+    if (bad.length) { alert('Could not understand: ' + bad.join(', ') + '. Use an attribute name (or Noise) followed by + or - and a number, e.g. "Night Vision +5" or "Noise -50%".'); return; }
+  }
+  // Renaming keeps the items that carry it attached.
+  const oldName = editingEnchantIndex !== null ? ENCHANTMENTS[editingEnchantIndex].name : null;
+  if (oldName && oldName !== name) [...EQUIPMENT, ...ARMOR_PIECES].forEach(it => { if (it.enchant === oldName) it.enchant = name; });
+  if (editingEnchantIndex !== null) ENCHANTMENTS[editingEnchantIndex] = row; else ENCHANTMENTS.push(row);
+  writeConfigToDisk();
+  closeEnchantForm();
+  buildEnchantManagerTable();
+}
+function deleteEnchant(index) {
+  const row = ENCHANTMENTS[index];
+  if (!row || !confirm(`Delete the enchantment "${row.name}"? Items carrying it become ordinary.`)) return;
+  closeEnchantForm();
+  ENCHANTMENTS.splice(index, 1);
+  [...EQUIPMENT, ...ARMOR_PIECES].forEach(it => { if (it.enchant === row.name) it.enchant = ''; });
+  writeConfigToDisk();
+  buildEnchantManagerTable();
+}
+function buildEnchantManagerTable() {
+  const tbody = document.getElementById('enchantmgr-list');
+  if (!tbody) return;
+  tbody.innerHTML = ENCHANTMENTS.length ? '' : '<tr><td colspan="5" style="color:var(--text-dim);font-style:italic;">No enchantments yet.</td></tr>';
+  ENCHANTMENTS.forEach((e, i) => {
+    const items = [...EQUIPMENT, ...ARMOR_PIECES].filter(it => it.enchant === e.name).map(it => it.name);
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td title="${_paEsc(e.description || '')}">${_paEsc(e.name)}</td><td>${e.kind === 'active' ? 'Activated' : 'Passive'}</td><td>${_paEsc(_enchantSummary(e))}</td>
+      <td>${items.length ? _paEsc(items.join(', ')) : '<span style="color:var(--text-dim);">none yet</span>'}</td>
+      <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openEnchantForm(${i})">Edit</button>
+      <button class="remove-btn" onclick="deleteEnchant(${i})">✕</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
 // ─── EQUIPMENT MANAGER ────────────────────────────────────────────────────────
 let editingEquipIndex = null;
 function openEquipForm(index) {
@@ -6576,6 +6919,8 @@ function openEquipForm(index) {
   document.getElementById('ef-name').value  = row ? row.name : '';
   document.getElementById('ef-wt').value    = row ? row.wt : '';
   document.getElementById('ef-price').value = row ? (row.price || '') : '';
+  document.getElementById('ef-wear').value  = row ? (row.wearSlot || '') : '';
+  document.getElementById('ef-enchant').innerHTML = _enchantOptionsHTML(row ? row.enchant : '');
   document.getElementById('equipmgr-form').style.display = 'block';
 }
 
@@ -6591,6 +6936,8 @@ function saveEquip() {
     name,
     wt: parseFloat(document.getElementById('ef-wt').value) || 0,
     price: parseInt(document.getElementById('ef-price').value, 10) || 0,
+    wearSlot: document.getElementById('ef-wear').value || '',
+    enchant: document.getElementById('ef-enchant').value || '',
   };
   if (editingEquipIndex !== null) EQUIPMENT[editingEquipIndex] = row;
   else EQUIPMENT.push(row);
@@ -6616,7 +6963,7 @@ function buildEquipManagerTable() {
   tbody.innerHTML = '';
   EQUIPMENT.forEach((row, i) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${formatMoney(row.price)}</td>
+    tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${formatMoney(row.price)}</td><td>${row.wearSlot || '—'}</td><td>${row.enchant ? '✨ ' + _paEsc(row.enchant) : '—'}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openEquipForm(${i})">Edit</button>
       <button class="remove-btn" onclick="deleteEquip(${i})">✕</button></td>`;
     tbody.appendChild(tr);
@@ -6869,11 +7216,13 @@ function showPanel(id) {
   if (id === 'loadout')    { buildStorageSection(); _collectIncomingItems(); }
   if (id === 'techmgr')    buildTechniqueManager();
   if (id === 'equipmgr')  buildEquipManagerTable();
+  if (id === 'enchantmgr') buildEnchantManagerTable();
+  if (id === 'armor')      buildWornFields();
   if (id === 'economymgr') _loadEconomySettingsUI();
   if (id === 'shop')       buildShopPanel();
 }
 
-const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','spellmgr','techmgr','economymgr'];
+const CONFIG_PANELS = ['speciesmgr','skillmgr','armormgr','armorpiecemgr','meleemgr','rangedmgr','consumablesmgr','equipmgr','enchantmgr','spellmgr','techmgr','economymgr'];
 
 // ─── HEADER MENU (☰) + SIDEBAR CHARACTER CARD ────────────────────────────────
 function closeAppMenu() {
@@ -7338,6 +7687,7 @@ function gatherCharacterData() {
     armor: getArmorSelections(),
     armorOwned: _ownedArmorPieces(),
     armorEquipped: getEquippedArmorIds(),
+    worn: { ...characterWorn },
     heldItems: getHeldItems(),
     avatarUrl,
   };
@@ -7439,7 +7789,7 @@ async function saveCharacter() {
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells, QuickSpells: data.quickSpells,
                    CharClass: data.charClass, Techniques: data.techniques,
                    Storage: data.storage, Given: data.given,
-                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language,
+                   ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Worn: data.worn, Language: data.language,
                    PlayerName: (currentUser?.user_metadata?.display_name || '').trim() || data.stats?.PlayerName || '' },
     notes:       data.notes || '',
     features:    data.features,
@@ -7730,7 +8080,7 @@ function _doNewCharacter() {
   characterXP = 0;
   characterPence = 0; // real starting amount is derived at this character's first save — see saveCharacter
   updatePurseDisplay();
-  characterKnownSpells = []; characterQuickSpells = [];
+  characterKnownSpells = []; characterQuickSpells = []; characterWorn = {};
   characterClass = 'Warrior'; characterTechniques = [];
   characterStorage = []; characterGiven = [];
   const newLangSel = document.getElementById('sel-language');
@@ -7794,6 +8144,8 @@ function gatherConfigData() {
     mentals: MENTAL_DATA,
     weapons: WEAPONS,
     equipment: EQUIPMENT,
+    enchantments: ENCHANTMENTS,
+    enchantDefaults: 1,
     skills: SKILLS,
     armorAreaWeights: ARMOR_AREA_WEIGHTS,
     armorTypes: ARMOR_TYPE_DATA,
@@ -7841,7 +8193,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261115a';
+const VERSION = 'v0.1.20261115b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8603,6 +8955,7 @@ const CORE_SECTIONS = [
   { key: 'rangedWeapons', label: 'Ranged weapon actions', kind: 'list', id: r => `${r.weapon} — ${r.action}` },
   { key: 'weapons',       label: 'Weapons',               kind: 'list', id: w => w.name },
   { key: 'equipment',     label: 'Equipment',             kind: 'list', id: e => e.name },
+  { key: 'enchantments',  label: 'Enchantments',          kind: 'list', id: e => e.name },
   { key: 'consumables',   label: 'Consumables',           kind: 'list', id: c => c.name },
   { key: 'armorPieces',   label: 'Armor pieces',          kind: 'list', id: p => p.name },
   { key: 'armorTypes',    label: 'Armor materials',       kind: 'map' },
@@ -8834,6 +9187,14 @@ function applyConfigData(data) {
   replaceObjectContents(MENTAL_DATA, data.mentals || DEFAULT_MENTAL_DATA);
   replaceArrayContents(SKILLS,          data.skills        && data.skills.length        ? data.skills        : DEFAULT_SKILLS);
   replaceArrayContents(WEAPONS,         data.weapons       && data.weapons.length       ? data.weapons       : DEFAULT_WEAPONS);
+  // Configs saved before enchantments existed: add the example enchanted items once (a GM who later deletes them keeps them gone).
+  if (data.enchantDefaults !== 1) {
+    if (data.equipment && data.equipment.length)
+      data.equipment = [...data.equipment, ...DEFAULT_EQUIPMENT.filter(d => (d.enchant || d.wearSlot) && !data.equipment.some(e => e.name === d.name)).map(d => ({ ...d }))];
+    if (data.armorPieces && data.armorPieces.length)
+      data.armorPieces = [...data.armorPieces, ...DEFAULT_ARMOR_PIECES.filter(d => d.enchant && !data.armorPieces.some(p => p.name === d.name)).map(d => ({ ...d }))];
+  }
+  replaceArrayContents(ENCHANTMENTS,    Array.isArray(data.enchantments) ? data.enchantments : DEFAULT_ENCHANTMENTS.map(e => ({ ...e })));
   replaceArrayContents(EQUIPMENT,       data.equipment     && data.equipment.length     ? data.equipment     : DEFAULT_EQUIPMENT);
   replaceArrayContents(MELEE_WEAPONS,   data.meleeWeapons  && data.meleeWeapons.length  ? data.meleeWeapons  : DEFAULT_MELEE_WEAPONS);
   replaceArrayContents(RANGED_WEAPONS,  data.rangedWeapons && data.rangedWeapons.length ? data.rangedWeapons : DEFAULT_RANGED_WEAPONS);
@@ -9033,6 +9394,7 @@ function applyCharacterData(data) {
   // where (stats.ArmorEquipped — instance ids, not the derived material
   // names in the plain `armor` column, which exists only for the DR lookups
   // that never needed to know about pieces at all).
+  characterWorn = (data.stats?.Worn && typeof data.stats.Worn === 'object') ? { ...data.stats.Worn } : {};
   const ownedArmor = Array.isArray(data.stats?.ArmorOwned) ? data.stats.ArmorOwned : [];
   if (ownedArmor.length) {
     const tbody = document.getElementById('armor-owned-list');
@@ -9884,8 +10246,22 @@ function getEntity(ref) {
     }
   }
 
+  // Enchanted items: passive ones adjust attributes / noise for as long as they're worn or held; the list
+  // is also what offers Activate actions (see _entityActivations).
+  const enchants = _entityEnchantItems(row, isChar);
+  let noiseMult = 1;
+  const _seenEnch = new Set();
+  for (const x of enchants) {
+    if (x.ench.kind === 'active' || _seenEnch.has(x.ench.name)) continue; // copies of one enchantment don't stack
+    _seenEnch.add(x.ench.name);
+    const fx = _parseEnchantEffects(x.ench.effects);
+    if (fx.noisePct) noiseMult *= Math.max(0, 1 + fx.noisePct / 100);
+    if (fx.attrs.length && attrs === row._attrs) attrs = Object.assign({}, row._attrs);
+    for (const a of fx.attrs) attrs[a.key] = a.pct ? (attrs[a.key] || 0) * Math.max(0, 1 + a.amt / 100) : (attrs[a.key] || 0) + a.amt;
+  }
+
   return {
-    ref, type,
+    ref, type, enchants, noiseMult,
     id:        row.id,
     tokenId:   token?.id || null,
     name:      row.name || token?.label || '',
@@ -11488,6 +11864,7 @@ let _castPendingRounds = 1;
 // Individual spells enter grab-style map targeting (mirrors Consume) so the
 // caster picks who receives it.
 async function atCompleteCast(casterCid, spellName) {
+  _enchantCast = null; // a real cast - never inherits a cancelled item activation
   const c = atCombatants.find(x => x.id === casterCid);
   const startRound = c?.slots?.full?.startRound;
   const nowRound = _atSharedRound();
@@ -13084,8 +13461,11 @@ async function _resolveSpellMiscastNow(casterEnt, spell) {
 // `aoePoint` ({xPct,yPct}) is set instead of a real targetRef for Area
 // spells — see enterAoeCastMode/aoeMouseDown.
 async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
-  const spell = SPELLS.find(s => s.name === spellName);
+  let spell = SPELLS.find(s => s.name === spellName);
   if (!spell) return;
+  // Cast from an enchanted item (see atActivateEnchant): fixed success %, the item's own cost.
+  const _ench = _takeEnchantCast(casterCid, spellName);
+  if (_ench) spell = { ...spell, _ench };
   const casterEnt = getEntity(casterCid);
   if (!casterEnt) { showToast('Could not load caster.', 'error'); return; }
 
@@ -13096,7 +13476,7 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
 
   const roundsWaited = _castPendingRounds;
   const unhurried = _castUnhurried();
-  const castThreshold = _castOdds(casterEnt, spell, roundsWaited);
+  const castThreshold = _ench ? _enchantPct(_ench.ench) : _castOdds(casterEnt, spell, roundsWaited);
 
   // Attack-type spells with a Hit Formula collapse the casting check and the
   // hit roll into ONE roll instead of two sequential ones — the same roll
@@ -13124,13 +13504,14 @@ async function _resolveSpellCast(casterCid, spellName, targetRef, aoePoint) {
   }
 
   openRoller({
-    label: `Cast: ${spell.name} — ${casterEnt.name}`,
-    target: castThreshold, targetLabel: `${spell.difficultyStat} check · ${unhurried ? 'unhurried, best odds' : roundsWaited + ' rd focus'}${_impedanceNote(casterEnt, spell)}`,
+    label: _ench ? `${_ench.item}: ${spell.name} — ${casterEnt.name}` : `Cast: ${spell.name} — ${casterEnt.name}`,
+    target: castThreshold, targetLabel: _ench ? `enchanted item · fixed ${castThreshold}% · a failure can miscast`
+      : `${spell.difficultyStat} check · ${unhurried ? 'unhurried, best odds' : roundsWaited + ' rd focus'}${_impedanceNote(casterEnt, spell)}`,
     onComplete: async (n) => {
       const success = n <= 5 || (n < 96 && n <= castThreshold);
 
       if (success) {
-        const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+        const paid = await _paySpellCost(casterEnt, spell);
         const costNote = (paid.quint || paid.stamina || paid.toughness || paid.blood) ? ` (spent ${_paidCostNote(paid)})` : '';
         if (spell.spellType === 'Creation' && spell.targetType === 'Area') {
           // Creation spells place a real obstacle on the map (a wall,
@@ -13281,7 +13662,7 @@ async function _resolveSpellAttack(casterEnt, spell, targetToken, castThreshold)
     onComplete: async (n) => {
       const heldPattern = n <= 5 || (n < 96 && n <= castThreshold);
       if (heldPattern) {
-        const paid = await _payQuintessence(casterEnt, spell.cost || 0);
+        const paid = await _paySpellCost(casterEnt, spell);
         const costNote = (paid.quint || paid.stamina || paid.toughness || paid.blood) ? ` (spent ${_paidCostNote(paid)})` : '';
         showToast(`${spell.name} takes shape!${costNote}`, 'good');
       } else {
@@ -17946,7 +18327,7 @@ function _vigilantVisionRangeFt(watcherEnt) {
 // scaled up by their own Target Size — a giant in the same armor, moving at
 // the same speed, is simply louder than a halfling.
 function _infiltratorNoiseScore(moverEnt) {
-  return _noiseScore(moverEnt.attrs, moverEnt.armorNoise);
+  return _noiseScore(moverEnt.attrs, moverEnt.armorNoise) * (moverEnt.noiseMult ?? 1);
 }
 // The Noise figure shown on the sheets: (worn armor noise + Speed) x Target Size.
 function _noiseScore(attrs, armorNoise) {
