@@ -8193,7 +8193,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261115b';
+const VERSION = 'v0.1.20261115c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11026,6 +11026,162 @@ async function pickUpItem(itemTokenId, grabberRef) {
   showToast((ent.name || 'They') + ' picked up ' + name, 'good');
   refreshUI();
 }
+// ═══ LOOTING ══════════════════════════════════════════════════════════════════
+// A selective grab on an incapacitated body (dead, unconscious or paralyzed) within reach. It needs a free
+// hand to start. The looter picks from the body's weapons and equipment; each item moves from the body's
+// inventory into the looter's pack, so its weight is carried from then on. Out of combat any number can be
+// taken; in combat one item is the whole round (the dialog closes after it and the round ends).
+const LOOT_REACH_FT = 7;
+let _lootState = null; // { looterRef, bodyRef, bodyTokenId, items, taken, busy }
+
+function _lootRefusal(looterRef, targetToken) {
+  if (!targetToken || (targetToken.entity_type !== 'character' && targetToken.entity_type !== 'creature')) return 'That is not a body.';
+  const bodyRef = _tokenCid(targetToken);
+  if (bodyRef === looterRef) return 'You cannot loot yourself.';
+  const conds = getConditions(targetToken.id);
+  if (!['dead', 'unconscious', 'paralyzed'].some(k => conds.has(k))) return `${targetToken.label || 'They'} must be dead, unconscious or paralyzed to be looted.`;
+  const me = _pathFindToken(looterRef);
+  const d = me ? _pctDistFt(me.x_pct, me.y_pct, targetToken.x_pct, targetToken.y_pct) : null;
+  if (d != null && d > LOOT_REACH_FT) return `Too far away (${Math.round(d)} ft) - stand next to the body.`;
+  const looter = getEntity(looterRef);
+  if (looter && looter.held?.right && looter.held?.left) return 'Looting needs a free hand.';
+  return '';
+}
+function _isNaturalWeaponName(n) {
+  const k = normalizeWeaponName(n || '');
+  return k === normalizeWeaponName('Bare Handed') || MELEE_WEAPONS.some(r => r.naturalSlot && normalizeWeaponName(r.weapon) === k);
+}
+function _catalogItemRecord(name) {
+  if (_lookupItemKind(name) === 'weapon') {
+    const w = _weaponLoadoutCatalog().find(x => x.name === name || normalizeWeaponName(x.name) === normalizeWeaponName(name));
+    return { name, damage: w?.damage || '', wt: Number(w?.wt) || 0, reach: w?.reach || '' };
+  }
+  return { name, qty: 1, unitWt: Number(_lookupEquipItem(name)?.wt) || 0 };
+}
+// What can be taken from a body: its weapons and equipment, plus anything it is holding that isn't tracked
+// in an inventory list. Natural weapons (claws, fangs, bare hands) are not loot.
+function _lootItems(bodyRef) {
+  const row = _entityCacheRow(bodyRef);
+  if (!row) return [];
+  const heldNames = Object.values(row.held_items || {}).filter(Boolean);
+  const out = [];
+  for (const w of (row.weapons || [])) if (w && w.name && !_isNaturalWeaponName(w.name)) out.push({ name: w.name, kind: 'weapon', qty: 1, wt: parseFloat(w.wt) || 0 });
+  for (const e of (row.equipment || [])) if (e && e.name) out.push({ name: e.name, kind: 'equipment', qty: parseFloat(e.qty) || 1, wt: parseFloat(e.unitWt) || 0 });
+  for (const n of new Set(heldNames)) {
+    if (_isNaturalWeaponName(n) || out.some(o => o.name === n)) continue;
+    const rec = _catalogItemRecord(n);
+    out.push({ name: n, kind: _lookupItemKind(n), qty: 1, wt: rec.wt ?? rec.unitWt ?? 0 });
+  }
+  for (const o of out) o.held = heldNames.includes(o.name);
+  return out;
+}
+async function openLootModal(looterRef, bodyToken) {
+  const bodyRef = _tokenCid(bodyToken);
+  if (bodyToken.entity_type === 'character') await ensureEntityLoaded(bodyRef);
+  if (!_entityCacheRow(bodyRef)) { showToast('Could not load the body.', 'error'); if (typeof _dlgMaybeReopen === 'function') _dlgMaybeReopen(); return; }
+  _lootState = { looterRef, bodyRef, bodyTokenId: bodyToken.id, items: [], taken: 0, busy: false };
+  _lootRender();
+}
+function _lootRender() {
+  const st = _lootState;
+  if (!st) return;
+  let ov = document.getElementById('loot-modal');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'loot-modal';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2300;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;';
+    document.body.appendChild(ov);
+  }
+  const looter = getEntity(st.looterRef), body = getEntity(st.bodyRef);
+  st.items = _lootItems(st.bodyRef);
+  const combat = _atIsCombatActive();
+  const fmt = v => Math.round((v || 0) * 10) / 10;
+  const rows = st.items.map((it, i) => `<tr>
+      <td>${_paEsc(it.name)}${it.qty > 1 ? ' ×' + it.qty : ''}${it.held ? ' <span style="color:var(--text-dim);font-size:0.72rem;">(in hand)</span>' : ''}${_enchantByName(_equipRow(it.name)?.enchant) ? ' ✨' : ''}</td>
+      <td style="text-align:right;">${fmt(it.wt)} lbs</td>
+      <td style="text-align:right;"><button class="btn" style="padding:4px 12px;font-size:0.78rem;" onclick="lootTake(${i})">Take${it.qty > 1 ? ' 1' : ''}</button></td></tr>`).join('');
+  ov.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:18px 20px;min-width:340px;max-width:92vw;max-height:84vh;overflow:auto;font-family:var(--ui-font);color:var(--text);box-shadow:0 6px 24px rgba(0,0,0,0.6);">
+      <h3 style="margin:0 0 2px;">🎒 Loot — ${_paEsc(body?.name || 'the body')}</h3>
+      <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:10px;">${combat ? 'In combat: taking one item is your whole round.' : 'Out of combat: take whatever you want.'}
+        ${_paEsc(looter?.name || 'You')} is carrying ${fmt((looter?.carriedWeight || 0) - (looter?.attrs?._weight || 0))} lbs of gear.</div>
+      ${rows ? `<table class="loadout-table" style="width:100%;"><tbody>${rows}</tbody></table>` : '<div style="color:var(--text-dim);font-style:italic;margin:8px 0;">Nothing to take.</div>'}
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;"><button class="at-btn" onclick="lootClose()">${st.taken ? 'Done' : 'Leave it'}</button></div>
+    </div>`;
+}
+async function lootTake(i) {
+  const st = _lootState;
+  const it = st && st.items[i];
+  if (!it || st.busy) return;
+  st.busy = true;
+  try {
+    const name = it.name;
+    const bodyRow = _entityCacheRow(st.bodyRef), looterRow = _entityCacheRow(st.looterRef);
+    const looter = getEntity(st.looterRef), body = getEntity(st.bodyRef);
+    if (!bodyRow || !looterRow || !looter) return;
+    const tracks = (ref, row) => ref.startsWith('char::') || Array.isArray(row.weapons) || Array.isArray(row.equipment);
+    const looterTracks = tracks(st.looterRef, looterRow);
+    if (!looterTracks && looter.held?.right && looter.held?.left) { showToast(`${looter.name} has nowhere to put ${name}.`, 'warn'); return; }
+
+    // 1. off the body
+    const ext = _extractItemFromInventory(bodyRow, name);
+    let record = Object.assign(_catalogItemRecord(name), ext.record || {});
+    const bPatch = {}, bBefore = {};
+    if (tracks(st.bodyRef, bodyRow)) {
+      if (Array.isArray(bodyRow.weapons))   { bBefore.weapons = bodyRow.weapons;     bPatch.weapons = ext.weapons || []; }
+      if (Array.isArray(bodyRow.equipment)) { bBefore.equipment = bodyRow.equipment; bPatch.equipment = ext.equipment || []; }
+    }
+    const stillHas = [...(bPatch.weapons || []), ...(bPatch.equipment || [])].some(x => x && x.name === name);
+    if (!stillHas && Object.values(bodyRow.held_items || {}).includes(name)) {
+      bBefore.held_items = bodyRow.held_items;
+      const h = Object.assign({}, bodyRow.held_items);
+      for (const k of Object.keys(h)) if (h[k] === name) h[k] = null;
+      bPatch.held_items = h;
+    }
+    if (!Object.keys(bPatch).length) { showToast(`${name} can't be taken.`, 'warn'); return; }
+    if (!(await updateEntity(st.bodyRef, bPatch))) return; // no permission etc. - updateEntity already said why
+
+    // 2. into the looter's pack (or a hand, for a creature that keeps no inventory)
+    const lPatch = {};
+    if (looterTracks) {
+      if (ext.kind === 'equipment') {
+        const equipment = [...(looterRow.equipment || [])];
+        const idx = equipment.findIndex(e => e.name === name);
+        if (idx >= 0) equipment[idx] = { ...equipment[idx], qty: (parseFloat(equipment[idx].qty) || 1) + 1 };
+        else equipment.push({ ...record, qty: 1 });
+        lPatch.equipment = equipment;
+      } else {
+        lPatch.weapons = [...(looterRow.weapons || []), record];
+      }
+    } else {
+      const h = Object.assign({}, looterRow.held_items || {});
+      if (!h.right) h.right = name; else h.left = name;
+      lPatch.held_items = h;
+    }
+    if (!(await updateEntity(st.looterRef, lPatch))) { await updateEntity(st.bodyRef, bBefore); return; } // put it back
+    _syncOwnBuilder(st.looterRef);
+    _syncOwnBuilder(st.bodyRef);
+    st.taken++;
+    logCombat(`${looter.name} takes ${name} from ${body?.name || 'a body'}.`, 'roll');
+    showToast(`${looter.name} took ${name}.`, 'good');
+    refreshUI();
+  } finally { st.busy = false; }
+  if (_lootState !== st) return;
+  if (_atIsCombatActive()) lootClose(); else _lootRender();
+}
+function lootClose() {
+  const st = _lootState;
+  _lootState = null;
+  document.getElementById('loot-modal')?.remove();
+  if (!st) return;
+  // In combat, walking away empty-handed doesn't cost the round: undo the Loot action and reopen the dialog.
+  if (_atIsCombatActive() && !st.taken) {
+    const c = atCombatants.find(x => x.id === st.looterRef);
+    if (c && c.slots) for (const k of Object.keys(c.slots)) if (c.slots[k] && c.slots[k].label === 'Loot') atClearSlot(st.looterRef, k);
+    if (typeof _dlgRoundEndPendingId !== 'undefined') _dlgRoundEndPendingId = null;
+  }
+  if (typeof _dlgMaybeReopen === 'function') _dlgMaybeReopen();
+}
+
 // Remove `name` from a holder's hand + inventory without dropping it anywhere
 // (unlike dropHeldItem, which places it on the map) — used when it's consumed.
 async function _expendHeldItem(ref, name) {
@@ -17619,6 +17775,7 @@ let attackAimed       = false; // an Aimed shot (Marksmen technique) - scales th
 let attackHeavy       = null;  // a declared Heavy Blow: {stam, dmg, name}
 
 function enterAttackMode(combatantId, weaponName, actionLabel, isRanged, rangeFt, aimed, heavy) {
+  if (actionLabel === 'Loot') { isRanged = false; rangeFt = 0; } // (the dialog marks it ranged only so it ends the round)
   // A grenade is aimed at a spot on the map, not at a token - it uses the area-spell aiming instead.
   if (actionLabel === 'Throw Grenade') {
     const g = _grenadeByName(weaponName);
@@ -17739,6 +17896,15 @@ function attackTokenClick(tokenId) {
     if (/grab/i.test(attackActionLabel || '')) pickUpItem(target.id, attackCombatantId); // char or creature
     else showToast('That is a ground item — use Grab to pick it up.');
     exitAttackMode(); return true;
+  }
+  // Loot: search an incapacitated body. An invalid click keeps the targeting up so another body can be chosen.
+  if (attackActionLabel === 'Loot') {
+    const looterRef = attackCombatantId;
+    const why = _lootRefusal(looterRef, target);
+    if (why) { showToast(why, 'warn'); return true; }
+    exitAttackMode();
+    openLootModal(looterRef, target);
+    return true;
   }
   // Consume: administer the held potion/etc. to whoever is clicked — no roll,
   // no miss chance, and (unlike a weapon attack) self-targeting is allowed.

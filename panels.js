@@ -1329,6 +1329,15 @@ function _dlgRender(body) {
                  : conds.has('held') ? '✊ Held — grabbed' : '🤚 Holding';
     escapeHtml = _dlgSection(gtitle, gchips, false);
   }
+  // ── Loot: a selective grab on an incapacitated body; one item per round in combat ──
+  {
+    const freeKey = ['right', 'left'].find(k => !ent.held?.[k]);
+    escapeHtml += _dlgSection('🎒 Loot', _dlgChip({
+      label: '🎒 Loot a body', sub: '1 item / round', disabled: !freeKey,
+      title: freeKey ? 'Search a dead, unconscious or paralyzed body next to you and take one item (it goes in your pack). Ends your round.' : 'Needs a free hand',
+      data: { dact: 'attack', slot: freeKey || 'right', label: 'Loot', dur: 3, item: 'Bare Handed', action: 'Loot', ranged: 1, range: 0 },
+    }), fullActive);
+  }
 
   // ── Recovery saves (manual roll to shed a condition) ───────────────────────
   // Resuscitate is here too, despite being unconscious — they still roll it
@@ -1729,6 +1738,11 @@ function _exploreRender(body) {
     title: !c ? 'Not on the map yet' : !freeHand ? 'Needs a free hand' : 'Seize another token - click who to grab',
     data: { dact: 'xgrab' },
   });
+  gchips += _dlgChip({
+    label: '🎒 Loot', sub: 'a body', disabled: !c || !freeHand,
+    title: !c ? 'Not on the map yet' : !freeHand ? 'Needs a free hand' : 'Search a dead, unconscious or paralyzed body next to you and take what you want (it goes in your pack)',
+    data: { dact: 'xloot' },
+  });
   if (conds.has('held'))
     gchips += _dlgChip({ label: 'Escape', sub: 'contest', title: 'Opposed Power + Coordination roll to break free', data: { dact: 'xescape' } });
   if (conds.has('holding')) {
@@ -1806,6 +1820,12 @@ async function _exploreClick(e) {
         _exploreRender(body);
         break;
       }
+      case 'xloot':
+        atCloseModal();
+        _dlgReopenId = id; // back to Explore once the loot dialog closes (see lootClose)
+        showToast('Click the body to loot.');
+        enterAttackMode(id, 'Bare Handed', 'Loot', false, 0);
+        break;
       case 'xthrow':
         atCloseModal(); // Explore reopens itself once the throw has resolved (see _resolveGrenadeThrow)
         showToast(`Click where to throw the ${d.item}.`);
