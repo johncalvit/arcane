@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grim Toll - smoke tests</title>
+<style>
+  body { font-family: Arial, sans-serif; background: #15151b; color: #ddd; margin: 20px; }
+  h1 { font-size: 1.2rem; margin: 0 0 4px; }
+  #summary { font-size: 1rem; margin: 8px 0 14px; font-weight: bold; }
+  .pass { color: #5adf7a; } .fail { color: #ff6a5a; } .dim { color: #888; }
+  table { border-collapse: collapse; width: 100%; max-width: 1000px; }
+  td { padding: 3px 8px; border-bottom: 1px solid #2a2a33; font-size: 0.85rem; vertical-align: top; }
+  tr.group td { background: #20202a; font-weight: bold; color: #e0c070; padding-top: 8px; }
+  pre { margin: 2px 0; white-space: pre-wrap; color: #ff9a8a; font-size: 0.78rem; }
+  iframe { position: fixed; right: 8px; bottom: 8px; width: 420px; height: 260px; border: 1px solid #444; opacity: 0.35; }
+  button { margin-left: 10px; }
+</style>
+</head>
+<body>
+<h1>Grim Toll - smoke tests</h1>
+<div class="dim" style="font-size:0.8rem;">Loads the real app (index.html + panels.js) in the frame at the bottom right and runs rule checks against stubbed characters and tokens.
+  Nothing is written to the database. It does not cover anything that needs two clients.</div>
+<div id="summary" class="dim">Loading the app...</div>
+<table id="results"></table>
+<iframe id="app" src="index.html"></iframe>
+<script src="tests.js"></script>
+<script>
+(async () => {
+  const frame = document.getElementById('app');
+  const summary = document.getElementById('summary'), table = document.getElementById('results');
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  await new Promise(res => { if (frame.contentDocument && frame.contentDocument.readyState === 'complete') res(); else frame.addEventListener('load', res); });
+  const win = frame.contentWindow;
+  // Wait until the app's scripts have run (VERSION is a top-level const, panels.js defines _dlgRender).
+  let ready = false;
+  for (let i = 0; i < 100 && !ready; i++) {
+    try { ready = win.eval("typeof VERSION === 'string' && typeof _dlgRender === 'function'"); } catch (e) {}
+    if (!ready) await new Promise(r => setTimeout(r, 100));
+  }
+  if (!ready) { summary.className = 'fail'; summary.textContent = 'The app did not load (a syntax error in index.html or panels.js?).'; window.__results = { ok: false, loadFailed: true }; return; }
+  await new Promise(r => setTimeout(r, 800)); // let startup settle
+  const version = win.eval('VERSION');
+  win.eval('(' + TEST_PRELUDE.toString() + ')()');
+
+  const results = [];
+  let lastGroup = null;
+  for (const t of TESTS) {
+    let error = null;
+    try {
+      await win.eval(`(async () => { const T = window.__T; T._begin(); try { await (${t.fn.toString()})(T); } finally { T._end(); } })()`);
+    } catch (e) { error = (e && (e.stack || e.message)) || String(e); }
+    results.push({ group: t.group, name: t.name, ok: !error, error });
+    if (t.group !== lastGroup) { lastGroup = t.group; table.insertAdjacentHTML('beforeend', `<tr class="group"><td colspan="2">${esc(t.group)}</td></tr>`); }
+    table.insertAdjacentHTML('beforeend', `<tr><td class="${error ? 'fail' : 'pass'}">${error ? 'FAIL' : 'ok'}</td><td>${esc(t.name)}${error ? '<pre>' + esc(error) + '</pre>' : ''}</td></tr>`);
+  }
+  const failed = results.filter(r => !r.ok);
+  summary.className = failed.length ? 'fail' : 'pass';
+  summary.textContent = `${version}: ${results.length - failed.length} of ${results.length} passed` + (failed.length ? ` - ${failed.length} FAILED` : '');
+  document.title = (failed.length ? 'FAIL ' : 'ok ') + (results.length - failed.length) + '/' + results.length + ' - Grim Toll tests';
+  window.__results = { ok: !failed.length, version, total: results.length, failed: failed.map(f => ({ name: f.group + ': ' + f.name, error: f.error })) };
+})();
+</script>
+</body>
+</html>
