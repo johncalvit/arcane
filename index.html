@@ -3428,6 +3428,15 @@ function buildSkillList() {
 // Points — deliberately a separate resource so investing in spells doesn't
 // starve a caster's other skills).
 let characterKnownSpells = [];
+// Names of known spells learned in their Quick Cast form (a subset of characterKnownSpells).
+let characterQuickSpells = [];
+// Quick Cast: doubles the success odds (still held under the armor / Impedance cap). Costs 3x the normal
+// Memory Points; a basic spell can be upgraded later for the extra 2x.
+const QUICK_CAST_MULT = 3;
+function _spellIsQuick(ent, spell) {
+  const q = ent?.stats?.QuickSpells;
+  return !!spell && Array.isArray(q) && q.includes(spell.name);
+}
 
 // A spell's Memory Cost for THIS character: its own configured base cost,
 // raised by the same deficiency the miscast table charges a mismatched
@@ -3463,7 +3472,7 @@ function _memoryPointsTotal(attrs) {
 function _memoryPointsUsed(attrs) {
   return characterKnownSpells.reduce((sum, name) => {
     const spell = SPELLS.find(s => s.name === name);
-    return sum + (spell ? _spellMemoryCost(attrs, spell) : 0);
+    return sum + (spell ? _spellMemoryCost(attrs, spell) * (characterQuickSpells.includes(name) ? QUICK_CAST_MULT : 1) : 0);
   }, 0);
 }
 
@@ -3479,26 +3488,42 @@ function _spellbookIntroText() {
     + (SPELL_LEARNING_PERMANENT ? 'Once memorized, a spell can\'t be unlearned or exchanged.' : 'You can unlearn a spell to get its Memory Points back and learn something else.');
 }
 
-async function learnSpell(name) {
+async function learnSpell(name, quick) {
   if (characterKnownSpells.includes(name)) return;
   const spell = SPELLS.find(s => s.name === name);
   if (!spell) return;
   const attrs = calcAttributes();
-  const cost  = _spellMemoryCost(attrs, spell);
+  const cost  = _spellMemoryCost(attrs, spell) * (quick ? QUICK_CAST_MULT : 1);
   const left  = _memoryPointsTotal(attrs) - _memoryPointsUsed(attrs);
-  if (cost > left) { alert(`Not enough Memory Points — ${spell.name} costs ${cost}, only ${left} left.`); return; }
-  const ok = await styledConfirm(`${SPELL_LEARNING_PERMANENT ? 'Permanently memorize' : 'Memorize'} "${spell.name}" for ${cost} Memory Point${cost === 1 ? '' : 's'}?${SPELL_LEARNING_PERMANENT ? " This can't be undone or exchanged later." : ' You can unlearn it later.'}`);
+  if (cost > left) { alert(`Not enough Memory Points — ${spell.name}${quick ? ' (Quick Cast)' : ''} costs ${cost}, only ${left} left.`); return; }
+  const ok = await styledConfirm(`${SPELL_LEARNING_PERMANENT ? 'Permanently memorize' : 'Memorize'} "${spell.name}"${quick ? ' as a Quick Cast spell (double success odds)' : ''} for ${cost} Memory Point${cost === 1 ? '' : 's'}?${SPELL_LEARNING_PERMANENT ? " This can't be undone or exchanged later." : ' You can unlearn it later.'}`);
   if (!ok) return;
   characterKnownSpells.push(name);
+  if (quick) characterQuickSpells.push(name);
+  recalc();
+}
+// Upgrade a known basic spell to Quick Cast for an extra 2x its base cost.
+async function upgradeSpellQuick(name) {
+  if (!characterKnownSpells.includes(name) || characterQuickSpells.includes(name)) return;
+  const spell = SPELLS.find(s => s.name === name);
+  if (!spell) return;
+  const attrs = calcAttributes();
+  const extra = _spellMemoryCost(attrs, spell) * (QUICK_CAST_MULT - 1);
+  const left  = _memoryPointsTotal(attrs) - _memoryPointsUsed(attrs);
+  if (extra > left) { alert(`Not enough Memory Points — upgrading ${spell.name} costs ${extra} more, only ${left} left.`); return; }
+  const ok = await styledConfirm(`Upgrade "${spell.name}" to Quick Cast (double success odds) for ${extra} more Memory Point${extra === 1 ? '' : 's'}?`);
+  if (!ok) return;
+  characterQuickSpells.push(name);
   recalc();
 }
 async function unlearnSpell(name) {
   if (SPELL_LEARNING_PERMANENT || !characterKnownSpells.includes(name)) return;
   const spell = SPELL_LEARNING_PERMANENT ? null : SPELLS.find(s => s.name === name);
-  const cost = spell ? _spellMemoryCost(calcAttributes(), spell) : 0;
+  const cost = spell ? _spellMemoryCost(calcAttributes(), spell) * (characterQuickSpells.includes(name) ? QUICK_CAST_MULT : 1) : 0;
   const ok = await styledConfirm(`Unlearn "${name}"? You get ${cost} Memory Point${cost === 1 ? '' : 's'} back and can learn it again later.`);
   if (!ok) return;
   characterKnownSpells = characterKnownSpells.filter(n => n !== name);
+  characterQuickSpells = characterQuickSpells.filter(n => n !== name);
   recalc();
 }
 
@@ -3620,19 +3645,25 @@ function buildSpellBookPanel(attrs) {
   // state, but skillInvestments' keys are exactly the skill names
   // _spellSkillBonus looks for, so it works as-is for the "known skills"
   // check that feeds the class-match bonus.
-  const pseudoEnt = { attrs, skills: skillInvestments, level: characterLevel };
+  const pseudoEnt = { attrs, skills: skillInvestments, level: characterLevel, stats: { QuickSpells: characterQuickSpells } };
 
   container.innerHTML = filtered.map(spell => {
     const known = characterKnownSpells.includes(spell.name);
+    const quick = characterQuickSpells.includes(spell.name);
     const base  = _spellMemoryBase(spell);
-    const cost  = _spellMemoryCost(attrs, spell);
-    const defNote = cost !== base ? ` (${base} base + ${cost - base} deficiency)` : '';
+    const cost1 = _spellMemoryCost(attrs, spell);       // basic form
+    const cost  = known && quick ? cost1 * QUICK_CAST_MULT : cost1;
+    const qCost = cost1 * QUICK_CAST_MULT;              // learn straight to Quick Cast
+    const upCost = cost1 * (QUICK_CAST_MULT - 1);       // upgrade a known basic spell
+    const qs = spell.name.replace(/'/g, "\\'");
+    const defNote = cost1 !== base ? ` (${base} base + ${cost1 - base} deficiency)` : '';
     const canAfford = known || cost <= left;
     // Base (round-1, no skill investment needed to see it) cast success%,
     // and whether the character's own Difficulty Stat meets the spell's
     // requirement outright (green) or falls short (red, same deficiency
     // _spellMemoryCost already charges extra for).
-    const castPct = _spellSuccessRoll(pseudoEnt, spell, 1);
+    const castPct = _spellSuccessRoll({ ...pseudoEnt, stats: { QuickSpells: [] } }, spell, 1);
+    const quickPct = _spellSuccessRoll({ ...pseudoEnt, stats: { QuickSpells: [spell.name] } }, spell, 1);
     const sufficient = _spellDeficiency(attrs, spell) === 0;
     const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;
       background:${sufficient ? '#4de080' : '#e05555'};margin-right:5px;flex-shrink:0;"
@@ -3643,11 +3674,11 @@ function buildSpellBookPanel(attrs) {
           <div style="font-weight:bold;">${_paEsc(spell.name)}
             <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;text-transform:uppercase;letter-spacing:0.04em;">${_paEsc(spell.magicClass)} · ${_paEsc(spell.spellType)}</span>
           </div>
-          <div style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;">${dot}${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${castPct}% cast · ${cost} memory${defNote}</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;">${dot}${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${quick ? quickPct + '% cast (Quick)' : castPct + '% cast'} · ${cost} memory${defNote}${quick ? '' : ' · Quick ' + quickPct + '% for ' + qCost}</div>
         </div>
         ${known
-          ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known</span>${SPELL_LEARNING_PERMANENT ? '' : ` <button class="btn-sm" onclick="unlearnSpell('${spell.name.replace(/'/g, "\'")}')" title="Forget this spell and get its Memory Points back">Unlearn</button>`}`
-          : `<button class="btn-sm" ${canAfford ? '' : 'disabled'} onclick="learnSpell('${spell.name.replace(/'/g, "\\'")}')" title="${canAfford ? '' : 'Not enough Memory Points left'}">Learn (${cost})</button>`}
+          ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known${quick ? ' ⚡ Quick' : ''}</span>${quick ? '' : ` <button class="btn-sm" ${upCost <= left ? '' : 'disabled'} onclick="upgradeSpellQuick('${qs}')" title="Learn the Quick Cast form: double the success odds (within the armor cap) for ${upCost} more Memory Points">⚡ Quick (+${upCost})</button>`}${SPELL_LEARNING_PERMANENT ? '' : ` <button class="btn-sm" onclick="unlearnSpell('${spell.name.replace(/'/g, "\'")}')" title="Forget this spell and get its Memory Points back">Unlearn</button>`}`
+          : `<button class="btn-sm" ${canAfford ? '' : 'disabled'} onclick="learnSpell('${qs}')" title="${canAfford ? '' : 'Not enough Memory Points left'}">Learn (${cost})</button> <button class="btn-sm" ${qCost <= left ? '' : 'disabled'} onclick="learnSpell('${qs}', true)" title="Quick Cast: double the success odds (within the armor cap), costs 3x">⚡ Quick (${qCost})</button>`}
       </div>`;
   }).join('');
 }
@@ -7273,6 +7304,7 @@ function gatherCharacterData() {
     xp:      characterXP,
     pence:   characterPence,
     knownSpells: [...characterKnownSpells],
+    quickSpells: [...characterQuickSpells],
     storage: characterStorage.map(x => ({ ...x })),
     given: characterGiven.slice(-50),
     charClass: characterClass,
@@ -7384,7 +7416,7 @@ async function saveCharacter() {
     build:       data.build || '',
     social:      data.social || '',
     mental:      data.mental || '',
-    stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells,
+    stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells, QuickSpells: data.quickSpells,
                    CharClass: data.charClass, Techniques: data.techniques,
                    Storage: data.storage, Given: data.given,
                    ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Language: data.language,
@@ -7678,7 +7710,7 @@ function _doNewCharacter() {
   characterXP = 0;
   characterPence = 0; // real starting amount is derived at this character's first save — see saveCharacter
   updatePurseDisplay();
-  characterKnownSpells = [];
+  characterKnownSpells = []; characterQuickSpells = [];
   characterClass = 'Warrior'; characterTechniques = [];
   characterStorage = []; characterGiven = [];
   const newLangSel = document.getElementById('sel-language');
@@ -7788,7 +7820,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261114h';
+const VERSION = 'v0.1.20261114i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -8908,6 +8940,7 @@ function applyCharacterData(data) {
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
   characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
+  characterQuickSpells = Array.isArray(data.stats?.QuickSpells) ? data.stats.QuickSpells.filter(n => characterKnownSpells.includes(n)) : [];
   // Storage + given-away log (stats.Storage / stats.Given; exported files carry them top-level)
   characterStorage = Array.isArray(data.storage || data.stats?.Storage) ? [...(data.storage || data.stats.Storage)] : [];
   characterGiven   = Array.isArray(data.given   || data.stats?.Given)   ? [...(data.given   || data.stats.Given)]   : [];
@@ -11065,7 +11098,8 @@ function _castOdds(ent, spell, roundsWaited) {
   return _castUnhurried() ? _spellSuccessCap(ent, spell) : _spellSuccessRoll(ent, spell, roundsWaited);
 }
 function _spellSuccessRoll(ent, spell, roundsWaited) {
-  return Math.max(1, Math.min(_spellSuccessCap(ent, spell), Math.round(_spellRawAccum(ent, spell, roundsWaited))));
+  const raw = _spellRawAccum(ent, spell, roundsWaited) * (_spellIsQuick(ent, spell) ? 2 : 1); // Quick Cast doubles it
+  return Math.max(1, Math.min(_spellSuccessCap(ent, spell), Math.round(raw)));
 }
 
 // The ceiling on casting success: 95, lowered by the wearer's total Arcane
