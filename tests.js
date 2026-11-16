@@ -450,6 +450,28 @@ test('Hands', 'letting go of a two-handed item with one hand keeps it in the oth
   T.eq(T.row(ref).held_items, { right: null, left: null }); T.eq(T.row(ref).weapons.length, 0); T.eq(dropped, 1);
 });
 
+test('Hands', 'the Loadout page hand selectors set what is held, and show a two-handed grip', async T => {
+  const wl = document.getElementById('weapon-list'), before = wl.innerHTML;
+  const r = document.getElementById('ps-hand-right'), l = document.getElementById('ps-hand-left');
+  const prev = [r.value, l.value];
+  try {
+    _appendWeaponRow({ name: 'T_TestBlade', damage: '', wt: 3, reach: '' });
+    buildHandSelectors(); buildHandFields();
+    const sel = side => document.querySelector(`#hand-fields select[data-hand="${side}"]`);
+    T.ok(sel('right') && sel('left'), 'both hand selectors should be on the Loadout page');
+    T.ok([...sel('right').options].some(o => o.value === 'T_TestBlade'), 'carried weapon should be offered');
+    setLoadoutHand('right', 'T_TestBlade');
+    T.eq(getHeldItems().right, 'T_TestBlade');
+    T.eq(sel('right').value, 'T_TestBlade', 'selector should show the new choice');
+    setLoadoutHand('left', 'T_TestBlade');
+    T.ok(/two-handed/i.test(document.getElementById('hand-fields').textContent), 'one copy in both hands is a two-handed grip');
+    setLoadoutHand('right', ''); setLoadoutHand('left', '');
+    T.eq(getHeldItems(), { right: '', left: '' });
+  } finally {
+    wl.innerHTML = before; buildHandSelectors(); r.value = prev[0]; l.value = prev[1]; recalc(); buildHandFields();
+  }
+});
+
 // ── Token health rings ───────────────────────────────────────────────────────
 test('Rings', 'the Toughness ring shows the fraction left, and damage pops a number', async T => {
   T.map();

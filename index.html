@@ -1152,8 +1152,8 @@
       <button class="nav-btn nav-item" onclick="showPanel('techniques')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20L20 4 M4 4l16 16 M3 15l6 6 M21 15l-6 6"/></svg></span>Techniques</button>
       <div class="nav-group"><span class="nav-group-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l9-5 9 5v9l-9 5-9-5z M3 8l9 5 9-5 M12 13v9"/></svg></span><span>Equipment</span></div>
       <button class="nav-btn nav-item" onclick="showPanel('shop')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h2l2.5 11h10l2-8H6.5 M9.5 20h.01 M17.5 20h.01"/></svg></span>Shop</button>
-      <button class="nav-btn nav-item" onclick="showPanel('loadout')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5 M8 11l5 5 M4 20l2-2"/></svg></span>Loadout</button>
-      <button class="nav-btn nav-item" onclick="showPanel('armor')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span>Armor</button>
+      <button class="nav-btn nav-item" onclick="showPanel('loadout')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19L19 5 M8 11l5 5 M4 20l2-2"/></svg></span>Possessions</button>
+      <button class="nav-btn nav-item" onclick="showPanel('armor')"><span class="nav-ico"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg></span>Loadout</button>
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importCharacter(this)">
     </div>
 
@@ -1571,7 +1571,7 @@
         still supplies damage reduction and Weight/Mod — but carries its own Gap, Noise, and Vision/Hearing modifiers
         (a full helm covers the face, a kettle hat doesn't, even in the same steel). Slot "Any (Generic)" fits any body
         slot as plain draped material with no special shape — one is auto-created per Material so nothing you already
-        set up needs to change. A character buys/finds a SPECIFIC SIZE of a piece in the Loadout tab; that size (not
+        set up needs to change. A character buys/finds a SPECIFIC SIZE of a piece in the Possessions tab; that size (not
         this row) determines its actual weight and cost.
       </p>
       <button class="btn" onclick="openArmorPieceForm(null)" style="margin-bottom:16px;">+ Add Armor Piece</button>
@@ -1685,7 +1685,7 @@
           </div>
           <div class="field">
             <label>Weight (lbs)</label>
-            <input type="text" id="mf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
+            <input type="text" id="mf-wt" placeholder="0" title="Carry weight — shown in the Possessions weapon list, not used in combat math">
           </div>
           <div class="field">
             <label>Price (pence)</label>
@@ -1788,7 +1788,7 @@
           </div>
           <div class="field">
             <label>Weight (lbs)</label>
-            <input type="text" id="rf-wt" placeholder="0" title="Carry weight — shown in the Loadout weapon list, not used in combat math">
+            <input type="text" id="rf-wt" placeholder="0" title="Carry weight — shown in the Possessions weapon list, not used in combat math">
           </div>
           <div class="field">
             <label>Price (pence)</label>
@@ -1870,7 +1870,7 @@
           <div class="field"><label>Name</label><input type="text" id="ef-name" placeholder="e.g. Backpack"></div>
           <div class="field"><label>Weight (lbs)</label><input type="text" id="ef-wt" placeholder="0"></div>
           <div class="field"><label>Price (pence)</label><input type="text" id="ef-price" placeholder="0" title="100 pence = 1 Crown"></div>
-          <div class="field"><label>Worn as</label><select id="ef-wear" style="width:100%;" title="Jewelry and belts are worn in their own slot on the character's Armor tab. Anything else works while held in a hand."><option value="">— Not worn (held) —</option><option value="ring">Ring</option><option value="necklace">Necklace</option><option value="belt">Belt</option></select></div>
+          <div class="field"><label>Worn as</label><select id="ef-wear" style="width:100%;" title="Jewelry and belts are worn in their own slot on the character's Loadout tab. Anything else works while held in a hand."><option value="">— Not worn (held) —</option><option value="ring">Ring</option><option value="necklace">Necklace</option><option value="belt">Belt</option></select></div>
           <div class="field"><label>Enchantment</label><select id="ef-enchant" style="width:100%;"></select></div>
         </div>
         <div style="display:flex;gap:10px;margin-top:10px;">
@@ -2111,7 +2111,7 @@
 
     <!-- LOADOUT -->
     <div id="panel-loadout" class="panel">
-      <h2>Loadout</h2>
+      <h2>Possessions</h2>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">What your character owns: what you're <b>carrying</b>, what's in <b>storage</b>, and what you've <b>given away</b>. Buy or find gear in the Shop. Carried gear counts toward your weight and can be held in your hands; stored gear is kept safe and weighs nothing. Anything can be handed to another character, a mount or a monster.</p>
       <div class="weight-summary" id="weight-summary">
         <div class="ws-item"><div class="label">Body Weight</div><div class="value" id="ws-body">—</div></div>
@@ -2151,7 +2151,7 @@
         <p class="lo-addctl" style="color:var(--text-dim);font-size:0.78rem;margin-bottom:8px;font-style:italic;">
           Buy or record a specific armor piece in the size YOU need — weight and cost are fixed to that size the
           moment it's added, not recalculated later. Armor scavenged from someone else keeps whatever size fit
-          THEM, so it'll only actually equip (see the Armor tab) if it happens to match your own Target Size.
+          THEM, so it'll only actually equip (see the Loadout tab) if it happens to match your own Target Size.
         </p>
         <div class="loadout-add lo-addctl">
           <select id="armorpiece-select" class="field" style="flex:1;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:4px;font-family:var(--ui-font);"></select>
@@ -2183,11 +2183,15 @@
 
     <!-- ARMOR -->
     <div id="panel-armor" class="panel">
-      <h2>Armor</h2>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip a piece you're carrying (see Loadout) into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
+      <h2>Loadout</h2>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">What your character has ready: what is in each hand, the armor on each part of the body, and the jewelry worn. Everything here comes from what you're carrying (see Possessions).</p>
+      <h3>Hands</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="hand-fields"></div>
+      <h3 style="margin-top:22px;">Armor</h3>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip a piece you're carrying into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
       <h3 style="margin-top:22px;">Jewelry &amp; Accessories</h3>
-      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Wear a ring on each hand, a necklace and a belt from what you're carrying (see Loadout). Boots, gloves and clothing go in the body slots above.</p>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Wear a ring on each hand, a necklace and a belt from what you're carrying (see Possessions). Boots, gloves and clothing go in the body slots above.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="worn-fields"></div>
       <div id="worn-enchant-summary" style="margin-top:16px;"></div>
     </div>
@@ -4609,7 +4613,7 @@ function _buyArmorPiece(index, free) {
   // otherwise — reported live as the Shop selling armor that doesn't fit.
   const mySize = _shopCharacterSize();
   if (size !== mySize && !confirm(
-    `This is sized for Target Size ${size}, but your character is size ${mySize} — it won't fit in the Armor tab until it matches. Buy it anyway?`
+    `This is sized for Target Size ${size}, but your character is size ${mySize} — it won't fit on the Loadout tab until it matches. Buy it anyway?`
   )) return;
   const price = _shopArmorPrice(index);
   if (!free && characterPence < price) { alert(`Not enough money — ${formatMoney(price)} needed, you have ${formatMoney(characterPence)}.`); return; }
@@ -4686,7 +4690,7 @@ function buildShopPanel() {
         <td><input type="number" id="shop-armor-size-${i}" value="${defaultSize}" min="1" step="1"
           style="width:56px;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:4px;border-radius:4px;text-align:center;"
           oninput="_shopArmorPriceUpdate(${i})"></td>
-        <td><span id="shop-armor-price-${i}">—</span><span id="shop-armor-warn-${i}" style="display:none;color:#e05555;font-size:0.72rem;margin-left:6px;" title="Won't fit your character at this size — see the Armor tab's own size check">⚠ won't fit</span></td>
+        <td><span id="shop-armor-price-${i}">—</span><span id="shop-armor-warn-${i}" style="display:none;color:#e05555;font-size:0.72rem;margin-left:6px;" title="Won't fit your character at this size — see the Loadout tab's own size check">⚠ won't fit</span></td>
         <td>${_shopOwnedCell(owned, p.name)}</td>
         <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="_buyArmorPiece(${i})">Buy</button> <button class="btn" style="padding:4px 10px;font-size:0.78rem;" title="Take it without paying — recorded in the Journal for the GM" onclick="_buyArmorPiece(${i}, true)">Acquire</button></td>`;
       aTbody.appendChild(tr);
@@ -6804,7 +6808,36 @@ function _carriedEquipNames() {
   return [...document.querySelectorAll('#equip-list tr')].map(tr => tr.cells[0]?.textContent || '').filter(Boolean);
 }
 function setWorn(key, value) { if (value) characterWorn[key] = value; else delete characterWorn[key]; buildWornFields(); recalc(); }
+// Right / Left Hand on the Loadout page. The hidden #ps-hand-* selects stay the single source of truth
+// (they are what saving and Play Mode read), so these just mirror them.
+function setLoadoutHand(side, value) {
+  const sel = document.getElementById('ps-hand-' + side);
+  if (!sel) return;
+  if (![...sel.options].some(o => o.value === value)) buildHandSelectors();
+  sel.value = value;
+  recalc();
+  buildWornFields();
+}
+function buildHandFields() {
+  const box = document.getElementById('hand-fields');
+  if (!box || !document.getElementById('ps-hand-right')) return;
+  const items = getLoadoutItemNames();
+  const held = getHeldItems();
+  const twoHanded = typeof isTwoHandedGrip === 'function' && isTwoHandedGrip();
+  box.innerHTML = [['right', 'Right Hand'], ['left', 'Left Hand']].map(([side, label]) => {
+    const cur = items.includes(held[side]) ? held[side] : '';
+    const e = _enchantByName(_equipRow(cur)?.enchant);
+    const note = cur && twoHanded ? 'Held in both hands (two-handed)' : e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (items.length ? '' : 'Nothing to hold yet - see Possessions');
+    return `<div class="field"><label>${label}</label>
+      <select data-hand="${side}" onchange="setLoadoutHand(this.dataset.hand, this.value)" style="width:100%;">
+        <option value="">Bare Handed</option>
+        ${items.map(n => `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n)}</option>`).join('')}
+      </select>
+      <div style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">${note}</div></div>`;
+  }).join('');
+}
 function buildWornFields() {
+  buildHandFields();
   const box = document.getElementById('worn-fields');
   if (!box) return;
   const carried = _carriedEquipNames();
@@ -6817,7 +6850,7 @@ function buildWornFields() {
         <option value="">— None —</option>
         ${names.map(n => `<option value="${_paEsc(n)}"${n === cur ? ' selected' : ''}>${_paEsc(n)}${_equipRow(n)?.enchant ? ' ✨' : ''}</option>`).join('')}
       </select>
-      <div style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">${e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (names.length ? '' : 'Nothing to wear here in your Loadout')}</div></div>`;
+      <div style="color:var(--text-dim);font-size:0.72rem;margin-top:3px;">${e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (names.length ? '' : 'Nothing to wear here in your Possessions')}</div></div>`;
   }).join('');
   // Everything enchanted this character has on right now.
   const sum = document.getElementById('worn-enchant-summary');
@@ -8193,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261115c';
+const VERSION = 'v0.1.20261115d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
