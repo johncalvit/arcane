@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117c';
+const VERSION = 'v0.1.20261117d';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10724,15 +10724,15 @@ async function atResolveHopUp(id) {
   openRoller({
     label: `Hop up - ${ent.name}`,
     target: h.pct,
-    targetLabel: `Acrobatics ${h.base}%${h.trained ? '' : ' (untrained)'}${h.penalty ? ` - ${h.penalty} for gear` : ''}  ·  ${HOP_UP_STAMINA} stamina  ·  a miss means a normal Stand Up`,
+    targetLabel: `Acrobatics ${h.base}%${h.trained ? '' : ' (untrained)'}${h.penalty ? ` - ${h.penalty} for gear` : ''}  ·  ${HOP_UP_STAMINA} stamina  ·  a miss leaves you Prone with no move left`,
     onComplete: async (n) => {
       const ok = n <= 5 || (n < 96 && n <= h.pct);
       if (ok) {
         await setCondition(tok.id, 'prone', false);
         logCombat(`${ent.name} hops to their feet (Acrobatics ${h.pct}%) and keeps their movement.`, 'good');
       } else {
-        await atSetSlot(id, 'move', 'Stand Up', 2, false);
-        logCombat(`${ent.name} fails to hop up (Acrobatics ${h.pct}%) and has to stand up the slow way.`, 'bad');
+        await atSetSlot(id, 'move', 'Hop Up failed', 2, false); // still Prone; the move is spent flailing
+        logCombat(`${ent.name} fails to hop up (Acrobatics ${h.pct}%) and stays prone - their move is spent.`, 'bad');
       }
       if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = id;
     },

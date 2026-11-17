@@ -1028,7 +1028,7 @@ function _dlgRender(body) {
   let fullChips = '';
   // A dead combatant keeps its prone condition (healing could raise it again) but
   // there's nothing to stand up for until then — don't offer it.
-  if (isProne && !conds.has('dead')) {
+  if (isProne && !conds.has('dead') && c.slots.move?.label !== 'Hop Up failed') {
     fullChips += _dlgChip({
       label: 'Stand Up', sub: '1r', lit: c.slots.move?.label === 'Stand Up',
       title: 'Prone — standing up takes your whole move',
@@ -1037,7 +1037,7 @@ function _dlgRender(body) {
     const hop = _hopUpChance(ent);
     fullChips += _dlgChip({
       label: 'Hop Up', sub: `${hop.pct}% · ${HOP_UP_STAMINA} stam`,
-      title: `Acrobatics roll to spring up and keep your movement (${hop.base}%${hop.penalty ? `, -${hop.penalty} for gear carried` : ''}). Costs ${HOP_UP_STAMINA} Stamina; a miss means a normal Stand Up.`,
+      title: `Acrobatics roll to spring up and keep your movement (${hop.base}%${hop.penalty ? `, -${hop.penalty} for gear carried` : ''}). Costs ${HOP_UP_STAMINA} Stamina; a miss leaves you Prone with your move spent.`,
       data: { dact: 'hopup' },
     });
   }
