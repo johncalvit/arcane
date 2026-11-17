@@ -1387,7 +1387,8 @@ function _dlgRender(body) {
     let cc = '';
     if (borneOn) cc += _dlgChip({ label: 'Dismount', sub: 'free', data: { dact: 'dismount' } });
     if (iCarry)  cc += _dlgChip({ label: 'Set down', sub: 'free', data: { dact: 'setdown' } });
-    const others = Object.values(mapTokens).filter(t => t.id !== selfTok.id);
+    // Only living bodies can carry or be carried - not candles, loot piles or other item tokens.
+    const others = Object.values(mapTokens).filter(t => t.id !== selfTok.id && (t.entity_type === 'character' || t.entity_type === 'creature'));
     if (others.length) {
       // Placeholder first so nothing is targeted until the user explicitly picks
       // — otherwise the dropdown silently defaults to the first token.
