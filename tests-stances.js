@@ -302,3 +302,26 @@ test('Hidden', 'a door is only known where the player has seen; the GM always se
     T.eq(_doorKnown(door), true, 'GM always');
   } finally { _fogExploredCanvas = savedCanvas; }
 });
+
+test('Hidden', 'GM trap dialog: failed rolls come back, then Apply Effects opens with the failures ticked', async T => {
+  T.map();
+  T.stub('isGM', () => true);
+  T.stub('showToast', () => {});
+  const a = T.token('T_a', 40, 50, 'character', 'ca'), b = T.token('T_b', 45, 50, 'character', 'cb');
+  a.label = 'Ann'; b.label = 'Bob';
+  let opened = null;
+  T.stub('atOpenApplyEffectsModal', ids => { opened = ids; });
+  try {
+    _trapGmDialog({ id: 'h', who: 'Ann', what: 'a Pit', charId: 'ca', tokenId: a.id });
+    T.ok(document.getElementById('trap-gm-modal'), 'dialog shown');
+    T.eq([...document.querySelectorAll('.tg-char:checked')].map(c => c.value).join(), 'ca', 'the one who triggered is ticked');
+    _trapDlg.callId = 'c1'; _trapDlg.called = { ca: null, cb: null };
+    _trapRollResult({ callId: 'other', charId: 'ca', ok: false });
+    T.eq(opened, null, 'results for another call are ignored');
+    _trapRollResult({ callId: 'c1', charId: 'ca', ok: true, roll: 10, pct: 50 });
+    T.eq(opened, null, 'still waiting for Bob');
+    _trapRollResult({ callId: 'c1', charId: 'cb', ok: false, roll: 90, pct: 50 });
+    T.eq(JSON.stringify(opened), JSON.stringify([b.id]), 'only the failure is ticked');
+    T.ok(!document.getElementById('trap-gm-modal'), 'trap dialog closes');
+  } finally { document.getElementById('trap-gm-modal')?.remove(); _trapDlg = null; }
+});

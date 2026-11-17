@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117h';
+const VERSION = 'v0.1.20261117i';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -15017,14 +15017,14 @@ async function _axpConfirmAward() {
 const _FX_DAMAGE_TYPES = [['slash','Slash'],['pierce','Pierce'],['crush','Crush'],['burn','Burn'],['shock','Shock'],['freeze','Freeze'],['corrode','Corrode']];
 const _FX_SKIP_CONDS = ['held', 'holding', 'carrying']; // relational - they need a second token
 
-function atOpenApplyEffectsModal() {
+function atOpenApplyEffectsModal(preChecked) {
   if (!isGM()) return;
   document.getElementById('fx-modal')?.remove();
   const toks = Object.values(mapTokens || {}).filter(t => t.entity_type === 'character' || t.entity_type === 'creature');
   const party = toks.filter(t => t.entity_type === 'character');
   const mons  = toks.filter(t => t.entity_type === 'creature');
   const row = t => `<label style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:0.85rem;cursor:pointer;">
-      <input type="checkbox" class="fx-tgt" data-grp="${t.entity_type === 'character' ? 'party' : 'mon'}" value="${_paEsc(t.id)}">
+      <input type="checkbox" class="fx-tgt" data-grp="${t.entity_type === 'character' ? 'party' : 'mon'}" value="${_paEsc(t.id)}"${Array.isArray(preChecked) && preChecked.includes(t.id) ? ' checked' : ''}>
       <span>${_paEsc(t.label || '?')}</span></label>`;
   const inp = 'background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:var(--ui-font);';
   const condOpts = CONDITION_DEFS.filter(d => !_FX_SKIP_CONDS.includes(d.key))
@@ -16608,8 +16608,12 @@ function subscribeMapRealtime() {
     // the GM also saves that into the map so it stays found.
     // The GM changed the check difficulty (Explore dialog) - everyone's odds follow.
     .on('broadcast', { event: 'call-for-roll' }, ({ payload }) => {
-      if (payload && payload.skill) _showCallForRoll(payload.skill, payload.level);
+      if (payload && (payload.skill || payload.stat)) _showCallForRoll(payload.skill, payload.level, payload);
     })
+    // A player's character walked onto an unnoticed trap (see _hiddenTrigger): the GM gets the trap dialog.
+    .on('broadcast', { event: 'trap-sprung' }, ({ payload }) => { if (isGM() && payload) _trapGmDialog(payload); })
+    // A called roll's outcome comes back to the GM (see _trapRollResult).
+    .on('broadcast', { event: 'roll-result' }, ({ payload }) => { if (isGM() && payload) _trapRollResult(payload); })
     .on('broadcast', { event: 'explore-difficulty' }, ({ payload }) => {
       if (payload && EXPLORE_DIFFICULTY[payload.level]) _exploreDifficulty = payload.level;
       const body = document.getElementById('at-dialog-body');
@@ -20522,6 +20526,85 @@ function _hiddenTrapsFor(tok) {
   return out;
 }
 
+// ── GM trap dialog ──────────────────────────────────────────────────────────────
+// When a player springs a trap the GM gets this: who triggered what, a way to call for a roll (any skill
+// or final stat, for any of the party, default the one who triggered it) and, once every called roll is
+// in, the Apply Effects dialog with whoever failed already ticked.
+var _trapDlg = null; // { callId, called: { charId: result | null }, p }
+function _trapPartyToks() { return Object.values(mapTokens || {}).filter(t => t.entity_type === 'character'); }
+function _trapGmDialog(p) {
+  if (!isGM()) return;
+  document.getElementById('trap-gm-modal')?.remove();
+  _trapDlg = { callId: null, called: {}, p };
+  const skills = (typeof SKILLS !== 'undefined' ? SKILLS : []).filter(s => !(typeof CHECK_SKIP_TYPES !== 'undefined' && CHECK_SKIP_TYPES.includes(s.type)))
+    .map(s => s.name).sort();
+  const inp = 'background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:3px 6px;font-family:var(--ui-font);';
+  const o = document.createElement('div');
+  o.id = 'trap-gm-modal';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3400;display:flex;align-items:center;justify-content:center;';
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:18px 24px;width:430px;max-width:94vw;max-height:90vh;overflow-y:auto;font-family:var(--ui-font);color:var(--text);display:flex;flex-direction:column;gap:10px;">
+    <div style="text-align:center;font-size:1.05rem;"><span style="font-size:1.4rem;">⚠️</span><br><b>${_paEsc(p.who || 'Someone')}</b> triggers ${_paEsc(p.what || 'something hidden')}.</div>
+    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Call for a roll</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <select id="tg-what" style="${inp}flex:1;min-width:150px;">
+        <optgroup label="Skills">${skills.map(n => `<option value="s:${_paEsc(n)}"${n === 'Dodge' ? ' selected' : ''}>${_paEsc(n)}</option>`).join('')}</optgroup>
+        <optgroup label="Final stats (stat x 5 %)">${ATTRIBUTES.map(a => `<option value="a:${_paEsc(a.key)}">${_paEsc(a.label)}</option>`).join('')}</optgroup>
+      </select>
+      <select id="tg-diff" style="${inp}"><option>Easy</option><option selected>Normal</option><option>Difficult</option></select>
+    </div>
+    <div>${_trapPartyToks().map(t => `<label style="display:flex;align-items:center;gap:8px;padding:1px 0;font-size:0.85rem;cursor:pointer;"><input type="checkbox" class="tg-char" value="${_paEsc(t.entity_id)}"${t.entity_id === p.charId ? ' checked' : ''}> ${_paEsc(t.label || '?')}</label>`).join('')}</div>
+    <div style="display:flex;gap:8px;justify-content:center;"><button class="btn" id="tg-call">📣 Call for roll</button></div>
+    <div id="tg-results" style="font-size:0.82rem;min-height:1em;"></div>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <button class="btn" id="tg-fx">⚡ Apply Effects…</button><button class="btn danger" id="tg-close">Dismiss</button></div></div>`;
+  document.body.appendChild(o);
+  o.querySelector('#tg-close').onclick = () => { o.remove(); _trapDlg = null; };
+  o.querySelector('#tg-fx').onclick = () => _trapOpenEffects(false);
+  o.querySelector('#tg-call').onclick = () => {
+    const chars = [...o.querySelectorAll('.tg-char:checked')].map(c => c.value);
+    if (!chars.length) { showToast('Tick at least one character to roll.', 'warn'); return; }
+    const spec = o.querySelector('#tg-what').value, level = o.querySelector('#tg-diff').value;
+    const isStat = spec.startsWith('a:'), key = spec.slice(2);
+    if (EXPLORE_DIFFICULTY[level]) _exploreDifficulty = level;
+    _trapDlg.callId = 'c' + Date.now();
+    _trapDlg.called = {}; chars.forEach(c => { _trapDlg.called[c] = null; });
+    const label = isStat ? (ATTRIBUTES.find(a => a.key === key) || {}).label || key : key;
+    mapChannel?.send({ type: 'broadcast', event: 'call-for-roll', payload: { skill: isStat ? '' : key, stat: isStat ? key : '', level, charIds: chars, callId: _trapDlg.callId } });
+    logCombat(`The GM calls for a ${label} check (${level}) after ${p.who || 'someone'} triggers ${p.what || 'a trap'}.`, 'info');
+    _trapRenderResults();
+  };
+}
+function _trapRenderResults() {
+  const el = document.getElementById('tg-results');
+  if (!el || !_trapDlg) return;
+  const toks = _trapPartyToks();
+  el.innerHTML = Object.entries(_trapDlg.called).map(([cid, r]) => {
+    const name = (toks.find(t => t.entity_id === cid) || {}).label || (r && r.name) || cid;
+    if (!r) return `<div style="color:var(--text-dim);">${_paEsc(name)} - waiting for the roll…</div>`;
+    return `<div style="color:${r.ok ? '#5adf7a' : '#ff6a5a'};">${_paEsc(name)} - ${r.roll == null ? 'cannot attempt it' : `rolled ${r.roll} against ${r.pct}%`}: <b>${r.ok ? 'passed' : 'failed'}</b></div>`;
+  }).join('');
+}
+// A called roll came back. When every character has rolled, the Apply Effects dialog opens for the failures.
+function _trapRollResult(r) {
+  if (!_trapDlg || r.callId !== _trapDlg.callId || !(r.charId in _trapDlg.called)) return;
+  _trapDlg.called[r.charId] = r;
+  _trapRenderResults();
+  if (Object.values(_trapDlg.called).every(Boolean)) _trapOpenEffects(true);
+}
+// Apply Effects with the characters who failed already ticked (or, before any roll, the one who triggered it).
+function _trapOpenEffects(auto) {
+  if (!_trapDlg) return;
+  const toks = _trapPartyToks();
+  const results = Object.entries(_trapDlg.called);
+  let chars = results.filter(([, r]) => r && !r.ok).map(([c]) => c);
+  if (!results.length) chars = _trapDlg.p.charId ? [_trapDlg.p.charId] : [];
+  const ids = toks.filter(t => chars.includes(t.entity_id)).map(t => t.id);
+  if (auto && !ids.length) { showToast('Everyone passed the roll.', 'good'); return; }
+  document.getElementById('trap-gm-modal')?.remove();
+  _trapDlg = null;
+  atOpenApplyEffectsModal(ids);
+}
+
 // A character walked onto an unnoticed trap: it is revealed to everyone and the player gets a dialog.
 function _hiddenTrigger(w, tok) {
   if (!w || w.found) return;
@@ -20532,6 +20615,7 @@ function _hiddenTrigger(w, tok) {
   drawWalls();
   mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who, triggered: true, what } });
   logCombat(`⚠️ ${who} triggers ${what}!`, 'bad');
+  mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id } });
   document.getElementById('trap-modal')?.remove();
   const o = document.createElement('div');
   o.id = 'trap-modal';

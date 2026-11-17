@@ -1571,9 +1571,15 @@ async function _exploreRest(id, days, quiet) {
 }
 
 // A player's side of the GM's call for a roll: a small prompt with a Roll button for their own character.
-function _showCallForRoll(skill, level) {
+// extra (optional): { stat: attribute key to roll instead of a skill, charIds: only these characters are asked,
+// callId: results are sent back to the GM under this id }.
+function _showCallForRoll(skill, level, extra) {
   if (isGM() || !currentCharacterId) return;
+  if (extra && extra.charIds && !extra.charIds.includes(currentCharacterId)) return;
   const ref = 'char::' + currentCharacterId;
+  const statDef = extra && extra.stat ? ATTRIBUTES.find(a => a.key === extra.stat) : null;
+  if (statDef) skill = statDef.label;
+  const report = extra && extra.callId ? (r => _reportCallRoll(extra.callId, ref, r)) : null;
   document.getElementById('cfr-modal')?.remove();
   const o = document.createElement('div');
   o.id = 'cfr-modal';
@@ -1589,15 +1595,45 @@ function _showCallForRoll(skill, level) {
   o.querySelector('#cfr-roll').onclick = () => {
     o.remove();
     if (EXPLORE_DIFFICULTY[level]) _exploreDifficulty = level;
-    _exploreRollCheck(ref, skill);
+    if (statDef) _exploreRollStat(ref, statDef, report); else _exploreRollCheck(ref, skill, report);
   };
 }
 
-function _exploreRollCheck(id, skillName) {
+// Tell the GM how a called roll went.
+function _reportCallRoll(callId, ref, r) {
+  const ent = getEntity(ref);
+  if (!ent || typeof mapChannel === 'undefined' || !mapChannel) return;
+  mapChannel.send({ type: 'broadcast', event: 'roll-result', payload: Object.assign({ callId, charId: ent.id, name: ent.name }, r) });
+}
+
+// A check against a final stat: stat x 5 as a percentage (a 12 is 60%), scaled by the difficulty.
+function _exploreRollStat(id, statDef, onResult) {
+  const ent = getEntity(id);
+  if (!ent) return;
+  const mult = EXPLORE_DIFFICULTY[_exploreDifficulty] || 1;
+  const pct = Math.max(1, Math.min(100, Math.round((ent.attrs?.[statDef.key] || 0) * 5 * mult)));
+  _dlgReopenId = id;
+  openRoller({
+    label: `${statDef.label} check - ${ent.name}`,
+    target: pct,
+    targetLabel: `${_exploreDifficulty}, ${statDef.label} x 5  or less`,
+    onComplete: async (n) => {
+      const ok = n <= 5 || (n < 96 && n <= pct);
+      logCombat(`${ent.name} ${ok ? 'succeeds at' : 'fails'} a ${statDef.label} check (${_exploreDifficulty}, ${pct}%).`, ok ? 'good' : 'bad');
+      if (onResult) onResult({ label: statDef.label, pct, roll: n, ok });
+    },
+  });
+}
+
+function _exploreRollCheck(id, skillName, onResult) {
   const ent = getEntity(id);
   if (!ent) return;
   const chk = _exploreChecks(ent).find(c => c.name === skillName);
-  if (!chk) { showToast('That check is not available.', 'warn'); return; }
+  if (!chk) {
+    showToast('That check is not available.', 'warn');
+    if (onResult) onResult({ label: skillName, pct: 0, roll: null, ok: false }); // no way to attempt it counts as a miss
+    return;
+  }
   _dlgReopenId = id; // come back to Explore once the roll closes
   openRoller({
     label: `${chk.name} check - ${ent.name}`,
@@ -1606,6 +1642,7 @@ function _exploreRollCheck(id, skillName) {
     onComplete: async (n) => {
       const ok = n <= 5 || (n < 96 && n <= chk.pct);
       logCombat(`${ent.name} ${ok ? 'succeeds at' : 'fails'} a ${chk.name} check (${_exploreDifficulty}, ${chk.pct}%).`, ok ? 'good' : 'bad');
+      if (onResult) onResult({ label: chk.name, pct: chk.pct, roll: n, ok });
     },
   });
 }
