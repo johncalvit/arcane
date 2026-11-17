@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261115d';
+const VERSION = 'v0.1.20261117a';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -10700,6 +10700,45 @@ function _totalCastableResource(ent) {
   return qCur + sCur + tCur + bCur;
 }
 
+// Hop Up: spring to your feet from Prone with an Acrobatics roll instead of spending the whole move on
+// Stand Up. Costs HOP_UP_STAMINA either way. Untrained is half the first-point odds; carried gear (not body
+// weight) takes up to 50 points off at your lift limit (Power x 10 lbs).
+const HOP_UP_STAMINA = 2;
+function _hopUpChance(ent) {
+  const attrs = ent.attrs || {};
+  const sk = (typeof SKILLS !== 'undefined' ? SKILLS : []).find(s => s.name === 'Acrobatics');
+  const pts = (ent.skills || {}).Acrobatics || 0;
+  let base = 0;
+  if (sk) base = pts > 0 ? calcSkillSuccess(sk, attrs, pts)
+    : Math.round(0.5 * (sk.successAttrs || []).reduce((t, k) => t + (attrs[k] || 0), 0));
+  let carried = 0; try { carried = _entityCarried(ent, attrs) || 0; } catch (e) {}
+  const gear = Math.max(0, carried - (attrs._weight || 0));
+  const penalty = Math.round(50 * gear / Math.max(1, (attrs.Power || 0) * 10));
+  return { base, penalty, pct: Math.max(1, Math.min(95, base - penalty)), trained: pts > 0 };
+}
+async function atResolveHopUp(id) {
+  const ent = getEntity(id), tok = _pathFindToken(id);
+  if (!ent || !tok) return;
+  const h = _hopUpChance(ent);
+  await _deductStamina(id, HOP_UP_STAMINA);
+  openRoller({
+    label: `Hop up - ${ent.name}`,
+    target: h.pct,
+    targetLabel: `Acrobatics ${h.base}%${h.trained ? '' : ' (untrained)'}${h.penalty ? ` - ${h.penalty} for gear` : ''}  ·  ${HOP_UP_STAMINA} stamina  ·  a miss means a normal Stand Up`,
+    onComplete: async (n) => {
+      const ok = n <= 5 || (n < 96 && n <= h.pct);
+      if (ok) {
+        await setCondition(tok.id, 'prone', false);
+        logCombat(`${ent.name} hops to their feet (Acrobatics ${h.pct}%) and keeps their movement.`, 'good');
+      } else {
+        await atSetSlot(id, 'move', 'Stand Up', 2, false);
+        logCombat(`${ent.name} fails to hop up (Acrobatics ${h.pct}%) and has to stand up the slow way.`, 'bad');
+      }
+      if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = id;
+    },
+  });
+}
+
 function _staminaCostForLabel(label) {
   const action = label.split(' —')[0].trim();
   if (action === 'Evade' || action === 'Sprint' || action === 'Charge') return 2;
@@ -12879,17 +12918,22 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight, verb) {
       }
     }
   }
-  // Being thrown breaks any held stance (Sentinel, Evade, Target, Vigilant) and may knock the body prone: a
-  // slam always does; otherwise about 20% + 4% per foot, up to 90%.
+  // Being thrown breaks any held stance (Sentinel, Evade, Target, Vigilant). The body then needs a save to land
+  // on its feet: Power + 2 x Physical Coordination %, halved after a slam (always at least 5%, at most 95%).
   let proneText = '';
   if (travel >= BLAST.minPushFt || slamFx) {
     await _cancelStancesOnMove(entRef, null, 'is thrown');
-    if (!getConditions(tok.id).has('prone') && (slamFx || Math.random() < Math.min(0.9, 0.2 + 0.04 * travel))) {
-      await setCondition(tok.id, 'prone', true);
-      proneText = ' and lands prone';
+    if (!getConditions(tok.id).has('prone')) {
+      const a = (getEntity(entRef) || {}).attrs || {};
+      let chance = (a.Power || 0) + 2 * (a.PhysCoord || 0);
+      if (slamFx) chance /= 2;
+      chance = Math.max(5, Math.min(95, Math.round(chance)));
+      if (Math.random() * 100 < chance) proneText = ` (keeps their feet, ${chance}%)`;
+      else { await setCondition(tok.id, 'prone', true); proneText = ` and lands prone (${chance}% to stay up)`; }
     }
   }
-  if (travel > 0.25 || slamFx) _blowbackFx(tok, startPct, `${tok.label ? tok.label + ' ' : ''}${verb || 'thrown'} ${Math.round(travel)} ft${proneText ? ' - prone!' : ''}`, slamFx);
+  const landedProne = / lands prone|and lands prone/.test(proneText);
+  if (travel > 0.25 || slamFx) _blowbackFx(tok, startPct, `${tok.label ? tok.label + ' ' : ''}${verb || 'thrown'} ${Math.round(travel)} ft${landedProne ? ' - prone!' : ''}`, slamFx);
   return { travel, slamText, proneText };
 }
 

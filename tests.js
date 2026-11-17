@@ -163,7 +163,7 @@ test('Blast', 'held / holding / carrying bodies are not thrown', async T => {
   }
 });
 test('Blast', 'a thrown body slides the full distance across open ground', async T => {
-  T.map(); T.fakeWrites(); T.random(0.99);
+  T.map(); T.fakeWrites(); T.random(0);
   const ref = T.char('thrown');
   const tok = T.token('T_a', 50, 50, 'character', 'T_thrown');
   T.stub('_clipRoute', pts => ({ points: pts, stop: null }));
@@ -173,7 +173,31 @@ test('Blast', 'a thrown body slides the full distance across open ground', async
   T.stubObj(sb, 'from', () => ({ update: () => ({ eq: async () => ({ data: [], error: null }) }) }));
   const r = await _blowbackSlide(tok, ref, 1, 0, 10, 150);
   T.near(r.travel, 10); T.near(tok.x_pct, 60); T.near(tok.y_pct, 50);
-  T.eq(r.slamText, ''); T.eq(r.proneText, '', 'random 0.99 should not knock prone');
+  T.eq(r.slamText, ''); T.ok(/keeps their feet/.test(r.proneText), 'a good save keeps them upright');
+});
+test('Blast', 'a failed landing save leaves the body prone', async T => {
+  T.map(); T.fakeWrites(); T.random(0.99);
+  const ref = T.char('thrown');
+  const tok = T.token('T_a', 50, 50, 'character', 'T_thrown');
+  T.stub('_clipRoute', pts => ({ points: pts, stop: null }));
+  T.stub('_cancelStancesOnMove', async () => {});
+  T.stub('_blowbackFx', () => {});
+  T.stub('getConditions', () => new Set());
+  let prone = false;
+  T.stub('setCondition', async (id, k, on) => { if (k === 'prone' && on) prone = true; });
+  T.stubObj(sb, 'from', () => ({ update: () => ({ eq: async () => ({ data: [], error: null }) }) }));
+  const r = await _blowbackSlide(tok, ref, 1, 0, 10, 150);
+  T.ok(prone && /lands prone/.test(r.proneText), 'a roll of 99 beats any save');
+});
+test('Hop Up', 'Acrobatics odds drop with gear carried but not with body weight', async T => {
+  const base = { Power: 10, PhysCoord: 10, _weight: 150 };
+  const sk = SKILLS.find(s => s.name === 'Acrobatics');
+  const naked = _hopUpChance({ attrs: base, skills: {}, carriedWeight: 150 });
+  T.eq(naked.penalty, 0, 'body weight alone is free');
+  T.eq(naked.base, Math.round(0.5 * sk.successAttrs.reduce((t, k) => t + (base[k] || 0), 0)), 'untrained is half a first point');
+  const loaded = _hopUpChance({ attrs: base, skills: {}, carriedWeight: 200 });
+  T.eq(loaded.penalty, 25, '50 lb of gear against a 100 lb lift limit is -25');
+  T.ok(loaded.pct < naked.pct || naked.pct === 1, 'gear lowers the chance');
 });
 test('Blast', 'hitting a wall stops the slide, deals slam damage and knocks prone', async T => {
   T.map(); T.fakeWrites(); T.random(0.99);

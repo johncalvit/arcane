@@ -1031,8 +1031,14 @@ function _dlgRender(body) {
   if (isProne && !conds.has('dead')) {
     fullChips += _dlgChip({
       label: 'Stand Up', sub: '1r', lit: c.slots.move?.label === 'Stand Up',
-      title: 'Prone — stand up first!',
+      title: 'Prone — standing up takes your whole move',
       data: { dact: 'set', slot: 'move', label: 'Stand Up', dur: 2, locks: 0 },
+    });
+    const hop = _hopUpChance(ent);
+    fullChips += _dlgChip({
+      label: 'Hop Up', sub: `${hop.pct}% · ${HOP_UP_STAMINA} stam`,
+      title: `Acrobatics roll to spring up and keep your movement (${hop.base}%${hop.penalty ? `, -${hop.penalty} for gear carried` : ''}). Costs ${HOP_UP_STAMINA} Stamina; a miss means a normal Stand Up.`,
+      data: { dact: 'hopup' },
     });
   }
   fullChips += AT_FULLBODY.map(a => {
@@ -2039,6 +2045,11 @@ async function _dlgAct(d, id, body) {
     case 'takedown':
       atCloseModal();
       await atResolveTakedown(id); // spends the action only when the roll lands
+      break;
+    case 'hopup':
+      _dlgReopenId = id;
+      atCloseModal();
+      await atResolveHopUp(id);
       break;
     case 'recover':
       atCloseModal();
