@@ -547,3 +547,46 @@ test('Loot', 'the loot chip under a hand needs that hand bare and a lootable bod
   conds = new Set(['dead']); T.stub('_pctDistFt', () => 40);
   T.ok(_lootHandRefusal(ref, 'right') !== '', 'too far away');
 });
+
+test('Techniques', 'Whirlwind exists for exactly the five weapon types and is found by weapon name', async T => {
+  const ws = TECHNIQUES.filter(t => t.whirlwind);
+  T.eq(ws.map(t => t.weaponType).sort().join(), ['Flail', 'Greatsword', 'Polearm', 'Scimitar', 'Staff'].join());
+  const sword = ws.find(t => t.weaponType === 'Greatsword');
+  T.ok(_techniqueWhirlwind([sword.id], 'Greatsword'), 'owner of the technique');
+  T.eq(_techniqueWhirlwind([], 'Greatsword'), null, 'not owned');
+  T.eq(_techniqueWhirlwind([sword.id], 'Dagger'), null, 'wrong weapon type');
+});
+test('Techniques', 'Whirlwind: targets in reach (allies too, not self, not the dead), stamina up front, one swing each', async T => {
+  T.map();
+  const me = T.token('T_me', 50, 50, 'character', 'T_me');
+  const a = T.token('T_a', 51, 50, 'character', 'T_a');       // an ally, in reach
+  const b = T.token('T_b', 50, 51, 'creature', 'T_b');        // a monster, in reach
+  const far = T.token('T_far', 90, 90, 'creature', 'T_far');  // out of reach
+  const dead = T.token('T_dead', 50, 49, 'creature', 'T_dead');
+  T.stub('getTokenSize', () => 0);
+  T.stub('_pathFindToken', () => me);
+  T.stub('getConditions', id => id === dead.id ? new Set(['dead']) : new Set());
+  T.stub('_pctDistFt', () => 3);
+  const reachFt = 6 * 0 + 1000 / (mapScalePPF || 1); // wide enough for the near tokens, nothing like 90% away
+  const ids = _whirlTargets('char::T_me', 12);
+  T.ok(ids.includes(a.id) && ids.includes(b.id), 'ally and monster are swept');
+  T.ok(!ids.includes(me.id) && !ids.includes(dead.id) && !ids.includes(far.id), 'not self, the dead, or the far');
+  // stamina check and the swing chain
+  const swings = [];
+  T.stub('showToast', () => {});
+  T.stub('logCombat', () => {});
+  T.stub('_whirlTargets', () => [a.id, b.id]);
+  T.stub('_whirlEnd', () => { _whirl = null; });
+  T.stub('enterAttackMode', () => {});
+  T.stub('exitAttackMode', () => {});
+  T.stub('attackTokenClick', id => { swings.push([id, attackWhirl && attackWhirl.n, attackWhirl && attackWhirl.last]); return true; });
+  let stam = 1;
+  T.stub('getEntity', () => ({ name: 'Me', attrs: { Stamina: stam }, damage: { stamina: 0 } }));
+  T.eq(startWhirlwind('char::T_me', 'Greatsword', 'Slash', 4), false, 'one Stamina is not enough for two targets');
+  T.eq(swings.length, 0);
+  stam = 5;
+  T.eq(startWhirlwind('char::T_me', 'Greatsword', 'Slash', 4), true);
+  T.eq(JSON.stringify(swings), JSON.stringify([[a.id, 2, false]]), 'first swing carries n=2');
+  _whirlNext();
+  T.eq(JSON.stringify(swings[1]), JSON.stringify([b.id, 2, true]), 'second swing is flagged last');
+});

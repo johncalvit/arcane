@@ -1188,7 +1188,16 @@ function _dlgRender(body) {
           });
         }
       }
-      return normalChip + aimedChip + heavyChips;
+      // Whirlwind technique: sweep everyone in reach (friends too), 1 Stamina and -1 max damage per target.
+      let whirlChip = '';
+      if (!ranged && r.damageMax > 0 && !defensive && (r.reach ?? 0) > 0 && typeof _techniqueWhirlwind === 'function' && _techniqueWhirlwind(ent?.stats?.Techniques, itemName)) {
+        whirlChip = _dlgChip({
+          label: `🌀 Whirlwind ${r.action}`, sub: '1 stam / target',
+          title: `${_techniqueWhirlwind(ent?.stats?.Techniques, itemName)}: attack EVERY living body within ${r.reach} ft, allies included. Costs 1 Stamina per target attacked, and the damage cap of each swing drops by 1 for each target.`,
+          data: { dact: 'whirl', item: itemName, action: r.action, range: r.reach ?? 0 },
+        });
+      }
+      return normalChip + aimedChip + heavyChips + whirlChip;
     }).join('');
   };
 
@@ -2028,6 +2037,10 @@ async function _dlgAct(d, id, body) {
         +d.hstam > 0 ? { stam: +d.hstam, dmg: +d.hdmg, name: d.hname } : null);
       break;
     }
+    case 'whirl':
+      atCloseModal();
+      startWhirlwind(id, d.item, d.action, +d.range); // the sweep reopens the dialog itself when it ends
+      break;
     case 'lootcheck': {
       const why = _lootHandRefusal(id, d.slot);
       if (why) { showToast(why, 'warn'); break; }
