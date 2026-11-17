@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117b';
+const VERSION = 'v0.1.20261117c';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -12919,14 +12919,14 @@ async function _blowbackSlide(tok, entRef, ux, uy, pushFt, weight, verb) {
     }
   }
   // Being thrown breaks any held stance (Sentinel, Evade, Target, Vigilant). The body then needs a save to land
-  // on its feet: Power + 2 x Physical Coordination % minus 4 per foot travelled, halved after a slam (5% to 95%).
+  // on its feet: Power + 4 x Physical Coordination % minus 4 per foot travelled, halved after a slam (5% to 95%).
   // Pushes of 2 ft or less need no save (unless they end in a slam).
   let proneText = '';
   if (travel >= BLAST.minPushFt || slamFx) {
     await _cancelStancesOnMove(entRef, null, 'is thrown');
     if (!getConditions(tok.id).has('prone') && (travel > 2 || slamFx)) {
       const a = (getEntity(entRef) || {}).attrs || {};
-      let chance = (a.Power || 0) + 2 * (a.PhysCoord || 0) - 4 * travel;
+      let chance = (a.Power || 0) + 4 * (a.PhysCoord || 0) - 4 * travel;
       if (slamFx) chance /= 2;
       chance = Math.max(5, Math.min(95, Math.round(chance)));
       if (Math.random() * 100 < chance) proneText = ` (keeps their feet, ${chance}%)`;
