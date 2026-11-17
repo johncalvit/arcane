@@ -285,3 +285,20 @@ test('Hidden', 'resetting the fog hides found objects again and clears the appro
   T.ok(!a.found && a.foundBy === '', 'forgotten');
   T.eq(Object.keys(_hiddenStage).length, 0, 'approach rolls cleared');
 });
+
+test('Hidden', 'a door is only known where the player has seen; the GM always sees it', async T => {
+  T.map();
+  const door = { id: 'd', door: true, type: 'line', points: [{ x_pct: 50, y_pct: 50 }, { x_pct: 52, y_pct: 50 }] };
+  const savedCanvas = _fogExploredCanvas;
+  try {
+    const c = document.createElement('canvas'); c.width = mapImgW || 1000; c.height = mapImgH || 1000;
+    _fogExploredCanvas = c;
+    T.stub('_fogViewerToken', () => ({ id: 'v' }));
+    T.stub('_gmSeesAll', () => false);
+    T.eq(_doorKnown(door), false, 'unexplored: unknown');
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(c.width * 0.45, c.height * 0.45, c.width * 0.1, c.height * 0.1);
+    T.eq(_doorKnown(door), true, 'explored: known');
+    T.stub('_gmSeesAll', () => true); _fogExploredCanvas = null;
+    T.eq(_doorKnown(door), true, 'GM always');
+  } finally { _fogExploredCanvas = savedCanvas; }
+});

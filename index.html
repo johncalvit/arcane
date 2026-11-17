@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117g';
+const VERSION = 'v0.1.20261117h';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -22020,6 +22020,7 @@ function drawFog(fromLights) {
     }
     _fogHideAllTokens();
     if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
+    if (mapWalls.some(w => w.door)) drawWalls(); // no viewpoint: no doors either
     return;
   }
 
@@ -22112,6 +22113,27 @@ function drawFog(fromLights) {
   // else happened to redraw it.
   if (typeof drawSentinelRanges === 'function') drawSentinelRanges();
   _hiddenDetectionCheck(false); // the viewer may have just moved into range of something hidden
+  if (mapWalls.some(w => w.door)) drawWalls(); // doors appear as the viewer's explored area grows
+}
+
+// Does this viewer know about the door? The GM (or a POV view) always does; a player only where their fog
+// is cleared: in sight now or remembered. Checks a small patch around the door's middle, since a door sits
+// right on the edge of the area a room's walls let you see.
+function _doorKnown(w) {
+  if (_gmSeesAll()) return true;
+  const c = _fogExploredCanvas;
+  if (!c || !_fogViewerToken() || !c.width || !(w.points || []).length) return false;
+  const pts = w.points;
+  const a = pts[0], b = pts[pts.length - 1];
+  const mx = Math.round(((a.x_pct + b.x_pct) / 2) / 100 * c.width), my = Math.round(((a.y_pct + b.y_pct) / 2) / 100 * c.height);
+  const r = 6, x0 = Math.max(0, mx - r), y0 = Math.max(0, my - r);
+  const wd = Math.min(c.width - x0, 2 * r + 1), ht = Math.min(c.height - y0, 2 * r + 1);
+  if (wd <= 0 || ht <= 0) return false;
+  try {
+    const d = c.getContext('2d', { willReadFrequently: true }).getImageData(x0, y0, wd, ht).data;
+    for (let i = 3; i < d.length; i += 4) if (d[i] > 0) return true;
+  } catch (e) {}
+  return false;
 }
 
 function drawWalls(mouseX, mouseY) {
@@ -22130,7 +22152,7 @@ function drawWalls(mouseX, mouseY) {
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
     if (w.type === 'litarea' || w.type === 'hidden') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
-    if (w.door) { _doorDraw(svg, w); return; }  // doors are visible to everyone, open or closed
+    if (w.door) { if (_doorKnown(w)) _doorDraw(svg, w); return; }  // open or closed, but only where the viewer has seen
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
     // Index passed through so the GM can see, right on the map, which wall
     // is which — the Manage Walls list numbers rows the same way (#1, #2,
