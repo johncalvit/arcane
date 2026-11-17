@@ -210,3 +210,39 @@ test('Vigilant', 'an unnoticed mover passes silently: no prompt, nothing pending
   T.eq(shown, 1); T.eq(_sentinelCheckPending.vigilantSense, 'hearing');
   _sentinelCheckPending.resolve(false); await p;
 });
+
+// ── Hidden objects: two rolls per approach (2x stat ft at half chance, 1x stat ft at full), none repeated ──
+test('Hidden', 'one roll at the far ring, one at the near ring, none while standing still; leaving resets', async T => {
+  const sn = { k: 'visual', stat: 10, hiding: 100, distFt: 30, los: true };
+  const w = { id: 'h1', found: false };
+  T.map();
+  const savedCid = currentCharacterId; currentCharacterId = 'T_me';
+  try {
+    let rolls = 0, revealed = 0;
+    T.stub('isGM', () => false);
+    T.stub('_hiddenObjects', () => [w]);
+    T.stub('_fogViewerToken', () => ({ id: 'tok1' }));
+    T.stub('getConditions', () => new Set());
+    T.stub('_refForToken', () => 'char::T_me');
+    T.stub('getEntity', () => ({ name: 'Me', attrs: {} }));
+    T.stub('_hiddenSenses', () => [Object.assign({}, sn)]);
+    T.stub('_hiddenReveal', () => { revealed++; });
+    T.stub('_hiddenRollChance', () => { rolls++; return 0; });
+    delete _hiddenStage['tok1|h1|visual'];
+    _hiddenDetectionCheck(false); T.eq(rolls, 0, 'beyond 2 x stat nothing rolls');
+    sn.distFt = 18; _hiddenDetectionCheck(false); T.eq(rolls, 1, 'far ring rolls once');
+    _hiddenDetectionCheck(false); _hiddenDetectionCheck(false); T.eq(rolls, 1, 'standing still never re-rolls');
+    sn.distFt = 8; _hiddenDetectionCheck(false); T.eq(rolls, 2, 'near ring rolls once');
+    sn.distFt = 5; _hiddenDetectionCheck(false); T.eq(rolls, 2, 'closer still: no extra roll');
+    sn.distFt = 40; _hiddenDetectionCheck(false); sn.distFt = 18; _hiddenDetectionCheck(false);
+    T.eq(rolls, 3, 'walking away and back rolls the far ring again');
+    _hiddenDetectionCheck(true); T.eq(rolls, 4, 'starting a Search re-rolls the stage they are inside');
+    T.eq(revealed, 0);
+  } finally { currentCharacterId = savedCid; delete _hiddenStage['tok1|h1|visual']; }
+});
+test('Hidden', 'chance is stat / hiding factor, half at the far ring, doubled by Searching', async T => {
+  const sn = { stat: 10, hiding: 40 };
+  T.near(_hiddenRollChance(sn, 2, false), 25); T.near(_hiddenRollChance(sn, 1, false), 12.5);
+  T.near(_hiddenRollChance(sn, 2, true), 50);  T.near(_hiddenRollChance(sn, 1, true), 25);
+  T.eq(_hiddenRollChance({ stat: 10, hiding: 0 }, 2, false), 0);
+});
