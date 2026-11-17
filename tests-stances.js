@@ -275,3 +275,13 @@ test('Hidden', 'a player route is stopped at an unnoticed hidden line or area; f
     T.eq(_hiddenTrapsFor(tok).length, 0, 'the GM never springs traps');
   } finally { currentCharacterId = savedCid; }
 });
+
+test('Hidden', 'resetting the fog hides found objects again and clears the approach rolls', async T => {
+  const a = { id: 'a', found: true, foundBy: 'X' }, b = { id: 'b', found: false };
+  T.stub('_hiddenObjects', () => [a, b]);
+  T.stub('drawWalls', () => {});
+  _hiddenStage['t|a|visual'] = 2;
+  T.eq(_hiddenForgetAll(), 1, 'one had been found');
+  T.ok(!a.found && a.foundBy === '', 'forgotten');
+  T.eq(Object.keys(_hiddenStage).length, 0, 'approach rolls cleared');
+});

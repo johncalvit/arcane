@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117f';
+const VERSION = 'v0.1.20261117g';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16655,6 +16655,7 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'fog-reset' }, () => {
       _fogExploredCanvas = null;
       _fogRevealedMapId  = null;
+      _hiddenForgetAll();
       if (typeof drawFog === 'function') drawFog();
     })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
@@ -20136,7 +20137,9 @@ enterPlayMode = function() {
 function resetFogOfWar() {
   if (!isGM()) return;
   mapChannel?.send({ type: 'broadcast', event: 'fog-reset', payload: {} });
-  showToast('Fog of war reset — players start unexplored again.', 'good');
+  const n = _hiddenForgetAll(); // hidden things the players had found are hidden again
+  if (n) saveMapWalls();
+  showToast('Fog of war reset — players start unexplored again' + (n ? `, and ${n} hidden item${n === 1 ? ' is' : 's are'} hidden again` : '') + '.', 'good');
 }
 
 // ── Calibration mode ─────────────────────────────────────────────────────────
@@ -21291,6 +21294,16 @@ document.addEventListener('dblclick', e => {
 var SEARCH_DETECT_MULT  = 2;
 var HIDDEN_FAR_FACTOR   = 0.5;    // the far (2 x stat) roll is this share of the full chance
 var _hiddenStage        = {};     // 'tokenId|objectId|sense' → 0 none / 1 far / 2 near, already rolled
+
+// Fog reset also makes everyone forget what they had found: every hidden object is hidden again and can be
+// noticed (or triggered) afresh. Returns how many had been found.
+function _hiddenForgetAll() {
+  let n = 0;
+  for (const w of _hiddenObjects()) { if (w.found) { n++; w.found = false; w.foundBy = ''; } }
+  _hiddenStage = {};
+  if (typeof drawWalls === 'function') drawWalls();
+  return n;
+}
 
 function _hiddenObjects() { return mapWalls.filter(w => w.type === 'hidden' && (w.points || []).length >= 2); }
 
