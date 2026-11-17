@@ -246,3 +246,32 @@ test('Hidden', 'chance is stat / hiding factor, half at the far ring, doubled by
   T.near(_hiddenRollChance(sn, 2, true), 50);  T.near(_hiddenRollChance(sn, 1, true), 25);
   T.eq(_hiddenRollChance({ stat: 10, hiding: 0 }, 2, false), 0);
 });
+
+// ── Hidden objects: walking onto an unnoticed one stops the move ──
+test('Hidden', 'a player route is stopped at an unnoticed hidden line or area; found ones and the GM pass', async T => {
+  T.map();
+  const savedCid = currentCharacterId; currentCharacterId = 'T_me';
+  try {
+    const line = { id: 'hl', type: 'hidden', shape: 'line', found: false, name: 'Tripwire', points: [{ x_pct: 50, y_pct: 40 }, { x_pct: 50, y_pct: 60 }] };
+    const area = { id: 'ha', type: 'hidden', shape: 'poly', found: false, name: 'Pit', points: [{ x_pct: 70, y_pct: 40 }, { x_pct: 80, y_pct: 40 }, { x_pct: 80, y_pct: 60 }, { x_pct: 70, y_pct: 60 }] };
+    T.stub('_hiddenObjects', () => [line, area]);
+    T.stub('getConditions', () => new Set());
+    T.stub('isGM', () => false);
+    const tok = T.token('T_me', 40, 50, 'character', 'T_me');
+    const route = [{ x_pct: 40, y_pct: 50 }, { x_pct: 90, y_pct: 50 }];
+    let r = _clipRoute(route, { traps: _hiddenTrapsFor(tok) });
+    T.eq(r.stop, 'hidden'); T.eq(r.trap.id, 'hl', 'the line is crossed first');
+    const end = r.points[r.points.length - 1];
+    T.ok(end.x_pct >= 50 && end.x_pct < 52, 'stops right on the line, got ' + end.x_pct);
+    line.found = true;
+    r = _clipRoute(route, { traps: _hiddenTrapsFor(tok) });
+    T.eq(r.trap.id, 'ha', 'with the line found, the area is next');
+    T.ok(r.points[r.points.length - 1].x_pct >= 70 && r.points[r.points.length - 1].x_pct < 72);
+    area.found = true;
+    r = _clipRoute(route, { traps: _hiddenTrapsFor(tok) });
+    T.eq(r.stop, null, 'found things do not trigger');
+    line.found = area.found = false;
+    T.stub('isGM', () => true);
+    T.eq(_hiddenTrapsFor(tok).length, 0, 'the GM never springs traps');
+  } finally { currentCharacterId = savedCid; }
+});

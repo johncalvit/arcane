@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117e';
+const VERSION = 'v0.1.20261117f';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -16638,6 +16638,7 @@ function subscribeMapRealtime() {
       w.found = true; w.foundBy = payload.who || '';
       if (isGM()) saveMapWalls();
       drawWalls();
+      if (payload.triggered) showToast(`${payload.who || 'Someone'} triggers ${payload.what || 'something hidden'}!`, 'warn');
     })
     // The GM flipped the active map's Day/Dark lighting (see
     // toggleMapLighting) — every Vigilant cone depends on this, so redraw.
@@ -17646,6 +17647,12 @@ function onTokenMouseMove(e) {
 
   // the rest of the borne-group rides along by the same delta
   _moveGroupWith(dragTokenId, x_pct - prevX, y_pct - prevY, false);
+
+  // Walked onto an unnoticed trap: the drag ends right here (as if released) and the trap is sprung.
+  if (clipped.trap) {
+    const trapTok = mapTokens[dragTokenId];
+    onTokenMouseUp(e).then(() => _hiddenTrigger(clipped.trap, trapTok));
+  }
 }
 
 async function onTokenMouseUp(e) {
@@ -20475,12 +20482,72 @@ function _wallStopT(a, b, segs) {
   return best === null ? null : Math.max(0, best - 1.5 / len);
 }
 
+// Where along a->b (0..1) the move first crosses any of segs (image px [x1,y1,x2,y2]), or null.
+function _firstCrossT(a, b, segs) {
+  const px = a.x_pct / 100 * mapImgW, py = a.y_pct / 100 * mapImgH;
+  const rx = b.x_pct / 100 * mapImgW - px, ry = b.y_pct / 100 * mapImgH - py;
+  if (Math.hypot(rx, ry) < 1e-6) return null;
+  let best = null;
+  for (const [cx, cy, dx, dy] of segs) {
+    const qx = dx - cx, qy = dy - cy;
+    const den = rx * qy - ry * qx;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((cx - px) * qy - (cy - py) * qx) / den;
+    const u = ((cx - px) * ry - (cy - py) * rx) / den;
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1 && (best === null || t < best)) best = t;
+  }
+  return best;
+}
+
+// Traps a player's own character can spring by walking onto them: the not-yet-noticed hidden lines and areas.
+// Not for the GM, not for anyone else's token. An area the token already stands in is ignored.
+function _hiddenTrapsFor(tok) {
+  if (!tok || isGM() || tok.entity_type !== 'character' || tok.entity_id !== currentCharacterId) return [];
+  if (!mapImgW || !mapImgH) return [];
+  const conds = getConditions(tok.id);
+  if (conds.has('dead') || conds.has('unconscious')) return [];
+  const sx = tok.x_pct / 100 * mapImgW, sy = tok.y_pct / 100 * mapImgH;
+  const out = [];
+  for (const w of _hiddenObjects()) {
+    if (w.found) continue;
+    const pts = (w.points || []).map(p => ({ x: p.x_pct / 100 * mapImgW, y: p.y_pct / 100 * mapImgH }));
+    if (w.shape === 'poly' && pts.length >= 3 && _fogPointInPolygon(sx, sy, pts)) continue;
+    const segs = [], n = w.shape === 'poly' ? pts.length : pts.length - 1;
+    for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % pts.length]; segs.push([p.x, p.y, q.x, q.y]); }
+    out.push({ w, segs });
+  }
+  return out;
+}
+
+// A character walked onto an unnoticed trap: it is revealed to everyone and the player gets a dialog.
+function _hiddenTrigger(w, tok) {
+  if (!w || w.found) return;
+  const ent = tok ? getEntity(_refForToken(tok)) : null;
+  const who = (ent && ent.name) || (tok && tok.label) || 'Someone';
+  const what = w.name ? 'a ' + w.name : 'something hidden';
+  w.found = true; w.foundBy = who;
+  drawWalls();
+  mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who, triggered: true, what } });
+  logCombat(`⚠️ ${who} triggers ${what}!`, 'bad');
+  document.getElementById('trap-modal')?.remove();
+  const o = document.createElement('div');
+  o.id = 'trap-modal';
+  o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10060;display:flex;align-items:center;justify-content:center;';
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:20px 26px;max-width:360px;text-align:center;">
+      <div style="font-size:1.8rem;">⚠️</div>
+      <div style="margin:8px 0 14px;color:var(--text);font-size:1.05rem;"><b>${_paEsc(who)}</b> triggers ${_paEsc(what)}.</div>
+      <button class="at-btn primary" id="trap-ok">OK</button></div>`;
+  document.body.appendChild(o);
+  o.querySelector('#trap-ok').onclick = () => o.remove();
+}
+
 // Cuts a route (image-percent points) short at the first wall and/or after opts.maxFeet.
 // Returns { points, stop: null | 'wall' | 'limit' }.
 function _clipRoute(pts, opts) {
   opts = opts || {};
   if (!pts || pts.length < 2) return { points: pts || [], stop: null };
   const segs = opts.walls ? _moveBlockers() : [];
+  const traps = opts.traps || [];
   const lim = (opts.maxFeet != null && mapScalePPF > 0) ? opts.maxFeet : null;
   const out = [pts[0]];
   let acc = 0;
@@ -20488,6 +20555,17 @@ function _clipRoute(pts, opts) {
     const a = pts[i - 1], b = pts[i];
     let tStop = null, kind = null;
     if (segs.length) { const t = _wallStopT(a, b, segs); if (t !== null) { tStop = t; kind = 'wall'; } }
+    let trapHit = null;
+    for (const tr of traps) {
+      const t = _firstCrossT(a, b, tr.segs);
+      if (t !== null && (tStop === null || t < tStop) && (trapHit === null || t < trapHit.t)) trapHit = { t, w: tr.w };
+    }
+    if (trapHit) {
+      const len = Math.hypot((b.x_pct - a.x_pct) / 100 * mapImgW, (b.y_pct - a.y_pct) / 100 * mapImgH) || 1;
+      const tt = Math.min(1, trapHit.t + 4 / len); // just onto the trap
+      out.push({ x_pct: a.x_pct + (b.x_pct - a.x_pct) * tt, y_pct: a.y_pct + (b.y_pct - a.y_pct) * tt });
+      return { points: out, stop: 'hidden', trap: trapHit.w };
+    }
     if (lim !== null) {
       const segFeet = _pctDistFt(a.x_pct, a.y_pct, b.x_pct, b.y_pct) || 0;
       if (segFeet > 0 && acc + segFeet > lim + 0.01) {
@@ -20531,12 +20609,12 @@ function _dragClip(tokenId, xp, yp) {
   const budgeted = controls && _atIsCombatActive() && mapScalePPF > 0 && atCombatants.some(c => c.id === combId)
     && (isGM() || _atSharedActive()?.id === combId);
   const res = _clipRoute([{ x_pct: _dragStartXPct, y_pct: _dragStartYPct }, { x_pct: xp, y_pct: yp }],
-    { walls: !_moveBypass(), maxFeet: budgeted ? _moveRemainingFeet(combId) : null });
+    { walls: !_moveBypass(), maxFeet: budgeted ? _moveRemainingFeet(combId) : null, traps: _hiddenTrapsFor(t) });
   const end = res.points[res.points.length - 1];
   if (res.stop === 'wall') {
     if (!_dragStopNoted) { _dragStopNoted = true; showToast(isGM() ? 'A wall stops the move (hold Shift to pass).' : 'A wall blocks the way.', 'warn'); }
   } else _dragStopNoted = false;
-  return { x_pct: end.x_pct, y_pct: end.y_pct, stop: res.stop };
+  return { x_pct: end.x_pct, y_pct: end.y_pct, stop: res.stop, trap: res.trap || null };
 }
 
 // Straight-line feet between two image-percent points — the same distance
@@ -20823,7 +20901,8 @@ async function pathCommit() {
   if (pathPoints.length >= 2 && combId) {
     let waypoints = pathPoints.map(p => _wallVpToPct(p.x, p.y));
     const gaitOn = mapScalePPF > 0 && _atIsCombatActive();
-    const clip = _clipRoute(waypoints, { walls: !_moveBypass(), maxFeet: gaitOn ? _moveRemainingFeet(combId) : null });
+    const clip = _clipRoute(waypoints, { walls: !_moveBypass(), maxFeet: gaitOn ? _moveRemainingFeet(combId) : null,
+      traps: _hiddenTrapsFor(_pathFindToken(combId)) });
     waypoints = clip.points;
     feet = _routeFeet(waypoints);
     if (clip.stop === 'wall')  showToast(isGM() ? 'A wall stops the move (hold Shift to pass).' : 'A wall stops the move.', 'warn');
@@ -20831,6 +20910,7 @@ async function pathCommit() {
     exitPathMode();
     await _cancelStancesOnMove(combId, feet);
     await _executeMoveWithSentinelChecks(combId, waypoints);
+    if (clip.trap) _hiddenTrigger(clip.trap, _pathFindToken(combId));
   } else {
     feet = pathTotalFeet();
     exitPathMode();
