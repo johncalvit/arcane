@@ -40,7 +40,7 @@ Click **View** next to **Education** to see your subjects with their success per
 
 Equipment shows what is in your **right** and **left** hand. Want to use your sword? Equip it in one hand or both. Want to drink a potion? Equip it here and be ready for your turn. You can also drop an item here, but it lands on the map for anyone to pick up. In combat, changing what is in a hand on your turn (from the Equipment panel or the action dialog) gives a choice: **stow** the old item (this ends your turn) or **drop** it (instant, it lands on the map and you can use the new item right away). To pick something up (or grab an opponent), make sure the hand you need is free. **View All** shows the hit chance and damage of each held weapon action and everything you're carrying.
 
-**Looting.** With a free hand, choose **🎒 Loot** in the Actions or Explore dialog and click a dead, unconscious or paralyzed body next to you. A list of its weapons and equipment appears; whatever you take goes into your pack and adds to the weight you carry. Out of combat you can take as much as you like. In combat, one item takes your whole round.
+**Looting.** With a free hand, choose **🎒 Loot** (in the Actions dialog it sits under each arm; in Explore it is under Grab) and click a dead, unconscious or paralyzed body next to you. A list of its weapons and equipment appears; whatever you take goes into your pack and adds to the weight you carry. Out of combat you can take as much as you like. In combat, one item takes your whole round.
 
 ### Armor
 

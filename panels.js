@@ -1209,6 +1209,13 @@ function _dlgRender(body) {
   const dlgPlan = plan === BODY_PLANS.Humanoid
     ? [...plan, ...HUMANOID_NATURAL.filter(ch => ent?.held?.[ch.key])]
     : plan;
+  // Loot sits under each arm: a selective grab on an incapacitated body, one item per round in combat. Always
+  // clickable - if the hand or the surroundings don't allow it, the click says what is needed.
+  const lootChip = slot => _dlgChip({
+    label: '🎒 Loot', sub: '1 item / round',
+    title: 'Search a dead, unconscious or paralyzed body next to you and take one item (it goes in your pack). Needs a bare hand. Ends your round.',
+    data: { dact: 'lootcheck', slot },
+  });
   const channelHtml = dlgPlan.map(ch => {
     const isArm = ch.key === 'right' || ch.key === 'left';
     if (twoHanded && ch.key === 'left') return ''; // merged into the Both Hands section
@@ -1227,10 +1234,12 @@ function _dlgRender(body) {
         // Both hands on one weapon: two selectors, actions once (on the right slot)
         chips += handSelect('right') + handSelect('left');
         chips += weaponChips(held, 'right');
+        chips += lootChip('right');
         return _dlgSection(`🤲 Both Hands — ${_paEsc(held)}`, chips, fullActive);
       }
       chips += handSelect(ch.key);
       chips += weaponChips(held || BARE_HANDED, ch.key);
+      chips += lootChip(ch.key);
     } else {
       // Natural attack channel — a body part equipped with a natural weapon
       // (Fangs, Claws, Tail Slam, ...) from the same MELEE_WEAPONS table
@@ -1335,16 +1344,6 @@ function _dlgRender(body) {
                  : conds.has('held') ? '✊ Held — grabbed' : '🤚 Holding';
     escapeHtml = _dlgSection(gtitle, gchips, false);
   }
-  // ── Loot: a selective grab on an incapacitated body; one item per round in combat ──
-  {
-    const freeKey = ['right', 'left'].find(k => !ent.held?.[k]);
-    escapeHtml += _dlgSection('🎒 Loot', _dlgChip({
-      label: '🎒 Loot a body', sub: '1 item / round', disabled: !freeKey,
-      title: freeKey ? 'Search a dead, unconscious or paralyzed body next to you and take one item (it goes in your pack). Ends your round.' : 'Needs a free hand',
-      data: { dact: 'attack', slot: freeKey || 'right', label: 'Loot', dur: 3, item: 'Bare Handed', action: 'Loot', ranged: 1, range: 0 },
-    }), fullActive);
-  }
-
   // ── Recovery saves (manual roll to shed a condition) ───────────────────────
   // Resuscitate is here too, despite being unconscious — they still roll it
   // themselves (via the GM if it's a creature) to stay engaged rather than
@@ -2028,6 +2027,11 @@ async function _dlgAct(d, id, body) {
       enterAttackMode(id, d.item, d.action, d.ranged === '1', +d.range, d.aimed === '1',
         +d.hstam > 0 ? { stam: +d.hstam, dmg: +d.hdmg, name: d.hname } : null);
       break;
+    }
+    case 'lootcheck': {
+      const why = _lootHandRefusal(id, d.slot);
+      if (why) { showToast(why, 'warn'); break; }
+      return _dlgAct({ dact: 'attack', slot: d.slot, label: 'Loot', dur: '3', item: 'Bare Handed', action: 'Loot', ranged: '1', range: '0' }, id, body);
     }
     case 'custom': {
       const label  = document.getElementById('dlg-custom-label')?.value.trim();

@@ -8226,7 +8226,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261117j';
+const VERSION = 'v0.1.20261117k';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -11105,6 +11105,24 @@ async function pickUpItem(itemTokenId, grabberRef) {
 // taken; in combat one item is the whole round (the dialog closes after it and the round ends).
 const LOOT_REACH_FT = 7;
 let _lootState = null; // { looterRef, bodyRef, bodyTokenId, items, taken, busy }
+
+// Why the loot chip under a hand can't be used right now, or '' if it can: that hand must be bare and a dead,
+// unconscious or paralyzed body must be within reach.
+function _lootHandRefusal(looterRef, slot) {
+  const need = `Looting needs a bare hand and a dead, unconscious or paralyzed body within about 5 feet.`;
+  const ent = getEntity(looterRef);
+  const me = _pathFindToken(looterRef);
+  if (!ent || !me) return need;
+  if (ent.held?.[slot]) return need + ` This hand is holding ${ent.held[slot]}.`;
+  const near = Object.values(mapTokens || {}).some(t => {
+    if (t.id === me.id || (t.entity_type !== 'character' && t.entity_type !== 'creature')) return false;
+    const conds = getConditions(t.id);
+    if (!['dead', 'unconscious', 'paralyzed'].some(k => conds.has(k))) return false;
+    const d = _pctDistFt(me.x_pct, me.y_pct, t.x_pct, t.y_pct);
+    return d == null || d <= LOOT_REACH_FT;
+  });
+  return near ? '' : need + ' There is none next to you.';
+}
 
 function _lootRefusal(looterRef, targetToken) {
   if (!targetToken || (targetToken.entity_type !== 'character' && targetToken.entity_type !== 'creature')) return 'That is not a body.';

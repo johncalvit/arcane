@@ -529,3 +529,21 @@ test('Rings', "players do not see monsters' rings", async T => {
   _updateTokenRing('T_m');
   T.ok(!el.querySelector('.token-hp'));
 });
+
+test('Loot', 'the loot chip under a hand needs that hand bare and a lootable body next to you', async T => {
+  T.map();
+  const me = T.token('T_me', 50, 50, 'character', 'T_me');
+  const ref = T.char('me');
+  const body = T.token('T_body', 52, 50, 'creature', 'T_body');
+  let conds = new Set(['unconscious']);
+  T.stub('getConditions', id => id === body.id ? conds : new Set());
+  T.stub('_pathFindToken', () => me);
+  T.stub('getEntity', () => ({ held: { right: '', left: 'Sword' } }));
+  T.stub('_pctDistFt', () => 5);
+  T.eq(_lootHandRefusal(ref, 'right'), '', 'bare right hand next to an unconscious body is fine');
+  T.ok(/holding Sword/.test(_lootHandRefusal(ref, 'left')), 'a full hand says what it holds');
+  conds = new Set();
+  T.ok(/bare hand/.test(_lootHandRefusal(ref, 'right')), 'no lootable body: says what is needed');
+  conds = new Set(['dead']); T.stub('_pctDistFt', () => 40);
+  T.ok(_lootHandRefusal(ref, 'right') !== '', 'too far away');
+});
