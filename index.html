@@ -8270,7 +8270,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118c';
+const VERSION = 'v0.1.20261118d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19942,7 +19942,7 @@ async function addCharacterToken(charId, charName, avatarPath) {
     entity_id: charId,
     label: charName,
     avatar_url,
-    ...viewportCenterPlacement(),
+    ...clusteredCenterPlacement(),
     visible: true,
   });
   // INSERT triggers Realtime → upsertTokenElement + refreshTokenPanel
@@ -22695,6 +22695,34 @@ function viewportCenterPlacement() {
   };
 }
 
+// A free spot near the viewport center for a newly dropped token: the center itself, then rings of
+// hex-packed slots around it, taking the first slot no existing token on this map already sits on. A party
+// dropped one by one therefore forms a tight cluster where the count is obvious at a glance.
+function clusteredCenterPlacement() {
+  const base = viewportCenterPlacement();
+  if (!mapImgW || !mapImgH) return base;
+  const step = TOKEN_SIZE * 1.15; // image px between neighbouring slots
+  const toks = Object.values(mapTokens).filter(t => t.map_id === activeMapId);
+  const taken = (x, y) => toks.some(t => Math.hypot((t.x_pct - x) / 100 * mapImgW, (t.y_pct - y) / 100 * mapImgH) < step * 0.8);
+  const at = (dx, dy) => ({
+    x_pct: Math.min(100, Math.max(0, base.x_pct + dx / mapImgW * 100)),
+    y_pct: Math.min(100, Math.max(0, base.y_pct + dy / mapImgH * 100)),
+  });
+  if (!taken(base.x_pct, base.y_pct)) return base;
+  for (let ring = 1; ring < 12; ring++) {
+    for (let k = 0; k < 6 * ring; k++) {
+      // walk the hexagon of this ring: corner i, then along the edge toward corner i+1
+      const side = Math.floor(k / ring), j = k % ring;
+      const a0 = side * Math.PI / 3, a1 = (side + 1) * Math.PI / 3;
+      const dx = ring * step * ((1 - j / ring) * Math.cos(a0) + (j / ring) * Math.cos(a1));
+      const dy = ring * step * ((1 - j / ring) * Math.sin(a0) + (j / ring) * Math.sin(a1));
+      const p = at(dx, dy);
+      if (!taken(p.x_pct, p.y_pct)) return p;
+    }
+  }
+  return base;
+}
+
 function findTokenPlacement() {
   const count = Object.values(mapTokens).length;
   // Space tokens by 1.6× TOKEN_SIZE in image pixels, laid out in a grid
@@ -22881,8 +22909,7 @@ async function addCreatureToken() {
     entity_id:   creature.id,
     label,
     avatar_url:  (RACE_DATA[species] || {}).avatarUrl || '',
-    x_pct:       50,
-    y_pct:       50,
+    ...clusteredCenterPlacement(),
     visible:     true,
   });
 

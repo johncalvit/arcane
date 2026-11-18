@@ -643,3 +643,25 @@ test('App integrity', 'update prompt: reads the published VERSION and only shows
   T.ok(document.getElementById('update-banner'), 'a still newer version brings it back');
   document.getElementById('update-banner')?.remove(); _updateDismissedFor = '';
 });
+
+test('Placement', 'dropped tokens cluster at the center without stacking', async T => {
+  T.map();
+  T.stub('viewportCenterPlacement', () => ({ x_pct: 50, y_pct: 50 }));
+  const saveTokens = mapTokens, saveMap = activeMapId;
+  activeMapId = 'm1'; mapTokens = {};
+  const placed = [];
+  for (let i = 0; i < 7; i++) {
+    const p = clusteredCenterPlacement();
+    placed.push(p);
+    mapTokens['t' + i] = { id: 't' + i, map_id: 'm1', x_pct: p.x_pct, y_pct: p.y_pct };
+  }
+  mapTokens = saveTokens; activeMapId = saveMap;
+  T.near(placed[0].x_pct, 50, 0.01, 'first token sits at the center');
+  let minD = 1e9, maxD = 0;
+  for (let i = 0; i < 7; i++) {
+    maxD = Math.max(maxD, Math.hypot(placed[i].x_pct - 50, placed[i].y_pct - 50) * 10);
+    for (let j = i + 1; j < 7; j++) minD = Math.min(minD, Math.hypot(placed[i].x_pct - placed[j].x_pct, placed[i].y_pct - placed[j].y_pct) * 10);
+  }
+  T.ok(minD >= TOKEN_SIZE * 0.8, 'no two tokens overlap (min gap ' + minD.toFixed(1) + 'px)');
+  T.ok(maxD <= TOKEN_SIZE * 1.3, 'seven tokens stay within one ring of the center');
+});
