@@ -8270,7 +8270,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118e';
+const VERSION = 'v0.1.20261118f';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -18640,8 +18640,12 @@ function _hasMeleeCapability(ent) {
 // apart.
 function _sentinelMeleeReachFt(t) {
   let maxReach = 1; // default 1ft reach (unarmed)
-  if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
-    const held = playCharCache[t.entity_id].held_items || {};
+  // Reach is measured from the token's edge (its radius stands for the body), so it is the longest melee
+  // weapon actually HELD - a weapon in the pack is just an item. Characters and creatures follow the same rule.
+  const row = t.entity_type === 'character' ? playCharCache[t.entity_id]
+            : t.entity_type === 'creature' ? sessionCreatureCache[t.entity_id] : null;
+  if (row) {
+    const held = row.held_items || {};
     for (const side of ['right', 'left']) {
       const itemName = held[side];
       if (!itemName) continue;
@@ -18649,9 +18653,6 @@ function _sentinelMeleeReachFt(t) {
       const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
       if (rows.length) maxReach = Math.max(maxReach, ...rows.map(r => r.reach));
     }
-  } else if (t.entity_type === 'creature') {
-    const race = RACE_DATA[t.species] || {};
-    maxReach = Math.max(1, Math.round((race.Height || 60) / 24));
   }
   return maxReach;
 }

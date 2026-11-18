@@ -325,3 +325,14 @@ test('Hidden', 'GM trap dialog: failed rolls come back, then Apply Effects opens
     T.ok(!document.getElementById('trap-gm-modal'), 'trap dialog closes');
   } finally { document.getElementById('trap-gm-modal')?.remove(); _trapDlg = null; }
 });
+
+test('Sentinel', 'creature reach is the held melee weapon, not body height; packed weapons do not count', async T => {
+  const saved = sessionCreatureCache['c1'];
+  sessionCreatureCache['c1'] = { held_items: { right: 'Sword, Long' }, weapons: [{ name: 'Sword, Long' }] };
+  const tok = { id: 't1', entity_type: 'creature', entity_id: 'c1', species: 'Orc' };
+  const spear = Math.max(...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === normalizeWeaponName('Sword, Long') && r.damageMax > 0).map(r => r.reach));
+  T.eq(_sentinelMeleeReachFt(tok), spear, 'a held sword sets the reach');
+  sessionCreatureCache['c1'] = { held_items: {}, weapons: [{ name: 'Sword, Long' }] };
+  T.eq(_sentinelMeleeReachFt(tok), 1, 'a sword in the pack gives only the unarmed 1 ft');
+  if (saved) sessionCreatureCache['c1'] = saved; else delete sessionCreatureCache['c1'];
+});
