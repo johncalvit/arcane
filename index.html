@@ -5864,7 +5864,7 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 5; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind
+const TECHNIQUE_EXTRAS_VERSION = 6; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind, 6 = + Numb, Lunge
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
@@ -5889,7 +5889,18 @@ for (const type of HEAVY_BLOW_TYPES)
 const WHIRLWIND_TYPES = ['Flail', 'Greatsword', 'Polearm', 'Scimitar', 'Staff'];
 const WHIRLWIND_TECHNIQUES = WHIRLWIND_TYPES.map(type => ({ id: _techSlug(type) + '-whirlwind', name: type + ' Whirlwind', weaponType: type,
   minLevel: 4, hit: 0, damage: 0, parry: 0, whirlwind: true }));
-const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES);
+// Numb (level 3): a hit on an ARM or LEG rolls its Fumble / Slow chance as if the weapon had done a d10 of damage
+// (whichever is higher, the d10 or the real damage), even when armor soaked the hit.
+const NUMB_TYPES = ['Whip', 'Staff', 'Club'];
+const NUMB_TECHNIQUES = NUMB_TYPES.map(type => ({ id: _techSlug(type) + '-numb', name: type + ' Numb', weaponType: type,
+  minLevel: 3, hit: 0, damage: 0, parry: 0, numb: true }));
+// Lunge (level 3): a defensive move. While lunging (declared on the weapon's hand, until you attack or the round
+// ends) a Sentinel with a LONGER reach than the lunge weapon does not get its reaction attack as you close in.
+// The sentinel is free to attack on its own turn afterwards.
+const LUNGE_TYPES = ['Knife', 'Short Sword', 'Longsword', 'Rapier'];
+const LUNGE_TECHNIQUES = LUNGE_TYPES.map(type => ({ id: _techSlug(type) + '-lunge', name: type + ' Lunge', weaponType: type,
+  minLevel: 3, hit: 0, damage: 0, parry: 0, lunge: true }));
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES, NUMB_TECHNIQUES, LUNGE_TECHNIQUES);
 const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(TECHNIQUE_EXTRAS.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
@@ -5950,6 +5961,20 @@ function _techniqueWhirlwind(techIds, weaponName) {
   }
   return null;
 }
+// Name of a flag technique (numb / lunge) a set of chosen techniques gives for a weapon, or null.
+function _techniqueFlag(techIds, weaponName, flag) {
+  const type = weaponName ? getWeaponType(weaponName) : '';
+  if (!type || !Array.isArray(techIds)) return null;
+  for (const id of techIds) {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (t && t.weaponType === type && t[flag]) return t.name;
+  }
+  return null;
+}
+function _combatantTechFlag(cid, weaponName, flag) {
+  const [kind, id] = String(cid || '').split('::');
+  return kind === 'char' ? _techniqueFlag(playCharCache[id]?.stats?.Techniques, weaponName, flag) : null;
+}
 function _combatantAim(cid, weaponName) {
   const [kind, id] = String(cid || '').split('::');
   return kind === 'char' ? _techniqueAim(playCharCache[id]?.stats?.Techniques, weaponName) : null;
@@ -5963,6 +5988,8 @@ function _techniqueSummary(t) {
   if (t.gapMult > 1) parts.push(`×${t.gapMult} armor gap chance on stabs`);
   if (t.heavyStam > 0) parts.push(`Heavy Blow: spend ${t.heavyStam} Stamina for +${t.heavyDmg} damage on a hit`);
   if (t.whirlwind) parts.push('Whirlwind: attack everyone in reach (allies too), 1 Stamina each, -1 max damage per target');
+  if (t.numb) parts.push('Numb: arm/leg hits roll Fumble / Slow as if a d10 of damage was dealt');
+  if (t.lunge) parts.push('Lunge: slip past a longer-reach Sentinel without its reaction attack');
   if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
 }
@@ -8243,7 +8270,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118a';
+const VERSION = 'v0.1.20261118b';
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
@@ -9691,6 +9718,8 @@ const CONDITION_DEFS = [
     desc:'Actively parrying. Parry defense is pre-applied to incoming attacks.' },
   { key:'evading',     label:'Evading',     icon:'💨', color:'#88ff88',
     desc:'Actively evading. Evade defense is pre-applied to incoming attacks.' },
+  { key:'lunging',     label:'Lunging',     icon:'🤺', color:'#e0b050',
+    desc:'Ready to lunge: a Sentinel with a longer reach than your weapon does not get its reaction attack as you close in. Ends when you attack or the round ends.' },
   { key:'sentinel',    label:'Sentinel',    icon:'👁', color:'#ff8c00',
     desc:'Ready to attack any enemy that enters melee range.' },
   { key:'target',      label:'Target',      icon:'🎯', color:'#40c0ff',
@@ -9771,6 +9800,7 @@ function _defCondFromLabel(label) {
   if (!label) return null;
   if (label.startsWith('Block')) return 'blocking';
   if (label.startsWith('Parry')) return 'parrying';
+  if (label.startsWith('Lunge')) return 'lunging';
   if (label === 'Evade') return 'evading';
   if (label === 'Sentinel') return 'sentinel';
   if (label === 'Target')   return 'target';
@@ -9787,7 +9817,7 @@ function _defCondFromLabel(label) {
 async function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
-  for (const c of ['blocking', 'parrying', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating', 'searching']) {
+  for (const c of ['blocking', 'parrying', 'lunging', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating', 'searching']) {
     if (conds.has(c)) await setCondition(token.id, c, false);
   }
 }
@@ -10898,9 +10928,15 @@ function _damageType(ctx) {
   if (ctx.damageType) return ctx.damageType;
   return ctx.category === 'slash' ? 'slash' : ctx.category === 'pierce' ? 'stab' : 'smashbash';
 }
+// Numb technique: the d10 rolled for this hit (arms and legs only), else 0.
+function _numbDmgFor(ctx) {
+  if (!ctx.numbDmg) return 0;
+  const role = _partRole(ctx.bodyType, ctx.hitPart);
+  return role === 'arm' || role === 'leg' ? ctx.numbDmg : 0;
+}
 function _locEffectChance(effKey, ctx) {
   const mod = (_LOC_EFFECT_MODS[effKey] || {})[_damageType(ctx)] || 0;
-  return Math.max(0, Math.min(1, mod * (ctx.finalDamage / ctx.toughnessMax)));
+  return Math.max(0, Math.min(1, mod * (Math.max(ctx.finalDamage, _numbDmgFor(ctx)) / ctx.toughnessMax)));
 }
 // Role of a hit location, from its label — head / arm / leg / other. Works across
 // body plans (forelegs/hindlegs read as legs) without per-plan role tagging.
@@ -11559,7 +11595,7 @@ const HIT_EFFECTS = [
   {
     // Arm hit → chance to drop what that hand holds (instant, no lasting cond).
     key: 'fumble', label: 'Fumble', icon: '🖐',
-    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'arm' && ctx.finalDamage > 0
+    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'arm' && (ctx.finalDamage > 0 || _numbDmgFor(ctx) > 0)
               && _LOC_EFFECT_MODS.fumble[_damageType(ctx)] > 0 && _armHasItem(ctx),
     chance: ctx => _locEffectChance('fumble', ctx),
     onHit: async ctx => { await _dropHeldFromArm(ctx); },
@@ -11568,7 +11604,7 @@ const HIT_EFFECTS = [
     // Leg hit → chance to injure that leg; max speed drops by the proportion of
     // legs injured (see _effectiveSpeed). Persists until the injury is healed.
     key: 'slowed', label: 'Slow', icon: '🩼',
-    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'leg' && ctx.finalDamage > 0
+    gate: ctx => _partRole(ctx.bodyType, ctx.hitPart) === 'leg' && (ctx.finalDamage > 0 || _numbDmgFor(ctx) > 0)
               && _LOC_EFFECT_MODS.slowed[_damageType(ctx)] > 0
               && !ctx.conds.has('legdmg:' + ctx.hitPart),
     chance: ctx => _locEffectChance('slowed', ctx),
@@ -14255,7 +14291,7 @@ async function _runHitEffects(ctx, dmgEl) {
       const pct  = Math.round(eff.chance(ctx) * 100);
       const roll = Math.floor(Math.random() * 100) + 1; // 1..100
       applied = roll <= pct;
-      line = `${label} ${pct}% · rolled ${roll} → ${applied ? (_condIcoFromEmoji(icon) || '•') + ' ' + label : 'no ' + label.toLowerCase()}`;
+      line = `${label} ${pct}%${_numbDmgFor(ctx) && (eff.key === 'fumble' || eff.key === 'slowed') ? ` (🧊 Numb d10 = ${ctx.numbDmg})` : ''} · rolled ${roll} → ${applied ? (_condIcoFromEmoji(icon) || '•') + ' ' + label : 'no ' + label.toLowerCase()}`;
     } else if (eff.save) {
       // Future: roll the saving-throw spec; fail → applied. Wired, not yet used.
       applied = false; line = '';
@@ -14431,6 +14467,8 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
         // Lets the generic 'spell-secondary' HIT_EFFECTS entry (below) roll
         // a spell's own secondary condition, e.g. Frost Fang's Slow.
         spell: ctx.spell,
+        // Numb technique: arm/leg Fumble / Slow chances are rolled as if a d10 of damage had been dealt.
+        numbDmg: (weaponRow && weaponRow.weapon && _combatantTechFlag(ctx.attackerCombatantId, weaponRow.weapon, 'numb')) ? 1 + Math.floor(Math.random() * 10) : 0,
       }, dmgEl);
       // A spell's restore/clears/buff fields still apply unconditionally on
       // a hit; its secondary CONDITION (setsCondition) is now rolled above,
@@ -19343,11 +19381,28 @@ const _SENTINEL_CHECK_SAMPLES = 40;
 // requiring devtools. Temporary diagnostic for the "still not triggering"
 // live report; safe to leave in (one line per segment, only when something
 // with the condition actually exists on the map) or strip out later.
+// The reach (ft) of the weapon a combatant is lunging with, or null if they are not lunging. A lunge is declared
+// on a hand as 'Lunge - <weapon>' (see the Lunge chip) and lasts until that hand attacks or the round ends.
+function _lungeReachFt(combId) {
+  const c = atCombatants.find(x => x.id === combId);
+  if (!c || !c.slots) return null;
+  for (const side of ['right', 'left']) {
+    const label = c.slots[side]?.label || '';
+    if (!label.startsWith('Lunge')) continue;
+    const weapon = label.replace(/^Lunge\s*[—–-]\s*/, '');
+    const norm = normalizeWeaponName(weapon);
+    const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
+    return rows.length ? Math.max(...rows.map(r => r.reach || 0)) : 0;
+  }
+  return null;
+}
+
 function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   const moverTok = _pathFindToken(moverCombId);
   if (!moverTok) { if (_debug) logCombat(`[sentinel debug] no mover token for ${moverCombId}`, 'roll'); return []; }
   const found = new Map(); // sentinelCid -> {sentinelCid, x_pct, y_pct, frac}
   const notes = [];
+  const lungeReach = _lungeReachFt(moverCombId); // null unless this mover is lunging
   for (const t of Object.values(mapTokens)) {
     if (t.id === moverTok.id) continue;
     const conds = getConditions(t.id);
@@ -19367,6 +19422,13 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
       const yPct = fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac;
       if (_sentinelZoneCheck(t, xPct, yPct, moverTok)) {
         const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+        // Lunge: slip inside a Sentinel whose reach beats the lunge weapon's - no reaction attack.
+        if (lungeReach != null && conds.has('sentinel') && _sentinelMeleeReachFt(t) > lungeReach) {
+          logCombat(`${moverTok.label} lunges in past ${t.label}'s longer reach - no reaction attack.`, 'roll');
+          notes.push(`${t.label}: LUNGED past`);
+          hit = true;
+          break;
+        }
         found.set(sentinelCid, { sentinelCid, x_pct: xPct, y_pct: yPct, frac });
         notes.push(`${t.label}: CROSSED at ${Math.round(frac*100)}% along the segment`);
         hit = true;

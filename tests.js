@@ -590,3 +590,39 @@ test('Techniques', 'Whirlwind: targets in reach (allies too, not self, not the d
   _whirlNext();
   T.eq(JSON.stringify(swings[1]), JSON.stringify([b.id, 2, true]), 'second swing is flagged last');
 });
+test('Techniques', 'Numb and Lunge exist for exactly their weapon types', async T => {
+  const types = f => TECHNIQUES.filter(t => t[f]).map(t => t.weaponType).sort().join();
+  T.eq(types('numb'), ['Club', 'Staff', 'Whip'].join());
+  T.eq(types('lunge'), ['Knife', 'Longsword', 'Rapier', 'Short Sword'].join());
+  const numb = TECHNIQUES.find(t => t.numb && t.weaponType === 'Whip');
+  T.ok(_techniqueFlag([numb.id], 'Whip', 'numb'), 'found by weapon');
+  T.eq(_techniqueFlag([numb.id], 'Club', 'numb'), null, 'a different weapon type');
+});
+test('Techniques', 'Numb: arm and leg Fumble/Slow chances use the d10 even when armor soaked the hit', async T => {
+  T.stub('_partRole', (bt, part) => part);
+  const base = { toughnessMax: 10, finalDamage: 0, damageType: 'slash', bodyType: 'Humanoid', numbDmg: 10 };
+  T.near(_locEffectChance('fumble', Object.assign({ hitPart: 'arm' }, base)), 1, 0.001, 'd10 of 10 on a 10 Toughness target');
+  T.near(_locEffectChance('slowed', Object.assign({ hitPart: 'leg' }, base, { numbDmg: 5 })), 0.5, 0.001);
+  T.near(_locEffectChance('stunned', Object.assign({ hitPart: 'head' }, base)), 0, 0.001, 'heads are not affected');
+  T.near(_locEffectChance('fumble', Object.assign({ hitPart: 'arm' }, base, { finalDamage: 8, numbDmg: 3 })), 0.8, 0.001, 'real damage counts when higher');
+  const eff = HIT_EFFECTS.find(e => e.key === 'fumble');
+  T.stub('_armHasItem', () => true);
+  T.ok(eff.gate(Object.assign({ hitPart: 'arm', conds: new Set() }, base)), 'gate opens on a 0-damage Numb hit');
+  T.ok(!eff.gate(Object.assign({ hitPart: 'arm', conds: new Set() }, base, { numbDmg: 0 })), 'but not without Numb');
+});
+test('Techniques', 'Lunge: a longer-reach Sentinel does not get its reaction; equal or shorter reach still does', async T => {
+  T.map();
+  const mover = T.token('m', 40, 50, 'creature', 'Em');
+  const sent = T.token('s', 50, 50, 'creature', 'Es', ['sentinel']);
+  T.stub('_pathFindToken', cid => cid === 'creature::m' ? mover : sent);
+  T.stub('_isEnemyOf', () => true);
+  T.stub('_sentinelCanReact', () => true);
+  T.stub('logCombat', () => {});
+  T.stub('_sentinelZoneCheck', (w, x, y) => x >= 45); // entering from x=40 toward 50
+  const run = reach => { T.stub('_lungeReachFt', () => reach); return _findSentinelCrossings('creature::m', { x_pct: 40, y_pct: 50 }, { x_pct: 50, y_pct: 50 }, false); };
+  T.stub('_sentinelMeleeReachFt', () => 6);
+  T.eq(run(null).length, 1, 'no lunge: the sentinel reacts');
+  T.eq(run(2).length, 0, 'lunging with a 2 ft blade past a 6 ft sentinel: bypassed');
+  T.eq(run(6).length, 1, 'equal reach: still reacts');
+  T.eq(run(9).length, 1, 'shorter sentinel reach: still reacts');
+});

@@ -1145,7 +1145,19 @@ function _dlgRender(body) {
       }
     }
     const aim = typeof _techniqueAim === 'function' ? _techniqueAim(ent?.stats?.Techniques, itemName) : null;
-    return loadChip + rows.map(({ r, ranged }) => {
+    // Lunge technique: a defensive move for a stabbing blade - until you attack (or the round ends) a Sentinel with a
+    // longer reach than this weapon doesn't get its reaction attack as you close in.
+    let lungeChip = '';
+    const lungeName = typeof _techniqueFlag === 'function' ? _techniqueFlag(ent?.stats?.Techniques, itemName, 'lunge') : null;
+    const lungeLbl = `Lunge — ${itemName}`;
+    if (lungeName && cur?.label !== lungeLbl && rows.some(x => !x.ranged && x.r.damageMax > 0)) {
+      lungeChip = _dlgChip({
+        label: '🤺 Lunge', sub: 'defense · 1r',
+        title: `${lungeName}: slip in past a Sentinel with a longer reach than ${itemName} - it gets no reaction attack. Lasts until you attack or the round ends; the Sentinel can still attack you on its own turn.`,
+        data: { dact: 'set', slot: chKey, label: lungeLbl, dur: 3, locks: 0 },
+      });
+    }
+    return loadChip + lungeChip + rows.map(({ r, ranged }) => {
       const lbl = `${r.action} — ${itemName}`;
       if (cur?.label === lbl) return ''; // already shown as the lit chip
       const dur = r.action.toLowerCase().includes('load') || r.action.toLowerCase().includes('nock') ? 3
