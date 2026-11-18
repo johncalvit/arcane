@@ -8270,7 +8270,39 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118b';
+const VERSION = 'v0.1.20261118c';
+
+// ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
+// A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
+// reload it). Every few minutes, and whenever the tab comes back into view, fetch the published page and compare its
+// VERSION; if it is newer, show a banner with a Refresh button. Never reloads by itself - a refresh mid-fight would hurt.
+var _updateDismissedFor = '';
+function _newVersionFromHtml(html) { const m = /const VERSION = '(v[\w.]+)'/.exec(html || ''); return m ? m[1] : ''; }
+function _showUpdateBanner(newVer) {
+  if (!newVer || newVer === VERSION || newVer === _updateDismissedFor) return;
+  let b = document.getElementById('update-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'update-banner';
+    b.style.cssText = 'position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:100000;background:var(--bg2,#222);color:var(--text,#eee);border:1px solid var(--gold,#c9a84c);border-top:none;border-radius:0 0 8px 8px;padding:7px 14px;font-family:var(--ui-font,sans-serif);font-size:0.85rem;box-shadow:0 4px 14px rgba(0,0,0,0.5);display:flex;align-items:center;gap:10px;';
+    document.body.appendChild(b);
+  }
+  b.innerHTML = `<span>A new version of Grim Toll is available (${newVer}).</span>
+    <button id="update-now" style="padding:3px 12px;border-radius:5px;cursor:pointer;border:1px solid var(--gold,#c9a84c);background:rgba(201,168,76,0.18);color:inherit;">Refresh</button>
+    <button id="update-later" title="Dismiss until the next version" style="padding:3px 8px;border-radius:5px;cursor:pointer;border:1px solid var(--border,#555);background:transparent;color:var(--text-dim,#aaa);">✕</button>`;
+  b.querySelector('#update-now').onclick = () => location.reload();
+  b.querySelector('#update-later').onclick = () => { _updateDismissedFor = newVer; b.remove(); };
+}
+async function _checkForNewVersion() {
+  if (location.protocol === 'file:') return;
+  try {
+    const r = await fetch('index.html?_=' + Date.now(), { cache: 'no-store' });
+    if (r.ok) _showUpdateBanner(_newVersionFromHtml(await r.text()));
+  } catch (e) { /* offline or blocked: try again next time */ }
+}
+setTimeout(_checkForNewVersion, 60 * 1000);
+setInterval(_checkForNewVersion, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) _checkForNewVersion(); });
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL

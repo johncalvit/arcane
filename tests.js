@@ -626,3 +626,20 @@ test('Techniques', 'Lunge: a longer-reach Sentinel does not get its reaction; eq
   T.eq(run(6).length, 1, 'equal reach: still reacts');
   T.eq(run(9).length, 1, 'shorter sentinel reach: still reacts');
 });
+
+test('App integrity', 'update prompt: reads the published VERSION and only shows for a different one', async T => {
+  const html = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store' })).text();
+  T.eq(_newVersionFromHtml(html), VERSION, 'the published page names the running version');
+  document.getElementById('update-banner')?.remove();
+  _showUpdateBanner(VERSION);
+  T.ok(!document.getElementById('update-banner'), 'same version: no banner');
+  _showUpdateBanner('v9.9.9');
+  T.ok(document.getElementById('update-banner') && /v9\.9\.9/.test(document.getElementById('update-banner').textContent), 'newer version: banner');
+  document.getElementById('update-later').click();
+  T.ok(!document.getElementById('update-banner'), 'dismissed');
+  _showUpdateBanner('v9.9.9');
+  T.ok(!document.getElementById('update-banner'), 'stays dismissed for that version');
+  _showUpdateBanner('v9.9.10');
+  T.ok(document.getElementById('update-banner'), 'a still newer version brings it back');
+  document.getElementById('update-banner')?.remove(); _updateDismissedFor = '';
+});
