@@ -336,3 +336,18 @@ test('Sentinel', 'creature reach is the held melee weapon, not body height; pack
   T.eq(_sentinelMeleeReachFt(tok), 1, 'a sword in the pack gives only the unarmed 1 ft');
   if (saved) sessionCreatureCache['c1'] = saved; else delete sessionCreatureCache['c1'];
 });
+
+test('Melee reach', 'a melee attack on a target beyond the weapon reach is refused and targeting stays up', async T => {
+  T.geo();
+  const a = T.token('a', 50, 50, 'creature', 'Ea', ['friendly']), far = T.token('far', 56, 50, 'creature', 'Far', ['foe']);
+  T.eq(Math.round(_meleeGapFt('creature::a', far)), 6, 'gap is the distance between the token edges');
+  const toasts = [];
+  T.stub('showToast', m => toasts.push(m));
+  const saved = [attackMode, attackIsRanged, attackRangeFt, attackCombatantId, attackWeaponName, attackActionLabel];
+  attackMode = true; attackIsRanged = false; attackRangeFt = 3; attackCombatantId = 'creature::a'; attackWeaponName = 'Sword, Long'; attackActionLabel = 'Slash';
+  const handled = attackTokenClick('far');
+  const stillTargeting = attackMode;
+  [attackMode, attackIsRanged, attackRangeFt, attackCombatantId, attackWeaponName, attackActionLabel] = saved;
+  T.ok(handled && stillTargeting, 'click is swallowed and targeting stays up');
+  T.ok(toasts.some(m => /Out of reach/.test(m)), 'player is told why: ' + toasts.join('|'));
+});

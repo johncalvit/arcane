@@ -8270,7 +8270,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118f';
+const VERSION = 'v0.1.20261118g';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -18137,6 +18137,14 @@ function calcTargetAdjFromRow(row) {
   return Math.max(1, Math.round(heightIn / 12 * buildTA));
 }
 
+// Edge-to-edge distance (ft) between a combatant's token and another token, or null when it can't be measured.
+function _meleeGapFt(combId, target) {
+  const me = _pathFindToken(combId);
+  if (!me || !target || !(mapScalePPF > 0)) return null;
+  const dx = ((target.x_pct - me.x_pct) / 100) * mapImgW, dy = ((target.y_pct - me.y_pct) / 100) * mapImgH;
+  return Math.max(0, (Math.hypot(dx, dy) - getTokenSize(me) / 2 - getTokenSize(target) / 2) / mapScalePPF);
+}
+
 function attackTokenClick(tokenId) {
   if (!attackMode) return false;
   const target = mapTokens[tokenId];
@@ -18199,6 +18207,18 @@ function attackTokenClick(tokenId) {
   }
   if (target.entity_id === attackCombatantId.split('::')[1] && target.entity_type === 'character') {
     exitAttackMode(); return true;
+  }
+
+  // Melee reach is a hard limit: the gap between the two token edges can't exceed the weapon's reach (a
+  // natural or pommel attack with 0 reach still needs the tokens touching, so at least 1 ft). A miss keeps
+  // the targeting up so another target can be picked; nudge the token closer if the GM wants it to land.
+  if (!attackIsRanged) {
+    const gap = _meleeGapFt(attackCombatantId, target);
+    const maxFt = Math.max(1, attackRangeFt || 0);
+    if (gap != null && gap > maxFt + 0.5) {
+      showToast(`Out of reach (${Math.round(gap)} ft away, ${attackWeaponName || 'weapon'} reaches ${maxFt} ft).`, 'warn');
+      return true;
+    }
   }
 
   // ── Attacker HIT value + damage context ──────────────────────────────────
