@@ -648,14 +648,14 @@ test('Placement', 'dropped tokens cluster at the center without stacking', async
   T.map();
   T.stub('viewportCenterPlacement', () => ({ x_pct: 50, y_pct: 50 }));
   const saveTokens = mapTokens, saveMap = activeMapId;
-  activeMapId = 'm1'; mapTokens = {};
+  activeMapId = 'm1'; mapTokens = {}; _recentDrops = [];
   const placed = [];
   for (let i = 0; i < 7; i++) {
     const p = clusteredCenterPlacement();
     placed.push(p);
     mapTokens['t' + i] = { id: 't' + i, map_id: 'm1', x_pct: p.x_pct, y_pct: p.y_pct };
   }
-  mapTokens = saveTokens; activeMapId = saveMap;
+  mapTokens = saveTokens; activeMapId = saveMap; _recentDrops = [];
   T.near(placed[0].x_pct, 50, 0.01, 'first token sits at the center');
   let minD = 1e9, maxD = 0;
   for (let i = 0; i < 7; i++) {
