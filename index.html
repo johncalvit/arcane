@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119d';
+const VERSION = 'v0.1.20261119e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -20328,6 +20328,7 @@ document.addEventListener('keydown', e => {
     }
     else if (wallMode) { wallEscape(); e.stopPropagation(); }
     else if (pinMode)  { exitPinMode(); e.stopPropagation(); }
+    else if (itemMode) { exitItemMode(); e.stopPropagation(); }
     else if (lightMode) {
       if (_lightAreaPts.length) { _lightAreaPts = []; drawLightAreaPreview(); } // cancel the polygon in progress first
       else exitLightMode();
@@ -20356,6 +20357,7 @@ exitPlayMode = function() {
   if (wallMode)     exitWallMode();
   if (pinMode)      exitPinMode();
   if (lightMode)    exitLightMode();
+  if (itemMode)     exitItemMode();
   if (pathMode)     exitPathMode();
   tokenChannel?.unsubscribe();
   tokenChannel = null;
@@ -21797,7 +21799,7 @@ function _doorDraw(svg, w) {
 
 // GM: double-click a door on the map (outside any drawing mode, not on a token) to open or close it
 document.addEventListener('dblclick', e => {
-  if (!isGM() || wallMode || lightMode || pathMode || (typeof measureMode !== 'undefined' && measureMode) || (typeof calMode !== 'undefined' && calMode)) return;
+  if (!isGM() || wallMode || lightMode || itemMode || pathMode || (typeof measureMode !== 'undefined' && measureMode) || (typeof calMode !== 'undefined' && calMode)) return;
   const vp = document.getElementById('map-viewport');
   if (!vp || !vp.contains(e.target) || e.target.closest?.('.map-token')) return;
   const rect = vp.getBoundingClientRect();
@@ -22890,6 +22892,7 @@ initMapInteraction = function() {
     if (wallMouseDown(e))      { e.stopImmediatePropagation(); return; }
     if (pinMouseDown(e))       { e.stopImmediatePropagation(); return; }
     if (lightMouseDown(e))     { e.stopImmediatePropagation(); return; }
+    if (itemMouseDown(e))      { e.stopImmediatePropagation(); return; }
     if (pathMouseDown(e))      { e.stopImmediatePropagation(); }
   }, true);
 
@@ -24324,6 +24327,7 @@ function toggleLightMode() { lightMode ? exitLightMode() : enterLightMode(); }
 
 function enterLightMode() {
   if (!isGM()) return;
+  if (typeof itemMode !== 'undefined' && itemMode) exitItemMode();
   lightMode = true;
   if (calMode)     exitCalibrationMode();
   if (measureMode) exitMeasureMode();
@@ -24353,7 +24357,7 @@ function exitLightMode() {
 for (const fn of ['enterWallMode', 'enterPinMode', 'enterCalibrationMode', 'enterMeasureMode', 'enterPathMode']) {
   const orig = window[fn];
   if (typeof orig !== 'function') continue;
-  window[fn] = function() { if (lightMode) exitLightMode(); return orig.apply(this, arguments); };
+  window[fn] = function() { if (lightMode) exitLightMode(); if (typeof itemMode !== 'undefined' && itemMode) exitItemMode(); return orig.apply(this, arguments); };
 }
 
 function lightMouseDown(e) {
@@ -24444,6 +24448,83 @@ async function _placeLightAt(x_pct, y_pct) {
   if (data) { mapTokens[data.id] = data; upsertTokenElement(data); if (isGM()) refreshTokenPanel(); }
 }
 // ═══ END LIGHT SOURCES ═══════════════════════════════════════════════════════
+
+// ═══ ITEMS TOOL (GM) ═════════════════════════════════════════════════════════
+// Drop any weapon, piece of equipment or consumable on the map the way the Lights tool drops a torch: pick it from
+// the list, click the map. It is an ordinary ground item (see dropItemOnMap), so characters pick it up, loot it
+// and carry it exactly like something another character dropped.
+var itemMode = false;
+const _origEnterPlayModeItems = enterPlayMode;
+enterPlayMode = function() {
+  _origEnterPlayModeItems();
+  if (isGM()) {
+    const tb = document.getElementById('map-toolbar-authoring');
+    if (tb) tb.insertAdjacentHTML('beforeend',
+      `<div class="tb-sep"></div>
+       <button class="btn-sm btn-text" id="item-btn" onclick="toggleItemMode()">📦 Items</button>
+       <select id="item-type-sel" class="btn-sm" title="Pick an item, then click the map to drop it" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.74rem;padding:2px 4px;max-width:170px;">
+       </select>`);
+  }
+};
+// Every droppable thing, grouped for the picker: [{ group, names[] }].
+function _itemToolCatalog() {
+  const byName = (a, b) => a.localeCompare(b);
+  const weapons = _weaponLoadoutCatalog().map(w => w.name).sort(byName);
+  const equip = EQUIPMENT.map(e => e.name).sort(byName);
+  const cons = CONSUMABLES.map(c => c.name).sort(byName);
+  return [{ group: 'Weapons', names: weapons }, { group: 'Equipment', names: equip }, { group: 'Consumables', names: cons }]
+    .filter(g => g.names.length);
+}
+function _itemToolFillSelect() {
+  const sel = document.getElementById('item-type-sel');
+  if (!sel || sel.options.length) return;
+  sel.innerHTML = _itemToolCatalog().map(g =>
+    `<optgroup label="${g.group}">${g.names.map(n => `<option value="${_paEsc(n)}">${_paEsc(n)}</option>`).join('')}</optgroup>`).join('');
+}
+function toggleItemMode() { itemMode ? exitItemMode() : enterItemMode(); }
+function enterItemMode() {
+  if (!isGM()) return;
+  if (calMode)     exitCalibrationMode();
+  if (measureMode) exitMeasureMode();
+  if (pathMode)    exitPathMode();
+  if (wallMode)    exitWallMode();
+  if (pinMode)     exitPinMode();
+  if (lightMode)   exitLightMode();
+  itemMode = true;
+  _itemToolFillSelect();
+  document.getElementById('map-viewport').classList.add('cal-mode');
+  const btn = document.getElementById('item-btn');
+  if (btn) { btn.style.color = 'var(--gold2)'; btn.style.borderColor = 'var(--gold)'; }
+  showToast('Items - pick one from the list, then click the map to drop it · Esc to stop');
+}
+function exitItemMode() {
+  itemMode = false;
+  document.getElementById('map-viewport')?.classList.remove('cal-mode');
+  const btn = document.getElementById('item-btn');
+  if (btn) { btn.style.color = ''; btn.style.borderColor = ''; }
+}
+function itemMouseDown(e) {
+  if (!itemMode) return false;
+  if (!activeMapId) { showToast('Upload/select a map first.', 'error'); return true; }
+  if (e.button !== 0) return true;
+  const name = document.getElementById('item-type-sel')?.value;
+  if (!name) { showToast('Pick an item first.', 'warn'); return true; }
+  const rect = document.getElementById('map-viewport').getBoundingClientRect();
+  const { x_pct, y_pct } = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
+  _placeItemAt(name, x_pct, y_pct);
+  return true;
+}
+async function _placeItemAt(name, x_pct, y_pct) {
+  const payload = { kind: _lookupItemKind(name), record: _catalogItemRecord(name) };
+  const { data, error } = await sb.from('map_tokens').insert({
+    map_id: activeMapId, campaign_id: currentCampaignId,
+    entity_type: 'item', entity_id: (crypto.randomUUID ? crypto.randomUUID() : 'item-' + Date.now()),
+    label: name, x_pct, y_pct, conditions: ['item:' + JSON.stringify(payload)], visible: true,
+  }).select().single();
+  if (error) { _writeErrorToast(error, 'map_tokens (item)'); return; }
+  if (data) { mapTokens[data.id] = data; upsertTokenElement(data); if (isGM()) refreshTokenPanel(); }
+}
+// ═══ END ITEMS TOOL ══════════════════════════════════════════════════════════
 
 // ── Map Setup toolbar: add the Pins tool ──────────────────────────────────
 const _origEnterPlayModePins = enterPlayMode;

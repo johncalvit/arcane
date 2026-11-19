@@ -670,3 +670,24 @@ test('Placement', 'dropped tokens cluster at the center without stacking', async
   T.ok(minD >= TOKEN_SIZE * 0.8, 'no two tokens overlap (min gap ' + minD.toFixed(1) + 'px)');
   T.ok(maxD <= TOKEN_SIZE * 1.3, 'seven tokens stay within one ring of the center');
 });
+
+test('Items tool', 'the picker lists weapons, equipment and consumables, and a placed item is a normal ground item', async T => {
+  const cat = _itemToolCatalog();
+  T.eq(cat.map(g => g.group).join(), 'Weapons,Equipment,Consumables', 'three groups');
+  T.ok(cat[0].names.includes('Sword, Long') && cat[1].names.length > 3 && cat[2].names.length > 0, 'each group has items');
+  const inserted = [];
+  const savedTokens = mapTokens, savedMap = activeMapId, savedCamp = currentCampaignId;
+  activeMapId = 'm1'; currentCampaignId = 'c1';
+  T.stub('upsertTokenElement', () => {}); T.stub('refreshTokenPanel', () => {});
+  T.stubObj(sb, 'from', () => ({ insert: row => { inserted.push(row); return { select: () => ({ single: async () => ({ data: { ...row, id: 'tk1' }, error: null }) }) }; } }));
+  try {
+    await _placeItemAt('Sword, Long', 40, 60);
+    const row = inserted[0];
+    T.eq(row.entity_type, 'item'); T.eq(row.label, 'Sword, Long'); T.eq(row.x_pct, 40);
+    const payload = JSON.parse(row.conditions[0].slice(5));
+    T.eq(payload.kind, 'weapon', 'a weapon is carried as a weapon');
+    T.eq(payload.record.name, 'Sword, Long');
+    await _placeItemAt(cat[1].names[0], 10, 10);
+    T.eq(JSON.parse(inserted[1].conditions[0].slice(5)).kind, 'equipment', 'equipment is carried as equipment');
+  } finally { mapTokens = savedTokens; activeMapId = savedMap; currentCampaignId = savedCamp; }
+});
