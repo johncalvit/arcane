@@ -423,3 +423,32 @@ test('Hidden', 'trap reaction: shield option only with a shield; responses are r
   T.eq(_trapResponseLines().join(), 'Choppy responds: Jump Back', 'the GM sees who did what');
   _trapResponses = saved;
 });
+
+test('Critical miss', 'melee critical miss: slip (96-97), fumble (98-99) and self-hit (100) each need a failed save', async T => {
+  const tok = T.token('a', 50, 50, 'creature', 'Ea', []);
+  const log = [], seq = { rolls: [] };
+  T.stub('_pathFindToken', () => tok);
+  T.stub('getEntity', () => ({ name: 'Ea', attrs: { PhysCoord: 10, ManualDex: 10 } }));
+  T.stub('_refForToken', () => 'creature::a');
+  T.stub('_handHoldingWeapon', () => 'right');
+  T.stub('logCombat', m => log.push(m));
+  T.stub('setCondition', async (id, k, on) => log.push('cond:' + k + ':' + on));
+  T.stub('dropHeldItem', async (ref, side) => log.push('drop:' + side));
+  T.stub('applyDamage', async (t, id, d) => log.push('dmg:' + (d >= 1 ? 'some' : 'none')));
+  T.stub('_checkDownedState', async () => null);
+  T.stub('openRoller', o => { log.push('save:' + o.target + ':' + o.label.split(' save')[0]); o.onComplete(seq.rolls.shift()); });
+  const dc = { attackerCombatantId: 'creature::a', weaponRow: { weapon: 'Sword, Long', damageMax: 6, maxPowerMod: 0.5 }, atkPower: 10, melee: true };
+  const run = async (n, saveRoll) => { log.length = 0; seq.rolls = [saveRoll]; await _meleeCritMiss(dc, n); return log.join(' | '); };
+  let r = await run(96, 90);
+  T.ok(/save:50:Physical Coordination/.test(r) && /cond:prone:true/.test(r), 'a failed save on 96 drops them Prone: ' + r);
+  r = await run(97, 20);
+  T.ok(!/cond:prone/.test(r), 'a passed save on 97 keeps them on their feet');
+  r = await run(98, 90);
+  T.ok(/save:50:Manual Dexterity/.test(r) && /drop:right/.test(r), 'a failed Manual Dexterity save on 98 drops the weapon: ' + r);
+  r = await run(99, 10);
+  T.ok(!/drop:/.test(r), 'a passed save on 99 holds on');
+  r = await run(100, 99);
+  T.ok(/save:50:Physical Coordination/.test(r) && /dmg:some/.test(r), 'a failed save on 100 hurts themselves: ' + r);
+  r = await run(100, 3);
+  T.ok(!/dmg:/.test(r), 'a passed save on 100 avoids it');
+});

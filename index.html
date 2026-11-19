@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119b';
+const VERSION = 'v0.1.20261119c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16366,6 +16366,8 @@ function _rollerShowResult() {
         const dc = _roller.damageContext;
         const tgt = getEntity(_entityRef(dc.targetEntityType, dc.targetEntityId))?.name || 'target';
         logCombat(`${_logName(dc.attackerCombatantId)} ${dc.actionLabel} ${tgt} — MISS (rolled ${n})`, 'miss');
+        // Melee critical miss (96+): once this roller is dismissed, the attacker rolls for a slip, a fumble or a self-hit.
+        if (critFail && dc.melee && !dc.spell) _rollerCloseCbs.push(() => { _meleeCritMiss(dc, n); });
       }
     } else if (!_roller.locContext) {
       logCombat(`${_roller.label}: rolled ${n} — ${bcLabel}`, success ? 'good' : 'roll');
@@ -16377,6 +16379,58 @@ function _rollerShowResult() {
   // Let spectators' mirror land on the same number and show the same result
   _rollerBroadcast('roller-result', { finalNum: n, resultLabel: bcLabel, resultClass: bcClass, hitLocation: bcHitLoc });
   if (_roller.onComplete) _roller.onComplete(_roller.finalNum);
+}
+
+// ── Melee critical miss ─────────────────────────────────────────────────────────
+// The attack roll itself says what goes wrong, and each outcome has a save (stat x 5 %, Normal):
+//   96-97  possible slip: fail a Physical Coordination save and the attacker falls Prone
+//   98-99  possible fumble: fail a Manual Dexterity save and the weapon is dropped
+//   100    possible self-hit: fail a Physical Coordination save and the attacker takes half a damage roll
+// (the self-hit ignores armor). Only melee swings; shots, throws and spells have no critical-miss table.
+function _critMissSave(cid, statKey, label) {
+  return new Promise(resolve => {
+    const ent = getEntity(cid);
+    if (!ent) { resolve(true); return; }
+    const pct = Math.max(1, Math.min(100, Math.round((ent.attrs?.[statKey] || 0) * 5)));
+    openRoller({
+      label: `${label} save - ${ent.name}`,
+      target: pct,
+      targetLabel: `${label} x 5  or less`,
+      onComplete: n => resolve(n <= 5 || (n < 96 && n <= pct)),
+    });
+  });
+}
+async function _meleeCritMiss(dc, n) {
+  const cid = dc.attackerCombatantId;
+  const tok = _pathFindToken(cid), ent = getEntity(cid);
+  if (!tok || !ent) return;
+  if (n <= 97) {
+    logCombat(`${ent.name} overreaches on a critical miss - a chance to slip.`, 'roll');
+    if (!(await _critMissSave(cid, 'PhysCoord', 'Physical Coordination'))) {
+      await setCondition(tok.id, 'prone', true);
+      logCombat(`${ent.name} slips and falls Prone!`, 'bad');
+    }
+  } else if (n <= 99) {
+    logCombat(`${ent.name}'s grip wavers on a critical miss - a chance to fumble.`, 'roll');
+    if (!(await _critMissSave(cid, 'ManualDex', 'Manual Dexterity'))) {
+      const weapon = dc.weaponRow && dc.weaponRow.weapon;
+      const side = weapon ? _handHoldingWeapon(cid, weapon) : null;
+      if (side) { await dropHeldItem(_refForToken(tok), side); logCombat(`${ent.name} fumbles and drops ${weapon}!`, 'bad'); }
+      else logCombat(`${ent.name} fumbles, but has no weapon to drop.`, 'roll');
+    }
+  } else {
+    logCombat(`${ent.name}'s swing goes terribly wrong - a chance to hit themselves.`, 'roll');
+    if (!(await _critMissSave(cid, 'PhysCoord', 'Physical Coordination'))) {
+      const row = dc.weaponRow || {};
+      const cap = row.damageMax ?? 0;
+      const maxRoll = Math.max(1, (dc.atkPower || 1) * (row.maxPowerMod ?? 0.5));
+      const dmg = cap > 0 ? Math.max(1, Math.round(Math.min(Math.random() * (maxRoll - 1) + 1, cap) / 2)) : 0;
+      if (!dmg) { logCombat(`${ent.name} swings wildly, but the attack could not hurt anyone.`, 'roll'); return; }
+      await applyDamage(tok.entity_type, tok.entity_id, dmg, 0);
+      const downed = await _checkDownedState(tok.id, getEntity(cid));
+      logCombat(`${ent.name} hits themselves for ${dmg} Toughness (half damage)${downed === 'dead' ? ' - killed' : downed === 'unconscious' ? ' - downed' : ''}!`, 'bad');
+    }
+  }
 }
 
 // Things to run once the current roller is dismissed (e.g. a failed cast's
@@ -18299,6 +18353,7 @@ function attackTokenClick(tokenId) {
     attackerCombatantId: attackCombatantId,
     heavy: attackHeavy,
     whirl: whirl ? whirl.n : 0,
+    melee: !attackIsRanged, // a swing (not a shot or a throw): a critical miss has consequences, see _meleeCritMiss
   };
 
   // ── Range penalty (ranged weapons only) ───────────────────────────────────
