@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119c';
+const VERSION = 'v0.1.20261119d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -18497,7 +18497,14 @@ function attackTokenClick(tokenId) {
   const onThrowRolled = thrownWeapon ? () => { _throwWeaponLands(throwerCid, thrownWeapon, throwTargetId); }
     // Whirlwind: once this swing's roll lands, the next target follows as soon as the roller is dismissed; after
     // the last one the action dialog comes back. (A cancelled swing never registers, so the sweep just stops.)
-    : whirl ? () => { if (whirl.last) { if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid; } else _rollerCloseCbs.push(() => _whirlNext()); }
+    : whirl ? (rolled) => {
+        if (whirl.last) { if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid; }
+        else if (rolled >= 96) { // a critical miss breaks the spin: no more swings (its slip / fumble / self-hit rolls follow)
+          _whirl = null;
+          logCombat(`${_logName(throwerCid)}'s Whirlwind is thrown off by a critical miss - the rest of the sweep is lost.`, 'bad');
+          if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid;
+        } else _rollerCloseCbs.push(() => _whirlNext());
+      }
     : undefined;
 
   exitAttackMode();
