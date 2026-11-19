@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118j';
+const VERSION = 'v0.1.20261119a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -20355,6 +20355,7 @@ enterPlayMode = function() {
          <option value="rect">Rect</option>
          <option value="circle">Circle</option>
          <option value="door">🚪 Door</option>
+         <option value="secretdoor">🚪🕵 Secret door</option>
          <option value="hline">🕵 Hidden line</option>
          <option value="hpoly">🕵 Hidden area</option>
          <option value="erase">Erase</option>
@@ -21339,6 +21340,7 @@ function wallMouseDown(e) {
   const shape = _wallShape();
 
   if (shape === 'door') { _wallPlaceDoor(x, y); return true; }
+  if (shape === 'secretdoor') { _wallPlaceDoor(x, y, true); return true; }
 
   if (shape === 'erase') {
     const hit = _findWallSegmentAt(x, y);
@@ -21517,7 +21519,7 @@ function _wallCommit(type, points) {
 const DOOR_FEET = 5;
 function _doorLenImgPx() { return mapScalePPF > 0 ? DOOR_FEET * mapScalePPF : 40; }
 
-function _wallPlaceDoor(vpX, vpY) {
+function _wallPlaceDoor(vpX, vpY, secret) {
   // find the nearest segment of a plain line wall (a Rect counts as its four edges)
   let best = null, bestDist = 14;
   for (const w of mapWalls) {
@@ -21553,14 +21555,70 @@ function _wallPlaceDoor(vpX, vpY) {
   const before = pts.slice(0, i + 1); if (s0 > 0.5) before.push(dA);
   const after  = pts.slice(i + 1);    if (s1 < L - 0.5) after.unshift(dB);
   const stamp = Date.now() + '-' + Math.round(Math.random() * 9999);
-  const next = [];
-  if (before.length >= 2) next.push({ ...wall, id: 'wall-' + stamp + 'a', type: 'line', points: before });
-  next.push({ id: 'door-' + stamp, type: 'line', door: true, open: false, points: [dA, dB], blocksVision: true, blocksMovement: true });
-  if (after.length >= 2)  next.push({ ...wall, id: 'wall-' + stamp + 'b', type: 'line', points: after });
-  mapWalls = mapWalls.filter(w => w !== wall).concat(next);
-  saveMapWalls();
+  const door = { id: 'door-' + stamp, type: 'line', door: true, open: false, points: [dA, dB], blocksVision: true, blocksMovement: true };
+  const commit = () => {
+    const next = [];
+    if (before.length >= 2) next.push({ ...wall, id: 'wall-' + stamp + 'a', type: 'line', points: before });
+    next.push(door);
+    if (after.length >= 2)  next.push({ ...wall, id: 'wall-' + stamp + 'b', type: 'line', points: after });
+    mapWalls = mapWalls.filter(w => w !== wall).concat(next);
+    saveMapWalls();
+    drawWalls(); drawFog();
+    showToast(secret ? 'Secret door placed. It reads as plain wall to players until noticed; double-click it to reveal, then to open or close.'
+                     : 'Door placed. Double-click it on the map to open or close it.');
+  };
+  if (secret) {
+    Object.assign(door, { secret: true, found: false, name: 'Secret door', vis: 40, hear: 0, smell: 0 });
+    _openSecretDoorModal(door, commit);
+  } else commit();
+}
+
+// GM's dialog after dropping a secret door: its name and how well it is hidden from each sense.
+function _openSecretDoorModal(door, onAdd) {
+  document.getElementById('hidden-obj-modal')?.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'hidden-obj-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:3100;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  const inp = 'width:70px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);';
+  overlay.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:22px 26px;width:360px;max-width:94vw;display:flex;flex-direction:column;gap:10px;font-family:var(--ui-font);">
+    <div style="font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;">🚪🕵 Secret Door</div>
+    <label style="font-size:0.78rem;color:var(--text-dim);">Name <span style="font-size:0.68rem;">(shown to players once noticed)</span>
+      <input id="sd-name" type="text" value="Secret door" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 7px;font-family:var(--ui-font);"></label>
+    <div style="font-size:0.72rem;color:var(--text-dim);">Hiding factors: the higher, the harder to notice; 0 means that sense can't find it. It starts <b>hidden</b> (plain wall), becomes <b>noticed</b> when found (a closed door), and the GM can then open it.</div>
+    <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:0.8rem;">
+      <label>👁 Visual<br><input id="sd-vis" type="number" min="0" value="40" style="${inp}"></label>
+      <label>👂 Hearing<br><input id="sd-hear" type="number" min="0" value="0" style="${inp}"></label>
+      <label>👃 Smell<br><input id="sd-smell" type="number" min="0" value="0" style="${inp}"></label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:4px;">
+      <button class="btn" id="sd-save">Add</button>
+      <button class="btn danger" id="sd-cancel">Cancel</button>
+    </div></div>`;
+  document.body.appendChild(overlay);
+  const num = id => Math.max(0, parseFloat(document.getElementById(id).value) || 0);
+  document.getElementById('sd-cancel').onclick = () => overlay.remove();
+  document.getElementById('sd-save').onclick = () => {
+    door.name = document.getElementById('sd-name').value.trim() || 'Secret door';
+    door.vis = num('sd-vis'); door.hear = num('sd-hear'); door.smell = num('sd-smell');
+    overlay.remove();
+    onAdd();
+  };
+  document.getElementById('sd-name').focus();
+}
+
+// A secret door's three states: hidden (not found), noticed (found, closed), open. The state is the pair found/open.
+function _secretDoorState(w) { return !w.found ? 'hidden' : (w.open ? 'open' : 'noticed'); }
+async function _secretDoorSet(wallId, state) {
+  const w = mapWalls.find(x => x.id === wallId);
+  if (!w || !w.door || !w.secret) return;
+  w.found = state !== 'hidden';
+  w.open  = state === 'open';
+  if (!w.found) w.foundBy = '';
+  w.blocksVision = !w.open; w.blocksMovement = !w.open;
+  await saveMapWalls();
   drawWalls(); drawFog();
-  showToast('Door placed. Double-click it on the map to open or close it.');
+  logCombat(`${w.name || 'A secret door'}: ${state === 'hidden' ? 'hidden again' : state === 'noticed' ? 'noticed' : 'opens'}.`, 'roll');
+  if (document.getElementById('manage-walls-modal')) _openManageWallsModal();
 }
 
 function _doorNearest(vpX, vpY) {
@@ -21577,6 +21635,10 @@ function _doorNearest(vpX, vpY) {
 async function toggleDoor(wallId) {
   const w = mapWalls.find(x => x.id === wallId);
   if (!w || !w.door) return;
+  if (w.secret) { // hidden -> noticed -> open -> noticed
+    await _secretDoorSet(wallId, !w.found ? 'noticed' : (w.open ? 'noticed' : 'open'));
+    return;
+  }
   w.open = !w.open;
   w.blocksVision = !w.open;
   w.blocksMovement = !w.open;
@@ -21631,13 +21693,17 @@ var _hiddenStage        = {};     // 'tokenId|objectId|sense' → 0 none / 1 far
 // noticed (or triggered) afresh. Returns how many had been found.
 function _hiddenForgetAll() {
   let n = 0;
-  for (const w of _hiddenObjects()) { if (w.found) { n++; w.found = false; w.foundBy = ''; } }
+  for (const w of _hiddenDetectables()) {
+    if (w.found) { n++; w.found = false; w.foundBy = ''; if (w.door) { w.open = false; w.blocksVision = true; w.blocksMovement = true; } }
+  }
   _hiddenStage = {};
   if (typeof drawWalls === 'function') drawWalls();
   return n;
 }
 
 function _hiddenObjects() { return mapWalls.filter(w => w.type === 'hidden' && (w.points || []).length >= 2); }
+// Everything a character can notice: hidden lines/areas plus secret doors (those never spring anything).
+function _hiddenDetectables() { return _hiddenObjects().concat(mapWalls.filter(w => w.door && w.secret && (w.points || []).length >= 2)); }
 
 // Closest point of a hidden object to (px,py), all in image px: { x, y, dist }. Inside an area counts as 0.
 function _hiddenNearest(w, px, py) {
@@ -21682,7 +21748,7 @@ function _hiddenRollChance(sense, stage, searching) {
 // they start Searching (force = a fresh roll for the stages they are already inside).
 function _hiddenDetectionCheck(force) {
   if (isGM() || !currentCharacterId || typeof mapScalePPF === 'undefined' || !mapScalePPF) return;
-  const objs = _hiddenObjects().filter(w => !w.found);
+  const objs = _hiddenDetectables().filter(w => !w.found);
   if (!objs.length) return;
   const viewer = _fogViewerToken();
   if (!viewer) return;
@@ -21712,6 +21778,7 @@ function _hiddenReveal(w, who) {
   w.found = true; w.foundBy = who || '';
   drawWalls();
   mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who: who || '' } });
+  if (w.door) { w.blocksVision = true; w.blocksMovement = true; } // noticed, but still a closed door
   logCombat(`🔍 ${who || 'Someone'} notices ${w.name ? 'a ' + w.name : 'something hidden'}!`, 'good');
   showToast(`You notice ${w.name ? 'a ' + w.name : 'something hidden'}!`, 'good');
 }
@@ -21781,7 +21848,7 @@ function _openHiddenModal(shape, points) {
 
 async function _hiddenEdit(id, field, value) {
   const w = mapWalls.find(x => x.id === id);
-  if (!w || w.type !== 'hidden') return;
+  if (!w || (w.type !== 'hidden' && !(w.door && w.secret))) return;
   w[field] = field === 'found' ? !!value : Math.max(0, parseFloat(value) || 0);
   if (field === 'found' && !w.found) delete w.foundBy;
   await saveMapWalls();
@@ -22496,7 +22563,12 @@ function drawWalls(mouseX, mouseY) {
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
     if (w.type === 'litarea' || w.type === 'hidden') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
-    if (w.door) { if (_doorKnown(w)) _doorDraw(svg, w); return; }  // open or closed, but only where the viewer has seen
+    if (w.door) {  // open or closed, but only where the viewer has seen
+      if (w.secret && !w.found && !_gmSeesAll()) return; // an unnoticed secret door is just wall to a player
+      if (_doorKnown(w)) _doorDraw(svg, w);
+      if (w.secret && _gmSeesAll()) _hiddenDrawShape(svg, w); // the GM's marker: name, hiding factors, noticed tick
+      return;
+    }
     if (w.maxHp) _wallDrawShape(svg, w, obColor, obFill, false, true);
     // Index passed through so the GM can see, right on the map, which wall
     // is which — the Manage Walls list numbers rows the same way (#1, #2,
@@ -22613,6 +22685,7 @@ async function _openManageWallsModal() {
     const safeId = w.id.replace(/'/g, "\\'");
     const label = w.maxHp
       ? `#${i + 1} ${_paEsc(w.spellName || 'obstacle')} <span style="color:var(--text-dim);font-size:0.74rem;">❄ ${w.hp}/${w.maxHp} HP</span>`
+      : w.door && w.secret ? `#${i + 1} 🚪🕵 ${_paEsc(w.name || 'Secret door')} <span style="color:var(--text-dim);font-size:0.74rem;">${_secretDoorState(w)}</span>`
       : w.door ? `#${i + 1} 🚪 Door <span style="color:var(--text-dim);font-size:0.74rem;">${w.open ? 'open' : 'closed'}</span>`
       : w.type === 'litarea' ? `#${i + 1} 💡 lit area`
       : w.type === 'hidden' ? `#${i + 1} 🕵 ${_paEsc(w.name || 'hidden object')} <span style="color:var(--text-dim);font-size:0.74rem;">${w.shape === 'poly' ? 'area' : 'line'}${w.found ? ' · found' : ''}</span>`
@@ -22621,7 +22694,14 @@ async function _openManageWallsModal() {
     // toggles — those are fixed (blocks both) for a spell-created barrier;
     // GM-drawn walls keep the toggles since those are the whole point there.
     const hidNum = (f, tip) => `<input type="number" min="0" step="1" value="${w[f] || 0}" title="${tip}" onchange="_hiddenEdit('${safeId}','${f}',this.value)" style="width:46px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 3px;font-family:var(--ui-font);font-size:0.74rem;">`;
-    const controls = w.door
+    const secretSel = w.door && w.secret
+      ? `<select onchange="_secretDoorSet('${safeId}',this.value)" title="Hidden: plain wall. Noticed: a closed door. Open: passable." style="background:var(--bg);color:var(--gold2);border:1px solid var(--border);border-radius:3px;padding:2px 4px;font-family:var(--ui-font);font-size:0.76rem;">
+           ${['hidden', 'noticed', 'open'].map(s => `<option value="${s}" ${_secretDoorState(w) === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
+         <span title="Hiding factors" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('vis', 'Visual hiding factor')}
+         <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
+         <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>` : '';
+    const controls = secretSel ? secretSel : w.door
       ? `<button onclick="toggleDoor('${safeId}')" style="border:1px solid var(--border);background:var(--bg);color:var(--gold2);border-radius:3px;padding:2px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.78rem;">${w.open ? 'Close' : 'Open'}</button>
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.type === 'hidden'

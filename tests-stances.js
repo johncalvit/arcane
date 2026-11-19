@@ -386,3 +386,27 @@ test('Sentinel', 'a token that is guarding but lost its tracker slot (refresh) g
   const busy = { slots: { full: null, right: { label: 'Slash' }, left: null, move: null }, id: 'creature::w' };
   T.ok(!_atRestoreStanceSlot(busy), 'not restored over a hand that is already acting');
 });
+
+test('Hidden', 'a secret door cycles hidden / noticed / open, is found like any hidden object, and hides again on fog reset', async T => {
+  const door = { id: 'sd', type: 'line', door: true, secret: true, found: false, open: false, blocksVision: true, blocksMovement: true,
+                 name: 'Secret door', vis: 40, hear: 0, smell: 0, points: [{ x_pct: 50, y_pct: 50 }, { x_pct: 52, y_pct: 50 }] };
+  const savedWalls = mapWalls;
+  mapWalls = [door];
+  T.stub('saveMapWalls', async () => {}); T.stub('drawWalls', () => {}); T.stub('drawFog', () => {}); T.stub('logCombat', () => {});
+  try {
+    T.eq(_secretDoorState(door), 'hidden', 'starts hidden');
+    T.ok(_hiddenDetectables().includes(door), 'characters can notice it');
+    T.ok(!_hiddenObjects().includes(door), 'but it is not a trap line');
+    await toggleDoor('sd');
+    T.eq(_secretDoorState(door), 'noticed', 'first toggle reveals it, still a closed door');
+    T.ok(door.blocksMovement && door.blocksVision, 'noticed doors are still shut');
+    await toggleDoor('sd');
+    T.eq(_secretDoorState(door), 'open', 'second toggle opens it');
+    T.ok(!door.blocksMovement && !door.blocksVision, 'open blocks nothing');
+    await toggleDoor('sd');
+    T.eq(_secretDoorState(door), 'noticed', 'third toggle closes it again');
+    await _secretDoorSet('sd', 'open');
+    T.eq(_hiddenForgetAll(), 1, 'fog reset forgets it');
+    T.ok(_secretDoorState(door) === 'hidden' && door.blocksMovement && door.blocksVision, 'hidden and shut again');
+  } finally { mapWalls = savedWalls; }
+});
