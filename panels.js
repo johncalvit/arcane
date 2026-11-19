@@ -979,6 +979,7 @@ function _dlgRender(body) {
   const c = atCombatants.find(x => x.id === combatantId);
   if (!c) { atCloseModal(); return; }
   if (!c.slots) c.slots = _newSlots();
+  if (typeof _atRestoreStanceSlot === 'function') _atRestoreStanceSlot(c); // a guarding token whose slot was lost (refresh)
   const ent = getEntity(combatantId);
   const attrs = ent?.attrs || {};
   const conds = ent?.conditions || new Set();

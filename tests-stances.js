@@ -368,3 +368,21 @@ test('Night Vision', 'in the dark you identify others within your Night Vision s
   [_darkActive, _fogLastPoly, _revealedTokens] = saved;
   T.eq(got.join(), ['full', 'shadow', 'none'].join(), 'near (1.5 ft, inside 2 ft NV) full, mid (10 ft, inside the 16 ft silhouette reach) shadow, far (40 ft) unseen');
 });
+
+test('Sentinel', 'a token that is guarding but lost its tracker slot (refresh) gets the stance slot back', async T => {
+  T.geo();
+  T.token('w', 50, 50, 'creature', 'Ew', ['sentinel']);
+  T.token('x', 60, 50, 'creature', 'Ex', []);
+  const saved = atCombatants;
+  atCombatants = [{ id: 'creature::w', slots: { full: null, right: null, left: null, move: null } },
+                  { id: 'creature::x', slots: { full: null, right: null, left: null, move: null } }];
+  const n = _atRestoreAllStanceSlots();
+  const w = atCombatants[0], x = atCombatants[1];
+  atCombatants = saved;
+  T.eq(n, 1, 'only the guarding token is restored');
+  T.eq(w.slots.full && w.slots.full.label, 'Sentinel', 'the slot reads Sentinel, so the dialog shows it lit');
+  T.ok(w.slots.full.durationRounds >= 9999 && w.slots.full.locksAll, 'a lock-on stance with no end');
+  T.ok(!x.slots.full, 'a token with no stance is left alone');
+  const busy = { slots: { full: null, right: { label: 'Slash' }, left: null, move: null }, id: 'creature::w' };
+  T.ok(!_atRestoreStanceSlot(busy), 'not restored over a hand that is already acting');
+});

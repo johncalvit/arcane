@@ -20,7 +20,7 @@ These bars show your current Toughness (hit points), Stamina (energy), Blood (li
 This lists the conditions affecting the character. The GM and the game assign and clear them; players can't change them. They fall into groups:
 
 * **Downed:** Unconscious, Dead.
-* **Stances you chose:** Blocking, Parrying, Evading, Sentinel, Target, Vigilant, Infiltrating, Searching.
+* **Stances you chose:** Blocking, Parrying, Evading, Sentinel, Target, Vigilant, Infiltrating, Searching. A stance guards until you drop it. If the GM refreshes the page mid-session, a token that was still guarding shows its stance as active again in the action dialog (it can be dropped there).
 * **Effects:** Bleeding, Stunned, Slowed, Blinded, Deafened, Paralyzed, Prone, Burning, Corroding, Regenerating, Bathed.
 * **Grappling:** Held, Holding, Carrying.
 

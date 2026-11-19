@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118i';
+const VERSION = 'v0.1.20261118j';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -14663,8 +14663,29 @@ function _atBroadcastFullState() {
   }});
 }
 
+// The tracker's slots live only in the GM's browser memory, but a stance's condition (Sentinel, Target, ...) is saved
+// on the token. After a page refresh - or a stance set by hand with Add Condition - the token still guards while its
+// tracker slot is empty, so the action dialog showed no active stance and offered no way to drop it. Rebuild the
+// stance slot from the token's condition: a lock-on stance with no end, exactly as the Explore dialog sets it.
+const _STANCE_BY_COND = [['sentinel', 'Sentinel'], ['target', 'Target'], ['vigilant', 'Vigilant'], ['evading', 'Evade'],
+                         ['infiltrating', 'Infiltrate'], ['searching', 'Search']];
+function _atRestoreStanceSlot(c) {
+  if (!c) return false;
+  if (!c.slots) c.slots = _newSlots();
+  if (c.slots.full || c.slots.right || c.slots.left) return false;
+  const tok = _pathFindToken(c.id);
+  if (!tok) return false;
+  const conds = getConditions(tok.id);
+  const hit = _STANCE_BY_COND.find(([k]) => conds.has(k));
+  if (!hit) return false;
+  c.slots.full = { label: hit[1], startRound: _atSharedRound(), durationRounds: 9999, locksAll: true };
+  return true;
+}
+function _atRestoreAllStanceSlots() { let n = 0; for (const c of atCombatants) if (_atRestoreStanceSlot(c)) n++; return n; }
+
 function atStartCombat() {
   if (!atCombatants.length) return;
+  _atRestoreAllStanceSlots();
   atActiveIdx = 0;
   { const s = atSortedCombatants(); let n = 0; while (n++ < s.length && _atSkipped(s[atActiveIdx])) atActiveIdx = (atActiveIdx + 1) % s.length; } // open on someone who is actually in the fight
   atRound = 1;
@@ -15744,6 +15765,7 @@ async function atAutoAddMapTokens() {
     const avatar = t.entity_type === 'character' ? (charMap[t.entity_id]?.avatar_url || null) : (t.avatar_url || null);
     atCombatants.push({ id, name, avatar, type: t.entity_type === 'character' ? 'char' : 'creature', initiative: null, tieBreak: null, slots: _newSlots() });
   }
+  _atRestoreAllStanceSlots();
   renderAtList();
   // The Tokens tab's own "+/⚔ add to combat" button (renderOnMapTokens)
   // reads atCombatants too, but nothing told it to redraw after this bulk
