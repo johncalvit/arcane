@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118h';
+const VERSION = 'v0.1.20261118i';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -22090,7 +22090,9 @@ function _fogVisState(t) {
   const revealed = _revealedTokens[revealedKey] || (_revealedTokens[revealedKey] = new Set());
   if (_withinTouchOf(t, viewer)) { revealed.add(t.id); return 'full'; }
   if (_tokenIsLit(t, viewer)) return 'full';
-  // Out of the light but inside Night Vision reach: a shadow — unless this
+  // Night Vision proper: within (Night Vision stat) feet, edge to edge, you make out who or what it is, no light needed.
+  if (_nightVisionSees(t, viewer)) return 'full';
+  // Beyond that but still inside the wider Night Vision reach: only a shadow — unless this
   // viewer already got close enough to know what it is.
   if (_nightVisionReaches(px, py, viewer)) return revealed.has(t.id) ? 'full' : 'shadow';
   return 'none';
@@ -22108,6 +22110,16 @@ function _withinTouchOf(t, viewer) {
   const dx = ((t.x_pct - viewer.x_pct) / 100) * mapImgW, dy = ((t.y_pct - viewer.y_pct) / 100) * mapImgH;
   const edgeGapPx = Math.hypot(dx, dy) - getTokenSize(t) / 2 - getTokenSize(viewer) / 2;
   return edgeGapPx / mapScalePPF <= TOUCH_REVEAL_FT;
+}
+
+// Night Vision lets you identify things in the dark out to as many feet as your Night Vision stat, measured from the
+// other token's edge to yours (like the touch reveal). Past that, _nightVisionReaches still gives a silhouette.
+function _nightVisionSees(t, viewer) {
+  if (!mapScalePPF) return false;
+  const stat = Math.max(0, getEntity(_refForToken(viewer))?.attrs?.NightVision || 0);
+  const dx = ((t.x_pct - viewer.x_pct) / 100) * mapImgW, dy = ((t.y_pct - viewer.y_pct) / 100) * mapImgH;
+  const edgeGapPx = Math.hypot(dx, dy) - getTokenSize(t) / 2 - getTokenSize(viewer) / 2;
+  return edgeGapPx / mapScalePPF <= stat;
 }
 
 // Night Vision (0-100 stat) scaled to feet the same way Vigilant's cone is.

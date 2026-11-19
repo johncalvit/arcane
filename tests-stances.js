@@ -351,3 +351,20 @@ test('Melee reach', 'a melee attack on a target beyond the weapon reach is refus
   T.ok(handled && stillTargeting, 'click is swallowed and targeting stays up');
   T.ok(toasts.some(m => /Out of reach/.test(m)), 'player is told why: ' + toasts.join('|'));
 });
+
+test('Night Vision', 'in the dark you identify others within your Night Vision stat in feet; a little farther they are shadows', async T => {
+  T.geo();
+  const me = T.token('me', 50, 50, 'creature', 'Me', ['friendly']);
+  const near = T.token('near', 51.5, 50, 'creature', 'Near', ['foe']), mid = T.token('mid', 60, 50, 'creature', 'Mid', ['foe']), far = T.token('far', 90, 50, 'creature', 'Far', ['foe']);
+  T.stub('_gmSeesAll', () => false);
+  T.stub('_fogViewerToken', () => me);
+  T.stub('_refForToken', () => 'creature::me');
+  T.stub('getEntity', () => ({ attrs: { NightVision: 2 } }));
+  T.stub('_tokenIsLit', () => false);
+  const saved = [_darkActive, _fogLastPoly, _revealedTokens];
+  _darkActive = true; _fogLastPoly = []; _revealedTokens = {};
+  const st = t => _fogVisState(t);
+  const got = [st(near), st(mid), st(far)];
+  [_darkActive, _fogLastPoly, _revealedTokens] = saved;
+  T.eq(got.join(), ['full', 'shadow', 'none'].join(), 'near (1.5 ft, inside 2 ft NV) full, mid (10 ft, inside the 16 ft silhouette reach) shadow, far (40 ft) unseen');
+});
