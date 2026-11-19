@@ -5895,7 +5895,8 @@ const NUMB_TYPES = ['Whip', 'Staff', 'Club'];
 const NUMB_TECHNIQUES = NUMB_TYPES.map(type => ({ id: _techSlug(type) + '-numb', name: type + ' Numb', weaponType: type,
   minLevel: 3, hit: 0, damage: 0, parry: 0, numb: true }));
 // Lunge (level 3): a defensive move. While lunging (declared on the weapon's hand, until you attack or the round
-// ends) a Sentinel with a LONGER reach than the lunge weapon does not get its reaction attack as you close in.
+// ends) a Sentinel does not get its reaction attack as you close in. When the lunger then attacks that Sentinel the
+// Sentinel stance is used up (it can still block/parry, and attacks normally on its own turn).
 // The sentinel is free to attack on its own turn afterwards.
 const LUNGE_TYPES = ['Knife', 'Short Sword', 'Longsword', 'Rapier'];
 const LUNGE_TECHNIQUES = LUNGE_TYPES.map(type => ({ id: _techSlug(type) + '-lunge', name: type + ' Lunge', weaponType: type,
@@ -8270,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261118g';
+const VERSION = 'v0.1.20261118h';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9751,7 +9752,7 @@ const CONDITION_DEFS = [
   { key:'evading',     label:'Evading',     icon:'💨', color:'#88ff88',
     desc:'Actively evading. Evade defense is pre-applied to incoming attacks.' },
   { key:'lunging',     label:'Lunging',     icon:'🤺', color:'#e0b050',
-    desc:'Ready to lunge: a Sentinel with a longer reach than your weapon does not get its reaction attack as you close in. Ends when you attack or the round ends.' },
+    desc:'Ready to lunge: a Sentinel does not get its reaction attack as you close in; your attack on it uses up its Sentinel stance. Ends when you attack or the round ends.' },
   { key:'sentinel',    label:'Sentinel',    icon:'👁', color:'#ff8c00',
     desc:'Ready to attack any enemy that enters melee range.' },
   { key:'target',      label:'Target',      icon:'🎯', color:'#40c0ff',
@@ -18360,6 +18361,13 @@ function attackTokenClick(tokenId) {
   if (atCombatants.find(x => x.id === attackCombatantId)) {
     const atkSlot = _handHoldingWeapon(attackCombatantId, attackWeaponName) || 'right';
     atSetSlot(attackCombatantId, atkSlot, actionLabel, 1, false);
+    // Lunge: the attack on a Sentinel the lunger slipped past uses up that Sentinel's stance. The target can still
+    // block / parry, and it attacks normally on its own turn.
+    const targetCid = _tokenCid(target);
+    if (_consumeLungedSentinel(attackCombatantId, targetCid)) {
+      atClearSlot(targetCid, 'full');
+      logCombat(`${target.label}'s Sentinel stance ends - the lunging attack came in under it.`, 'roll');
+    }
     switchGmTab('actions');
   }
 
@@ -19434,20 +19442,20 @@ const _SENTINEL_CHECK_SAMPLES = 40;
 // requiring devtools. Temporary diagnostic for the "still not triggering"
 // live report; safe to leave in (one line per segment, only when something
 // with the condition actually exists on the map) or strip out later.
-// The reach (ft) of the weapon a combatant is lunging with, or null if they are not lunging. A lunge is declared
-// on a hand as 'Lunge - <weapon>' (see the Lunge chip) and lasts until that hand attacks or the round ends.
-function _lungeReachFt(combId) {
+// Is this combatant lunging? A lunge is declared on a hand as 'Lunge - <weapon>' (see the Lunge chip) and lasts
+// until that hand attacks or the round ends.
+function _isLunging(combId) {
   const c = atCombatants.find(x => x.id === combId);
-  if (!c || !c.slots) return null;
-  for (const side of ['right', 'left']) {
-    const label = c.slots[side]?.label || '';
-    if (!label.startsWith('Lunge')) continue;
-    const weapon = label.replace(/^Lunge\s*[—–-]\s*/, '');
-    const norm = normalizeWeaponName(weapon);
-    const rows = MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && r.damageMax > 0);
-    return rows.length ? Math.max(...rows.map(r => r.reach || 0)) : 0;
-  }
-  return null;
+  return !!(c && c.slots && ['right', 'left'].some(side => (c.slots[side]?.label || '').startsWith('Lunge')));
+}
+// Sentinels a lunger slipped past this round: lungerCid -> { round, sentinels: Set of sentinel combatant ids }.
+// Attacking one of them uses up its Sentinel stance (see attackTokenClick).
+var _lungedPast = {};
+function _consumeLungedSentinel(lungerCid, targetCid) {
+  const rec = _lungedPast[lungerCid];
+  if (!rec || rec.round !== atRound || !rec.sentinels.has(targetCid)) return false;
+  rec.sentinels.delete(targetCid);
+  return true;
 }
 
 function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
@@ -19455,7 +19463,7 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   if (!moverTok) { if (_debug) logCombat(`[sentinel debug] no mover token for ${moverCombId}`, 'roll'); return []; }
   const found = new Map(); // sentinelCid -> {sentinelCid, x_pct, y_pct, frac}
   const notes = [];
-  const lungeReach = _lungeReachFt(moverCombId); // null unless this mover is lunging
+  const lunging = _isLunging(moverCombId);
   for (const t of Object.values(mapTokens)) {
     if (t.id === moverTok.id) continue;
     const conds = getConditions(t.id);
@@ -19475,9 +19483,11 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
       const yPct = fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac;
       if (_sentinelZoneCheck(t, xPct, yPct, moverTok)) {
         const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
-        // Lunge: slip inside a Sentinel whose reach beats the lunge weapon's - no reaction attack.
-        if (lungeReach != null && conds.has('sentinel') && _sentinelMeleeReachFt(t) > lungeReach) {
-          logCombat(`${moverTok.label} lunges in past ${t.label}'s longer reach - no reaction attack.`, 'roll');
+        // Lunge: slip in past a Sentinel - no reaction attack (its stance ends once the lunger attacks it).
+        if (lunging && conds.has('sentinel')) {
+          const rec = _lungedPast[moverCombId] && _lungedPast[moverCombId].round === atRound ? _lungedPast[moverCombId] : (_lungedPast[moverCombId] = { round: atRound, sentinels: new Set() });
+          rec.sentinels.add(sentinelCid);
+          logCombat(`${moverTok.label} lunges in past ${t.label}'s Sentinel - no reaction attack.`, 'roll');
           notes.push(`${t.label}: LUNGED past`);
           hit = true;
           break;

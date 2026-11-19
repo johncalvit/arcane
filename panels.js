@@ -1145,15 +1145,15 @@ function _dlgRender(body) {
       }
     }
     const aim = typeof _techniqueAim === 'function' ? _techniqueAim(ent?.stats?.Techniques, itemName) : null;
-    // Lunge technique: a defensive move for a stabbing blade - until you attack (or the round ends) a Sentinel with a
-    // longer reach than this weapon doesn't get its reaction attack as you close in.
+    // Lunge technique: a defensive move for a stabbing blade - until you attack (or the round ends) a Sentinel doesn't
+    // get its reaction attack as you close in.
     let lungeChip = '';
     const lungeName = typeof _techniqueFlag === 'function' ? _techniqueFlag(ent?.stats?.Techniques, itemName, 'lunge') : null;
     const lungeLbl = `Lunge — ${itemName}`;
     if (lungeName && cur?.label !== lungeLbl && rows.some(x => !x.ranged && x.r.damageMax > 0)) {
       lungeChip = _dlgChip({
         label: '🤺 Lunge', sub: 'defense · 1r',
-        title: `${lungeName}: slip in past a Sentinel with a longer reach than ${itemName} - it gets no reaction attack. Lasts until you attack or the round ends; the Sentinel can still attack you on its own turn.`,
+        title: `${lungeName}: close in on a Sentinel without it getting a reaction attack. Your attack on it uses up its Sentinel stance (it can still block or parry) and it attacks normally on its own turn. Lasts until you attack or the round ends.`,
         data: { dact: 'set', slot: chKey, label: lungeLbl, dur: 3, locks: 0 },
       });
     }

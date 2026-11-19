@@ -610,7 +610,7 @@ test('Techniques', 'Numb: arm and leg Fumble/Slow chances use the d10 even when 
   T.ok(eff.gate(Object.assign({ hitPart: 'arm', conds: new Set() }, base)), 'gate opens on a 0-damage Numb hit');
   T.ok(!eff.gate(Object.assign({ hitPart: 'arm', conds: new Set() }, base, { numbDmg: 0 })), 'but not without Numb');
 });
-test('Techniques', 'Lunge: a longer-reach Sentinel does not get its reaction; equal or shorter reach still does', async T => {
+test('Techniques', 'Lunge: a Sentinel does not react to a lunger, and attacking it uses up the stance', async T => {
   T.map();
   const mover = T.token('m', 40, 50, 'creature', 'Em');
   const sent = T.token('s', 50, 50, 'creature', 'Es', ['sentinel']);
@@ -619,12 +619,17 @@ test('Techniques', 'Lunge: a longer-reach Sentinel does not get its reaction; eq
   T.stub('_sentinelCanReact', () => true);
   T.stub('logCombat', () => {});
   T.stub('_sentinelZoneCheck', (w, x, y) => x >= 45); // entering from x=40 toward 50
-  const run = reach => { T.stub('_lungeReachFt', () => reach); return _findSentinelCrossings('creature::m', { x_pct: 40, y_pct: 50 }, { x_pct: 50, y_pct: 50 }, false); };
+  const run = lunging => { T.stub('_isLunging', () => lunging); return _findSentinelCrossings('creature::m', { x_pct: 40, y_pct: 50 }, { x_pct: 50, y_pct: 50 }, false); };
   T.stub('_sentinelMeleeReachFt', () => 6);
-  T.eq(run(null).length, 1, 'no lunge: the sentinel reacts');
-  T.eq(run(2).length, 0, 'lunging with a 2 ft blade past a 6 ft sentinel: bypassed');
-  T.eq(run(6).length, 1, 'equal reach: still reacts');
-  T.eq(run(9).length, 1, 'shorter sentinel reach: still reacts');
+  _lungedPast = {};
+  T.eq(run(false).length, 1, 'no lunge: the sentinel reacts');
+  T.eq(run(true).length, 0, 'lunging: bypassed whatever the reach');
+  const rec = _lungedPast['creature::m'];
+  T.ok(rec && rec.sentinels.has('creature::s'), 'the sentinel is remembered for the attack');
+  T.ok(!_consumeLungedSentinel('creature::m', 'creature::other'), 'an unrelated target does not use up a stance');
+  T.ok(_consumeLungedSentinel('creature::m', 'creature::s'), 'attacking it uses up its stance');
+  T.ok(!_consumeLungedSentinel('creature::m', 'creature::s'), 'only once');
+  _lungedPast = {};
 });
 
 test('App integrity', 'update prompt: reads the published VERSION and only shows for a different one', async T => {
