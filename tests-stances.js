@@ -410,3 +410,16 @@ test('Hidden', 'a secret door cycles hidden / noticed / open, is found like any 
     T.ok(_secretDoorState(door) === 'hidden' && door.blocksMovement && door.blocksVision, 'hidden and shut again');
   } finally { mapWalls = savedWalls; }
 });
+
+test('Hidden', 'trap reaction: shield option only with a shield; responses are recorded for the GM', async T => {
+  const base = ['Freeze', 'Jump Back', 'Roll to the Side', 'Dash Forward', 'Go Prone', 'Other'];
+  T.eq(_trapReactionOptions({ held: { right: 'Sword, Long' } }).join(), base.join(), 'no shield, no Hunker option');
+  T.eq(_trapReactionOptions({ held: { left: 'Shield, Heater' } }).join(),
+    ['Freeze', 'Jump Back', 'Roll to the Side', 'Hunker behind Shield', 'Dash Forward', 'Go Prone', 'Other'].join(), 'a shield adds Hunker behind Shield');
+  T.eq(TRAP_REACT_SECS, 6, 'six seconds on the clock');
+  const saved = _trapResponses;
+  _trapResponses = {};
+  _trapResponseReceived({ who: 'Choppy', response: 'Jump Back', charId: 'c1' });
+  T.eq(_trapResponseLines().join(), 'Choppy responds: Jump Back', 'the GM sees who did what');
+  _trapResponses = saved;
+});

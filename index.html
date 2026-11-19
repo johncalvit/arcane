@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119a';
+const VERSION = 'v0.1.20261119b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -15147,7 +15147,7 @@ async function _axpConfirmAward() {
 const _FX_DAMAGE_TYPES = [['slash','Slash'],['pierce','Pierce'],['crush','Crush'],['burn','Burn'],['shock','Shock'],['freeze','Freeze'],['corrode','Corrode']];
 const _FX_SKIP_CONDS = ['held', 'holding', 'carrying']; // relational - they need a second token
 
-function atOpenApplyEffectsModal(preChecked) {
+function atOpenApplyEffectsModal(preChecked, notes) {
   if (!isGM()) return;
   document.getElementById('fx-modal')?.remove();
   const toks = Object.values(mapTokens || {}).filter(t => t.entity_type === 'character' || t.entity_type === 'creature');
@@ -15173,6 +15173,7 @@ function atOpenApplyEffectsModal(preChecked) {
   card.style.cssText = 'background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;width:520px;max-width:94vw;max-height:90vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px;font-family:var(--ui-font);';
   card.innerHTML = `
     <div style="font-size:1.05rem;font-weight:bold;color:var(--gold);text-align:center;">⚡ Apply Effects</div>
+    ${Array.isArray(notes) && notes.length ? `<div style="border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:0.82rem;background:var(--bg3);"><div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);margin-bottom:2px;">Character responses</div>${notes.map(n => _paEsc(n)).join('<br>')}</div>` : ''}
     <div>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
         <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Targets</span>
@@ -16742,7 +16743,8 @@ function subscribeMapRealtime() {
       if (payload && (payload.skill || payload.stat)) _showCallForRoll(payload.skill, payload.level, payload);
     })
     // A player's character walked onto an unnoticed trap (see _hiddenTrigger): the GM gets the trap dialog.
-    .on('broadcast', { event: 'trap-sprung' }, ({ payload }) => { if (isGM() && payload) _trapGmDialog(payload); })
+    .on('broadcast', { event: 'trap-sprung' }, ({ payload }) => { if (isGM() && payload) { _trapResponses = {}; _trapGmDialog(payload); } })
+    .on('broadcast', { event: 'trap-response' }, ({ payload }) => { if (isGM() && payload) { _trapResponseReceived(payload); } })
     // A called roll's outcome comes back to the GM (see _trapRollResult).
     .on('broadcast', { event: 'roll-result' }, ({ payload }) => { if (isGM() && payload) _trapRollResult(payload); })
     .on('broadcast', { event: 'explore-difficulty' }, ({ payload }) => {
@@ -20793,6 +20795,7 @@ function _trapGmDialog(p) {
   o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3400;display:flex;align-items:center;justify-content:center;';
   o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:18px 24px;width:430px;max-width:94vw;max-height:90vh;overflow-y:auto;font-family:var(--ui-font);color:var(--text);display:flex;flex-direction:column;gap:10px;">
     <div style="text-align:center;font-size:1.05rem;"><span style="font-size:1.4rem;">⚠️</span><br><b>${_paEsc(p.who || 'Someone')}</b> triggers ${_paEsc(p.what || 'something hidden')}.</div>
+    <div id="tg-resp" style="text-align:center;font-size:0.85rem;color:var(--gold2);">Waiting for their response…</div>
     <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Call for a roll</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
       <select id="tg-what" style="${inp}flex:1;min-width:150px;">
@@ -20851,7 +20854,7 @@ function _trapOpenEffects(auto) {
   if (auto && !ids.length) { showToast('Everyone passed the roll.', 'good'); return; }
   document.getElementById('trap-gm-modal')?.remove();
   _trapDlg = null;
-  atOpenApplyEffectsModal(ids);
+  atOpenApplyEffectsModal(ids, _trapResponseLines());
 }
 
 // A character walked onto an unnoticed trap: it is revealed to everyone and the player gets a dialog.
@@ -20865,16 +20868,83 @@ function _hiddenTrigger(w, tok) {
   mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who, triggered: true, what } });
   logCombat(`⚠️ ${who} triggers ${what}!`, 'bad');
   mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id } });
+  _trapReactionDialog(w, tok, who, ent);
+}
+
+// ── Trap reaction ───────────────────────────────────────────────────────────────
+// The moment a trap is sprung its player gets TRAP_REACT_SECS seconds to say how their character reacts; no answer
+// means they Freeze. The choice is only RECORDED (sent to the GM, shown in the trap dialog and Apply Effects):
+// what it does to the trap's effects is the GM's call at the table.
+const TRAP_REACT_SECS = 6;
+function _trapReactionOptions(ent) {
+  const held = Object.values((ent && ent.held) || {}).filter(Boolean);
+  const hasShield = held.some(n => /shield|buckler/i.test(String(n)));
+  const opts = ['Freeze', 'Jump Back', 'Roll to the Side'];
+  if (hasShield) opts.push('Hunker behind Shield');
+  opts.push('Dash Forward', 'Go Prone', 'Other');
+  return opts;
+}
+function _trapReactionDialog(w, tok, who, ent) {
   document.getElementById('trap-modal')?.remove();
   const o = document.createElement('div');
   o.id = 'trap-modal';
   o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10060;display:flex;align-items:center;justify-content:center;';
-  o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:20px 26px;max-width:360px;text-align:center;">
+  const btn = 'padding:8px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:var(--ui-font);font-size:0.9rem;';
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:20px 26px;width:380px;max-width:94vw;text-align:center;font-family:var(--ui-font);color:var(--text);">
       <div style="font-size:1.8rem;">⚠️</div>
-      <div style="margin:8px 0 14px;color:var(--text);font-size:1.05rem;"><b>${_paEsc(who)}</b> triggers ${_paEsc(what)}.</div>
-      <button class="at-btn primary" id="trap-ok">OK</button></div>`;
+      <div style="margin:6px 0 10px;font-size:1.05rem;">There is a suspicious click. How will <b>${_paEsc(who)}</b> respond?</div>
+      <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:4px;"><div id="trap-bar" style="height:100%;width:100%;background:#e05555;"></div></div>
+      <div id="trap-secs" style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">${TRAP_REACT_SECS}s - no answer and ${_paEsc(who)} freezes</div>
+      <div id="trap-opts" style="display:flex;flex-direction:column;gap:6px;">
+        ${_trapReactionOptions(ent).map(l => `<button data-r="${_paEsc(l)}" style="${btn}${l === 'Freeze' ? 'border-color:var(--gold);background:rgba(201,168,76,0.18);color:var(--gold2);' : ''}">${_paEsc(l)}${l === 'Freeze' ? ' (default)' : ''}</button>`).join('')}
+      </div>
+      <div id="trap-other" style="display:none;margin-top:8px;gap:6px;">
+        <input id="trap-other-txt" type="text" placeholder="What does ${_paEsc(who)} do?" style="flex:1;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:6px 8px;font-family:var(--ui-font);">
+        <button id="trap-other-go" class="at-btn primary">Go</button>
+      </div></div>`;
   document.body.appendChild(o);
-  o.querySelector('#trap-ok').onclick = () => o.remove();
+  const t0 = Date.now(), total = TRAP_REACT_SECS * 1000;
+  let done = false, timer = null;
+  const finish = label => {
+    if (done) return; done = true; clearInterval(timer); o.remove();
+    _trapRespond(w, tok, who, label);
+  };
+  timer = setInterval(() => {
+    const left = Math.max(0, total - (Date.now() - t0));
+    const bar = o.querySelector('#trap-bar'), secs = o.querySelector('#trap-secs');
+    if (bar) bar.style.width = (left / total * 100) + '%';
+    if (secs) secs.textContent = `${Math.ceil(left / 1000)}s - no answer and ${who} freezes`;
+    if (left <= 0) finish('Freeze');
+  }, 100);
+  o.querySelectorAll('#trap-opts button').forEach(b => b.onclick = () => {
+    if (b.dataset.r !== 'Other') { finish(b.dataset.r); return; }
+    clearInterval(timer); // typing an answer stops the clock
+    o.querySelector('#trap-secs').textContent = 'Describe what they do';
+    o.querySelector('#trap-opts').style.display = 'none';
+    o.querySelector('#trap-other').style.display = 'flex';
+    o.querySelector('#trap-other-txt').focus();
+  });
+  const goOther = () => { const t = o.querySelector('#trap-other-txt').value.trim(); finish(t ? 'Other: ' + t : 'Other'); };
+  o.querySelector('#trap-other-go').onclick = goOther;
+  o.querySelector('#trap-other-txt').onkeydown = e => { if (e.key === 'Enter') goOther(); };
+}
+// Hand the chosen reaction to the GM (their trap dialog and Apply Effects show it).
+function _trapRespond(w, tok, who, label) {
+  const payload = { id: w.id, who, response: label, charId: tok && tok.entity_id };
+  logCombat(`${who} reacts: ${label}.`, 'roll');
+  _trapResponseReceived(payload);
+  mapChannel?.send({ type: 'broadcast', event: 'trap-response', payload });
+}
+// Character reactions to the current trap, charId -> { who, response }. Shown to the GM.
+var _trapResponses = {};
+function _trapResponseReceived(p) {
+  if (!p || !p.charId) return;
+  _trapResponses[p.charId] = { who: p.who || '', response: p.response || 'Freeze' };
+  const el = document.getElementById('tg-resp');
+  if (el) el.innerHTML = _trapResponseLines().map(l => _paEsc(l)).join('<br>');
+}
+function _trapResponseLines() {
+  return Object.values(_trapResponses).map(r => `${r.who || 'Someone'} responds: ${r.response}`);
 }
 
 // Cuts a route (image-percent points) short at the first wall and/or after opts.maxFeet.
