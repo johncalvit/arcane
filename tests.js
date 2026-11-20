@@ -713,6 +713,8 @@ test('Preferences', 'quick roll and active-character centering: defaults, saved 
 test('Ammunition', 'bows use Arrows, crossbows use Bolts; a bundle opens into single rounds and each shot spends one; creatures are untracked', async T => {
   T.eq(_ammoTypeFor('Bow, Hunting').key, 'Arrows'); T.eq(_ammoTypeFor('Crossbow, Light').key, 'Crossbow Bolts');
   T.eq(_ammoTypeFor('Dart'), null, 'darts and javelins are thrown, not shot'); T.eq(_ammoTypeFor('Sling Stone'), null);
+  T.eq(_ammoTypeFor('Bow, War 50 Pounds').key, 'Arrows'); T.eq(_ammoTypeFor('Composite Bow').key, 'Arrows'); T.eq(_ammoTypeFor('Longbow').key, 'Arrows');
+  T.eq(_ammoTypeFor('Heavy Crossbow').key, 'Crossbow Bolts'); T.eq(_ammoTypeFor('Arbalest').key, 'Crossbow Bolts'); T.eq(_ammoTypeFor('Bowie Knife'), null);
   const row = { equipment: [{ name: 'Arrows (×20)', qty: 2, unitWt: 2 }, { name: 'Backpack', qty: 1, unitWt: 2 }] };
   T.stub('_entityCacheRow', () => row);
   T.stub('_syncOwnBuilder', () => {});

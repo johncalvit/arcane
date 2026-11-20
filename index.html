@@ -2187,6 +2187,7 @@
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">What your character has ready: what is in each hand, the armor on each part of the body, and the jewelry worn. Everything here comes from what you're carrying (see Possessions).</p>
       <h3>Hands</h3>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="hand-fields"></div>
+      <div id="ammo-fields" style="margin-top:12px;max-width:520px;"></div>
       <h3 style="margin-top:22px;">Armor</h3>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:10px;font-style:italic;">Equip a piece you're carrying into each body slot — a piece sized for someone else won't fit and shows disabled.</p>
       <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:14px;" id="armor-fields"></div>
@@ -6867,16 +6868,35 @@ function setLoadoutHand(side, value) {
   recalc();
   buildWornFields();
 }
+// "🏹 14 arrows" for a projectile weapon, counted from the Possessions tables (empty string for anything else).
+function _loadoutAmmoText(weaponName) {
+  const t = _ammoTypeFor(weaponName);
+  if (!t) return '';
+  const counts = getLoadoutItemCounts();
+  const have = (counts[t.key] || 0) + t.per * (counts[t.bundle] || 0);
+  return `<span style="color:${have ? 'var(--gold2)' : '#e05555'};">🏹 ${have} ${t.unit}</span>`;
+}
 function buildHandFields() {
   const box = document.getElementById('hand-fields');
   if (!box || !document.getElementById('ps-hand-right')) return;
+  // Every projectile weapon carried, with its rounds, under the hands.
+  const ammoBox = document.getElementById('ammo-fields');
+  if (ammoBox) {
+    const bows = [...new Set([...document.querySelectorAll('#weapon-list tr')].map(tr => tr.cells[0].textContent))].filter(n => _ammoTypeFor(n));
+    ammoBox.innerHTML = bows.length
+      ? `<div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Projectile weapons carried</div>` +
+        bows.map(n => `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;"><span>${_paEsc(n)}</span><span>${_loadoutAmmoText(n)}</span></div>`).join('')
+      : '';
+  }
   const items = getLoadoutItemNames();
   const held = getHeldItems();
   const twoHanded = typeof isTwoHandedGrip === 'function' && isTwoHandedGrip();
   box.innerHTML = [['right', 'Right Hand'], ['left', 'Left Hand']].map(([side, label]) => {
     const cur = items.includes(held[side]) ? held[side] : '';
     const e = _enchantByName(_equipRow(cur)?.enchant);
-    const note = cur && twoHanded ? 'Held in both hands (two-handed)' : e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (items.length ? '' : 'Nothing to hold yet - see Possessions');
+    const ammoHere = cur ? _loadoutAmmoText(cur) : '';
+    const note = (cur && twoHanded ? 'Held in both hands (two-handed)' : e ? '✨ ' + _paEsc(e.name) + ': ' + _paEsc(_enchantSummary(e)) : (items.length ? '' : 'Nothing to hold yet - see Possessions'))
+      + (ammoHere ? (cur && twoHanded || e ? ' · ' : '') + ammoHere : '');
     return `<div class="field"><label>${label}</label>
       <select data-hand="${side}" onchange="setLoadoutHand(this.dataset.hand, this.value)" style="width:100%;">
         <option value="">Bare Handed</option>
@@ -8311,7 +8331,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261120d';
+const VERSION = 'v0.1.20261120e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -11123,9 +11143,16 @@ function _syncOwnBuilder(ref) {
 // 20 ("Arrows (×20)", qty = bundles); the first shot from a bundle opens it into a stack of single rounds ("Arrows",
 // qty = rounds, weight scaled), so the count is plain integers everywhere. Each shot spends one. Characters only: a
 // creature's quiver is not tracked, so its bow never runs dry.
+// Variants count too ("Bow, War 50 Pounds", "Composite Bow", a crossbow type you add): the weapon's name or its Weapon
+// Type says "bow" or "crossbow". Slings, blowguns and thrown weapons are not matched.
+function _ammoKind(n) {
+  const s = (String(n) + ' ' + (typeof getWeaponType === 'function' ? getWeaponType(n) : '')).toLowerCase();
+  if (/crossbow|arbalest/.test(s)) return 'bolt';
+  return /\bbow\b|longbow|shortbow/.test(s) ? 'arrow' : null;
+}
 const AMMO_TYPES = [
-  { key: 'Arrows',         bundle: 'Arrows (×20)',          per: 20, unit: 'arrows', uses: n => /^Bow\b/i.test(n) },
-  { key: 'Crossbow Bolts', bundle: 'Crossbow Bolts (×20)',  per: 20, unit: 'bolts',  uses: n => /^Crossbow\b/i.test(n) },
+  { key: 'Arrows',         bundle: 'Arrows (×20)',          per: 20, unit: 'arrows', uses: n => _ammoKind(n) === 'arrow' },
+  { key: 'Crossbow Bolts', bundle: 'Crossbow Bolts (×20)',  per: 20, unit: 'bolts',  uses: n => _ammoKind(n) === 'bolt' },
 ];
 function _ammoTypeFor(weaponName) { return weaponName ? (AMMO_TYPES.find(t => t.uses(String(weaponName))) || null) : null; }
 // Rounds carried, from a list of { name, qty } stacks.
