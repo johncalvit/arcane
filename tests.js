@@ -691,3 +691,21 @@ test('Items tool', 'the picker lists weapons, equipment and consumables, and a p
     T.eq(JSON.parse(inserted[1].conditions[0].slice(5)).kind, 'equipment', 'equipment is carried as equipment');
   } finally { mapTokens = savedTokens; activeMapId = savedMap; currentCampaignId = savedCamp; }
 });
+
+test('Preferences', 'quick roll and active-character centering: defaults, saved to the account, and quick roll follows the preference', async T => {
+  const saved = currentUser, savedLs = (() => { try { return localStorage.getItem('gt_quickroll'); } catch (e) { return null; } })();
+  try { localStorage.removeItem('gt_quickroll'); } catch (e) {}
+  const sent = [];
+  T.stubObj(sb.auth, 'updateUser', async arg => { sent.push(arg); return { data: { user: Object.assign({}, currentUser, { user_metadata: Object.assign({}, currentUser.user_metadata, arg.data) }) }, error: null }; });
+  currentUser = { id: 'u', email: 'x@y.z', user_metadata: {} };
+  T.eq(_prefGet('quick_roll'), false, 'quick roll is off by default');
+  T.eq(_prefGet('center_active'), true, 'centering is on by default');
+  T.eq(await _prefSet('center_active', false), true, 'saving works');
+  T.eq(_prefGet('center_active'), false, 'now off');
+  T.eq(sent[0].data.prefs.center_active, false, 'sent to the account');
+  await _prefSet('quick_roll', true);
+  T.eq(_rollerQuick(), true, 'the roller follows the preference');
+  T.eq(sent[1].data.prefs.center_active, false, 'saving one preference keeps the other');
+  currentUser = saved;
+  try { savedLs === null ? localStorage.removeItem('gt_quickroll') : localStorage.setItem('gt_quickroll', savedLs); } catch (e) {}
+});

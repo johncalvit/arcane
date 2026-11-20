@@ -7354,7 +7354,28 @@ function openAboutModal() {
   document.body.appendChild(o);
 }
 
-// Minimal profile: display name (shown in the menu and to other players).
+// Player preferences live on the account (Supabase user metadata, so they follow the player to any device), with the
+// quick-roll value also mirrored in this browser as before. _prefGet falls back to `dflt` when nothing is saved.
+const PREF_DEFAULTS = { quick_roll: false, center_active: true };
+function _prefGet(key) {
+  const p = currentUser && currentUser.user_metadata && currentUser.user_metadata.prefs;
+  if (p && key in p) return !!p[key];
+  if (key === 'quick_roll') { try { if (localStorage.getItem('gt_quickroll') === '1') return true; } catch (e) {} } // an older per-device choice
+  return PREF_DEFAULTS[key];
+}
+async function _prefSet(key, val) {
+  val = !!val;
+  if (key === 'quick_roll') { try { localStorage.setItem('gt_quickroll', val ? '1' : '0'); } catch (e) {} }
+  if (!currentUser) return false;
+  const prefs = Object.assign({}, currentUser.user_metadata && currentUser.user_metadata.prefs, { [key]: val });
+  currentUser.user_metadata = Object.assign({}, currentUser.user_metadata, { prefs }); // effective at once, saved below
+  const { data, error } = await sb.auth.updateUser({ data: { prefs } });
+  if (error) return false;
+  if (data && data.user) currentUser = data.user;
+  return true;
+}
+
+// Profile: display name (shown in the menu and to other players) and player preferences.
 function openProfileModal() {
   if (!currentUser) { alert('Sign in first.'); return; }
   document.getElementById('profile-modal')?.remove();
@@ -7369,10 +7390,25 @@ function openProfileModal() {
     <label style="font-size:0.78rem;color:var(--text-dim);">Email<div style="color:var(--text);font-size:0.9rem;margin-top:2px;">${_escWeaponType(currentUser.email || '')}</div></label>
     <label style="font-size:0.78rem;color:var(--text-dim);">Display name
       <input type="text" id="profile-name" value="${_escWeaponType(nm)}" maxlength="40" style="display:block;width:100%;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 8px;font-family:var(--ui-font);"></label>
+    <div style="border-top:1px solid var(--border);padding-top:10px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Preferences (saved as you tick them)</div>
+      <label style="font-size:0.85rem;cursor:pointer;display:flex;gap:8px;align-items:flex-start;"><input type="checkbox" id="pref-quick" ${_prefGet('quick_roll') ? 'checked' : ''} style="margin-top:3px;">
+        <span>Quick roll by default<br><span style="font-size:0.72rem;color:var(--text-dim);">The number appears after a short pause instead of the spinning roller.</span></span></label>
+      <label style="font-size:0.85rem;cursor:pointer;display:flex;gap:8px;align-items:flex-start;"><input type="checkbox" id="pref-center" ${_prefGet('center_active') ? 'checked' : ''} style="margin-top:3px;">
+        <span>Center the map on the active character in combat<br><span style="font-size:0.72rem;color:var(--text-dim);">When it is someone's turn the view slides to them. Off keeps the map where you put it.</span></span></label>
+    </div>
     <div id="profile-status" style="font-size:0.75rem;color:var(--gold2);min-height:1em;"></div>
     <div style="display:flex;gap:10px;justify-content:center;"><button class="btn" id="profile-save">Save</button><button class="btn danger" onclick="document.getElementById('profile-modal').remove()">Close</button></div>`;
   overlay.appendChild(card);
   document.body.appendChild(overlay);
+  for (const [id, key] of [['pref-quick', 'quick_roll'], ['pref-center', 'center_active']]) {
+    document.getElementById(id).onchange = async e => {
+      const st = document.getElementById('profile-status');
+      const ok = await _prefSet(key, e.target.checked);
+      st.style.color = ok ? 'var(--gold2)' : '#e05555';
+      st.textContent = ok ? 'Preference saved.' : 'Could not save that to your account (kept on this device).';
+    };
+  }
   document.getElementById('profile-save').onclick = async () => {
     const name = document.getElementById('profile-name').value.trim();
     const st = document.getElementById('profile-status');
@@ -8271,7 +8307,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261120b';
+const VERSION = 'v0.1.20261120c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -15429,7 +15465,8 @@ function _atUpdateBlink() {
     // the player's view on their own character (no change if they have none).
     const t = mapTokens[tokenId];
     const hiddenFromMe = !!t && ((!t.visible && !isGM()) || _fogVisState(t) === 'none');
-    if (!hiddenFromMe) _panToToken(tokenId);
+    if (!_prefGet('center_active')) { /* the player turned centering off in their Profile */ }
+    else if (!hiddenFromMe) _panToToken(tokenId);
     else {
       const own = _fogViewerToken();
       if (own) _panToToken(own.id);
@@ -16237,8 +16274,8 @@ function _rollerRand() {
 // Quick roll: a per-device preference (some players dislike the slot-machine spin). With it on, the number
 // is revealed after a short fixed delay instead of the spin + slow-down. If the roll offers defense choices
 // it still waits for the click (so a defense can be picked first), then reveals at once.
-function _rollerQuick() { try { return localStorage.getItem('gt_quickroll') === '1'; } catch (e) { return false; } }
-function _rollerQuickChanged(cb) { try { localStorage.setItem('gt_quickroll', cb.checked ? '1' : '0'); } catch (e) {} }
+function _rollerQuick() { return _prefGet('quick_roll'); }
+function _rollerQuickChanged(cb) { _prefSet('quick_roll', cb.checked); } // the checkbox in the roller changes the same preference
 function _rollerStartSpin() {
   _roller.phase = 'spinning';
   const quick = _rollerQuick();
