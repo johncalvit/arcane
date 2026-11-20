@@ -2837,11 +2837,15 @@ function updatePlaysheet(attrs) {
     : '<span style="color:var(--text-dim)">No spells known.</span>';
 
   // Loadout (weapons + equipment)
-  const weaponRows = [...document.querySelectorAll('#weapon-list tr')].map(tr =>
-    `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
-      <span>${tr.cells[0].textContent} <span style="color:var(--text-dim);">(${tr.cells[1].textContent}, ${tr.cells[3].textContent})</span></span>
+  const _loCounts = getLoadoutItemCounts();
+  const weaponRows = [...document.querySelectorAll('#weapon-list tr')].map(tr => {
+    const at = _ammoTypeFor(tr.cells[0].textContent);
+    const have = at ? (_loCounts[at.key] || 0) + at.per * (_loCounts[at.bundle] || 0) : null;
+    const ammoTxt = at ? ` <span style="color:${have ? 'var(--gold2)' : '#e05555'};">· ${have} ${at.unit}</span>` : '';
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border);font-size:0.85rem;">
+      <span>${tr.cells[0].textContent}${ammoTxt} <span style="color:var(--text-dim);">(${tr.cells[1].textContent}, ${tr.cells[3].textContent})</span></span>
       <span style="color:var(--gold2);">${tr.cells[2].textContent} lbs</span>
-    </div>`);
+    </div>`; });
   // A consumable's description shows as a hover tooltip on its name, right
   // where a player is actually looking at what they're carrying — so they
   // can tell a Healing Potion from a Night Vision Potion without having to
@@ -8307,7 +8311,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261120c';
+const VERSION = 'v0.1.20261120d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -11113,6 +11117,57 @@ function _syncOwnBuilder(ref) {
   if (typeof _syncHandSelectsFromCache === 'function') _syncHandSelectsFromCache();
   if (typeof recalc === 'function') recalc();
 }
+
+// ═══ AMMUNITION ═══════════════════════════════════════════════════════════════
+// Bows shoot Arrows and crossbows shoot Crossbow Bolts (one generic kind each, for now). They are bought in bundles of
+// 20 ("Arrows (×20)", qty = bundles); the first shot from a bundle opens it into a stack of single rounds ("Arrows",
+// qty = rounds, weight scaled), so the count is plain integers everywhere. Each shot spends one. Characters only: a
+// creature's quiver is not tracked, so its bow never runs dry.
+const AMMO_TYPES = [
+  { key: 'Arrows',         bundle: 'Arrows (×20)',          per: 20, unit: 'arrows', uses: n => /^Bow\b/i.test(n) },
+  { key: 'Crossbow Bolts', bundle: 'Crossbow Bolts (×20)',  per: 20, unit: 'bolts',  uses: n => /^Crossbow\b/i.test(n) },
+];
+function _ammoTypeFor(weaponName) { return weaponName ? (AMMO_TYPES.find(t => t.uses(String(weaponName))) || null) : null; }
+// Rounds carried, from a list of { name, qty } stacks.
+function _ammoCountIn(stacks, t) {
+  let n = 0;
+  for (const e of (stacks || [])) {
+    const q = Math.max(0, Math.floor(Number(e.qty) || 0));
+    if (e.name === t.key) n += q; else if (e.name === t.bundle) n += q * t.per;
+  }
+  return n;
+}
+// { type, count } for a character's projectile weapon, else null (not a projectile weapon, or not a character).
+function _ammoInfoForRef(ref, weaponName) {
+  const t = _ammoTypeFor(weaponName);
+  if (!t || !String(ref || '').startsWith('char::')) return null;
+  const row = _entityCacheRow(ref);
+  return row ? { type: t, count: _ammoCountIn(row.equipment, t) } : null;
+}
+function _ammoLabel(info) { return info ? `${info.count} ${info.type.unit}` : ''; }
+// Spend one round; false when there is none.
+async function _spendAmmo(ref, weaponName) {
+  const t = _ammoTypeFor(weaponName);
+  const row = t && String(ref || '').startsWith('char::') ? _entityCacheRow(ref) : null;
+  if (!row) return true; // nothing to track
+  const eq = (row.equipment || []).map(e => ({ ...e }));
+  const single = eq.findIndex(e => e.name === t.key && (Number(e.qty) || 0) > 0);
+  if (single >= 0) {
+    eq[single].qty = (Number(eq[single].qty) || 0) - 1;
+    if (eq[single].qty <= 0) eq.splice(single, 1);
+  } else {
+    const b = eq.findIndex(e => e.name === t.bundle && (Number(e.qty) || 0) > 0);
+    if (b < 0) return false;
+    const unitWt = (Number(eq[b].unitWt) || 0) / t.per;
+    eq[b].qty = (Number(eq[b].qty) || 0) - 1;
+    if (eq[b].qty <= 0) eq.splice(b, 1);
+    eq.push({ name: t.key, qty: t.per - 1, unitWt });
+  }
+  await updateEntity(ref, { equipment: eq });
+  _syncOwnBuilder(ref);
+  return true;
+}
+// ═══ END AMMUNITION ═══════════════════════════════════════════════════════════
 
 // A thrown weapon leaves the thrower's hand and inventory and lands near the
 // TARGET (1–4 ft, same scatter as any drop), where it can be picked up again —
@@ -18341,6 +18396,14 @@ function attackTokenClick(tokenId) {
     }
   }
 
+  // Projectile weapons need ammunition: a character with none can't shoot (a thrown weapon is its own ammunition).
+  const _isThrow = attackIsRanged && (/^Throw\b/i.test(attackActionLabel || '') || getWeaponRows(attackWeaponName).find(r => r.action === attackActionLabel)?.reload === 'N/A');
+  const _ammo = attackIsRanged && !_isThrow ? _ammoInfoForRef(attackCombatantId, attackWeaponName) : null;
+  if (_ammo && _ammo.count < 1) {
+    showToast(`Out of ${_ammo.type.unit}: ${attackWeaponName} has nothing to fire.`, 'warn');
+    return true; // targeting stays up so the player can back out
+  }
+
   // ── Attacker HIT value + damage context ──────────────────────────────────
   const [atkType, atkId] = attackCombatantId.split('::');
   let hitValue = null;
@@ -18481,6 +18544,7 @@ function attackTokenClick(tokenId) {
   if (atCombatants.find(x => x.id === attackCombatantId)) {
     const atkSlot = _handHoldingWeapon(attackCombatantId, attackWeaponName) || 'right';
     atSetSlot(attackCombatantId, atkSlot, actionLabel, 1, false);
+    if (_ammo) _spendAmmo(attackCombatantId, attackWeaponName); // the shot is fired: one round gone
     // Lunge: the attack on a Sentinel the lunger slipped past uses up that Sentinel's stance. The target can still
     // block / parry, and it attacks normally on its own turn.
     const targetCid = _tokenCid(target);

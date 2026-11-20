@@ -709,3 +709,27 @@ test('Preferences', 'quick roll and active-character centering: defaults, saved 
   currentUser = saved;
   try { savedLs === null ? localStorage.removeItem('gt_quickroll') : localStorage.setItem('gt_quickroll', savedLs); } catch (e) {}
 });
+
+test('Ammunition', 'bows use Arrows, crossbows use Bolts; a bundle opens into single rounds and each shot spends one; creatures are untracked', async T => {
+  T.eq(_ammoTypeFor('Bow, Hunting').key, 'Arrows'); T.eq(_ammoTypeFor('Crossbow, Light').key, 'Crossbow Bolts');
+  T.eq(_ammoTypeFor('Dart'), null, 'darts and javelins are thrown, not shot'); T.eq(_ammoTypeFor('Sling Stone'), null);
+  const row = { equipment: [{ name: 'Arrows (×20)', qty: 2, unitWt: 2 }, { name: 'Backpack', qty: 1, unitWt: 2 }] };
+  T.stub('_entityCacheRow', () => row);
+  T.stub('_syncOwnBuilder', () => {});
+  T.stub('updateEntity', async (ref, patch) => { Object.assign(row, patch); return true; });
+  T.eq(_ammoInfoForRef('char::a', 'Bow, War').count, 40, 'two bundles of 20');
+  T.eq(_ammoInfoForRef('creature::x', 'Bow, War'), null, 'creatures are not tracked');
+  T.eq(_ammoInfoForRef('char::a', 'Sword, Long'), null, 'only projectile weapons');
+  T.eq(await _spendAmmo('char::a', 'Bow, War'), true);
+  T.eq(_ammoInfoForRef('char::a', 'Bow, War').count, 39, 'one arrow gone');
+  const single = row.equipment.find(e => e.name === 'Arrows');
+  T.eq(single.qty, 19, 'the opened bundle became 19 single arrows'); T.near(single.unitWt, 0.1, 0.001, 'at a twentieth of the bundle weight');
+  T.eq(row.equipment.find(e => e.name === 'Arrows (×20)').qty, 1, 'one sealed bundle left');
+  for (let i = 0; i < 38; i++) await _spendAmmo('char::a', 'Bow, War');
+  T.eq(_ammoInfoForRef('char::a', 'Bow, War').count, 1, 'down to the last arrow');
+  T.eq(await _spendAmmo('char::a', 'Bow, War'), true);
+  T.eq(_ammoInfoForRef('char::a', 'Bow, War').count, 0);
+  T.ok(!row.equipment.some(e => /Arrows/.test(e.name)), 'the empty stack is removed');
+  T.eq(await _spendAmmo('char::a', 'Bow, War'), false, 'nothing left to fire');
+  T.ok(row.equipment.some(e => e.name === 'Backpack'), 'other gear untouched');
+});

@@ -107,8 +107,9 @@ function _paViewTechniques(ent) {
 function _paViewEquipment(ent, attrs) {
   const rows = _paWeaponRowsHtml(ent, attrs);
   const carried = (ent.loadout || []);
+  const ammoNote = n => { const a = typeof _ammoInfoForRef === 'function' ? _ammoInfoForRef(ent.ref, n) : null; return a ? ` <span style="color:${a.count ? 'var(--gold2)' : '#e05555'};">· ${_paEsc(_ammoLabel(a))}</span>` : ''; };
   const carriedHtml = carried.length
-    ? carried.map(n => `<div class="ps-stat-row"><span class="ps-stat-label">${_itemNameSpan(n)}</span></div>`).join('')
+    ? carried.map(n => `<div class="ps-stat-row"><span class="ps-stat-label">${_itemNameSpan(n)}${ammoNote(n)}</span></div>`).join('')
     : '<div style="color:var(--text-dim);font-style:italic;font-size:0.8rem;">Nothing carried.</div>';
   _paOpenModal('Equipment',
     `<div class="pa-sub">Weapon actions</div>${rows || '<div style="color:var(--text-dim);font-style:italic;font-size:0.8rem;">No weapons held.</div>'}
@@ -1166,9 +1167,14 @@ function _dlgRender(body) {
       const sub = (r.damageMax ? `dmg ${r.damageMax}` : ranged && r.rangeIncrement ? `${r.rangeIncrement}ft` : '') || `${dur}r`;
       const defensive = r.action === 'Block' || r.action === 'Parry';
       const kb = (!ranged && typeof _knockbackFor === 'function') ? _knockbackFor(r) : 0;
+      // Projectile weapons show the rounds left and can't be used with none (characters only).
+      const ammoInfo = ranged && r.damageMax > 0 && !/^Throw\b/i.test(r.action) && r.reload !== 'N/A' && typeof _ammoInfoForRef === 'function'
+        ? _ammoInfoForRef(combatantId, itemName) : null;
+      const noAmmo = !!ammoInfo && ammoInfo.count < 1;
       const normalChip = _dlgChip({
-        label: r.action, sub,
-        title: kb > 0 ? `Knocks the target back (up to ~${kb} ft at full damage; lighter targets fly further, and hitting a wall or another body hurts)` : '',
+        label: r.action, sub: ammoInfo ? `${sub} · ${_ammoLabel(ammoInfo)}` : sub,
+        disabled: noAmmo,
+        title: noAmmo ? `Out of ${ammoInfo.type.unit}` : kb > 0 ? `Knocks the target back (up to ~${kb} ft at full damage; lighter targets fly further, and hitting a wall or another body hurts)` : '',
         data: defensive
           ? { dact: 'set', slot: chKey, label: lbl, dur: 99, locks: 0 } // lock-on stance
           : { dact: 'attack', slot: chKey, label: lbl, dur: dur * 3,
@@ -1179,7 +1185,7 @@ function _dlgRender(body) {
       // shot (action slots are whole rounds, so it rounds up), at a reduced range penalty.
       const aimLbl = `Aimed ${r.action} — ${itemName}`;
       const aimedChip = (ranged && aim && r.damageMax > 0 && cur?.label !== aimLbl) ? _dlgChip({
-        label: `🎯 Aimed ${r.action}`, sub: `+${aim.aimSec}s · ×${aim.rangeMult} range`,
+        label: `🎯 Aimed ${r.action}`, sub: `+${aim.aimSec}s · ×${aim.rangeMult} range`, disabled: noAmmo,
         title: `${aim.name}: ${aim.aimSec}s to aim (the action takes ${Math.ceil((dur * 3 + aim.aimSec) / 3)} rounds), range penalty ×${aim.rangeMult}`,
         data: { dact: 'attack', slot: chKey, label: aimLbl, dur: dur * 3 + aim.aimSec,
                 item: itemName, action: r.action, ranged: 1, aimed: 1, range: r.rangeIncrement || 5 },
