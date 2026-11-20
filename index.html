@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261120a';
+const VERSION = 'v0.1.20261120b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16797,7 +16797,11 @@ function subscribeMapRealtime() {
       if (payload && (payload.skill || payload.stat)) _showCallForRoll(payload.skill, payload.level, payload);
     })
     // A player's character walked onto an unnoticed trap (see _hiddenTrigger): the GM gets the trap dialog.
-    .on('broadcast', { event: 'trap-sprung' }, ({ payload }) => { if (isGM() && payload) { _trapResponses = {}; _trapGmDialog(payload); } })
+    .on('broadcast', { event: 'trap-sprung' }, ({ payload }) => {
+      if (!payload) return;
+      if (isGM()) { _trapResponses = {}; _trapGmDialog(payload); }
+      else _trapPartyReaction(payload);
+    })
     .on('broadcast', { event: 'trap-response' }, ({ payload }) => { if (isGM() && payload) { _trapResponseReceived(payload); } })
     // A called roll's outcome comes back to the GM (see _trapRollResult).
     .on('broadcast', { event: 'roll-result' }, ({ payload }) => { if (isGM() && payload) _trapRollResult(payload); })
@@ -20932,7 +20936,7 @@ function _hiddenTrigger(w, tok) {
   drawWalls();
   mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who, triggered: true, what } });
   logCombat(`⚠️ ${who} triggers ${what}!`, 'bad');
-  mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id, clue: _trapClueLine(w.clue, who) } });
+  mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id, clue: _trapClueLine(w.clue, who), clueId: w.clue || '' } });
   _trapReactionDialog(w, tok, who, ent, _trapClueLine(w.clue, who));
 }
 
@@ -20987,7 +20991,19 @@ function _trapReactionOptions(ent) {
   opts.push('Dash Forward', 'Go Prone', 'Other');
   return opts;
 }
-function _trapReactionDialog(w, tok, who, ent, clueLine) {
+// Everyone else in the party gets the same call when a trap springs (not just whoever bumped into it): a character
+// close by may be able to react, one far away can let the clock run out. Runs on each player's own client.
+function _trapPartyReaction(p) {
+  if (isGM() || !currentCharacterId || p.charId === currentCharacterId) return; // the trigger's own client shows it itself
+  const tok = Object.values(mapTokens || {}).find(t => t.entity_type === 'character' && t.entity_id === currentCharacterId);
+  if (!tok) return;
+  const conds = getConditions(tok.id);
+  if (conds.has('dead') || conds.has('unconscious')) return;
+  const ent = getEntity(_refForToken(tok));
+  const me = (ent && ent.name) || tok.label || 'Your character';
+  _trapReactionDialog({ id: p.id }, tok, me, ent, _trapClueLine(p.clueId, me), `${p.who || 'Someone'} set off ${p.what || 'a trap'}.`);
+}
+function _trapReactionDialog(w, tok, who, ent, clueLine, sprungBy) {
   document.getElementById('trap-modal')?.remove();
   const o = document.createElement('div');
   o.id = 'trap-modal';
@@ -20995,6 +21011,7 @@ function _trapReactionDialog(w, tok, who, ent, clueLine) {
   const btn = 'padding:8px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:var(--ui-font);font-size:0.9rem;';
   o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:20px 26px;width:380px;max-width:94vw;text-align:center;font-family:var(--ui-font);color:var(--text);">
       <div style="font-size:1.8rem;">⚠️</div>
+      ${sprungBy ? `<div style="font-size:0.78rem;color:var(--text-dim);margin-top:4px;">${_paEsc(sprungBy)}</div>` : ''}
       <div style="margin:6px 0 10px;font-size:1.05rem;">${clueLine ? `${_paEsc(clueLine)} ` : 'There is a suspicious click. '}How will <b>${_paEsc(who)}</b> respond?</div>
       <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:4px;"><div id="trap-bar" style="height:100%;width:100%;background:#e05555;"></div></div>
       <div id="trap-secs" style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">${TRAP_REACT_SECS}s - no answer and ${_paEsc(who)} freezes</div>

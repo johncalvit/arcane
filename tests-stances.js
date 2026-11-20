@@ -482,3 +482,31 @@ test('Hidden', 'trap cues: 32 of them, each reads "<name> sees/hears/feels/smell
   T.eq(_trapClueLine('nope', 'Choppy'), null, 'unknown cue');
   T.ok(all.every(c => c[2].length <= 34), 'descriptions stay short');
 });
+
+test('Hidden', 'a sprung trap calls every other living party member to react, with their own name; the trigger and the GM are skipped', async T => {
+  T.map();
+  const mine = T.token('mine', 50, 50, 'character', 'Fez', []);
+  mine.entity_id = 'T_fez';
+  const calls = [];
+  T.stub('_trapReactionDialog', (w, tok, who, ent, line, by) => calls.push({ id: w.id, who, line, by }));
+  T.stub('getEntity', () => ({ name: 'Fez' }));
+  T.stub('_refForToken', () => 'char::T_fez');
+  const savedCid = currentCharacterId; currentCharacterId = 'T_fez';
+  try {
+    T.stub('isGM', () => false);
+    const p = { id: 'h1', who: 'Choppy', what: 'a pit trap', charId: 'T_choppy', clueId: 'click' };
+    _trapPartyReaction(p);
+    T.eq(calls.length, 1, 'a party member who did not trigger it gets the call');
+    T.eq(calls[0].who, 'Fez'); T.eq(calls[0].line, 'Fez hears a sharp metallic click.', 'the cue is worded for them');
+    T.eq(calls[0].by, 'Choppy set off a pit trap.', 'and told who set it off');
+    _trapPartyReaction(Object.assign({}, p, { charId: 'T_fez' }));
+    T.eq(calls.length, 1, 'the character who triggered it already has their own dialog');
+    T.stub('getConditions', () => new Set(['unconscious']));
+    _trapPartyReaction(p);
+    T.eq(calls.length, 1, 'an unconscious character is not asked');
+    T.stub('isGM', () => true);
+    T.stub('getConditions', () => new Set());
+    _trapPartyReaction(p);
+    T.eq(calls.length, 1, 'the GM is not asked');
+  } finally { currentCharacterId = savedCid; }
+});
