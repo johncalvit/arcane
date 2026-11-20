@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119e';
+const VERSION = 'v0.1.20261119f';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -21723,6 +21723,7 @@ function _openSecretDoorModal(door, onAdd) {
       <label>👁 Visual<br><input id="sd-vis" type="number" min="0" value="40" style="${inp}"></label>
       <label>👂 Hearing<br><input id="sd-hear" type="number" min="0" value="0" style="${inp}"></label>
       <label>👃 Smell<br><input id="sd-smell" type="number" min="0" value="0" style="${inp}"></label>
+      <label>✨ Quint<br><input id="sd-quint" type="number" min="0" value="0" style="${inp}"></label>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:4px;">
       <button class="btn" id="sd-save">Add</button>
@@ -21733,7 +21734,7 @@ function _openSecretDoorModal(door, onAdd) {
   document.getElementById('sd-cancel').onclick = () => overlay.remove();
   document.getElementById('sd-save').onclick = () => {
     door.name = document.getElementById('sd-name').value.trim() || 'Secret door';
-    door.vis = num('sd-vis'); door.hear = num('sd-hear'); door.smell = num('sd-smell');
+    door.vis = num('sd-vis'); door.hear = num('sd-hear'); door.smell = num('sd-smell'); door.quint = num('sd-quint');
     overlay.remove();
     onAdd();
   };
@@ -21812,7 +21813,7 @@ document.addEventListener('dblclick', e => {
 // that only the GM sees until a character notices them. Stored in mapWalls as type 'hidden' (like lit
 // areas), so they save and sync with the walls; they never block sight or movement.
 //   { type:'hidden', shape:'line'|'poly', points, name, vis, hear, smell, found }
-// vis/hear/smell are HIDING factors (0 = that sense can't detect it). For each sense the character's matching
+// vis/hear/smell/quint are HIDING factors (0 = that sense can't detect it; quint is hidden magic, seen with Quintessence). For each sense the character's matching
 // stat is both its chance and its reach: chance = stat / hiding factor. Sight (Day Vision, or Night Vision in
 // an unlit dark spot; needs line of sight), hearing and smell (both ignore walls) each work the same way:
 // the first roll comes when the character gets within 2 x stat feet (at HALF the chance), the second when
@@ -21869,6 +21870,10 @@ function _hiddenSenses(w, viewerTok, attrs) {
       los: _sentinelLineOfSight(viewerTok.x_pct, viewerTok.y_pct, (near.x / mapImgW) * 100, (near.y / mapImgH) * 100) });
   }
   if (w.hear > 0)  out.push({ k: 'hearing', stat: stat(attrs.Hearing), hiding: w.hear,  distFt, los: true });
+  // Quintessence: casters perceive magic (enchantments, illusions, spells on the ground) with their own Quintessence
+  // score, like sight: it needs a clear line, and the score is both the chance and the reach. 0 Quintessence sees nothing.
+  if (w.quint > 0) out.push({ k: 'quint', stat: stat(attrs.Quintessence), hiding: w.quint, distFt,
+    los: _sentinelLineOfSight(viewerTok.x_pct, viewerTok.y_pct, (near.x / mapImgW) * 100, (near.y / mapImgH) * 100) });
   if (w.smell > 0) out.push({ k: 'smell',   stat: stat(attrs.Smell),   hiding: w.smell, distFt, los: true });
   return out;
 }
@@ -21936,7 +21941,7 @@ function _hiddenDrawShape(svg, w) {
   tx.setAttribute('fill', color);
   tx.setAttribute('style', 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;');
   tx.textContent = gm
-    ? `🕵 ${w.name || 'hidden'} · 👁${w.vis || 0} 👂${w.hear || 0} 👃${w.smell || 0}${w.found ? ' ✓' : ''}`
+    ? `🕵 ${w.name || 'hidden'} · 👁${w.vis || 0} 👂${w.hear || 0} 👃${w.smell || 0} ✨${w.quint || 0}${w.found ? ' ✓' : ''}`
     : `🔍 ${w.name || 'Something hidden'}`;
   svg.appendChild(tx);
 }
@@ -21957,6 +21962,7 @@ function _openHiddenModal(shape, points) {
       <label>👁 Visual<br><input id="hid-vis" type="number" min="0" value="40" style="${inp}"></label>
       <label>👂 Hearing<br><input id="hid-hear" type="number" min="0" value="0" style="${inp}"></label>
       <label>👃 Smell<br><input id="hid-smell" type="number" min="0" value="0" style="${inp}"></label>
+      <label>✨ Quint<br><input id="hid-quint" type="number" min="0" value="0" style="${inp}"></label>
     </div>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:4px;">
       <button class="btn" id="hid-save">Add</button>
@@ -21970,7 +21976,7 @@ function _openHiddenModal(shape, points) {
       id: 'hid-' + Date.now() + '-' + Math.round(Math.random() * 9999),
       type: 'hidden', shape, points,
       name: document.getElementById('hid-name').value.trim(),
-      vis: num('hid-vis'), hear: num('hid-hear'), smell: num('hid-smell'),
+      vis: num('hid-vis'), hear: num('hid-hear'), smell: num('hid-smell'), quint: num('hid-quint'),
       found: false, blocksVision: false, blocksMovement: false,
     });
     overlay.remove();
@@ -22834,6 +22840,7 @@ async function _openManageWallsModal() {
          <span title="Hiding factors" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('vis', 'Visual hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
+         <span title="Quintessence hiding factor (magic: enchantments, illusions, spells on the floor)" style="font-size:0.7rem;color:var(--text-dim);">✨</span>${hidNum('quint', 'Quintessence hiding factor')}
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>` : '';
     const controls = secretSel ? secretSel : w.door
       ? `<button onclick="toggleDoor('${safeId}')" style="border:1px solid var(--border);background:var(--bg);color:var(--gold2);border-radius:3px;padding:2px 10px;cursor:pointer;font-family:var(--ui-font);font-size:0.78rem;">${w.open ? 'Close' : 'Open'}</button>
@@ -22842,6 +22849,7 @@ async function _openManageWallsModal() {
       ? `<span title="Hiding factors — higher is harder to notice; 0 means that sense can't detect it" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('vis', 'Visual hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
+         <span title="Quintessence hiding factor (magic: enchantments, illusions, spells on the floor)" style="font-size:0.7rem;color:var(--text-dim);">✨</span>${hidNum('quint', 'Quintessence hiding factor')}
          <label style="cursor:pointer;font-size:0.72rem;" title="Already noticed by the party"><input type="checkbox" ${w.found ? 'checked' : ''} onchange="_hiddenEdit('${safeId}','found',this.checked)"> found</label>
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.type === 'litarea'

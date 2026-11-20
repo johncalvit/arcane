@@ -452,3 +452,20 @@ test('Critical miss', 'melee critical miss: slip (96-97), fumble (98-99) and sel
   r = await run(100, 3);
   T.ok(!/dmg:/.test(r), 'a passed save on 100 avoids it');
 });
+
+test('Hidden', 'hidden magic: Quintessence is its own sense, reaching as far as the score, blocked by walls, nothing for a non-caster', async T => {
+  T.map();
+  const me = T.token('me', 50, 50, 'character', 'Me', []);
+  const w = { id: 'q1', type: 'hidden', shape: 'line', points: [{ x_pct: 60, y_pct: 50 }, { x_pct: 60, y_pct: 55 }], vis: 0, hear: 0, smell: 0, quint: 40 };
+  T.stub('_sentinelLineOfSight', () => true);
+  const caster = _hiddenSenses(w, me, { Quintessence: 12 });
+  T.eq(caster.length, 1, 'only the Quintessence sense applies to a magic-only object');
+  T.eq(caster[0].k, 'quint'); T.eq(caster[0].stat, 12); T.eq(caster[0].hiding, 40);
+  T.eq(Math.round(_hiddenRollChance(caster[0], 2, false)), 30, 'stat / hiding at full chance (12 / 40)');
+  T.eq(Math.round(_hiddenRollChance(caster[0], 2, true)), 60, 'Searching doubles it');
+  T.eq(Math.round(_hiddenRollChance(caster[0], 1, false)), 15, 'the far roll is half');
+  T.eq(_hiddenSenses(w, me, { Quintessence: 0 })[0].stat, 0, 'no Quintessence, no chance (the check skips a zero stat)');
+  T.stub('_sentinelLineOfSight', () => false);
+  T.eq(_hiddenSenses(w, me, { Quintessence: 12 })[0].los, false, 'a wall blocks seeing magic, like sight');
+  T.eq(_hiddenSenses(Object.assign({}, w, { quint: 0 }), me, { Quintessence: 12 }).length, 0, 'a factor of 0 means magic does not reveal it');
+});
