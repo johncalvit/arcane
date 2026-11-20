@@ -469,3 +469,16 @@ test('Hidden', 'hidden magic: Quintessence is its own sense, reaching as far as 
   T.eq(_hiddenSenses(w, me, { Quintessence: 12 })[0].los, false, 'a wall blocks seeing magic, like sight');
   T.eq(_hiddenSenses(Object.assign({}, w, { quint: 0 }), me, { Quintessence: 12 }).length, 0, 'a factor of 0 means magic does not reveal it');
 });
+
+test('Hidden', 'trap cues: 32 of them, each reads "<name> sees/hears/feels/smells ..." and an unknown cue is none', async T => {
+  const all = TRAP_CLUES.flatMap(g => g.list);
+  T.eq(all.length, 32, 'twelve visual, ten audible, ten physical');
+  T.eq(new Set(all.map(c => c[0])).size, 32, 'ids are unique');
+  T.eq(_trapClueLine('click', 'Choppy'), 'Choppy hears a sharp metallic click.');
+  T.eq(_trapClueLine('glint', 'Choppy'), 'Choppy sees a glint of metal.');
+  T.eq(_trapClueLine('tremor', 'Choppy'), 'Choppy feels the floor shudder.');
+  T.eq(_trapClueLine('sulfur', 'Choppy'), 'Choppy smells a sharp sulfur odor.');
+  T.eq(_trapClueLine('', 'Choppy'), null, 'no cue chosen');
+  T.eq(_trapClueLine('nope', 'Choppy'), null, 'unknown cue');
+  T.ok(all.every(c => c[2].length <= 34), 'descriptions stay short');
+});

@@ -8271,7 +8271,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261119f';
+const VERSION = 'v0.1.20261120a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -20859,6 +20859,7 @@ function _trapGmDialog(p) {
   o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:3400;display:flex;align-items:center;justify-content:center;';
   o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:18px 24px;width:430px;max-width:94vw;max-height:90vh;overflow-y:auto;font-family:var(--ui-font);color:var(--text);display:flex;flex-direction:column;gap:10px;">
     <div style="text-align:center;font-size:1.05rem;"><span style="font-size:1.4rem;">⚠️</span><br><b>${_paEsc(p.who || 'Someone')}</b> triggers ${_paEsc(p.what || 'something hidden')}.</div>
+    ${p.clue ? `<div style="text-align:center;font-size:0.8rem;color:var(--text-dim);">Cue given: ${_paEsc(p.clue)}</div>` : ''}
     <div id="tg-resp" style="text-align:center;font-size:0.85rem;color:var(--gold2);">Waiting for their response…</div>
     <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:var(--text-dim);">Call for a roll</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -20931,8 +20932,46 @@ function _hiddenTrigger(w, tok) {
   drawWalls();
   mapChannel?.send({ type: 'broadcast', event: 'hidden-found', payload: { id: w.id, who, triggered: true, what } });
   logCombat(`⚠️ ${who} triggers ${what}!`, 'bad');
-  mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id } });
-  _trapReactionDialog(w, tok, who, ent);
+  mapChannel?.send({ type: 'broadcast', event: 'trap-sprung', payload: { id: w.id, who, what, charId: tok && tok.entity_id, tokenId: tok && tok.id, clue: _trapClueLine(w.clue, who) } });
+  _trapReactionDialog(w, tok, who, ent, _trapClueLine(w.clue, who));
+}
+
+// ── Trap cues ───────────────────────────────────────────────────────────────────
+// The GM can give a hidden line/area a cue: the moment it is sprung the character sees / hears / feels / smells a
+// short hint of what is coming ("Choppy hears a sharp metallic click."), just before the reaction clock starts.
+const TRAP_CLUES = [
+  { group: 'Visual',   verb: 'sees',   list: [
+    ['glint', 'Metallic Glint', 'a glint of metal'], ['flash', 'Bright Flash', 'a sudden flash of light'],
+    ['runes', 'Runic Flare', 'runes flare with eerie light'], ['dustfall', 'Dustfall', 'dust shake loose from above'],
+    ['stoneshift', 'Stone Shift', 'the floor shift'], ['seam', 'Hidden Mechanism', 'a seam open in the wall'],
+    ['shadow', 'Shadow Movement', 'a shadow dart past'], ['spark', 'Spark', 'a shower of sparks'],
+    ['blur', 'Passing Blur', 'a violent blur of movement'], ['sink', 'Pressure Shift', 'a nearby surface sink'],
+    ['sigil', 'Glowing Sigil', 'a sigil flash underfoot'], ['shimmer', 'Unnatural Shimmer', 'the air ripple'] ] },
+  { group: 'Audible',  verb: 'hears',  list: [
+    ['click', 'Mechanism Click', 'a sharp metallic click'], ['grind', 'Stone Grinding', 'stone grind below'],
+    ['cord', 'Cord Snap', 'a cord snap'], ['clatter', 'Metallic Clatter', 'metal clatter in the walls'],
+    ['hiss', 'Hissing Release', 'a sudden hiss'], ['chain', 'Chain Rattle', 'chains rattle overhead'],
+    ['thud', 'Deep Thud', 'a heavy thud'], ['whir', 'Mechanical Whir', 'a mechanism whir to life'],
+    ['hum', 'Magical Hum', 'a low, rising hum'], ['crack', 'Cracking Stone', 'a sharp crack in the stone'] ] },
+  { group: 'Physical', verb: 'feels',  list: [
+    ['tremor', 'Floor Tremor', 'the floor shudder'], ['gust', 'Sudden Gust', 'a sharp gust of air'],
+    ['wave', 'Pressure Wave', 'a wave of force'], ['chill', 'Chilling Draft', 'an unnatural chill'],
+    ['heat', 'Heat Surge', 'a flash of heat'], ['static', 'Static Discharge', 'static prickle the skin'],
+    ['vibration', 'Ground Vibration', 'a faint vibration underfoot'], ['thick', 'Air Distortion', 'the air thicken'],
+    ['debris', 'Falling Debris', 'bits of stone rain down'], ['sulfur', 'Scent of Sulfur', 'a sharp sulfur odor', 'smells'] ] },
+];
+// "Choppy hears a sharp metallic click." for a cue id, or null for none / unknown.
+function _trapClueLine(clueId, who) {
+  if (!clueId) return null;
+  for (const g of TRAP_CLUES) {
+    const c = g.list.find(x => x[0] === clueId);
+    if (c) return `${who || 'Someone'} ${c[3] || g.verb} ${c[2]}.`;
+  }
+  return null;
+}
+function _trapClueOptionsHtml(selected) {
+  return `<option value="">(no cue)</option>` + TRAP_CLUES.map(g =>
+    `<optgroup label="${g.group}">${g.list.map(c => `<option value="${c[0]}"${selected === c[0] ? ' selected' : ''}>${_paEsc(c[1])}</option>`).join('')}</optgroup>`).join('');
 }
 
 // ── Trap reaction ───────────────────────────────────────────────────────────────
@@ -20948,7 +20987,7 @@ function _trapReactionOptions(ent) {
   opts.push('Dash Forward', 'Go Prone', 'Other');
   return opts;
 }
-function _trapReactionDialog(w, tok, who, ent) {
+function _trapReactionDialog(w, tok, who, ent, clueLine) {
   document.getElementById('trap-modal')?.remove();
   const o = document.createElement('div');
   o.id = 'trap-modal';
@@ -20956,7 +20995,7 @@ function _trapReactionDialog(w, tok, who, ent) {
   const btn = 'padding:8px 12px;border-radius:5px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:var(--ui-font);font-size:0.9rem;';
   o.innerHTML = `<div style="background:var(--bg2);border:1px solid #e05555;border-radius:8px;padding:20px 26px;width:380px;max-width:94vw;text-align:center;font-family:var(--ui-font);color:var(--text);">
       <div style="font-size:1.8rem;">⚠️</div>
-      <div style="margin:6px 0 10px;font-size:1.05rem;">There is a suspicious click. How will <b>${_paEsc(who)}</b> respond?</div>
+      <div style="margin:6px 0 10px;font-size:1.05rem;">${clueLine ? `${_paEsc(clueLine)} ` : 'There is a suspicious click. '}How will <b>${_paEsc(who)}</b> respond?</div>
       <div style="height:8px;background:var(--bg3);border-radius:4px;overflow:hidden;margin-bottom:4px;"><div id="trap-bar" style="height:100%;width:100%;background:#e05555;"></div></div>
       <div id="trap-secs" style="font-size:0.8rem;color:var(--text-dim);margin-bottom:10px;">${TRAP_REACT_SECS}s - no answer and ${_paEsc(who)} freezes</div>
       <div id="trap-opts" style="display:flex;flex-direction:column;gap:6px;">
@@ -21964,6 +22003,8 @@ function _openHiddenModal(shape, points) {
       <label>👃 Smell<br><input id="hid-smell" type="number" min="0" value="0" style="${inp}"></label>
       <label>✨ Quint<br><input id="hid-quint" type="number" min="0" value="0" style="${inp}"></label>
     </div>
+    <label style="font-size:0.78rem;color:var(--text-dim);">Trap cue <span style="font-size:0.68rem;">(what the character sees / hears / feels as it springs)</span>
+      <select id="hid-clue" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 7px;font-family:var(--ui-font);">${_trapClueOptionsHtml('')}</select></label>
     <div style="display:flex;gap:10px;justify-content:center;margin-top:4px;">
       <button class="btn" id="hid-save">Add</button>
       <button class="btn danger" id="hid-cancel">Cancel</button>
@@ -21977,6 +22018,7 @@ function _openHiddenModal(shape, points) {
       type: 'hidden', shape, points,
       name: document.getElementById('hid-name').value.trim(),
       vis: num('hid-vis'), hear: num('hid-hear'), smell: num('hid-smell'), quint: num('hid-quint'),
+      clue: document.getElementById('hid-clue').value,
       found: false, blocksVision: false, blocksMovement: false,
     });
     overlay.remove();
@@ -21989,7 +22031,7 @@ function _openHiddenModal(shape, points) {
 async function _hiddenEdit(id, field, value) {
   const w = mapWalls.find(x => x.id === id);
   if (!w || (w.type !== 'hidden' && !(w.door && w.secret))) return;
-  w[field] = field === 'found' ? !!value : Math.max(0, parseFloat(value) || 0);
+  w[field] = field === 'found' ? !!value : field === 'clue' ? String(value || '') : Math.max(0, parseFloat(value) || 0);
   if (field === 'found' && !w.found) delete w.foundBy;
   await saveMapWalls();
   drawWalls();
@@ -22850,6 +22892,7 @@ async function _openManageWallsModal() {
          <span style="font-size:0.7rem;color:var(--text-dim);">👂</span>${hidNum('hear', 'Hearing hiding factor')}
          <span style="font-size:0.7rem;color:var(--text-dim);">👃</span>${hidNum('smell', 'Smell hiding factor')}
          <span title="Quintessence hiding factor (magic: enchantments, illusions, spells on the floor)" style="font-size:0.7rem;color:var(--text-dim);">✨</span>${hidNum('quint', 'Quintessence hiding factor')}
+         <select title="Trap cue" onchange="_hiddenEdit('${safeId}','clue',this.value)" style="max-width:120px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px;font-family:var(--ui-font);font-size:0.72rem;">${_trapClueOptionsHtml(w.clue || '')}</select>
          <label style="cursor:pointer;font-size:0.72rem;" title="Already noticed by the party"><input type="checkbox" ${w.found ? 'checked' : ''} onchange="_hiddenEdit('${safeId}','found',this.checked)"> found</label>
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.type === 'litarea'
