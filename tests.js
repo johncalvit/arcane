@@ -713,6 +713,9 @@ test('Preferences', 'quick roll and active-character centering: defaults, saved 
 test('Ammunition', 'bows use Arrows, crossbows use Bolts; a bundle opens into single rounds and each shot spends one; creatures are untracked', async T => {
   T.eq(_ammoTypeFor('Bow, Hunting').key, 'Arrows'); T.eq(_ammoTypeFor('Crossbow, Light').key, 'Crossbow Bolts');
   T.eq(_ammoTypeFor('Dart'), null, 'darts and javelins are thrown, not shot'); T.eq(_ammoTypeFor('Sling Stone'), null);
+  { const at = _ammoTypeFor('Bow, War 50 Pounds'), bt = _ammoTypeFor('Crossbow, Light');
+    T.eq(_ammoCountIn([{ name: 'War Arrow', qty: 1 }, { name: 'War Arrow', qty: 2 }, { name: 'Quiver', qty: 1 }, { name: 'Arrows (×20)', qty: 1 }], at), 23, 'custom arrow names count, bundles too');
+    T.eq(_ammoCountIn([{ name: 'Iron Bolt', qty: 5 }, { name: 'War Arrow', qty: 9 }], bt), 5, 'bolts are separate from arrows'); }
   T.eq(_ammoTypeFor('Bow, War 50 Pounds').key, 'Arrows'); T.eq(_ammoTypeFor('Composite Bow').key, 'Arrows'); T.eq(_ammoTypeFor('Longbow').key, 'Arrows');
   T.eq(_ammoTypeFor('Heavy Crossbow').key, 'Crossbow Bolts'); T.eq(_ammoTypeFor('Arbalest').key, 'Crossbow Bolts'); T.eq(_ammoTypeFor('Bowie Knife'), null);
   const row = { equipment: [{ name: 'Arrows (×20)', qty: 2, unitWt: 2 }, { name: 'Backpack', qty: 1, unitWt: 2 }] };
