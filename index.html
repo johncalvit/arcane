@@ -8197,7 +8197,16 @@ async function deleteCharacter(id, name) {
   showCharacterListModal(); // refresh list
 }
 
+// Only ask when there is something on the builder to lose: nothing is typed or carried yet, so a brand-new player
+// (or a fresh campaign) goes straight to a blank character. A character already saved is named in the message.
 function newCharacter() {
+  const name = (document.getElementById('char-name')?.value || '').trim();
+  const carrying = document.querySelectorAll('#weapon-list tr, #equip-list tr').length > 0;
+  if (!currentCharacterId && !name && !carrying) { _doNewCharacter(); return; }
+  const msg = document.getElementById('new-char-msg');
+  if (msg) msg.textContent = currentCharacterId && name
+    ? `Start a new character? ${name} stays saved in your list; only edits you haven't saved yet are lost.`
+    : 'Start a new character? What is on the builder now has not been saved and will be lost.';
   document.getElementById('modal-new-char-confirm').style.display = 'flex';
 }
 function _doNewCharacter() {
@@ -8331,7 +8340,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261120f';
+const VERSION = 'v0.1.20261121a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -24980,7 +24989,7 @@ async function _deleteMapPin(pinId) {
     background:var(--bg2); border:1px solid var(--gold); border-radius:6px;
     padding:28px 32px; width:360px; max-width:94vw; display:flex; flex-direction:column; gap:16px;">
     <h2 style="margin:0; font-size:1.05rem;">✦ New Character</h2>
-    <p style="margin:0; font-size:0.85rem; color:var(--text-dim); line-height:1.6;">
+    <p id="new-char-msg" style="margin:0; font-size:0.85rem; color:var(--text-dim); line-height:1.6;">
       Start a new character? Any unsaved changes will be lost.
     </p>
     <div style="display:flex; justify-content:flex-end; gap:10px;">
