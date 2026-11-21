@@ -479,6 +479,11 @@
     flex-shrink: 0;
   }
   .map-activate-btn:hover { filter: brightness(1.2); }
+  .map-delete-btn {
+    font-size: 0.75rem; padding: 3px 6px; background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); border-radius: 3px; cursor: pointer; flex-shrink: 0;
+  }
+  .map-delete-btn:hover { color: #e05555; border-color: #e05555; }
   .map-upload-area {
     padding: 12px;
     border-bottom: 1px solid var(--border);
@@ -8340,7 +8345,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261121a';
+const VERSION = 'v0.1.20261121b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -17224,8 +17229,35 @@ async function loadMapLibrary() {
         <div class="map-thumb-status">${isActive ? '● Active' : 'Inactive'}</div>
       </div>
       ${isActive ? '' : `<button class="map-activate-btn" onclick="activateMap('${m.id}')">Activate</button>`}
+      <button class="map-delete-btn" title="Delete this map permanently" onclick="deleteMap('${m.id}')">🗑</button>
     </div>`;
   }).join('');
+}
+
+// Permanently delete a map: its tokens, walls/hidden objects, pins and map notes go with it (database cascade), and the
+// image file is removed from storage unless another map still uses it. If it was the active map the table goes blank.
+async function deleteMap(mapId) {
+  if (!isGM() || !currentCampaignId) return;
+  const { data: m } = await sb.from('maps').select('name, image_url').eq('id', mapId).single();
+  if (!m) return;
+  if (!confirm(`Permanently delete the map "${m.name}"?\n\nIts tokens, walls, hidden objects, pins and map notes are deleted with it. This cannot be undone.`)) return;
+  const wasActive = mapId === activeMapId;
+  if (wasActive) await sb.from('campaigns').update({ active_map_id: null }).eq('id', currentCampaignId);
+  const { error } = await sb.from('maps').delete().eq('id', mapId);
+  if (error) { showToast('Could not delete the map: ' + error.message, 'error'); return; }
+  // The picture itself, if nothing else points at it (copies of a map can share one file).
+  try {
+    const marker = '/maps/';
+    const i = (m.image_url || '').indexOf(marker);
+    if (i >= 0) {
+      const path = decodeURIComponent(m.image_url.slice(i + marker.length).split('?')[0]);
+      const { data: others } = await sb.from('maps').select('id').eq('image_url', m.image_url).limit(1);
+      if (!others || !others.length) await sb.storage.from('maps').remove([path]);
+    }
+  } catch (e) {}
+  if (wasActive) { activeMapId = null; await loadActiveMap(null); }
+  showToast(`Deleted map "${m.name}".`, 'info');
+  loadMapLibrary();
 }
 
 async function activateMap(mapId) {
