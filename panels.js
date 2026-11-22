@@ -1382,6 +1382,7 @@ function _dlgRender(body) {
   if (conds.has('stunned'))     recoverable.push({ key: 'stunned',     label: 'Shake Off Stun' });
   if (conds.has('bleeding'))    recoverable.push({ key: 'bleeding',    label: 'Stanch Bleeding' });
   if (conds.has('slowed'))      recoverable.push({ key: 'slowed',      label: 'Shake Off Slow' });
+  if (conds.has('webbed'))      recoverable.push({ key: 'webbed',      label: 'Break Free' });
   if (conds.has('corroding'))   recoverable.push({ key: 'corroding',   label: 'Neutralize Acid' });
   if (conds.has('burning'))     recoverable.push({ key: 'burning',     label: 'Quench Flame' });
   // Resuscitate is only for a Toughness knockout — _checkDownedState (index.html)
@@ -1816,6 +1817,11 @@ function _exploreRender(body) {
   });
   if (conds.has('held'))
     gchips += _dlgChip({ label: 'Escape', sub: 'contest', title: 'Opposed Power + Coordination roll to break free', data: { dact: 'xescape' } });
+  if (conds.has('webbed')) {
+    const wt = typeof _recoverTarget === 'function' && ent && ent.tokenId ? _recoverTarget(ent, ent.tokenId, 'webbed') : null;
+    gchips += _dlgChip({ label: 'Break Free', sub: wt ? `${wt.pct}%` : 'save', iconHtml: _condIco('webbed'),
+      title: 'Struggle against the web: a percentile save, a little easier each round', data: { dact: 'xbreakfree' } });
+  }
   if (conds.has('holding')) {
     gchips += _dlgChip({ label: 'Takedown', sub: 'contest', title: 'Opposed roll to wrestle the held target Prone', data: { dact: 'xtakedown' } });
     const dr = typeof _drainBloodRow === 'function' ? _drainBloodRow(ent) : null;
@@ -1915,6 +1921,9 @@ async function _exploreClick(e) {
         break;
       case 'xescape':
         _dlgReopenId = id; atCloseModal(); await atResolveEscape(id);
+        break;
+      case 'xbreakfree':
+        _dlgReopenId = id; atCloseModal(); await atResolveRecovery(id, 'webbed', false);
         break;
       case 'xtakedown':
         _dlgReopenId = id; atCloseModal(); await atResolveTakedown(id);
@@ -2127,7 +2136,7 @@ async function _dlgAct(d, id, body) {
       break;
     case 'recover':
       atCloseModal();
-      await atResolveRecovery(id, d.key, d.key === 'stunned' || d.key === 'unconscious'); // manual save roll to shed the condition
+      await atResolveRecovery(id, d.key, d.key === 'stunned' || d.key === 'unconscious' || d.key === 'webbed'); // manual save roll to shed the condition
       break;
     case 'carry': {
       const depTok = mapTokens[document.getElementById('dlg-carry-target')?.value];

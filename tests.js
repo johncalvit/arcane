@@ -738,3 +738,39 @@ test('Ammunition', 'bows use Arrows, crossbows use Bolts; a bundle opens into si
   T.eq(await _spendAmmo('char::a', 'Bow, War'), false, 'nothing left to fire');
   T.ok(row.equipment.some(e => e.name === 'Backpack'), 'other gear untouched');
 });
+
+test('Web', 'a web holds its target until it breaks free; strength scales with the spinner; a stronger web wins; fire burns it away', async T => {
+  T.eq(_webStrength({ attrs: { Power: 80 } }, 'natural'), 80, 'a natural web is as strong as the spider\'s Power');
+  T.eq(_webStrength({ attrs: { Power: 5 } }, 'natural'), WEB.minStrength, 'a weak spinner still holds');
+  T.eq(_webStrength({ attrs: { Quintessence: 55, Power: 10 } }, 'spell'), 55, 'a spell web is as strong as the caster\'s Quintessence');
+  T.token('v', 50, 50, 'creature', 'V', []);
+  T.stub('_atSharedRound', () => 3);
+  T.stub('setConditions', async (id, ch) => {
+    const t = mapTokens[id], set = new Set(t.conditions);
+    for (const [c, on] of ch) on ? set.add(c) : set.delete(c);
+    t.conditions = [...set];
+  });
+  await applyWeb('v', 60);
+  T.ok(mapTokens.v.conditions.includes('webbed') && mapTokens.v.conditions.includes('web:60:3'), 'webbed with its strength and round');
+  await applyWeb('v', 40);
+  T.eq(mapTokens.v.conditions.filter(c => c.startsWith('web:')).join(), 'web:60:3', 'a weaker second web does not loosen the first');
+  await applyWeb('v', 90);
+  T.eq(mapTokens.v.conditions.filter(c => c.startsWith('web:')).join(), 'web:90:3', 'a stronger one tightens it, and there is still only one marker');
+  await applyWeb('v', 60); // (stays 90)
+  mapTokens.v.conditions = ['webbed', 'web:60:3'];
+  const strong = { attrs: { Power: 60 }, baseAttrs: { Power: 60 } }, weak = { attrs: { Power: 20 }, baseAttrs: { Power: 20 } };
+  T.eq(_recoverTarget(strong, 'v', 'webbed').pct, 50, 'equal Power and web strength: even odds');
+  T.eq(_recoverTarget(weak, 'v', 'webbed').pct, 25, 'a weaker victim struggles longer');
+  T.stub('_atSharedRound', () => 5);
+  T.eq(_recoverTarget(weak, 'v', 'webbed').pct, 45, 'two more rounds stuck: +10% each');
+  T.eq(_recoverTarget({ attrs: { Power: 1 }, baseAttrs: { Power: 1 } }, 'v', 'webbed').pct >= WEB.floorPct, true, 'never below the floor');
+  const a = _clipRoute([{ x_pct: 10, y_pct: 10 }, { x_pct: 20, y_pct: 10 }], { stuck: true });
+  T.eq(a.points.length, 1, 'a webbed token cannot move'); T.eq(a.stop, 'web');
+  T.eq(_clipRoute([{ x_pct: 10, y_pct: 10 }, { x_pct: 20, y_pct: 10 }], {}).points.length, 2, 'free to move without it');
+  const s = new Set(['webbed', 'web:60:3', 'prone']); _burnAwayWeb(s);
+  T.eq([...s].join(), 'prone', 'fire burns the web away');
+  T.ok(SPELLS.concat(DEFAULT_SPELLS).some(x => x.name === 'Web' && x.setsCondition === 'webbed'), 'the Web spell exists');
+  T.ok(DEFAULT_MELEE_WEAPONS.some(x => x.weapon === 'Spinnerets' && x.webs > 0 && x.naturalSlot === 'tail'), 'Spinnerets is a natural weapon that webs');
+  T.eq(DEFAULT_RACE_DATA['Giant Spider'].BodyType, 'Insect');
+  T.ok(DEFAULT_ENCHANTMENTS.some(x => x.spell === 'Web'), 'an enchantment casts it');
+});

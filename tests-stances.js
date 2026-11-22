@@ -366,7 +366,7 @@ test('Night Vision', 'in the dark you identify others within your Night Vision s
   const st = t => _fogVisState(t);
   const got = [st(near), st(mid), st(far)];
   [_darkActive, _fogLastPoly, _revealedTokens] = saved;
-  T.eq(got.join(), ['full', 'shadow', 'none'].join(), 'near (1.5 ft, inside 2 ft NV) full, mid (10 ft, inside the 16 ft silhouette reach) shadow, far (40 ft) unseen');
+  T.eq(got.join(), ['full', 'shadow', 'none'].join(), 'near (1.5 ft, inside 2 ft NV) full, mid (10 ft, at the edge of the 10 ft silhouette reach, 5 ft per point) shadow, far (40 ft) unseen');
 });
 
 test('Sentinel', 'a token that is guarding but lost its tracker slot (refresh) gets the stance slot back', async T => {
