@@ -1288,8 +1288,8 @@
         </div>
         <div class="field field-inline">
           <label>Class</label>
-          <select id="sel-charclass" onchange="characterClass=this.value;recalc()" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
-            <option>Warrior</option><option>Disciple</option><option>Caster</option>
+          <select id="sel-charclass" onchange="setCharacterClass(this.value)" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
+            <option>Warrior</option><option>Disciple</option><option>Caster</option><option>Monk</option>
           </select>
         </div>
         <div class="field field-inline" id="is-template-row" style="display:none;" title="Mark this character as a reusable monster/NPC template (GM)">
@@ -4839,6 +4839,9 @@ const DEFAULT_ARMOR_TYPE_DATA = {
   'Steel Chainmail':      { protection: { Slash:-8,  Stab:-5,  SmashBash:-3, Burn:-1, Shock:0, Freeze:0, Corrode:-1,Quintessence:-4 }, weightPerMod: 1.25, gap: 5 },
   'Steel Plate':          { protection: { Slash:-10, Stab:-9,  SmashBash:-8, Burn:-7, Shock:0, Freeze:-4,Corrode:-4,Quintessence:-5 }, weightPerMod: 1.3,  gap: 5 },
   'Tempered Steel Plate': { protection: { Slash:-12, Stab:-11, SmashBash:-8, Burn:-7, Shock:0, Freeze:-4,Corrode:-4,Quintessence:-5 }, weightPerMod: 1.5,  gap: 5 },
+  // Monk Soul Armor (level 3 Monk technique): not worn or bought. A Monk who has learned it is protected like this on
+  // every body area that carries no armor (see _soulArmorType). Tune the numbers here like any other armor type.
+  'Soul Armor':           { protection: { Slash:-3,  Stab:-2,  SmashBash:-3, Burn:-2, Shock:-1,Freeze:-2,Corrode:-1,Quintessence:-3 }, weightPerMod: 0,    gap: 5 },
 };
 let ARMOR_AREA_WEIGHTS = { ...DEFAULT_ARMOR_AREA_WEIGHTS };
 let ARMOR_TYPE_DATA = { ...DEFAULT_ARMOR_TYPE_DATA };
@@ -4863,7 +4866,7 @@ const DEFAULT_ARMOR_PIECES = [
   { name: 'Kettle Hat',    slot: 'head',  material: 'Steel Plate',  gap: 40, noise: 0,  visionMod: -10, hearingMod: -10, costPerMod: 4 },
   { name: 'Scale Hauberk', slot: 'torso', material: 'Bronze Scale', gap: 20, noise: 15, visionMod: 0,   hearingMod: 0,   costPerMod: 3 },
   { name: "Thieves' Enchanted Boots", slot: null, material: 'Leather/Hide', gap: 5, noise: 0, visionMod: 0, hearingMod: 0, costPerMod: 0, enchant: 'Silent Step' },
-  ...Object.keys(DEFAULT_ARMOR_TYPE_DATA).map(mat => ({
+  ...Object.keys(DEFAULT_ARMOR_TYPE_DATA).filter(mat => mat !== 'Soul Armor').map(mat => ({
     name: `${mat} (Generic)`, slot: null, material: mat,
     gap: DEFAULT_ARMOR_TYPE_DATA[mat].gap, noise: 0, visionMod: 0, hearingMod: 0,
     costPerMod: DEFAULT_ARMOR_TYPE_DATA[mat].weightPerMod || 1,
@@ -5422,6 +5425,10 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Bare Handed",           action:"Smash",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:5,  maxPowerMod:0.3 },
   { weapon:"Bare Handed",           action:"Grab",          minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:0,  maxPowerMod:0   },
   { weapon:"Bare Handed",           action:"Crush",         minReach:0,   reach:0,    hitFormula:"Power",                                        material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:20, maxPowerMod:0.1 },
+  // Monk-only (need the Monk Block / Iron Fist techniques - see _barehandRowUnlocked): a Block with an empty hand, a bit
+  // weaker than a Small Shield's (x1.5 vs x2), and the Iron Fist strike.
+  { weapon:"Bare Handed",           action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 1.5",                 material:"Flesh; Bone",                minStr:3,  damageMax:0,  maxPowerMod:0,   weaponType:"Unarmed" },
+  { weapon:"Bare Handed",           action:"Iron Fist",     minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:10, maxPowerMod:0.4, weaponType:"Unarmed" },
 
   { weapon:"Battleaxe",             action:"Slash",         minReach:1,   reach:2,    hitFormula:"(Physical Coordination + Manual Dexterity)*.5",material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:14, maxPowerMod:0.8 },
   { weapon:"Battleaxe",             action:"Smash",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:9,  maxPowerMod:0.6 },
@@ -5954,8 +5961,8 @@ let editingSpellIndex = null;
 //   parry  — added to the reduction of a Parry made with that weapon type
 // Config data (TECHNIQUES, TECHNIQUE_ALLOWANCE) — edited in Game Config →
 // Techniques, saved with the config and merged by Core Rules.
-const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster'];
-const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1 };
+const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster', 'Monk'];
+const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1, Monk: 2 };
 function _techSlug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 // Technique I / II / III (unlock at levels 1 / 2 / 3, each +10 hit and +1 damage — they
 // stack) for every weapon type, plus a Parry technique (+10 parry, level 2) for every type
@@ -5981,7 +5988,7 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 6; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind, 6 = + Numb, Lunge
+const TECHNIQUE_EXTRAS_VERSION = 7; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind, 6 = + Numb, Lunge, 7 = + Monk set
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
@@ -6018,7 +6025,50 @@ const NUMB_TECHNIQUES = NUMB_TYPES.map(type => ({ id: _techSlug(type) + '-numb',
 const LUNGE_TYPES = ['Knife', 'Short Sword', 'Longsword', 'Rapier'];
 const LUNGE_TECHNIQUES = LUNGE_TYPES.map(type => ({ id: _techSlug(type) + '-lunge', name: type + ' Lunge', weaponType: type,
   minLevel: 3, hit: 0, damage: 0, parry: 0, lunge: true }));
-const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES, NUMB_TECHNIQUES, LUNGE_TECHNIQUES);
+// Monk techniques - only a Monk can choose them (`classes`). All work bare-handed (weapon type Unarmed).
+//   Monk Block I-III: I lets an empty hand Block (a little weaker than a small shield), each tier adds +5 to the block.
+//   Iron Fist (2): unlocks the Iron Fist bare-handed attack.   Soul Armor (3): unarmored areas get Soul Armor protection.
+//   Tornado (4): a Whirlwind with bare hands (5 ft around the Monk).
+const MONK_TECHNIQUES = [1, 2, 3].map(n => ({ id: 'monk-block-' + n, name: 'Monk Block ' + _ROMAN[n], weaponType: 'Unarmed', minLevel: n, hit: 0, damage: 0, parry: 0, block: 5, classes: ['Monk'], grantsBlock: n === 1 }))
+  .concat([
+    { id: 'monk-iron-fist',   name: 'Iron Fist',   weaponType: 'Unarmed', minLevel: 2, hit: 0, damage: 0, parry: 0, classes: ['Monk'], ironFist: true },
+    { id: 'monk-soul-armor',  name: 'Soul Armor',  weaponType: 'Unarmed', minLevel: 3, hit: 0, damage: 0, parry: 0, classes: ['Monk'], soulArmor: true },
+    { id: 'monk-tornado',     name: 'Tornado',     weaponType: 'Unarmed', minLevel: 4, hit: 0, damage: 0, parry: 0, classes: ['Monk'], whirlwind: true, whirlReach: 5 },
+  ]);
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES, NUMB_TECHNIQUES, LUNGE_TECHNIQUES, MONK_TECHNIQUES);
+
+// A technique with a `classes` list is open only to those classes; without one it is open to everybody.
+function _techAvailableToClass(t, cls) { return !t || !Array.isArray(t.classes) || !t.classes.length || t.classes.includes(cls); }
+function _techHasFlag(techIds, flag) {
+  return Array.isArray(techIds) && techIds.some(id => { const t = TECHNIQUES.find(x => x.id === id); return !!(t && t[flag]); });
+}
+// The Monk's bare-handed Block and Iron Fist rows only exist for a character who has learned the matching technique.
+function _barehandRowUnlocked(techIds, r) {
+  if (!r || normalizeWeaponName(r.weapon) !== normalizeWeaponName('Bare Handed')) return true;
+  if (/iron\s*fist/i.test(r.action)) return _techHasFlag(techIds, 'ironFist');
+  if (r.action === 'Block') return _techHasFlag(techIds, 'grantsBlock');
+  return true;
+}
+function _combatantTechIds(cid) {
+  const [kind, id] = String(cid || '').split('::');
+  return kind === 'char' ? (playCharCache[id]?.stats?.Techniques || null) : null;
+}
+// Soul Armor: a Monk who knows it is protected by the 'Soul Armor' armor type wherever a body area has no armor on.
+function _soulArmorType(techIds, rawType) {
+  if ((!rawType || rawType === 'None') && _techHasFlag(techIds, 'soulArmor') && (ARMOR_TYPE_DATA['Soul Armor'] || DEFAULT_ARMOR_TYPE_DATA['Soul Armor'])) return 'Soul Armor';
+  return rawType || 'None';
+}
+// Whirlwind reach: the weapon's own reach, or (bare hands, reach 0) the technique's whirlReach.
+function _techniqueWhirlReach(techIds, weaponName, rowReach) {
+  if ((rowReach || 0) > 0) return rowReach;
+  const type = weaponName ? getWeaponType(weaponName) : '';
+  if (!type || !Array.isArray(techIds)) return 0;
+  for (const id of techIds) {
+    const t = TECHNIQUES.find(x => x.id === id);
+    if (t && t.weaponType === type && t.whirlwind && t.whirlReach > 0) return t.whirlReach;
+  }
+  return 0;
+}
 const DEFAULT_TECHNIQUES = _techniquesForTypes([...new Set(Object.values(DEFAULT_WEAPON_TYPES))].sort(), []).concat(TECHNIQUE_EXTRAS.map(t => ({ ...t })));
 let TECHNIQUES = DEFAULT_TECHNIQUES.map(t => ({ ...t }));
 let TECHNIQUE_ALLOWANCE = { ...DEFAULT_TECHNIQUE_ALLOWANCE };
@@ -6107,6 +6157,9 @@ function _techniqueSummary(t) {
   if (t.heavyStam > 0) parts.push(`Heavy Blow: spend ${t.heavyStam} Stamina for +${t.heavyDmg} damage on a hit`);
   if (t.whirlwind) parts.push('Whirlwind: attack everyone in reach (allies too), 1 Stamina each, -1 max damage per target');
   if (t.numb) parts.push('Numb: arm/leg hits roll Fumble / Slow as if a d10 of damage was dealt');
+  if (t.grantsBlock) parts.push('Block with an empty hand');
+  if (t.ironFist) parts.push('unlocks the Iron Fist strike');
+  if (t.soulArmor) parts.push('unarmored body areas gain Soul Armor protection');
   if (t.lunge) parts.push('Lunge: slip past a longer-reach Sentinel without its reaction attack');
   if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
   return parts.join(', ') || 'no effect';
@@ -6118,12 +6171,18 @@ var characterTechniques = [];
 function _techAllowanceTotal() {
   return Math.max(0, Math.round((TECHNIQUE_ALLOWANCE[characterClass] ?? 0) * characterLevel));
 }
+// Switching class drops any chosen technique the new class cannot use (e.g. leaving Monk loses the Monk set).
+function setCharacterClass(cls) {
+  characterClass = cls;
+  characterTechniques = characterTechniques.filter(id => _techAvailableToClass(TECHNIQUES.find(x => x.id === id), cls));
+  recalc();
+}
 function toggleTechnique(id) {
   const i = characterTechniques.indexOf(id);
   if (i >= 0) { characterTechniques.splice(i, 1); }
   else {
     const t = TECHNIQUES.find(x => x.id === id);
-    if (!t || (t.minLevel || 1) > characterLevel || characterTechniques.length >= _techAllowanceTotal()) return;
+    if (!t || !_techAvailableToClass(t, characterClass) || (t.minLevel || 1) > characterLevel || characterTechniques.length >= _techAllowanceTotal()) return;
     characterTechniques.push(id);
   }
   recalc();
@@ -6199,7 +6258,7 @@ function buildTechniquesPanel() {
     + `<button class="btn" style="margin-left:14px;padding:3px 10px;font-size:0.75rem;" onclick="respecTechniques()" ${used ? '' : 'disabled'}>Respec (clear all)</button>`;
   if (!TECHNIQUES.length) { list.innerHTML = '<p style="color:var(--text-dim);font-size:0.85rem;">No techniques configured yet.</p>'; return; }
   const byType = {};
-  for (const t of TECHNIQUES) (byType[t.weaponType || 'Other'] ||= []).push(t);
+  for (const t of TECHNIQUES) if (_techAvailableToClass(t, characterClass)) (byType[t.weaponType || 'Other'] ||= []).push(t);
   list.innerHTML = Object.keys(byType).sort().map(type => `
     <h4 style="margin:14px 0 6px;color:var(--gold2);">${_escWeaponType(type)}</h4>
     ${byType[type].sort((a, b) => (a.minLevel || 1) - (b.minLevel || 1) || a.name.localeCompare(b.name)).map(t => {
@@ -6211,7 +6270,7 @@ function buildTechniquesPanel() {
         : `<button class="btn" ${full ? 'disabled title="No technique slots left"' : ''} onclick="toggleTechnique('${_escWeaponType(t.id)}')">Learn</button>`;
       return `<div class="ps-block" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;gap:12px;${has ? 'border-color:var(--gold2);' : ''}${locked ? 'opacity:0.55;' : ''}">
         <div><div style="font-weight:bold;">${_escWeaponType(t.name)} <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;">Level ${t.minLevel || 1}+</span></div>
-        <div style="font-size:0.8rem;color:var(--text-dim);">${_escWeaponType(_techniqueSummary(t))} with ${_escWeaponType(type)} weapons</div></div>${btn}</div>`;
+        <div style="font-size:0.8rem;color:var(--text-dim);">${_escWeaponType(_techniqueSummary(t))}${t.soulArmor ? '' : ' with ' + _escWeaponType(type) + ' weapons'}${Array.isArray(t.classes) && t.classes.length ? ' · ' + _escWeaponType(t.classes.join('/')) + ' only' : ''}</div></div>${btn}</div>`;
     }).join('')}`).join('');
 }
 
@@ -8439,6 +8498,7 @@ function gatherConfigData() {
     arcaneBlast: 1,
     arcaneGrenade: 1,
     webContent: 1,
+    monkContent: 1,
     blastItems: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
@@ -8472,7 +8532,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122g';
+const VERSION = 'v0.1.20261122h';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9514,6 +9574,15 @@ function applyConfigData(data) {
     if (data.meleeWeapons && data.meleeWeapons.length)
       data.meleeWeapons = [...data.meleeWeapons, ...DEFAULT_MELEE_WEAPONS.filter(d => (d.weapon === 'Spinnerets' || d.weapon === 'Mandibles') && !data.meleeWeapons.some(m => m.weapon === d.weapon)).map(d => ({ ...d }))];
     if (Array.isArray(data.enchantments) && !data.enchantments.some(x => x.name === 'Webspinning')) data.enchantments = [...data.enchantments, { ...DEFAULT_ENCHANTMENTS.find(x => x.name === 'Webspinning') }];
+  }
+  // Configs saved before the Monk existed: add its Soul Armor type, the bare-handed Block row and its technique allowance
+  // once (a GM who later deletes or edits them keeps their version). The Monk techniques themselves come in through
+  // TECHNIQUE_EXTRAS below.
+  if (data.monkContent !== 1) {
+    if (data.armorTypes && Object.keys(data.armorTypes).length && !data.armorTypes['Soul Armor']) data.armorTypes = Object.assign({}, data.armorTypes, { 'Soul Armor': JSON.parse(JSON.stringify(DEFAULT_ARMOR_TYPE_DATA['Soul Armor'])) });
+    if (data.meleeWeapons && data.meleeWeapons.length && !data.meleeWeapons.some(m => m.weapon === 'Bare Handed' && m.action === 'Block'))
+      data.meleeWeapons = [...data.meleeWeapons, { ...DEFAULT_MELEE_WEAPONS.find(d => d.weapon === 'Bare Handed' && d.action === 'Block') }];
+    if (data.techniqueAllowance && Object.keys(data.techniqueAllowance).length && data.techniqueAllowance.Monk == null) data.techniqueAllowance = Object.assign({}, data.techniqueAllowance, { Monk: DEFAULT_TECHNIQUE_ALLOWANCE.Monk });
   }
   replaceObjectContents(RACE_DATA,   data.species || data.races   || DEFAULT_RACE_DATA);
   replaceObjectContents(GENDER_DATA, data.sexes   || data.genders || DEFAULT_GENDER_DATA);
@@ -13721,7 +13790,7 @@ async function _applyAoeFailure(casterEnt, spell, ent, token, opts = {}) {
       // own "main body" slot (Torso for most, Body/Trunk/Abdomen for types
       // that don't have one) instead of always assuming Torso specifically.
       const armorSlot = _armorSlotForPart(ent.bodyType, null);
-      const armorType = (ent.armor && ent.armor[armorSlot]) || 'None';
+      const armorType = _soulArmorType(ent.stats?.Techniques, (ent.armor && ent.armor[armorSlot]) || 'None');
       const dr  = getArmorDR(armorType, spell.damageCategory || '');
       const raw = (Math.random() * (dmgCap - 1) + 1) * (opts.dmgMult ?? 1);
       const dmg = Math.max(0, Math.round(Math.max(0, raw - dr)));
@@ -14752,20 +14821,21 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // Humanoid's Arms/Legs (which don't exist for it and would never match).
   let targetArmor = {};
   let targetBodyType = 'Humanoid';
-  let targetArmorOwned = [], targetArmorEquipped = {};
+  let targetArmorOwned = [], targetArmorEquipped = {}, targetTechIds = null;
   if (targetEntityType === 'character') {
     const row = playCharCache[targetEntityId];
     targetArmor = row?.armor || {};
     targetBodyType = row?.body_type || 'Humanoid';
     targetArmorOwned = Array.isArray(row?.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
     targetArmorEquipped = row?.stats?.ArmorEquipped || {};
+    targetTechIds = row?.stats?.Techniques || null;
   } else {
     const row = sessionCreatureCache[targetEntityId];
     targetArmor = row?.armor || {};
     targetBodyType = row?.body_type || 'Humanoid';
   }
   const armorSlot = _armorSlotForPart(targetBodyType, hitPart);
-  const armorType = targetArmor[armorSlot] || 'None';
+  const armorType = _soulArmorType(targetTechIds, targetArmor[armorSlot] || 'None');
   // Spell attacks (ctx.damageCategory set) supply their own elemental
   // category directly instead of it being parsed from the action label —
   // physical weapons only ever produce slash/pierce/crush that way.
@@ -15349,7 +15419,7 @@ function _xpRewardFor(combatantId) {
   const slots = _armorSlotsFor(ent.bodyType);
   let drSum = 0;
   for (const slot of slots) {
-    const armorType = ent.armor?.[slot.key] || 'None';
+    const armorType = _soulArmorType(ent.stats?.Techniques, ent.armor?.[slot.key] || 'None');
     drSum += (getArmorDR(armorType, 'slash') + getArmorDR(armorType, 'pierce') + getArmorDR(armorType, 'crush')) / 3;
   }
   const avgArmorDR = slots.length ? drSum / slots.length : 0;
@@ -18962,8 +19032,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
     const defCid  = _tokenCid(target);
     const defC    = atCombatants.find(c => c.id === defCid);
     for (const side of ['right', 'left']) {
-      const itemName = held[side];
-      if (!itemName) continue;
+      const itemName = held[side] || BARE_HANDED; // an empty hand can still Block if the Monk Block technique unlocks it
       // If this hand is already spent on something else this round (an
       // attack, a different declared action), a reactive Block/Parry with
       // it isn't available — same weapon can't both swing and parry. A hand
@@ -18976,6 +19045,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         if (seen.has(key)) continue;
         seen.add(key);
         if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
+        if (!_barehandRowUnlocked(_combatantTechIds(defCid), r)) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
         const parryB = _combatantTechBonus(defCid, itemName);

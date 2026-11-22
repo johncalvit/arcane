@@ -549,7 +549,7 @@ test('Loot', 'the loot chip under a hand needs that hand bare and a lootable bod
 });
 
 test('Techniques', 'Whirlwind exists for exactly the five weapon types and is found by weapon name', async T => {
-  const ws = TECHNIQUES.filter(t => t.whirlwind);
+  const ws = TECHNIQUES.filter(t => t.whirlwind && !t.classes); // the Monk's Tornado is class-locked and tested under Monk
   T.eq(ws.map(t => t.weaponType).sort().join(), ['Flail', 'Greatsword', 'Polearm', 'Scimitar', 'Staff'].join());
   const sword = ws.find(t => t.weaponType === 'Greatsword');
   T.ok(_techniqueWhirlwind([sword.id], 'Greatsword'), 'owner of the technique');
@@ -814,4 +814,34 @@ test('Figure', 'a full-body figure shows to the GM and owner always, to others o
   T.eq(_paFigureHtml(mk({ figureUrl: '' }), false), '', 'no image, no card');
   el.style.display = '';
   T.ok(_paFigureHtml(mk(), false).includes('pa-figure'), 'a visible token renders the figure card');
+});
+
+// ── Monk ─────────────────────────────────────────────────────────────────────
+test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
+  T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
+  T.eq(DEFAULT_TECHNIQUE_ALLOWANCE.Monk, 2, 'a Monk gets 2 techniques per level');
+  const ids = ['monk-block-1', 'monk-block-2', 'monk-block-3', 'monk-iron-fist', 'monk-soul-armor', 'monk-tornado'];
+  for (const id of ids) T.ok(DEFAULT_TECHNIQUES.some(x => x.id === id), id + ' is a default technique');
+  const lvl = id => DEFAULT_TECHNIQUES.find(x => x.id === id).minLevel;
+  T.eq(lvl('monk-iron-fist'), 2, 'Iron Fist is level 2'); T.eq(lvl('monk-soul-armor'), 3, 'Soul Armor is level 3'); T.eq(lvl('monk-tornado'), 4, 'Tornado is level 4');
+  const th = id => DEFAULT_TECHNIQUES.find(x => x.id === id);
+  T.ok(_techAvailableToClass(th('monk-tornado'), 'Monk'), 'a Monk can choose Tornado');
+  T.ok(!_techAvailableToClass(th('monk-tornado'), 'Warrior'), 'a Warrior cannot');
+  T.ok(_techAvailableToClass(th('unarmed-1'), 'Warrior'), 'a normal technique stays open to every class');
+
+  const bh = a => ({ weapon: 'Bare Handed', action: a });
+  T.ok(!_barehandRowUnlocked([], bh('Block')), 'no technique, no bare-handed Block');
+  T.ok(_barehandRowUnlocked(['monk-block-1'], bh('Block')), 'Monk Block I unlocks it');
+  T.ok(!_barehandRowUnlocked(['monk-block-2'], bh('Block')), 'tier II alone does not');
+  T.ok(!_barehandRowUnlocked([], bh('Iron Fist')) && _barehandRowUnlocked(['monk-iron-fist'], bh('Iron Fist')), 'Iron Fist needs its technique');
+  T.ok(_barehandRowUnlocked([], bh('Smash')) && _barehandRowUnlocked([], { weapon: 'Sword, Long', action: 'Block' }), 'other rows are never gated');
+
+  T.eq(_soulArmorType(['monk-soul-armor'], 'None'), 'Soul Armor', 'a bare body area gets Soul Armor');
+  T.eq(_soulArmorType(['monk-soul-armor'], 'Steel Plate'), 'Steel Plate', 'worn armor wins');
+  T.eq(_soulArmorType([], 'None'), 'None', 'without the technique nothing changes');
+  T.ok(getArmorDR('Soul Armor', 'slash') > 0, 'Soul Armor has protection');
+  T.ok(!ARMOR_PIECES.some(p => p.material === 'Soul Armor'), 'Soul Armor is not sold as a piece');
+
+  T.eq(_techniqueWhirlReach(['monk-tornado'], 'Bare Handed', 0), 5, 'Tornado reaches 5 ft bare-handed');
+  T.eq(_techniqueWhirlReach(['monk-tornado'], 'Bare Handed', 8), 8, 'a weapon keeps its own reach');
 });

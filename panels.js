@@ -1130,7 +1130,7 @@ function _dlgRender(body) {
     }
     const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
     const rows = [
-      ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm).map(r => ({ r, ranged: false })),
+      ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && (typeof _barehandRowUnlocked !== 'function' || _barehandRowUnlocked(ent?.stats?.Techniques, r))).map(r => ({ r, ranged: false })),
       ...rangedRows.map(r => ({ r, ranged: true })),
     ];
     const cur = c.slots[chKey];
@@ -1211,11 +1211,12 @@ function _dlgRender(body) {
       }
       // Whirlwind technique: sweep everyone in reach (friends too), 1 Stamina and -1 max damage per target.
       let whirlChip = '';
-      if (!ranged && r.damageMax > 0 && !defensive && (r.reach ?? 0) > 0 && typeof _techniqueWhirlwind === 'function' && _techniqueWhirlwind(ent?.stats?.Techniques, itemName)) {
+      const whirlReach = typeof _techniqueWhirlReach === 'function' ? _techniqueWhirlReach(ent?.stats?.Techniques, itemName, r.reach ?? 0) : (r.reach ?? 0);
+      if (!ranged && r.damageMax > 0 && !defensive && whirlReach > 0 && typeof _techniqueWhirlwind === 'function' && _techniqueWhirlwind(ent?.stats?.Techniques, itemName)) {
         whirlChip = _dlgChip({
           label: `🌀 Whirlwind ${r.action}`, sub: '1 stam / target',
-          title: `${_techniqueWhirlwind(ent?.stats?.Techniques, itemName)}: attack EVERY living body within ${r.reach} ft, allies included. Costs 1 Stamina per target attacked, and the damage cap of each swing drops by 1 for each target.`,
-          data: { dact: 'whirl', item: itemName, action: r.action, range: r.reach ?? 0 },
+          title: `${_techniqueWhirlwind(ent?.stats?.Techniques, itemName)}: attack EVERY living body within ${whirlReach} ft, allies included. Costs 1 Stamina per target attacked, and the damage cap of each swing drops by 1 for each target.`,
+          data: { dact: 'whirl', item: itemName, action: r.action, range: whirlReach },
         });
       }
       return normalChip + aimedChip + heavyChips + whirlChip;

@@ -66,6 +66,10 @@ Some items carry an enchantment. A **passive** one is always on while you wear t
 
 A character can have a larger full-body picture, set under the portrait on the Traits tab in Character Mode (click the box; the picture is scaled down but not cropped, and a transparent background works). It is a visual hint of what a character carries, or what a monster looks like, without naming it. Click a token on the map and the picture appears in the panel at the left; click it for a large view (click again or press Esc to close). Other players see it only while that token is fully visible to them: not when it is just a shadow in the dark or out of sight. A monster template's picture is copied onto every monster spawned from it. You and the GM always see yours.
 
+### Monk
+
+**Monk** is a class (pick it in the builder's Class box; 2 techniques per level) with its own techniques that no other class can choose. All of them work bare-handed. **Monk Block I–III** (levels 1–3): tier I lets an empty hand Block, a little weaker than a small shield, and every tier adds +5 to it. **Iron Fist** (level 2) unlocks the Iron Fist strike among the bare-handed attacks. **Soul Armor** (level 3): any body area with no armor on is protected by the Soul Armor type (set its numbers under Game Config → Armor); worn armor takes its place. **Tornado** (level 4) is a Whirlwind with bare hands: everyone within 5 ft, allies included, 1 Stamina each. A Monk casts Nature magic by learning Nature skills, like any other caster. Switching away from Monk drops the Monk techniques.
+
 ### Stats
 
 Your Final Attributes (Power, Toughness, Speed, and so on). A green or red number in brackets means the stat is currently raised or lowered, for example by blood loss or a potion.
