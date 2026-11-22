@@ -1844,6 +1844,10 @@
           <div class="field"><label>Buff Duration (min)</label><input type="text" id="cf-buffminutes" placeholder="e.g. 10-100"></div>
           <div class="field"><label>Blast Radius (ft)</label><input type="text" id="cf-blastradius" placeholder="0" title="Above 0 makes this a thrown explosive (a grenade) instead of something you drink"></div>
           <div class="field"><label>Blast Max Damage</label><input type="text" id="cf-blastdamage" placeholder="0"></div>
+          <div class="field"><label>Blast Damage Type</label>
+            <select id="cf-blastcategory"><option value="crush">Crush (explosion)</option><option value="burn">Burn (fire)</option><option value="shock">Shock (lightning)</option><option value="corrode">Corrode (acid)</option><option value="freeze">Freeze (cold)</option><option value="slash">Slash (shrapnel)</option><option value="pierce">Pierce (shards)</option><option value="magic">Magic</option></select></div>
+          <div class="field"><label>Blast Condition</label><input type="text" id="cf-blastcondition" placeholder="e.g. burning" title="A condition set on anyone caught in the blast who fails their save: burning, corroding, stunned, slowed, webbed... Blank = none"></div>
+          <div class="field"><label>Condition Chance (%)</label><input type="text" id="cf-blastcondchance" placeholder="100" title="Chance that a target who failed the save gets the condition"></div>
           <div class="field"><label>Blowback (ft)</label><input type="text" id="cf-blowback" placeholder="0" title="Feet a 150 lb person is thrown at the centre of the blast"></div>
           <div class="field"><label>Throw Range (ft)</label><input type="text" id="cf-throwrange" placeholder="40"></div>
         </div>
@@ -5719,6 +5723,16 @@ const DEFAULT_CONSUMABLES = [
   { name:"Arcane Grenade",     wt:1,   price:1500, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
     blastRadius:12, blastDamage:11, blastCategory:"crush", blowback:15, throwRange:40,
     description:"A sealed glass sphere of unstable arcane force. Throw it (up to 40 ft): it bursts in a 12 ft radius for up to 11 crushing damage (a save halves it) and hurls everyone caught away from the blast. A bad throw scatters. Don't stand too close." },
+  // Other damage types: same throw, other blast category (and a condition on anyone who fails the save). No blowback.
+  { name:"Molotov Cocktail",   wt:1,   price:400,  restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    blastRadius:8, blastDamage:6, blastCategory:"burn", blastCondition:"burning", blastConditionChance:60, blowback:0, throwRange:40,
+    description:"A bottle of spirits with a burning rag. Throw it (up to 40 ft): it shatters in an 8 ft burst of flame for up to 6 burn damage (a save halves it), and anyone who fails the save has a 60% chance of catching fire. Fire also burns away webs. A bad throw scatters." },
+  { name:"Bottled Lightning",  wt:1,   price:1200, restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    blastRadius:10, blastDamage:10, blastCategory:"shock", blastCondition:"stunned", blastConditionChance:25, blowback:0, throwRange:40,
+    description:"A stoppered flask of captive storm. Throw it (up to 40 ft): it releases a 10 ft burst of lightning for up to 10 shock damage (a save halves it), and anyone who fails the save has a 25% chance of being Stunned. A bad throw scatters." },
+  { name:"Acid Vial",          wt:0.5, price:600,  restoreToughness:0, restoreStamina:0, restoreBlood:0, clears:"",         buffAttr:"",             buffAmount:0,  buffMinutes:"",
+    blastRadius:6, blastDamage:8, blastCategory:"corrode", blastCondition:"corroding", blastConditionChance:50, blowback:0, throwRange:30,
+    description:"A thick glass vial of caustic acid. Throw it (up to 30 ft): it splashes a 6 ft area for up to 8 corrode damage (a save halves it), and anyone who fails the save has a 50% chance of being left Corroding. A bad throw scatters." },
 ];
 let CONSUMABLES = [...DEFAULT_CONSUMABLES];
 let editingConsumableIndex = null;
@@ -6631,6 +6645,9 @@ function openConsumableForm(index) {
   document.getElementById('cf-blastradius').value = row ? (row.blastRadius || '') : '';
   document.getElementById('cf-blastdamage').value = row ? (row.blastDamage || '') : '';
   document.getElementById('cf-blowback').value    = row ? (row.blowback || '') : '';
+  document.getElementById('cf-blastcategory').value   = row ? (row.blastCategory || 'crush') : 'crush';
+  document.getElementById('cf-blastcondition').value  = row ? (row.blastCondition || '') : '';
+  document.getElementById('cf-blastcondchance').value = row ? (row.blastConditionChance || '') : '';
   document.getElementById('cf-throwrange').value  = row ? (row.throwRange || '') : '';
   document.getElementById('cf-description').value = row ? (row.description || '') : '';
   document.getElementById('consumable-form').style.display = 'block';
@@ -6661,9 +6678,13 @@ function saveConsumable() {
     blowback:    parseFloat(document.getElementById('cf-blowback').value) || 0,
     throwRange:  parseFloat(document.getElementById('cf-throwrange').value) || 0,
   };
+  if (row.blastRadius > 0) {
+    row.blastCategory = document.getElementById('cf-blastcategory').value || 'crush';
+    const bc = document.getElementById('cf-blastcondition').value.trim().toLowerCase();
+    if (bc) { row.blastCondition = bc; row.blastConditionChance = Math.max(1, Math.min(100, parseFloat(document.getElementById('cf-blastcondchance').value) || 100)); }
+  }
   if (editingConsumableIndex !== null) {
     const old = CONSUMABLES[editingConsumableIndex] || {}; // keep fields the form has no input for
-    if (old.blastCategory) row.blastCategory = old.blastCategory;
     if (old.blastSave) row.blastSave = old.blastSave;
     CONSUMABLES[editingConsumableIndex] = row;
   } else {
@@ -8331,6 +8352,7 @@ function gatherConfigData() {
     arcaneBlast: 1,
     arcaneGrenade: 1,
     webContent: 1,
+    blastItems: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
     startingCrowns: STARTING_CROWNS,
@@ -8363,7 +8385,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261121d';
+const VERSION = 'v0.1.20261121e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9428,6 +9450,9 @@ function applyConfigData(data) {
   _migrateThrownWeapons(); // thrown rows must be named "Throw (...)" — see its comment
   _migrateSpearShortLong(); // see its comment
   _backfillWeaponTypes();  // saved configs predating weapon types get them filled by name
+  // Configs saved before the other throwable types: add Molotov Cocktail, Bottled Lightning and Acid Vial once.
+  if (data.consumables && data.consumables.length && data.blastItems !== 1)
+    data.consumables = [...data.consumables, ...DEFAULT_CONSUMABLES.filter(d => ['Molotov Cocktail', 'Bottled Lightning', 'Acid Vial'].includes(d.name) && !data.consumables.some(c => c.name === d.name)).map(d => ({ ...d }))];
   // Configs saved before the Arcane Grenade existed: add it once (a GM who later deletes it keeps it gone).
   if (data.consumables && data.consumables.length && data.arcaneGrenade !== 1) {
     const ag = DEFAULT_CONSUMABLES.find(c => c.name === 'Arcane Grenade');
@@ -13303,6 +13328,8 @@ function _grenadeSpell(c) {
     damageMax: c.blastDamage || 0, damageCategory: c.blastCategory || 'crush',
     saveFormula: c.blastSave || 'Power + Speed + Physical Coordination',
     halfOnSave: true, blowback: c.blowback || 0,
+    // What it leaves behind on anyone who fails the save: a condition (Burning, Corroding, Stunned...) with a chance.
+    setsCondition: c.blastCondition || '', secondaryChance: c.blastCondition ? (c.blastConditionChance || 100) : 0,
   };
 }
 function _grenadeByName(name) {

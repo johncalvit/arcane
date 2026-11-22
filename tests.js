@@ -774,3 +774,17 @@ test('Web', 'a web holds its target until it breaks free; strength scales with t
   T.eq(DEFAULT_RACE_DATA['Giant Spider'].BodyType, 'Insect');
   T.ok(DEFAULT_ENCHANTMENTS.some(x => x.spell === 'Web'), 'an enchantment casts it');
 });
+
+test('Grenade', 'Molotov, Bottled Lightning and Acid Vial are throwables with their own damage type and a condition on a failed save', async T => {
+  const want = { 'Molotov Cocktail': ['burn', 'burning'], 'Bottled Lightning': ['shock', 'stunned'], 'Acid Vial': ['corrode', 'corroding'] };
+  for (const [name, [cat, cond]] of Object.entries(want)) {
+    const c = DEFAULT_CONSUMABLES.find(x => x.name === name);
+    T.ok(c, name + ' exists');
+    const g = _grenadeSpell(c);
+    T.eq(g.damageCategory, cat, name + ' damage type'); T.eq(g.setsCondition, cond, name + ' condition');
+    T.ok(g.secondaryChance > 0 && g.secondaryChance <= 100, name + ' chance'); T.eq(g.blowback, 0, name + ' does not throw bodies about');
+    T.ok(_isBlastSpell(g), name + ' resolves as a blast (halves on a save)');
+    T.ok(CONDITION_DEFS.some(d => d.key === cond), cond + ' is a real condition');
+  }
+  T.eq(_grenadeSpell(DEFAULT_CONSUMABLES.find(x => x.name === 'Arcane Grenade')).setsCondition, '', 'the Arcane Grenade sets none');
+});
