@@ -788,3 +788,30 @@ test('Grenade', 'Molotov, Bottled Lightning and Acid Vial are throwables with th
   }
   T.eq(_grenadeSpell(DEFAULT_CONSUMABLES.find(x => x.name === 'Arcane Grenade')).setsCondition, '', 'the Arcane Grenade sets none');
 });
+
+// ── Full-body figure ─────────────────────────────────────────────────────────
+test('Figure', 'a full-body figure shows to the GM and owner always, to others only while the token is fully visible', async T => {
+  T.token('T_figtok', 10, 10, 'creature');
+  const el = document.createElement('div');
+  el.id = 'token-T_figtok';
+  document.body.appendChild(el); // T._end removes [id^="token-T_"]
+  const mk = over => Object.assign({ type: 'creature', tokenId: 'T_figtok', figureUrl: 'a/b.webp' }, over);
+
+  T.stub('isGM', () => false);
+  T.ok(_figureShown(mk(), false), 'a fully visible token shows it');
+  el.classList.add('token-shadow');
+  T.ok(!_figureShown(mk(), false), 'a shadow in the dark hides it');
+  el.classList.remove('token-shadow');
+  el.style.display = 'none';
+  T.ok(!_figureShown(mk(), false), 'a token out of sight hides it');
+  T.ok(_figureShown(mk(), true), "the owner's own sheet always shows it");
+  T.ok(!_figureShown(mk({ tokenId: null }), false), 'a creature that is not on the map shows nothing');
+  T.ok(_figureShown(mk({ tokenId: null, type: 'char' }), false), 'a party character who is not on the map still shows it');
+  T.stub('isGM', () => true);
+  T.ok(_figureShown(mk(), false), 'the GM always sees it');
+
+  T.stub('isGM', () => false);
+  T.eq(_paFigureHtml(mk({ figureUrl: '' }), false), '', 'no image, no card');
+  el.style.display = '';
+  T.ok(_paFigureHtml(mk(), false).includes('pa-figure'), 'a visible token renders the figure card');
+});

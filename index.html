@@ -298,6 +298,13 @@
   .play-panel-header .panel-title .ico { width: 1.3em; height: 1.3em; }
   .pa-id { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 8px; }
   .pa-id .ps-compact-avatar { width: 76px; height: 92px; border: 2px solid var(--gold); }
+  /* Full-body figure shown in a token's panel; click for the large view */
+  .pa-figure { margin: 4px 0 10px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); cursor: zoom-in; }
+  .pa-figure:hover { border-color: var(--gold); }
+  .pa-figure img { display: block; margin: 0 auto; max-width: 100%; max-height: 240px; object-fit: contain; }
+  #figure-lightbox { position: fixed; inset: 0; z-index: 3700; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: zoom-out; }
+  #figure-lightbox img { max-width: 92vw; max-height: 86vh; object-fit: contain; border: 1px solid var(--gold); border-radius: 4px; background: var(--bg3); }
+  #figure-lightbox div { color: var(--gold2); font-family: var(--ui-font); font-size: 1rem; }
   .pa-id-text { flex: 1; min-width: 0; }
   .pa-id-name { font-size: 1.3rem; color: var(--gold2); font-weight: bold; line-height: 1.1; margin-bottom: 3px; overflow-wrap: anywhere; }
   .pa-id-sub { font-size: 0.85rem; color: var(--text-dim); line-height: 1.35; }
@@ -1206,6 +1213,15 @@
             <span id="avatar-placeholder" style="color:var(--text-dim);font-size:0.72rem;text-align:center;padding:8px;line-height:1.5;">Click to<br>set avatar</span>
           </div>
           <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileSelected(this)">
+          <div id="figure-preview" onclick="document.getElementById('figure-file-input').click()" title="A full-body picture players see when they click your token on the map (once it is fully visible to them)" style="
+            margin-top:8px;width:130px;height:120px;border:2px dashed var(--border);border-radius:4px;
+            background:var(--bg3);cursor:pointer;display:flex;align-items:center;
+            justify-content:center;overflow:hidden;transition:border-color 0.15s;">
+            <img id="figure-img" src="" style="display:none;width:100%;height:100%;object-fit:contain;">
+            <span id="figure-placeholder" style="color:var(--text-dim);font-size:0.7rem;text-align:center;padding:8px;line-height:1.5;">Click to set<br>full-body image</span>
+          </div>
+          <button class="btn-sm" id="figure-clear-btn" style="display:none;margin-top:4px;" onclick="clearFigure()">Remove full-body image</button>
+          <input type="file" id="figure-file-input" accept="image/*" style="display:none" onchange="onFigureFileSelected(this)">
         </div>
         <div>
           <div class="field">
@@ -3182,6 +3198,67 @@ function resolveAvatarUrl(raw) {
   if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
   // storage path → public URL
   return sb.storage.from('avatars').getPublicUrl(raw).data.publicUrl;
+}
+
+// ── Full-body figure ─────────────────────────────────────────────────────────
+// A larger picture than the portrait (not cropped), shown to other players when they click this character's
+// token - it hints at gear carried or what a monster looks like. Stored in the avatars bucket like the portrait;
+// the characters row keeps only the storage path (figure_url). Monster templates pass theirs on to each spawn.
+let figureUrl         = '';    // what the preview shows: a data URL just picked/imported, or a hosted URL
+let figureStoragePath = '';    // storage path (or hosted URL) the characters row keeps once it is uploaded
+let _figureTouched    = false; // picked or removed this session, so an empty figure_url is written on purpose
+const FIGURE_MAX_PX   = 1000;  // longest side after scaling down
+
+function setFigureUrl(url) {
+  figureUrl = url || '';
+  const img = document.getElementById('figure-img'), ph = document.getElementById('figure-placeholder');
+  const box = document.getElementById('figure-preview'), clr = document.getElementById('figure-clear-btn');
+  if (!img || !ph || !box) return;
+  if (figureUrl) { img.src = figureUrl; img.style.display = ''; ph.style.display = 'none'; box.style.borderColor = 'var(--gold)'; }
+  else { img.removeAttribute('src'); img.style.display = 'none'; ph.style.display = ''; box.style.borderColor = 'var(--border)'; }
+  if (clr) clr.style.display = figureUrl ? '' : 'none';
+}
+function onFigureFileSelected(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, FIGURE_MAX_PX / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width  = Math.max(1, Math.round(im.naturalWidth * k));
+      c.height = Math.max(1, Math.round(im.naturalHeight * k));
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      figureStoragePath = ''; // a new picture: it uploads on the next save
+      _figureTouched = true;
+      setFigureUrl(c.toDataURL('image/webp', 0.9)); // keeps transparency; falls back to PNG where WebP is unsupported
+    };
+    im.onerror = () => showToast('That file is not a picture this browser can open.', 'error');
+    im.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clearFigure() {
+  figureStoragePath = '';
+  _figureTouched = true;
+  setFigureUrl('');
+}
+// Upload a freshly picked (or imported) figure so the characters row only has to keep a short path.
+async function _ensureFigureUploaded() {
+  if (!figureUrl || !figureUrl.startsWith('data:') || figureStoragePath || !currentUser) return;
+  try {
+    const blob = await (await fetch(figureUrl)).blob();
+    const ext = blob.type === 'image/png' ? 'png' : (blob.type === 'image/jpeg' ? 'jpg' : 'webp');
+    const path = `${currentUser.id}/figure-${Date.now()}.${ext}`;
+    const { error } = await sb.storage.from('avatars').upload(path, blob, { contentType: blob.type || 'image/webp', upsert: true });
+    if (error) throw error;
+    figureStoragePath = path;
+  } catch (err) {
+    console.warn('Figure upload failed:', err.message);
+    showToast('The full-body image could not be uploaded, so it was not saved.', 'warn');
+  }
 }
 
 function applySpeciesDefaultAvatar() {
@@ -7871,6 +7948,7 @@ function gatherCharacterData() {
     worn: { ...characterWorn },
     heldItems: getHeldItems(),
     avatarUrl,
+    figureUrl,
   };
 }
 
@@ -7955,6 +8033,7 @@ async function saveCharacter() {
     currentCampaignId = homeId;
   }
 
+  await _ensureFigureUploaded();
   const row = {
     campaign_id: currentCampaignId,
     user_id:     currentUser.id,
@@ -7982,6 +8061,9 @@ async function saveCharacter() {
     avatar_url:  avatarStoragePath || data.avatarUrl || '',
     is_template: document.getElementById('is-template-chk')?.checked || false,
   };
+  // Only touch figure_url when there is something to say (so a database without the column still saves).
+  if (figureStoragePath) row.figure_url = figureStoragePath;
+  else if (_figureTouched && !figureUrl) row.figure_url = ''; // removed on purpose
 
   let error;
   if (currentCharacterId) {
@@ -8001,6 +8083,7 @@ async function saveCharacter() {
     setCharSaveStatus('Save failed: ' + error.message, false);
   } else {
     setCharSaveStatus('☁ Saved ' + new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), true);
+    _figureTouched = false;
     // Ensure a campaign_characters link exists (Phase 3: characters are
     // user-owned and join campaigns via the join table; campaign_id is kept
     // in sync as the home campaign for now).
@@ -8218,11 +8301,14 @@ async function loadCharacter(id) {
     armor:     data.armor,
     heldItems: data.held_items,
     avatarUrl: resolveAvatarUrl(data.avatar_url),
+    figureUrl: resolveAvatarUrl(data.figure_url),
   });
 
   // keep storage path so re-saves don't re-upload
   avatarStoragePath = (data.avatar_url && !data.avatar_url.startsWith('data:') && !data.avatar_url.startsWith('http'))
     ? data.avatar_url : '';
+  figureStoragePath = data.figure_url || '';
+  _figureTouched = false;
 
   setCharSaveStatus('Loaded: ' + data.name, true);
   buildStorageSection();
@@ -8259,6 +8345,7 @@ function _doNewCharacter() {
   setCharSaveStatus('', false);
   avatarUrl = '';
   avatarStoragePath = '';
+  figureStoragePath = ''; _figureTouched = false; setFigureUrl('');
   const tmplChk = document.getElementById('is-template-chk');
   if (tmplChk) tmplChk.checked = false;
   setAvatarUrl('');
@@ -8385,7 +8472,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122e';
+const VERSION = 'v0.1.20261122f';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9682,6 +9769,11 @@ function applyCharacterData(data) {
 
   // Avatar
   setAvatarUrl(data.avatarUrl || '');
+  // Full-body figure: loadCharacter hands in the hosted URL (and then sets the storage path); an imported
+  // file carries a data or hosted URL - a data one is uploaded on the next save.
+  figureStoragePath = /^https?:/.test(data.figureUrl || '') ? data.figureUrl : '';
+  _figureTouched = !!(data.figureUrl && data.figureUrl.startsWith('data:'));
+  setFigureUrl(data.figureUrl || '');
 }
 
 // ─── INIT ───────────────────────────────────────────────────────────────────
@@ -10343,7 +10435,7 @@ function getArmorDR(armorType, category) {
 
 // Single source of truth for which character columns exist — used by every
 // SELECT so cache rows can never be missing a column again.
-const CHAR_COLUMNS = 'id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, features, weapons, equipment, held_items, armor, avatar_url, damage, notes';
+const CHAR_COLUMNS = 'id, name, species, body_type, sex, age, height, build, social, mental, stats, skills, features, weapons, equipment, held_items, armor, avatar_url, figure_url, damage, notes';
 
 const _CREATURE_DEFAULT_STATS = { Strength:10, Endurance:10, Agility:10, Memory:10, Intellect:10, Senses:10, Quintessence:0 };
 
@@ -10532,6 +10624,7 @@ function getEntity(ref) {
     social:    row.social || '',
     bodyType:  row.body_type || (isChar ? '' : 'Humanoid'),
     avatarUrl: row.avatar_url || token?.avatar_url || '',
+    figureUrl: row.figure_url || '',
     attrs,
     // Pre-buff, pre-blood-loss attrs — for the rare calc that needs a STABLE
     // reference point rather than current (possibly weakened) capability,
@@ -22779,8 +22872,10 @@ function _fogApplyTokenVisibility(tokenId) {
   // the GM had even placed their own token.
   if (!viewer) { el.style.display = 'none'; return; }
   const state = _fogVisState(t);
+  const wasShadow = el.classList.contains('token-shadow'), wasHidden = el.style.display === 'none';
   el.style.display = state === 'none' ? 'none' : '';
   el.classList.toggle('token-shadow', state === 'shadow');
+  if (_tokenInfoViewId === tokenId && (wasShadow !== (state === 'shadow') || wasHidden !== (state === 'none'))) refreshUI();
 }
 function _fogApplyAllTokenVisibility() {
   for (const id of Object.keys(mapTokens)) _fogApplyTokenVisibility(id);
@@ -23517,7 +23612,7 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
   // equipment columns aren't there yet (migration not run), retry without them
   // so spawning still works.
   let { data: creature, error: scErr } = await sb.from('session_creatures')
-    .insert({ ...baseInsert, weapons: tmpl.weapons || [], equipment: tmpl.equipment || [] })
+    .insert({ ...baseInsert, weapons: tmpl.weapons || [], equipment: tmpl.equipment || [], figure_url: tmpl.figure_url || '' })
     .select('id').single();
   if (scErr && /column .* does not exist/i.test(scErr.message || '')) {
     ({ data: creature, error: scErr } = await sb.from('session_creatures').insert(baseInsert).select('id').single());
@@ -23531,7 +23626,7 @@ async function spawnTemplate(templateId, templateName, avatarPath) {
     sex: tmpl.sex||'', age: tmpl.age||'Adult', height: tmpl.height||'Average',
     build: tmpl.build||'Average', social: tmpl.social||'Balanced', mental: tmpl.mental||'Balanced',
     stats: tmpl.stats||{}, skills: tmpl.skills||{}, held_items: tmpl.held_items||{}, armor: tmpl.armor||{},
-    weapons: tmpl.weapons||[], equipment: tmpl.equipment||[] };
+    weapons: tmpl.weapons||[], equipment: tmpl.equipment||[], figure_url: tmpl.figure_url||'' };
 
   let avatar_url = '';
   if (avatarPath) {

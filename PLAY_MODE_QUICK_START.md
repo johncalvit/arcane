@@ -62,6 +62,10 @@ This lists the armor you are wearing. To change it, go to Character Mode: buy pi
 
 Some items carry an enchantment. A **passive** one is always on while you wear the item (armor in a body slot; a ring on each hand, a necklace and a belt under **Jewelry & Accessories** on the Character Mode Loadout tab) or, for anything else, hold it in a hand. An **activated** one (a wand, say) casts a spell on demand: with the item worn or in hand, the Actions and Explore dialogs show an **Enchanted Items** section. It works at a fixed chance no matter who uses it, and a failure can miscast. It costs Quintessence; if you're short, each missing point costs 4 Stamina instead (some items insist on Quintessence). In combat, activating an item ends your round.
 
+### Full-body image
+
+A character can have a larger full-body picture, set under the portrait on the Traits tab in Character Mode (click the box; the picture is scaled down but not cropped, and a transparent background works). It is a visual hint of what a character carries, or what a monster looks like, without naming it. Click a token on the map and the picture appears in the panel at the left; click it for a large view (click again or press Esc to close). Other players see it only while that token is fully visible to them: not when it is just a shadow in the dark or out of sight. A monster template's picture is copied onto every monster spawned from it. You and the GM always see yours.
+
 ### Stats
 
 Your Final Attributes (Power, Toughness, Speed, and so on). A green or red number in brackets means the stat is currently raised or lowered, for example by blood loss or a potion.

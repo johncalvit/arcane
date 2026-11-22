@@ -435,6 +435,7 @@ function _paBind(el, ctx) {
       case 'view-techniques': _paViewTechniques(ctx.ent); break;
       case 'view-equipment': _paViewEquipment(ctx.ent, ctx.attrs); break;
       case 'edit-char': if (typeof exitPlayMode === 'function') exitPlayMode(); break;
+      case 'figure': openFigureLightbox(t.querySelector('img')?.src, d.name); break;
       case 'back': backToMyCharacter(); break;
       case 'cond': setCondition(d.token, d.key, d.on === '1'); break;
       case 'roll-skill': openRoller({ label: d.name, target: +d.pct, targetLabel: 'or less' }); break;
@@ -598,6 +599,7 @@ function renderEntityPanel(ref, opts = {}) {
   el.innerHTML = `
     ${opts.prefixHtml || ''}
     ${headerHtml}
+    ${(opts.header === 'back' || opts.header === 'self') ? _paFigureHtml(ent, isOwnSheet) : ''}
     ${_paSecHealth(ent, canEdit)}
     ${_paSecConditions(ent)}
     ${_paSecExplore(ent, canEdit)}
@@ -2174,4 +2176,32 @@ async function _dlgAct(d, id, body) {
       atCloseModal();
       break;
   }
+}
+
+// ── Full-body figure ──────────────────────────────────────────────────────────
+// Shown in a token's panel. The GM and the character's owner always see it; anyone else only while that
+// token is fully visible to them (not a shadow in the dark, not out of sight). A creature with no token on
+// the map shows nothing; a character who is simply not on the map (party list) does.
+function _figureShown(ent, isOwnSheet) {
+  if (isGM() || isOwnSheet) return true;
+  if (!ent.tokenId) return ent.type === 'char';
+  const el = document.getElementById('token-' + ent.tokenId);
+  return !!el && el.style.display !== 'none' && !el.classList.contains('token-shadow');
+}
+function _paFigureHtml(ent, isOwnSheet) {
+  const raw = (isOwnSheet && figureUrl) ? figureUrl : resolveAvatarUrl(ent.figureUrl);
+  if (!raw || !_figureShown(ent, isOwnSheet)) return '';
+  return `<div class="pa-figure" data-pa="figure" data-name="${_paEsc(ent.name)}" title="Click to enlarge"><img src="${_paEsc(raw)}" alt=""></div>`;
+}
+function openFigureLightbox(src, name) {
+  if (!src) return;
+  document.getElementById('figure-lightbox')?.remove();
+  const o = document.createElement('div');
+  o.id = 'figure-lightbox';
+  o.innerHTML = `<img src="${_paEsc(src)}" alt=""><div>${_paEsc(name || '')}</div>`;
+  const onKey = ev => { if (ev.key === 'Escape') close(); };
+  const close = () => { o.remove(); document.removeEventListener('keydown', onKey); };
+  o.onclick = close;
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(o);
 }
