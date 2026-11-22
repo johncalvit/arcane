@@ -8385,7 +8385,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122d';
+const VERSION = 'v0.1.20261122e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -8431,7 +8431,14 @@ const USE_TEST_BACKEND = TEST_HOSTS.includes(location.hostname)
   || (location.hostname === 'johncalvit.github.io' && location.pathname.startsWith('/arcane-test'));
 const SUPABASE_URL  = USE_TEST_BACKEND ? 'https://ffbuyfayicnoqwpokypz.supabase.co' : 'https://wicuxjjpyemfiinfkblw.supabase.co';
 const SUPABASE_KEY  = USE_TEST_BACKEND ? 'sb_publishable_Hf2MgWdi1rH-5K2zkoEZjA_W3S6JsTP' : 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';
-if (USE_TEST_BACKEND) document.title = '[TEST] ' + document.title;
+// The app rewrites document.title in several places (campaign name, config mode...), so keep the [TEST] tag
+// on with a watcher instead of setting it once.
+if (USE_TEST_BACKEND) {
+  const _tagTitle = () => { if (!document.title.startsWith('[TEST]')) document.title = '[TEST] ' + document.title; };
+  const _titleEl = document.querySelector('title');
+  if (_titleEl) new MutationObserver(_tagTitle).observe(_titleEl, { childList: true, characterData: true, subtree: true });
+  _tagTitle();
+}
 // Arriving from a password-reset email? Remember it now - supabase-js clears the URL once it reads the link.
 var _recoveryMode = /[#&?]type=recovery/.test(location.href);
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
