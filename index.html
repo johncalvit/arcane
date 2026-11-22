@@ -8385,7 +8385,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261121e';
+const VERSION = 'v0.1.20261122c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -8420,8 +8420,16 @@ setInterval(_checkForNewVersion, 5 * 60 * 1000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) _checkForNewVersion(); });
 
 // ─── SUPABASE ────────────────────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://wicuxjjpyemfiinfkblw.supabase.co';   // replace with your Supabase project URL
-const SUPABASE_KEY  = 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';      // replace with your Supabase anon/public key
+// Which database this copy talks to. Production unless the page is served from a test address
+// (a second site running this same code), where it uses the separate grim-toll-test project so
+// testers never touch real campaigns. Locally, http://127.0.0.1:PORT uses the test database while
+// http://localhost:PORT keeps using production (the address survives sign-in redirects, a ?query would not;
+// the two also keep separate browser storage).
+const TEST_HOSTS = ['grimtoll-test.netlify.app', '127.0.0.1'];
+const USE_TEST_BACKEND = TEST_HOSTS.includes(location.hostname);
+const SUPABASE_URL  = USE_TEST_BACKEND ? 'https://ffbuyfayicnoqwpokypz.supabase.co' : 'https://wicuxjjpyemfiinfkblw.supabase.co';
+const SUPABASE_KEY  = USE_TEST_BACKEND ? 'sb_publishable_Hf2MgWdi1rH-5K2zkoEZjA_W3S6JsTP' : 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';
+if (USE_TEST_BACKEND) document.title = '[TEST] ' + document.title;
 // Arriving from a password-reset email? Remember it now - supabase-js clears the URL once it reads the link.
 var _recoveryMode = /[#&?]type=recovery/.test(location.href);
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -8520,7 +8528,7 @@ async function submitSignup() {
       // Land confirmed users back on the app (must be in Supabase Redirect URLs
       // allowlist). Overrides the project Site URL, which was sending them to
       // the bare github.io root and 404ing.
-      emailRedirectTo: 'https://johncalvit.github.io/arcane/',
+      emailRedirectTo: USE_TEST_BACKEND ? _authReturnUrl() : 'https://johncalvit.github.io/arcane/',
     }
   });
   if (error) showAuthError(error.message);
@@ -9733,6 +9741,11 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 (async () => {
+  // panels.js is injected at the very end of the page. With no saved login the session check below resolves
+  // instantly - before that script has loaded - and the UI builders that use its helpers (_paEsc...) threw
+  // and aborted startup (a first-time visitor saw a half-built app). Wait for the full load if needed.
+  if (typeof _paEsc !== 'function' && document.readyState !== 'complete')
+    await new Promise(r => window.addEventListener('load', r, { once: true }));
   // Restore session if already logged in (e.g. page refresh)
   const { data: { session } } = await sb.auth.getSession();
 
