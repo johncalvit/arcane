@@ -8385,7 +8385,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122c';
+const VERSION = 'v0.1.20261122d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -8425,8 +8425,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) _che
 // testers never touch real campaigns. Locally, http://127.0.0.1:PORT uses the test database while
 // http://localhost:PORT keeps using production (the address survives sign-in redirects, a ?query would not;
 // the two also keep separate browser storage).
-const TEST_HOSTS = ['grimtoll-test.netlify.app', '127.0.0.1'];
-const USE_TEST_BACKEND = TEST_HOSTS.includes(location.hostname);
+// The hosted test copy is the arcane-test repo's GitHub Pages site (a path under johncalvit.github.io).
+const TEST_HOSTS = ['127.0.0.1'];
+const USE_TEST_BACKEND = TEST_HOSTS.includes(location.hostname)
+  || (location.hostname === 'johncalvit.github.io' && location.pathname.startsWith('/arcane-test'));
 const SUPABASE_URL  = USE_TEST_BACKEND ? 'https://ffbuyfayicnoqwpokypz.supabase.co' : 'https://wicuxjjpyemfiinfkblw.supabase.co';
 const SUPABASE_KEY  = USE_TEST_BACKEND ? 'sb_publishable_Hf2MgWdi1rH-5K2zkoEZjA_W3S6JsTP' : 'sb_publishable_Cj-1EDybo0RJM0gzP9tI0Q_ESVbWGPV';
 if (USE_TEST_BACKEND) document.title = '[TEST] ' + document.title;
