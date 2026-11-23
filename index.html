@@ -302,6 +302,17 @@
   .pa-figure { margin: 4px 0 10px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); cursor: zoom-in; }
   .pa-figure:hover { border-color: var(--gold); }
   .pa-figure img { display: block; margin: 0 auto; max-width: 100%; max-height: 240px; object-fit: contain; }
+  /* Play-mode identity block: figure (or token portrait) on the left, name / level / XP / species / tiles on the right. */
+  .pa-id2 { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+  .pa-id2-fig { flex: 0 0 44%; max-width: 160px; min-width: 0; }
+  .pa-id2-fig .pa-figure { margin: 0; }
+  .pa-id2-fig .pa-figure img { max-height: 280px; }
+  .pa-id2-fig .pa-id2-av { width: 100%; height: 120px; border: 2px solid var(--gold); }
+  .pa-id2-info { flex: 1; min-width: 0; }
+  .pa-id2-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+  .pa-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; }
+  .pa-mini { background: var(--bg3); border: 1px solid var(--border); border-radius: 4px; padding: 3px 5px; min-width: 0; text-align: center; }
+  .pa-mini-v { font-size: 0.84rem; font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #figure-lightbox { position: fixed; inset: 0; z-index: 3700; background: rgba(0,0,0,0.88); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; cursor: zoom-out; }
   #figure-lightbox img { max-width: 92vw; max-height: 86vh; object-fit: contain; border: 1px solid var(--gold); border-radius: 4px; background: var(--bg3); }
   #figure-lightbox div { color: var(--gold2); font-family: var(--ui-font); font-size: 1rem; }
@@ -8563,7 +8574,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123a';
+const VERSION = 'v0.1.20261123b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not

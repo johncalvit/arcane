@@ -64,7 +64,7 @@ Some items carry an enchantment. A **passive** one is always on while you wear t
 
 ### Full-body image
 
-A character can have a larger full-body picture, set under the portrait on the Traits tab in Character Mode (click the box; the picture is scaled down but not cropped, and a transparent background works). It is a visual hint of what a character carries, or what a monster looks like, without naming it. Click a token on the map and the picture appears in the panel at the left; click it for a large view (click again or press Esc to close). Other players see it only while that token is fully visible to them: not when it is just a shadow in the dark or out of sight. A monster template's picture is copied onto every monster spawned from it. You and the GM always see yours.
+A character can have a larger full-body picture, set under the portrait on the Traits tab in Character Mode (click the box; the picture is scaled down but not cropped, and a transparent background works). It is a visual hint of what a character carries, or what a monster looks like, without naming it. Click a token on the map and the picture appears in the upper left of the panel (replacing the round portrait), with the name, level and class, XP, species, Speed, Height, Weight and Size beside it; click it for a large view (click again or press Esc to close). Other players see it only while that token is fully visible to them: not when it is just a shadow in the dark or out of sight. A monster template's picture is copied onto every monster spawned from it. You and the GM always see yours.
 
 ### Monk
 

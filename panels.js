@@ -563,33 +563,31 @@ function renderEntityPanel(ref, opts = {}) {
     const avatarHtml = avatarSrc
       ? `<img src="${_paEsc(avatarSrc)}" style="width:100%;height:100%;object-fit:cover;object-position:top center;" onerror="this.style.display='none'">`
       : `<span style="font-size:1.4rem;opacity:0.4;">${fallbackIcon}</span>`;
-    // Identity lines: "Level 4 • Human" / "Caster • Introvert" for characters (own sheet
-    // reads the live builder fields), "Species · Body type" for creatures.
-    let line1, line2 = '';
+    // Layout: the full-body figure fills the upper left (the round token portrait only stands in when there is no
+    // figure, or it is not visible to this viewer); to its right come the name, "Level N • Class", XP, species and
+    // the Speed / Height / Weight / Size tiles. For creatures: name, species and the tiles.
+    let classLine = '';
     if (ent.type === 'char') {
       const cls = isOwnSheet && typeof characterClass !== 'undefined' ? characterClass : (ent.stats?.CharClass || 'Warrior');
-      const soc = isOwnSheet ? (document.getElementById('sel-social')?.value || ent.social) : ent.social;
-      line1 = `Level ${ent.level ?? 1} • ${_paEsc(ent.species)}`;
-      line2 = [cls, soc].filter(Boolean).map(_paEsc).join(' • ');
-    } else {
-      line1 = _paEsc(sub);
+      classLine = `<div class="pa-id-sub">Level ${ent.level ?? 1} • ${_paEsc(cls)}</div>`;
     }
+    const speciesLine = `<div class="pa-id-sub">${_paEsc(ent.type === 'char' ? ent.species : sub)}</div>`;
     const xpLine = ent.type === 'char'
       ? `<div class="pa-id-xp" title="Experience points">${Math.round(ent.stats?.XP || 0)} XP</div>` : '';
     const editBtn = isOwnSheet
       ? `<button class="pa-edit-btn" data-pa="edit-char" title="Edit character (Character Mode)">${_paIcon('pencil')}</button>` : '';
+    const figHtml = _paFigureHtml(ent, isOwnSheet);
+    const sideHtml = figHtml || `<div class="ps-compact-avatar pa-id2-av">${avatarHtml}</div>`;
+    const mini = (l, v) => `<div class="pa-mini"><div class="pa-tile-l">${l}</div><div class="pa-mini-v">${v}</div></div>`;
     headerHtml = `${backBtn}
-      <div class="pa-id">
-        <div class="ps-compact-avatar">${avatarHtml}</div>
-        <div class="pa-id-text">
-          <div class="pa-id-name">${_paEsc(name)}</div>
-          <div class="pa-id-sub">${line1}</div>
-          ${line2 ? `<div class="pa-id-sub">${line2}</div>` : ''}
-          ${xpLine}
+      <div class="pa-id2">
+        <div class="pa-id2-fig">${sideHtml}</div>
+        <div class="pa-id2-info">
+          <div class="pa-id2-top"><div class="pa-id-name">${_paEsc(name)}</div>${editBtn}</div>
+          ${classLine}${xpLine}${speciesLine}
+          <div class="pa-mini-grid">${mini('Speed', speedStr.replace(' (crawl)', ''))}${mini('Height', heightStr)}${mini('Weight', weightStr)}${mini('Size', sizeStr)}</div>
         </div>
-        ${editBtn}
-      </div>
-      ${tilesHtml}`;
+      </div>`;
   } else if (opts.header === 'mini') {
     headerHtml = `
       <div class="pa-id-sub" style="margin-bottom:6px;">${_paEsc(ent.type === 'char' ? `Level ${ent.level ?? 1} • ${ent.species}` : sub)}</div>
@@ -599,7 +597,6 @@ function renderEntityPanel(ref, opts = {}) {
   el.innerHTML = `
     ${opts.prefixHtml || ''}
     ${headerHtml}
-    ${(opts.header === 'back' || opts.header === 'self') ? _paFigureHtml(ent, isOwnSheet) : ''}
     ${_paSecHealth(ent, canEdit)}
     ${_paSecConditions(ent)}
     ${_paSecExplore(ent, canEdit)}
