@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123d';
+const VERSION = 'v0.1.20261123e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -23409,6 +23409,72 @@ function _wallDrawShape(svg, w, color, fill, dashed, isObstacle, index) {
   }
 }
 
+// ═══ WALL IMPORT / EXPORT ═════════════════════════════════════════════════════
+// Walls travel as JSON: {"format":"grim-toll-walls","version":1,"walls":[{type,points:[{x_pct,y_pct}..],...}]}
+// (a bare array of walls works too). Coordinates are percent of the map image (0-100). Anything that does not
+// check out is skipped and counted, never half-imported. See tools/WALLS_FORMAT.md.
+function _wallsFromImport(text) {
+  let data;
+  try { data = JSON.parse(text); } catch (e) { return { error: 'That file is not valid JSON.' }; }
+  const list = Array.isArray(data) ? data : (data && Array.isArray(data.walls) ? data.walls : null);
+  if (!list) return { error: 'No "walls" list found in that file.' };
+  const walls = []; let skipped = 0;
+  const stamp = Date.now();
+  list.forEach((w, i) => {
+    if (!w || typeof w !== 'object' || !['line', 'rect', 'circle'].includes(w.type) || !Array.isArray(w.points)) { skipped++; return; }
+    const pts = w.points.map(p => ({ x_pct: Number(p && p.x_pct), y_pct: Number(p && p.y_pct) }));
+    const need = w.type === 'line' ? 2 : 2;
+    if (pts.length < need || (w.type !== 'line' && pts.length !== 2)
+        || pts.some(p => !isFinite(p.x_pct) || !isFinite(p.y_pct) || p.x_pct < 0 || p.x_pct > 100 || p.y_pct < 0 || p.y_pct > 100)) { skipped++; return; }
+    const o = {
+      id: 'wall-' + stamp + '-' + i + '-' + Math.round(Math.random() * 9999),
+      type: w.type,
+      points: pts.map(p => ({ x_pct: Math.round(p.x_pct * 1000) / 1000, y_pct: Math.round(p.y_pct * 1000) / 1000 })),
+      blocksVision: w.blocksVision !== false,
+      blocksMovement: w.blocksMovement !== false,
+    };
+    if (w.door === true) { o.door = true; o.open = w.open === true; if (w.secret === true) o.secret = true; }
+    walls.push(o);
+  });
+  return { walls, skipped };
+}
+
+function exportMapWalls() {
+  const walls = mapWalls.filter(w => !w.maxHp); // spell-made obstacles are temporary; leave them out
+  const blob = new Blob([JSON.stringify({ format: 'grim-toll-walls', version: 1, walls }, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'walls.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function importMapWalls(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const r = _wallsFromImport(String(fr.result || ''));
+    if (r.error) { showToast(r.error, 'warn'); return; }
+    if (!r.walls.length) { showToast('No usable walls in that file' + (r.skipped ? ` (${r.skipped} skipped).` : '.'), 'warn'); return; }
+    const have = mapWalls.filter(w => !w.maxHp).length;
+    let replace = false;
+    if (have) {
+      const msg = `Import ${r.walls.length} wall${r.walls.length === 1 ? '' : 's'}` + (r.skipped ? ` (${r.skipped} unusable skipped)` : '') +
+        ` into this map, which already has ${have}.\n\nOK = REPLACE the existing walls\nCancel = ADD to them (or close this to stop)`;
+      if (!confirm(msg)) { if (!confirm(`Add ${r.walls.length} walls to the existing ${have}?`)) return; }
+      else replace = true;
+    } else if (!confirm(`Import ${r.walls.length} walls` + (r.skipped ? ` (${r.skipped} unusable skipped)` : '') + ' into this map?')) return;
+    mapWalls = replace ? mapWalls.filter(w => w.maxHp).concat(r.walls) : mapWalls.concat(r.walls);
+    saveMapWalls();
+    drawWalls();
+    if (typeof drawFog === 'function') drawFog();
+    showToast(`${replace ? 'Replaced with' : 'Added'} ${r.walls.length} walls.`, 'success');
+    _openManageWallsModal();
+  };
+  fr.readAsText(file);
+}
+
 async function _openManageWallsModal() {
   const existing = document.getElementById('manage-walls-modal');
   if (existing) existing.remove();
@@ -23485,6 +23551,14 @@ async function _openManageWallsModal() {
       <span style="display:flex;gap:8px;align-items:center;">${controls}</span>`;
     card.appendChild(row);
   });
+
+  const ioRow = document.createElement('div');
+  ioRow.style.cssText = 'display:flex;gap:8px;justify-content:center;flex-wrap:wrap;';
+  const ioBtnCss = `padding:6px 14px;border-radius:5px;cursor:pointer;font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--gold);background:var(--bg3);color:var(--gold2);`;
+  ioRow.innerHTML = `<button style="${ioBtnCss}" title="Save this map's walls and doors as a file" onclick="exportMapWalls()">Export walls</button>
+    <button style="${ioBtnCss}" title="Load walls from a file (made by Export, or traced with tools/wall-tracer.html)" onclick="document.getElementById('walls-import-input').click()">Import walls</button>
+    <input type="file" id="walls-import-input" accept=".json,application/json" style="display:none" onchange="importMapWalls(this)">`;
+  card.appendChild(ioRow);
 
   const closeBtn = document.createElement('button');
   closeBtn.textContent = 'Close';

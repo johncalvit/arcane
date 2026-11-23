@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grim Toll - Wall Tracer</title>
+<style>
+  :root { --bg:#14110d; --bg2:#1d1913; --line:#3a3024; --gold:#c9a84c; --text:#e6dcc6; --dim:#9a8f78; }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 14px 18px 40px; }
+  h1 { color: var(--gold); font-size: 1.25rem; margin: 0 0 6px; }
+  p.help { color: var(--dim); max-width: 880px; margin: 4px 0 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; background: var(--bg2); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; margin-bottom: 10px; }
+  .bar label { display: flex; flex-direction: column; font-size: 0.72rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; gap: 2px; }
+  .bar label span.v { color: var(--gold); font-weight: bold; }
+  .bar input[type=range] { width: 150px; }
+  button { background: var(--bg2); color: var(--gold); border: 1px solid var(--gold); border-radius: 5px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  button:hover { background: #2a2418; }
+  #stats { color: var(--dim); margin: 6px 0; min-height: 1.3em; }
+  .wrap { overflow: auto; border: 1px solid var(--line); border-radius: 6px; background: #000; display: inline-block; max-width: 100%; }
+  canvas { display: block; max-width: 100%; height: auto; }
+  .chk { flex-direction: row !important; align-items: center; gap: 6px !important; text-transform: none !important; font-size: 0.85rem !important; color: var(--text) !important; }
+</style>
+</head>
+<body>
+<h1>Wall Tracer</h1>
+<p class="help">Loads a map image, finds where the lit floor meets the dark void, and turns that edge into wall lines for Grim Toll.
+Pick the map, adjust the sliders until the red lines sit on the walls, then <b>Download walls</b> and use <b>Import walls</b> in Manage Walls
+on the same map. Doors and secret doors are not traced - add those by hand. Works best on maps with a dark background and lighter floors.</p>
+
+<div class="bar">
+  <label>Map image <input type="file" id="file" accept="image/*"></label>
+  <label>Method <select id="method"><option value="grid">Grid cells (straight walls)</option><option value="free">Free outline</option></select></label>
+  <label>Grid cell size (px, blank = detect) <span class="v" id="v-gridInfo"></span><input type="number" id="cell" min="8" max="200" step="0.1" placeholder="auto" style="width:90px"></label>
+  <label>Floor brightness cutoff <span class="v" id="v-thr"></span><input type="range" id="thr" min="10" max="90" step="1" value="26"></label>
+  <label>Texture sensitivity <span class="v" id="v-tex"></span><input type="range" id="tex" min="0" max="12" step="0.25" value="2"></label>
+  <label>Smoothing (px) <span class="v" id="v-smooth"></span><input type="range" id="smooth" min="0" max="12" step="1" value="4"></label>
+  <label>Ignore specks under (px) <span class="v" id="v-minArea"></span><input type="range" id="minArea" min="0" max="4000" step="50" value="600"></label>
+  <label>Simplify (px) <span class="v" id="v-eps"></span><input type="range" id="eps" min="1" max="12" step="0.5" value="3"></label>
+  <label class="chk"><input type="checkbox" id="ortho" checked> Straighten to horizontal / vertical</label>
+  <label class="chk"><input type="checkbox" id="showMask"> Show floor mask</label>
+</div>
+<div class="bar">
+  <button id="dl">Download walls (.json)</button>
+  <button id="cp">Copy walls JSON</button>
+  <span id="stats"></span>
+</div>
+<div class="wrap"><canvas id="cv" width="600" height="400"></canvas></div>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+let img = null, imgData = null, W = 0, H = 0, walls = [], maskCache = null, fileName = 'map', lumCache = null;
+
+// ── image helpers ──────────────────────────────────────────────────────────
+function boxBlur(src, w, h, r) {
+  if (r <= 0) return src;
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {                       // horizontal
+    let acc = 0; const row = y * w;
+    for (let x = -r; x <= r; x++) acc += src[row + Math.min(w - 1, Math.max(0, x))];
+    for (let x = 0; x < w; x++) {
+      tmp[row + x] = acc / (2 * r + 1);
+      acc += src[row + Math.min(w - 1, x + r + 1)] - src[row + Math.max(0, x - r)];
+    }
+  }
+  for (let x = 0; x < w; x++) {                       // vertical
+    let acc = 0;
+    for (let y = -r; y <= r; y++) acc += tmp[Math.min(h - 1, Math.max(0, y)) * w + x];
+    for (let y = 0; y < h; y++) {
+      out[y * w + x] = acc / (2 * r + 1);
+      acc += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x];
+    }
+  }
+  return out;
+}
+
+// Connected components over `val` (4-neighbour); regions of that value smaller than minArea are flipped.
+function flipSmall(mask, w, h, val, minArea) {
+  if (minArea <= 0) return;
+  const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
+  for (let s = 0; s < w * h; s++) {
+    if (seen[s] || mask[s] !== val) continue;
+    let sp = 0, n = 0; stack[sp++] = s; seen[s] = 1;
+    const members = [];
+    while (sp) {
+      const p = stack[--sp]; members.push(p); n++;
+      const x = p % w, y = (p - x) / w;
+      if (x > 0     && !seen[p - 1] && mask[p - 1] === val) { seen[p - 1] = 1; stack[sp++] = p - 1; }
+      if (x < w - 1 && !seen[p + 1] && mask[p + 1] === val) { seen[p + 1] = 1; stack[sp++] = p + 1; }
+      if (y > 0     && !seen[p - w] && mask[p - w] === val) { seen[p - w] = 1; stack[sp++] = p - w; }
+      if (y < h - 1 && !seen[p + w] && mask[p + w] === val) { seen[p + w] = 1; stack[sp++] = p + w; }
+    }
+    if (n < minArea) for (const p of members) mask[p] = 1 - val;
+  }
+}
+
+function buildMask(opt) {
+  const d = imgData.data, lum = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) lum[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+  lumCache = lum;
+  const sm = boxBlur(lum, W, H, 1);
+  let m = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) m[i] = sm[i] > opt.thr ? 1 : 0;
+  // Dark floor (shadowed corners) is still textured, while the void is perfectly flat: count a pixel as floor too
+  // where the blurred local contrast is above the texture cutoff (0 = off).
+  if (opt.tex > 0) {
+    const g = new Float32Array(W * H);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x; g[i] = Math.abs(lum[i + 1] - lum[i - 1]) + Math.abs(lum[i + W] - lum[i - W]);
+    }
+    const gb = boxBlur(g, W, H, 2);
+    for (let i = 0; i < W * H; i++) if (gb[i] > opt.tex) m[i] = 1;
+  }
+  if (opt.smooth > 0) { const b = boxBlur(m, W, H, opt.smooth); for (let i = 0; i < W * H; i++) m[i] = b[i] > 0.5 ? 1 : 0; }
+  const mask = new Uint8Array(W * H); for (let i = 0; i < W * H; i++) mask[i] = m[i] ? 1 : 0;
+  flipSmall(mask, W, H, 1, opt.minArea);   // drop floor specks
+  flipSmall(mask, W, H, 0, opt.minArea);   // fill small holes (furniture, shadows)
+  return mask;
+}
+
+// ── marching squares -> closed loops (pixel coordinates) ─────────────────────
+function marching(mask, w, h) {
+  const PW = w + 2, PH = h + 2, pm = new Uint8Array(PW * PH);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) pm[(y + 1) * PW + x + 1] = mask[y * w + x];
+  const segs = [];                                   // each: [keyA, keyB]
+  const K = 2 * PH + 3;
+  const key = (X, Y) => X * K + Y;
+  for (let y = 0; y < PH - 1; y++) for (let x = 0; x < PW - 1; x++) {
+    const a = pm[y * PW + x], b = pm[y * PW + x + 1], c = pm[(y + 1) * PW + x + 1], dd = pm[(y + 1) * PW + x];
+    const c4 = a * 8 + b * 4 + c * 2 + dd;
+    if (c4 === 0 || c4 === 15) continue;
+    const T = key(2 * x + 1, 2 * y), R = key(2 * x + 2, 2 * y + 1), B = key(2 * x + 1, 2 * y + 2), L = key(2 * x, 2 * y + 1);
+    switch (c4) {
+      case 1: case 14: segs.push([L, B]); break;
+      case 2: case 13: segs.push([B, R]); break;
+      case 3: case 12: segs.push([L, R]); break;
+      case 4: case 11: segs.push([T, R]); break;
+      case 5: segs.push([T, R], [L, B]); break;
+      case 6: case 9: segs.push([T, B]); break;
+      case 7: case 8: segs.push([T, L]); break;
+      case 10: segs.push([T, L], [B, R]); break;
+    }
+  }
+  const adj = new Map();
+  segs.forEach((s, i) => { for (const k of s) { if (!adj.has(k)) adj.set(k, []); adj.get(k).push(i); } });
+  const used = new Uint8Array(segs.length), loops = [];
+  const toPt = k => { const X = Math.floor(k / K), Y = k % K; return { x: X / 2 - 1, y: Y / 2 - 1 }; };
+  for (let i = 0; i < segs.length; i++) {
+    if (used[i]) continue;
+    const pts = []; let cur = segs[i][0], si = i;
+    for (let guard = 0; guard < 4e6; guard++) {
+      used[si] = 1; pts.push(toPt(cur));
+      const s = segs[si], next = s[0] === cur ? s[1] : s[0];
+      const cand = (adj.get(next) || []).find(j => !used[j]);
+      cur = next;
+      if (cand === undefined) break;
+      si = cand;
+    }
+    if (pts.length > 3) loops.push(pts);
+  }
+  return loops;
+}
+
+// ── simplify ────────────────────────────────────────────────────────────────
+function segDist(p, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y, L2 = dx * dx + dy * dy;
+  let t = L2 ? ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2 : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+function dp(pts, i0, i1, eps, keep) {
+  let best = -1, bi = -1;
+  for (let i = i0 + 1; i < i1; i++) { const d = segDist(pts[i], pts[i0], pts[i1]); if (d > best) { best = d; bi = i; } }
+  if (best > eps) { keep[bi] = 1; dp(pts, i0, bi, eps, keep); dp(pts, bi, i1, eps, keep); }
+}
+function simplifyClosed(pts, eps) {
+  const n = pts.length; let far = 0, fd = -1;
+  for (let i = 1; i < n; i++) { const d = Math.hypot(pts[i].x - pts[0].x, pts[i].y - pts[0].y); if (d > fd) { fd = d; far = i; } }
+  const ring = pts.concat([pts[0]]), keep = new Uint8Array(n + 1);
+  keep[0] = keep[far] = keep[n] = 1;
+  dp(ring, 0, far, eps, keep); dp(ring, far, n, eps, keep);
+  const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push(ring[i]);
+  return out;
+}
+
+// ── straighten near-horizontal / near-vertical runs ─────────────────────────
+function orthogonalize(v, tolDeg) {
+  const n = v.length; if (n < 4) return v;
+  const tan = Math.tan(tolDeg * Math.PI / 180);
+  const cls = i => { const a = v[i], b = v[(i + 1) % n], dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y);
+    return dy <= tan * dx ? 'H' : dx <= tan * dy ? 'V' : 'D'; };
+  // merge consecutive same-class H/V segments (drop the vertex between them)
+  let pts = v.slice(), changed = true;
+  while (changed && pts.length > 4) {
+    changed = false; const m = pts.length;
+    const c = i => { const a = pts[i], b = pts[(i + 1) % m], dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y); return dy <= tan * dx ? 'H' : dx <= tan * dy ? 'V' : 'D'; };
+    for (let i = 0; i < m; i++) {
+      const k = c(i), k2 = c((i + 1) % m);
+      if (k !== 'D' && k === k2) { pts.splice((i + 1) % m, 1); changed = true; break; }
+    }
+  }
+  const m = pts.length;
+  const c = i => { const a = pts[i], b = pts[(i + 1) % m], dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y); return dy <= tan * dx ? 'H' : dx <= tan * dy ? 'V' : 'D'; };
+  const seg = pts.map((_, i) => { const a = pts[i], b = pts[(i + 1) % m], k = c(i);
+    return { k, y: (a.y + b.y) / 2, x: (a.x + b.x) / 2 }; });
+  return pts.map((p, i) => {
+    const prev = seg[(i - 1 + m) % m], cur = seg[i], q = { x: p.x, y: p.y };
+    for (const s of [prev, cur]) { if (s.k === 'H') q.y = s.y; else if (s.k === 'V') q.x = s.x; }
+    return q;
+  });
+}
+
+
+// ── grid detection + cell tracing ───────────────────────────────────────────
+function integral(mask, w, h) {
+  const I = new Uint32Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += mask[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + row; } }
+  return I;
+}
+function cellFrac(I, w, h, x0f, y0f, s) {
+  const x0 = Math.max(0, Math.round(x0f)), y0 = Math.max(0, Math.round(y0f)), x1 = Math.min(w, Math.round(x0f + s)), y1 = Math.min(h, Math.round(y0f + s));
+  if (x1 <= x0 || y1 <= y0) return -1;
+  const sum = I[y1 * (w + 1) + x1] - I[y0 * (w + 1) + x1] - I[y1 * (w + 1) + x0] + I[y0 * (w + 1) + x0];
+  return sum / ((x1 - x0) * (y1 - y0));
+}
+function purity(I, w, h, s, ox, oy) {
+  let sc = 0; const i0 = Math.floor(-ox / s), i1 = Math.ceil((w - ox) / s), j0 = Math.floor(-oy / s), j1 = Math.ceil((h - oy) / s);
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) { const f = cellFrac(I, w, h, ox + i * s, oy + j * s, s); if (f >= 0) sc += Math.abs(f - 0.5); }
+  return sc;
+}
+// Rough grid period from the repeating floor-tile lines (autocorrelation of the edge energy along x and y).
+function detectPeriod() {
+  const lum = lumCache, col = new Float32Array(W), row = new Float32Array(H);
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const i = y * W + x; col[x] += Math.abs(lum[i + 1] - lum[i - 1]); row[y] += Math.abs(lum[i + W] - lum[i - W]);
+  }
+  const flat = a => { const n = a.length, o = new Float32Array(n); let m = 0; for (const v of a) m += v; m /= n; const sm = boxBlur(a, n, 1, 30); for (let i = 0; i < n; i++) o[i] = a[i] - sm[i]; return o; };
+  const c = flat(col), r = flat(row), score = [];
+  for (let L = 12; L <= 110; L++) {
+    let a = 0, na = 0, b = 0, nb = 0;
+    for (let x = 0; x + L < W; x++) { a += c[x] * c[x + L]; na++; }
+    for (let y = 0; y + L < H; y++) { b += r[y] * r[y + L]; nb++; }
+    score[L] = (a / Math.max(1, na)) / Math.max(1e-6, c.reduce((q, v) => q + v * v, 0) / W) + (b / Math.max(1, nb)) / Math.max(1e-6, r.reduce((q, v) => q + v * v, 0) / H);
+  }
+  let best = 12; for (let L = 12; L <= 110; L++) if (score[L] > score[best]) best = L;
+  for (let L = 12; L < best; L++) if (score[L] >= 0.85 * score[best] && score[L] >= score[L - 1] && score[L] >= (score[L + 1] || 0)) return L; // smallest strong peak (not a multiple)
+  return best;
+}
+function detectGrid(I, userS) {
+  const L = userS > 0 ? userS : detectPeriod();
+  const sLo = userS > 0 ? userS : L - 1.5, sHi = userS > 0 ? userS : L + 1.5, step = userS > 0 ? 1 : 0.1;
+  let best = { sc: -1, s: L, ox: 0, oy: 0 };
+  for (let s = sLo; s <= sHi + 1e-9; s += step) {
+    for (let ox = 0; ox < s; ox += 1) for (let oy = 0; oy < s; oy += 1) {
+      const sc = purity(I, W, H, s, ox, oy); if (sc > best.sc) best = { sc, s, ox, oy };
+    }
+  }
+  return best;
+}
+// Floor cells (more than half floor) -> outline loops along the cell edges, straight by construction.
+function gridLoops(mask, g) {
+  const I = integral(mask, W, H), s = g.s, ox = g.ox, oy = g.oy;
+  const i0 = Math.floor(-ox / s), i1 = Math.ceil((W - ox) / s), j0 = Math.floor(-oy / s), j1 = Math.ceil((H - oy) / s);
+  const nI = i1 - i0, nJ = j1 - j0, F = new Uint8Array(nI * nJ);
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) { const f = cellFrac(I, W, H, ox + i * s, oy + j * s, s); F[(j - j0) * nI + (i - i0)] = f > 0.5 ? 1 : 0; }
+  const isF = (i, j) => i >= i0 && i < i1 && j >= j0 && j < j1 && F[(j - j0) * nI + (i - i0)] === 1;
+  const key = (i, j) => (i - i0 + 1) * 100000 + (j - j0 + 1);
+  const out = new Map(), add = (a, b) => { if (!out.has(a)) out.set(a, []); out.get(a).push(b); };
+  for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+    if (!isF(i, j)) continue;
+    if (!isF(i, j - 1)) add(key(i, j), key(i + 1, j));
+    if (!isF(i + 1, j)) add(key(i + 1, j), key(i + 1, j + 1));
+    if (!isF(i, j + 1)) add(key(i + 1, j + 1), key(i, j + 1));
+    if (!isF(i - 1, j)) add(key(i, j + 1), key(i, j));
+  }
+  const unkey = k => ({ i: Math.floor(k / 100000) - 1 + i0, j: (k % 100000) - 1 + j0 });
+  const loops = [];
+  for (const [start] of out) {
+    while (out.get(start) && out.get(start).length) {
+      const pts = [start]; let cur = out.get(start).pop();
+      for (let guard = 0; guard < 1e6 && cur !== start; guard++) {
+        pts.push(cur); const nx = out.get(cur); if (!nx || !nx.length) break; cur = nx.pop();
+      }
+      const v = pts.map(unkey);
+      const keep = v.filter((p, k) => { const a = v[(k - 1 + v.length) % v.length], b = v[(k + 1) % v.length]; return (p.i - a.i) * (b.j - p.j) !== (p.j - a.j) * (b.i - p.i); });
+      if (keep.length >= 4) loops.push(keep.map(p => ({ x: Math.max(0, Math.min(W, ox + p.i * s)), y: Math.max(0, Math.min(H, oy + p.j * s)) })));
+    }
+  }
+  return loops;
+}
+
+// ── pipeline ────────────────────────────────────────────────────────────────
+function run() {
+  if (!imgData) return;
+  const opt = { thr: +$('thr').value, tex: +$('tex').value, smooth: +$('smooth').value, minArea: +$('minArea').value, eps: +$('eps').value };
+  for (const k of ['thr', 'tex', 'smooth', 'minArea', 'eps']) $('v-' + k).textContent = $(k).value;
+  const t0 = performance.now();
+  const mask = buildMask(opt); maskCache = mask;
+  let loops, gridNote = '';
+  if ($('method').value === 'grid') {
+    const g = detectGrid(integral(mask, W, H), parseFloat($('cell').value) || 0);
+    loops = gridLoops(mask, g);
+    gridNote = ` Grid ${g.s.toFixed(1)} px, offset ${g.ox}/${g.oy}.`;
+    $('v-gridInfo').textContent = g.s.toFixed(1) + ' px';
+  } else {
+    loops = marching(mask, W, H).map(l => simplifyClosed(l, opt.eps));
+    if ($('ortho').checked) loops = loops.map(l => orthogonalize(l, 12));
+  }
+  loops = loops.filter(l => l.length >= 3);
+  const pct = (x, y) => ({ x_pct: +(Math.max(0, Math.min(W, x)) / W * 100).toFixed(3), y_pct: +(Math.max(0, Math.min(H, y)) / H * 100).toFixed(3) });
+  walls = loops.map((l, i) => {
+    const points = l.map(p => pct(p.x, p.y)); points.push({ ...points[0] });
+    return { id: 'trace-' + Date.now().toString(36) + '-' + i, type: 'line', points, blocksVision: true, blocksMovement: true };
+  });
+  draw(mask);
+  const segs = walls.reduce((n, w) => n + w.points.length - 1, 0);
+  $('stats').textContent = `${walls.length} wall outlines, ${segs} segments (${Math.round(performance.now() - t0)} ms).${gridNote}`;
+}
+function draw(mask) {
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  cv.width = W; cv.height = H;
+  ctx.drawImage(img, 0, 0);
+  if ($('showMask').checked && mask) {
+    const o = ctx.getImageData(0, 0, W, H);
+    for (let i = 0; i < W * H; i++) { const v = mask[i] ? 255 : 0; o.data[i * 4] = v; o.data[i * 4 + 1] = v; o.data[i * 4 + 2] = v; o.data[i * 4 + 3] = 255; }
+    ctx.putImageData(o, 0, 0);
+  }
+  ctx.lineWidth = Math.max(1.5, W / 450); ctx.strokeStyle = '#ff3b3b'; ctx.lineJoin = 'round';
+  for (const w of walls) {
+    ctx.beginPath();
+    w.points.forEach((p, i) => { const x = p.x_pct / 100 * W, y = p.y_pct / 100 * H; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#ffd24a';
+  for (const w of walls) for (const p of w.points) ctx.fillRect(p.x_pct / 100 * W - 1.5, p.y_pct / 100 * H - 1.5, 3, 3);
+}
+
+function loadImage(src, name) {
+  const im = new Image();
+  im.onload = () => {
+    img = im; W = im.naturalWidth; H = im.naturalHeight; fileName = (name || 'map').replace(/\.[^.]+$/, '');
+    const c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'); x.drawImage(im, 0, 0); imgData = x.getImageData(0, 0, W, H);
+    run();
+  };
+  im.onerror = () => { $('stats').textContent = 'Could not open that image.'; };
+  im.src = src;
+}
+
+function exportJson() {
+  return JSON.stringify({ format: 'grim-toll-walls', version: 1, source: fileName, walls }, null, 1);
+}
+$('file').onchange = e => { const f = e.target.files[0]; if (f) loadImage(URL.createObjectURL(f), f.name); };
+let deb = null;
+for (const id of ['method', 'cell', 'thr', 'tex', 'smooth', 'minArea', 'eps', 'ortho', 'showMask']) $(id).addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(run, 200); });
+$('dl').onclick = () => {
+  if (!walls.length) return;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([exportJson()], { type: 'application/json' }));
+  a.download = fileName + '-walls.json'; a.click();
+};
+$('cp').onclick = async () => { if (walls.length) { try { await navigator.clipboard.writeText(exportJson()); $('stats').textContent = 'Walls JSON copied.'; } catch (e) { $('stats').textContent = 'Copy failed - use Download.'; } } };
+for (const id of ['thr', 'tex', 'smooth', 'minArea', 'eps']) $('v-' + id).textContent = $(id).value;
+const q = new URLSearchParams(location.search).get('img'); if (q) loadImage(q, q.split('/').pop());
+</script>
+</body>
+</html>

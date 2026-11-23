@@ -853,3 +853,25 @@ test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block
   T.eq(_techniqueWhirlReach(['monk-tornado'], 'Bare Handed', 0), 5, 'Tornado reaches 5 ft bare-handed');
   T.eq(_techniqueWhirlReach(['monk-tornado'], 'Bare Handed', 8), 8, 'a weapon keeps its own reach');
 });
+
+// ── Wall import ──────────────────────────────────────────────────────────────
+test('Walls', 'import accepts good walls, skips bad ones, and gives fresh ids', async T => {
+  const good = { type: 'line', points: [{ x_pct: 10, y_pct: 10 }, { x_pct: 50, y_pct: 10 }, { x_pct: 50, y_pct: 60.5 }] };
+  const txt = JSON.stringify({ format: 'grim-toll-walls', version: 1, walls: [
+    good, { ...good, id: 'x' },
+    { type: 'line', points: [{ x_pct: 10, y_pct: 10 }] },                                   // one point
+    { type: 'line', points: [{ x_pct: -5, y_pct: 10 }, { x_pct: 20, y_pct: 10 }] },         // out of range
+    { type: 'spiral', points: [{ x_pct: 1, y_pct: 1 }, { x_pct: 2, y_pct: 2 }] },           // unknown type
+    { type: 'rect', points: [{ x_pct: 1, y_pct: 1 }, { x_pct: 2, y_pct: 2 }, { x_pct: 3, y_pct: 3 }] }, // rect needs 2
+    { type: 'line', points: [{ x_pct: 20, y_pct: 20 }, { x_pct: 30, y_pct: 20 }], door: true, blocksVision: false },
+  ] });
+  const r = _wallsFromImport(txt);
+  T.eq(r.walls.length, 3, 'usable count');
+  T.eq(r.skipped, 4, 'skipped count');
+  T.ok(r.walls[0].id !== r.walls[1].id && r.walls[1].id !== 'x', 'ids not fresh');
+  T.ok(r.walls[0].blocksVision === true && r.walls[0].blocksMovement === true, 'defaults should block');
+  T.ok(r.walls[2].door === true && r.walls[2].open === false && r.walls[2].blocksVision === false, 'door flags');
+  T.eq(_wallsFromImport(JSON.stringify([good])).walls.length, 1, 'bare array');
+  T.ok(_wallsFromImport('not json').error, 'bad json');
+  T.ok(_wallsFromImport('{"a":1}').error, 'no walls list');
+});
