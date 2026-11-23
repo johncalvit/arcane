@@ -1222,26 +1222,20 @@
             <img id="figure-img" src="" style="display:none;width:100%;height:100%;object-fit:contain;">
             <span id="figure-placeholder" style="color:var(--text-dim);font-size:0.7rem;text-align:center;padding:8px;line-height:1.5;">Click to set<br>full-body image</span>
           </div>
+          <button class="btn" id="token-from-figure-btn" style="margin-top:4px;width:130px;padding:3px 6px;font-size:0.72rem;" onclick="setTokenFromFigure()" title="Frame the round token picture (shown on the map and in lists) from this full-body image. With no full-body image yet, pick a token picture file instead.">Set token image</button>
           <button class="btn" id="figure-clear-btn" style="display:none;margin-top:4px;width:130px;padding:3px 6px;font-size:0.72rem;" onclick="clearFigure()">Remove full-body image</button>
           <input type="file" id="figure-file-input" accept="image/*" style="display:none" onchange="onFigureFileSelected(this)">
         </div>
         <div>
-          <div style="display:flex;gap:12px;align-items:flex-start;">
-            <div class="field" style="flex:1;min-width:0;">
-              <label>Character Name</label>
-              <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
-            </div>
-            <div style="flex:0 0 auto;">
-              <div id="avatar-preview" onclick="openAvatarPicker()" title="Token image - the portrait shown on your map token and in lists. Click to set." style="
-                width:72px;height:84px;border:2px dashed var(--border);border-radius:4px;
-                background:var(--bg3);cursor:pointer;display:flex;align-items:center;
-                justify-content:center;overflow:hidden;transition:border-color 0.15s;"
-                onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor=avatarUrl?'var(--gold)':'var(--border)'">
-                <img id="avatar-img" src="" style="display:none;width:100%;height:100%;object-fit:cover;">
-                <span id="avatar-placeholder" style="color:var(--text-dim);font-size:0.62rem;text-align:center;padding:4px;line-height:1.4;">Token<br>image</span>
-              </div>
-              <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileSelected(this)">
-            </div>
+          <div class="field">
+            <label>Character Name</label>
+            <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
+          </div>
+          <!-- The token image is cropped from the full-body picture (Set token image), shown in the sidebar card and on the
+               map. These elements stay, hidden, because the avatar code reads and writes them. -->
+          <div style="display:none;">
+            <div id="avatar-preview"><img id="avatar-img" src="" style="display:none;"><span id="avatar-placeholder"></span></div>
+            <input type="file" id="avatar-file-input" accept="image/*" onchange="onAvatarFileSelected(this)">
           </div>
           <div class="grid-2" style="margin-bottom:0">
         <div class="field field-inline">
@@ -3195,7 +3189,7 @@ async function confirmCrop() {
   btn.disabled = true;
   status.textContent = _avatarCropTarget === 'species' ? 'Saving…' : 'Uploading…';
 
-  const canvas = cropper.getCroppedCanvas({ width: 260, height: 320 });
+  const canvas = cropper.getCroppedCanvas({ width: 260, height: 320, fillColor: '#1d1a14' }); // a transparent picture gets a dark backdrop, not black
   const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
 
   if (_avatarCropTarget === 'species') {
@@ -3270,11 +3264,29 @@ function onFigureFileSelected(input) {
       figureStoragePath = ''; // a new picture: it uploads on the next save
       _figureTouched = true;
       setFigureUrl(c.toDataURL('image/webp', 0.9)); // keeps transparency; falls back to PNG where WebP is unsupported
+      if (!avatarUrl) setTimeout(() => _openCropModal(figureUrl, 'character'), 0); // no token image yet: frame it right away (the crop can be cancelled)
     };
     im.onerror = () => showToast('That file is not a picture this browser can open.', 'error');
     im.src = e.target.result;
   };
   reader.readAsDataURL(file);
+}
+// Crop the token image out of the full-body picture (the crop window opens on it). With no figure, fall back to
+// picking a token picture file.
+async function setTokenFromFigure() {
+  if (!figureUrl) { openAvatarPicker(); return; }
+  try {
+    let src = figureUrl;
+    if (!src.startsWith('data:')) { // a hosted picture: read it into the page first so the crop can be exported
+      const blob = await (await fetch(src)).blob();
+      src = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(blob); });
+    }
+    _openCropModal(src, 'character');
+  } catch (err) {
+    console.warn('Token crop from figure failed', err);
+    showToast('Could not open the full-body image for cropping - pick a token picture file instead.', 'warn');
+    openAvatarPicker();
+  }
 }
 function clearFigure() {
   figureStoragePath = '';
@@ -8578,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123c';
+const VERSION = 'v0.1.20261123d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
