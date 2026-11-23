@@ -1215,29 +1215,33 @@
       <div class="collapse-body" id="body-overview">
       <div style="display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:start;margin-bottom:10px;">
         <div>
-          <div id="avatar-preview" onclick="openAvatarPicker()" title="Click to set avatar" style="
-            width:130px;height:160px;border:2px dashed var(--border);border-radius:4px;
-            background:var(--bg3);cursor:pointer;display:flex;align-items:center;
-            justify-content:center;overflow:hidden;transition:border-color 0.15s;"
-            onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor=avatarUrl?'var(--gold)':'var(--border)'">
-            <img id="avatar-img" src="" style="display:none;width:100%;height:100%;object-fit:cover;">
-            <span id="avatar-placeholder" style="color:var(--text-dim);font-size:0.72rem;text-align:center;padding:8px;line-height:1.5;">Click to<br>set avatar</span>
-          </div>
-          <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileSelected(this)">
           <div id="figure-preview" onclick="document.getElementById('figure-file-input').click()" title="A full-body picture players see when they click your token on the map (once it is fully visible to them)" style="
-            margin-top:8px;width:130px;height:120px;border:2px dashed var(--border);border-radius:4px;
+            width:130px;height:250px;border:2px dashed var(--border);border-radius:4px;
             background:var(--bg3);cursor:pointer;display:flex;align-items:center;
             justify-content:center;overflow:hidden;transition:border-color 0.15s;">
             <img id="figure-img" src="" style="display:none;width:100%;height:100%;object-fit:contain;">
             <span id="figure-placeholder" style="color:var(--text-dim);font-size:0.7rem;text-align:center;padding:8px;line-height:1.5;">Click to set<br>full-body image</span>
           </div>
-          <button class="btn-sm" id="figure-clear-btn" style="display:none;margin-top:4px;" onclick="clearFigure()">Remove full-body image</button>
+          <button class="btn" id="figure-clear-btn" style="display:none;margin-top:4px;width:130px;padding:3px 6px;font-size:0.72rem;" onclick="clearFigure()">Remove full-body image</button>
           <input type="file" id="figure-file-input" accept="image/*" style="display:none" onchange="onFigureFileSelected(this)">
         </div>
         <div>
-          <div class="field">
-            <label>Character Name</label>
-            <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div class="field" style="flex:1;min-width:0;">
+              <label>Character Name</label>
+              <input type="text" id="char-name" placeholder="Enter character name..." oninput="recalc()">
+            </div>
+            <div style="flex:0 0 auto;">
+              <div id="avatar-preview" onclick="openAvatarPicker()" title="Token image - the portrait shown on your map token and in lists. Click to set." style="
+                width:72px;height:84px;border:2px dashed var(--border);border-radius:4px;
+                background:var(--bg3);cursor:pointer;display:flex;align-items:center;
+                justify-content:center;overflow:hidden;transition:border-color 0.15s;"
+                onmouseover="this.style.borderColor='var(--gold)'" onmouseout="this.style.borderColor=avatarUrl?'var(--gold)':'var(--border)'">
+                <img id="avatar-img" src="" style="display:none;width:100%;height:100%;object-fit:cover;">
+                <span id="avatar-placeholder" style="color:var(--text-dim);font-size:0.62rem;text-align:center;padding:4px;line-height:1.4;">Token<br>image</span>
+              </div>
+              <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileSelected(this)">
+            </div>
           </div>
           <div class="grid-2" style="margin-bottom:0">
         <div class="field field-inline">
@@ -7666,7 +7670,7 @@ function openProfileModal() {
   };
 }
 
-// Sidebar card: portrait, name, "Level N • Species", "Class • Social" — refreshed
+// Sidebar card: portrait, name, "Species • Class", "Level N • XP" - refreshed
 // from _updateBuilderTitle (every recalc) and when the portrait changes.
 function _updateNavCharCard(name) {
   const $ = id => document.getElementById(id);
@@ -7674,8 +7678,8 @@ function _updateNavCharCard(name) {
   if (name === undefined) name = $('char-name')?.value?.trim();
   $('nav-card-name').textContent = name || 'New Character';
   const race = $('sel-race')?.value || '';
-  $('nav-card-sub1').textContent = `Level ${characterLevel}` + (race ? ` • ${race}` : '');
-  $('nav-card-sub2').textContent = [characterClass, $('sel-social')?.value].filter(Boolean).join(' • ');
+  $('nav-card-sub1').textContent = [race, characterClass].filter(Boolean).join(' • ');
+  $('nav-card-sub2').textContent = `Level ${characterLevel} • ${characterXP} XP`;
   const src = $('avatar-img');
   const has = !!(src && src.style.display !== 'none' && src.getAttribute('src'));
   const img = $('nav-card-img'), ph = $('nav-card-ph');
@@ -8574,7 +8578,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123b';
+const VERSION = 'v0.1.20261123c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
