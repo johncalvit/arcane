@@ -2554,6 +2554,15 @@ function _levelStatBonus() {
 // survive every ordinary Character Builder save, so gatherCharacterData/
 // saveCharacter carry it explicitly.
 let characterXP = 0;
+// The builder's XP changed behind its back (a GM award, or a fresh read at save time): take the new number AND
+// recompute the level, the stat bonus and the "XP to next level" line from it.
+function _syncBuilderXp(xp) {
+  const n = Math.round(xp) || 0;
+  const changed = n !== characterXP;
+  characterXP = n;
+  const xd = document.getElementById('char-xp-display'); if (xd) xd.textContent = characterXP;
+  if (changed || _levelFromXp(characterXP) !== characterLevel) { try { _refreshLevelFromXp(); } catch (e) { console.warn('level refresh failed', e); } }
+}
 
 // Same piggyback pattern as Level/XP (stats.Pence) — the character's purse,
 // in pence (see formatMoney). A brand-new character's starting amount is
@@ -8071,9 +8080,8 @@ async function saveCharacter() {
     try {
       const { data: cur } = await sb.from('characters').select('stats').eq('id', currentCharacterId).maybeSingle();
       if (cur && cur.stats && cur.stats.XP != null) {
-        characterXP = Math.round(cur.stats.XP) || 0;
+        _syncBuilderXp(cur.stats.XP);
         data.xp = characterXP;
-        const xd = document.getElementById('char-xp-display'); if (xd) xd.textContent = characterXP;
       }
     } catch (e) { console.warn('XP re-read before save failed', e); }
   }
@@ -8532,7 +8540,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122h';
+const VERSION = 'v0.1.20261122i';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -15808,6 +15816,7 @@ async function _awardXpToCharacter(characterId, amount) {
     return `0 rows updated (id ${String(characterId).slice(0, 8)}, ${fresh ? 'row readable' : 'row NOT readable'})`;
   }
   if (row) { row.stats = newStats; delete row._attrs; }
+  if (characterId === currentCharacterId) _syncBuilderXp(newStats.XP); // the builder on THIS client is not told by the broadcast below
   // Tell every other client (the owning player included) so their cache, sheet and health bars catch up now.
   mapChannel?.send({ type: 'broadcast', event: 'xp-awarded', payload: { charId: characterId, xp: newStats.XP } });
   return null;
@@ -17264,9 +17273,7 @@ function subscribeMapRealtime() {
       const row = playCharCache[payload.charId];
       if (row) { row.stats = { ...(row.stats || {}), XP: payload.xp }; delete row._attrs; }
       if (payload.charId === currentCharacterId) {
-        characterXP = Math.round(payload.xp) || 0;
-        const xd = document.getElementById('char-xp-display'); if (xd) xd.textContent = characterXP;
-        try { _refreshLevelFromXp(); } catch (e) {}
+        _syncBuilderXp(payload.xp);
       }
       if (typeof refreshUI === 'function') refreshUI();
     })
