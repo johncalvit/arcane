@@ -1677,6 +1677,18 @@
             <input type="text" id="mf-action" placeholder="e.g. Slash, Smash, Parry...">
           </div>
           <div class="field">
+            <label>Req. Technique</label>
+            <select id="mf-reqtech" title="Optional. When set, this action is offered only to a character who has chosen that technique (monsters never get it). Use it for actions a class technique grants, like the Monk's Iron Fist."></select>
+          </div>
+          <div class="field">
+            <label>Damage Type</label>
+            <select id="mf-damagetype" title="Optional. The kind of damage this action deals, which decides which armor protection applies. Blank = guess from the action name (Slash/Swing/Chop = slash, Stab/Thrust = stab, anything else = smash).">
+              <option value="">— From the action name —</option>
+              <option value="slash">Slash</option><option value="pierce">Stab</option><option value="crush">Smash</option>
+              <option value="burn">Burn</option><option value="shock">Shock</option><option value="freeze">Freeze</option><option value="corrode">Corrode</option>
+            </select>
+          </div>
+          <div class="field">
             <label>Material</label>
             <input type="text" id="mf-material" placeholder="e.g. Steel; Iron; Bronze">
           </div>
@@ -1753,7 +1765,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Weapon</th><th>Type</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Quint.</th><th>Natural Slot</th><th></th></tr></thead>
+        <thead><tr><th>Weapon</th><th>Type</th><th>Action</th><th>Min Reach</th><th>Reach</th><th>Hit Formula</th><th>Material</th><th>Min Power</th><th>Dmg Max</th><th>Max Pwr Mod</th><th>Wt</th><th>Price</th><th>Quint.</th><th>Natural Slot</th><th>Req. Technique</th><th>Dmg Type</th><th></th></tr></thead>
         <tbody id="meleemgr-list"></tbody>
       </table>
     </div>
@@ -5434,10 +5446,10 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Bare Handed",           action:"Smash",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:5,  maxPowerMod:0.3 },
   { weapon:"Bare Handed",           action:"Grab",          minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:0,  maxPowerMod:0   },
   { weapon:"Bare Handed",           action:"Crush",         minReach:0,   reach:0,    hitFormula:"Power",                                        material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:20, maxPowerMod:0.1 },
-  // Monk-only (need the Monk Block / Iron Fist techniques - see _barehandRowUnlocked): a Block with an empty hand, a bit
+  // Monk-only (need the Monk Block / Iron Fist techniques - see _rowUnlocked): a Block with an empty hand, a bit
   // weaker than a Small Shield's (x1.5 vs x2), and the Iron Fist strike.
-  { weapon:"Bare Handed",           action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 1.5",                 material:"Flesh; Bone",                minStr:3,  damageMax:0,  maxPowerMod:0,   weaponType:"Unarmed" },
-  { weapon:"Bare Handed",           action:"Iron Fist",     minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:10, maxPowerMod:0.4, weaponType:"Unarmed" },
+  { weapon:"Bare Handed",           action:"Block",         minReach:0,   reach:0,    hitFormula:"Physical Coordination * 1.5",                 material:"Flesh; Bone",                minStr:3,  damageMax:0,  maxPowerMod:0,   weaponType:"Unarmed", reqTechnique:"monk-block-1" },
+  { weapon:"Bare Handed",           action:"Iron Fist",     minReach:0,   reach:0,    hitFormula:"Physical Coordination * 2",                   material:"Flesh; Bone; Stone; Iron",   minStr:3,  damageMax:10, maxPowerMod:0.4, weaponType:"Unarmed", reqTechnique:"monk-iron-fist", damageType:"crush" },
 
   { weapon:"Battleaxe",             action:"Slash",         minReach:1,   reach:2,    hitFormula:"(Physical Coordination + Manual Dexterity)*.5",material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:14, maxPowerMod:0.8 },
   { weapon:"Battleaxe",             action:"Smash",         minReach:1,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze; Stone", minStr:11, damageMax:9,  maxPowerMod:0.6 },
@@ -5635,6 +5647,11 @@ function _fillMeleeForm(row) {
   document.getElementById('mf-webs').value = row ? (row.webs || 0) : 0;
   document.getElementById('mf-naturalslot').value = row ? (row.naturalSlot || '') : '';
   document.getElementById('mf-weapontype').value  = row ? (row.weaponType || '') : '';
+  const rtSel = document.getElementById('mf-reqtech');
+  rtSel.innerHTML = '<option value="">— None —</option>' + TECHNIQUES.map(t => `<option value="${_escWeaponType(t.id)}">${_escWeaponType(t.name)}</option>`).join('');
+  if (row && row.reqTechnique && !TECHNIQUES.some(t => t.id === row.reqTechnique)) rtSel.insertAdjacentHTML('beforeend', `<option value="${_escWeaponType(row.reqTechnique)}">${_escWeaponType(row.reqTechnique)} (missing)</option>`);
+  rtSel.value = row ? (row.reqTechnique || '') : '';
+  document.getElementById('mf-damagetype').value = row ? (row.damageType || '') : '';
   _refreshWeaponTypeList();
 }
 
@@ -5692,6 +5709,8 @@ function saveMeleeWeapon() {
   row.knockback = Math.max(0, parseFloat(document.getElementById('mf-knockback').value) || 0); // explicit, so a GM can set 0 to turn the default off
   const webs = parseFloat(document.getElementById('mf-webs').value) || 0;
   if (webs > 0) row.webs = webs;
+  const reqTech = document.getElementById('mf-reqtech').value; if (reqTech) row.reqTechnique = reqTech;
+  const dmgType = document.getElementById('mf-damagetype').value; if (dmgType) row.damageType = dmgType;
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
@@ -5731,7 +5750,7 @@ function buildMeleeWeaponsManagerTable() {
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
       : '—';
-    tr.innerHTML = `<td>${row.weapon}</td><td>${row.weaponType ? _escWeaponType(row.weaponType) : '—'}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${row.quintessence || 0}</td><td>${slotLabel}</td>
+    tr.innerHTML = `<td>${row.weapon}</td><td>${row.weaponType ? _escWeaponType(row.weaponType) : '—'}</td><td>${row.action}</td><td>${row.minReach}</td><td>${row.reach}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td><td>${row.quintessence || 0}</td><td>${slotLabel}</td><td>${row.reqTechnique ? _escWeaponType((TECHNIQUES.find(t => t.id === row.reqTechnique) || {}).name || row.reqTechnique) : '—'}</td><td>${row.damageType ? ({ pierce: 'Stab', crush: 'Smash' }[row.damageType] || row.damageType[0].toUpperCase() + row.damageType.slice(1)) : '—'}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openMeleeWeaponForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyMeleeWeapon(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="remove-btn" onclick="deleteMeleeWeapon(${i})">✕</button></td>`;
@@ -6051,12 +6070,15 @@ function _techAvailableToClass(t, cls) { return !t || !Array.isArray(t.classes) 
 function _techHasFlag(techIds, flag) {
   return Array.isArray(techIds) && techIds.some(id => { const t = TECHNIQUES.find(x => x.id === id); return !!(t && t[flag]); });
 }
-// The Monk's bare-handed Block and Iron Fist rows only exist for a character who has learned the matching technique.
-function _barehandRowUnlocked(techIds, r) {
-  if (!r || normalizeWeaponName(r.weapon) !== normalizeWeaponName('Bare Handed')) return true;
-  if (/iron\s*fist/i.test(r.action)) return _techHasFlag(techIds, 'ironFist');
-  if (r.action === 'Block') return _techHasFlag(techIds, 'grantsBlock');
-  return true;
+// A weapon action row with a Req. Technique (Melee Weapons manager) is offered only to a character who has chosen that
+// technique - never to monsters (techIds null). Rows without one are open to everybody.
+function _rowUnlocked(techIds, r) {
+  if (!r || !r.reqTechnique) return true;
+  return Array.isArray(techIds) && techIds.includes(r.reqTechnique);
+}
+// The damage type of an attack: the row's own Damage Type when set, else guessed from the action name.
+function _rowDamageCategory(row, actionLabel) {
+  return (row && row.damageType) || getAttackCategory(actionLabel);
 }
 function _combatantTechIds(cid) {
   const [kind, id] = String(cid || '').split('::');
@@ -8507,6 +8529,7 @@ function gatherConfigData() {
     arcaneGrenade: 1,
     webContent: 1,
     monkContent: 1,
+    reqTech: 1,
     blastItems: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
@@ -8540,7 +8563,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261122i';
+const VERSION = 'v0.1.20261123a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9591,6 +9614,16 @@ function applyConfigData(data) {
     if (data.meleeWeapons && data.meleeWeapons.length && !data.meleeWeapons.some(m => m.weapon === 'Bare Handed' && m.action === 'Block'))
       data.meleeWeapons = [...data.meleeWeapons, { ...DEFAULT_MELEE_WEAPONS.find(d => d.weapon === 'Bare Handed' && d.action === 'Block') }];
     if (data.techniqueAllowance && Object.keys(data.techniqueAllowance).length && data.techniqueAllowance.Monk == null) data.techniqueAllowance = Object.assign({}, data.techniqueAllowance, { Monk: DEFAULT_TECHNIQUE_ALLOWANCE.Monk });
+  }
+  // Configs saved before weapon rows had a Req. Technique: put it on the default Monk rows (rows a GM already set up
+  // differently are left alone).
+  if (data.reqTech !== 1 && data.meleeWeapons && data.meleeWeapons.length) {
+    data.meleeWeapons = data.meleeWeapons.map(m => {
+      if (m.reqTechnique || m.weapon !== 'Bare Handed') return m;
+      if (m.action === 'Block') return { ...m, reqTechnique: 'monk-block-1' };
+      if (/iron\s*fist/i.test(m.action)) return { ...m, reqTechnique: 'monk-iron-fist', damageType: m.damageType || 'crush' };
+      return m;
+    });
   }
   replaceObjectContents(RACE_DATA,   data.species || data.races   || DEFAULT_RACE_DATA);
   replaceObjectContents(GENDER_DATA, data.sexes   || data.genders || DEFAULT_GENDER_DATA);
@@ -14847,7 +14880,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // Spell attacks (ctx.damageCategory set) supply their own elemental
   // category directly instead of it being parsed from the action label —
   // physical weapons only ever produce slash/pierce/crush that way.
-  const category  = ctx.damageCategory || getAttackCategory(actionLabel);
+  const category  = ctx.damageCategory || _rowDamageCategory(weaponRow, actionLabel);
   // Gap: a precise enough TO-HIT roll (not the damage roll) finds a weak
   // point and bypasses this armor's DR entirely for the hit, regardless of
   // how good the armor otherwise is. The specific PIECE equipped in this
@@ -19052,7 +19085,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         if (seen.has(key)) continue;
         seen.add(key);
         if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
-        if (!_barehandRowUnlocked(_combatantTechIds(defCid), r)) continue;
+        if (!_rowUnlocked(_combatantTechIds(defCid), r)) continue;
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
         const parryB = _combatantTechBonus(defCid, itemName);
@@ -19184,6 +19217,7 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
         if (seen.has(key)) continue;
         seen.add(key);
         if (handEntry && !handEntry.label.startsWith(r.action + ' —')) continue;
+        if (!_rowUnlocked(null, r)) continue; // monsters have no techniques
         const defVal = calcHitValue(r.hitFormula, defAttrs);
         if (defVal == null) continue;
         defenseOptions.push({ label: `${r.action} — ${itemName} (−${Math.round(defVal * defSize)})`, reduction: Math.round(defVal * defSize),

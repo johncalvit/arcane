@@ -1130,7 +1130,7 @@ function _dlgRender(body) {
     }
     const rangedRows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
     const rows = [
-      ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && (typeof _barehandRowUnlocked !== 'function' || _barehandRowUnlocked(ent?.stats?.Techniques, r))).map(r => ({ r, ranged: false })),
+      ...MELEE_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm && (typeof _rowUnlocked !== 'function' || _rowUnlocked(ent?.stats?.Techniques, r))).map(r => ({ r, ranged: false })),
       ...rangedRows.map(r => ({ r, ranged: true })),
     ];
     const cur = c.slots[chKey];

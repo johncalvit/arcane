@@ -829,12 +829,20 @@ test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block
   T.ok(!_techAvailableToClass(th('monk-tornado'), 'Warrior'), 'a Warrior cannot');
   T.ok(_techAvailableToClass(th('unarmed-1'), 'Warrior'), 'a normal technique stays open to every class');
 
-  const bh = a => ({ weapon: 'Bare Handed', action: a });
-  T.ok(!_barehandRowUnlocked([], bh('Block')), 'no technique, no bare-handed Block');
-  T.ok(_barehandRowUnlocked(['monk-block-1'], bh('Block')), 'Monk Block I unlocks it');
-  T.ok(!_barehandRowUnlocked(['monk-block-2'], bh('Block')), 'tier II alone does not');
-  T.ok(!_barehandRowUnlocked([], bh('Iron Fist')) && _barehandRowUnlocked(['monk-iron-fist'], bh('Iron Fist')), 'Iron Fist needs its technique');
-  T.ok(_barehandRowUnlocked([], bh('Smash')) && _barehandRowUnlocked([], { weapon: 'Sword, Long', action: 'Block' }), 'other rows are never gated');
+  const row = (w, a) => MELEE_WEAPONS.find(r => r.weapon === w && r.action === a);
+  const block = row('Bare Handed', 'Block'), fist = row('Bare Handed', 'Iron Fist');
+  T.ok(block && block.reqTechnique === 'monk-block-1', 'the default bare-handed Block requires Monk Block I');
+  T.ok(fist && fist.reqTechnique === 'monk-iron-fist' && fist.damageType === 'crush', 'the default Iron Fist requires its technique and is Smash damage');
+  T.ok(!_rowUnlocked([], block), 'no technique, no bare-handed Block');
+  T.ok(_rowUnlocked(['monk-block-1'], block), 'Monk Block I unlocks it');
+  T.ok(!_rowUnlocked(['monk-block-2'], block), 'tier II alone does not');
+  T.ok(!_rowUnlocked([], fist) && _rowUnlocked(['monk-iron-fist'], fist), 'Iron Fist needs its technique');
+  T.ok(!_rowUnlocked(null, fist), 'a monster (no techniques) never gets it');
+  T.ok(_rowUnlocked([], row('Bare Handed', 'Smash')) && _rowUnlocked(null, { weapon: 'Sword, Long', action: 'Slash' }), 'rows without a Req. Technique are open to everybody');
+  T.ok(_rowUnlocked(['x-1'], { weapon: 'Knife', action: 'Backstab', reqTechnique: 'x-1' }), 'any weapon can have a technique-only action');
+  T.eq(_rowDamageCategory({ damageType: 'burn' }, 'Slash'), 'burn', 'a set Damage Type wins over the action name');
+  T.eq(_rowDamageCategory({}, 'Slash'), 'slash', 'blank: guessed from the name (slash)');
+  T.eq(_rowDamageCategory({}, 'Iron Fist'), 'crush', 'blank: anything unrecognised is smash');
 
   T.eq(_soulArmorType(['monk-soul-armor'], 'None'), 'Soul Armor', 'a bare body area gets Soul Armor');
   T.eq(_soulArmorType(['monk-soul-armor'], 'Steel Plate'), 'Steel Plate', 'worn armor wins');
