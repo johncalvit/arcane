@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123e';
+const VERSION = 'v0.1.20261123f';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -18113,6 +18113,12 @@ function _itemIconUrl(label) {
   let slug = _itemSlug(name);
   slug = ITEM_ICON_ALIAS[slug] || slug;
   if (ITEM_ICON_SLUGS.has(slug)) return ITEM_ICON_DIR + slug + '.png';
+  // A consumable with a custom name (e.g. "Divine Blessing"): pick the potion art from what it does.
+  const cons = (typeof CONSUMABLES !== 'undefined' ? CONSUMABLES : []).find(c => c.name === name);
+  if (cons && !(cons.blastRadius > 0)) {
+    const n = cons.restoreBlood > 0 ? 2 : cons.restoreToughness > 0 ? 1 : cons.restoreStamina > 0 ? 3 : cons.buffAttr ? 4 : 6;
+    if (!/campfire|brazier/i.test(name)) return ITEM_ICON_DIR + 'potion-' + n + '.png';
+  }
   if (/campfire/i.test(name)) return ITEM_ICON_DIR + 'light-4.png';
   if (/brazier/i.test(name)) return ITEM_ICON_DIR + 'light-5.png';
   if (/potion|elixir|tonic|draught|philter|water|ale\b|wine/i.test(name)) {

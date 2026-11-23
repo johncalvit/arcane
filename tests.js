@@ -875,3 +875,11 @@ test('Walls', 'import accepts good walls, skips bad ones, and gives fresh ids', 
   T.ok(_wallsFromImport('not json').error, 'bad json');
   T.ok(_wallsFromImport('{"a":1}').error, 'no walls list');
 });
+
+test('Walls', 'a consumable with a custom name still gets potion art', async T => {
+  CONSUMABLES.push({ name: 'Zz Test Blessing', restoreToughness: 0, restoreStamina: 0, restoreBlood: 0, buffAttr: 'Quintessence', buffAmount: 2 });
+  try {
+    T.eq(_itemIconUrl('Zz Test Blessing'), 'icons/items/potion-4.png', 'buff potion');
+    T.eq(_itemIconUrl('Healing Potion'), 'icons/items/potion-1.png', 'name match still wins');
+  } finally { CONSUMABLES.pop(); }
+});
