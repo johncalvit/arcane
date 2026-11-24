@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123f';
+const VERSION = 'v0.1.20261123g';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10964,6 +10964,15 @@ async function updateEntity(ref, patch) {
   // .select() so a write RLS silently filters out (0 rows, no error) is caught too.
   let { data: written, error } = await sb.from(table).update(patch).eq('id', row.id).select('id');
   if (!error && !(written && written.length)) error = { message: 'No permission to change this ' + (table === 'characters' ? 'character' : 'creature') + ' (permission) - the change was not saved.' };
+  // A player can only write their own character row. Their heal/aid on ANOTHER character is handed to the GM's
+  // screen to save (the GM can write any character in the campaign); the optimistic change stays meanwhile.
+  if (error && table === 'characters' && !isGM() && mapChannel && Object.keys(patch).every(k => k === 'damage')) {
+    try {
+      mapChannel.send({ type: 'broadcast', event: 'entity-patch-request', payload: { id: row.id, patch } });
+      mapChannel.send({ type: 'broadcast', event: 'entity-patch', payload: { table, id: row.id, patch } });
+      return true;
+    } catch (e) {}
+  }
   if (error) {
     Object.assign(row, before);
     delete row._attrs;
@@ -17437,6 +17446,15 @@ function subscribeMapRealtime() {
       Object.assign(row, p);
       delete row._attrs;
       refreshUI();
+    })
+    // A player's change to someone else's character (heal, aid): only the GM's session can write it.
+    .on('broadcast', { event: 'entity-patch-request' }, async ({ payload }) => {
+      if (!isGM() || !payload || !payload.id || !payload.patch || typeof payload.patch !== 'object') return;
+      const dmg = payload.patch.damage;
+      if (!dmg || typeof dmg !== 'object' || Object.keys(payload.patch).length !== 1) return; // damage only
+      const ref = 'char::' + payload.id;
+      if (!(await ensureEntityLoaded(ref))) return;
+      await updateEntity(ref, { damage: dmg });
     })
     .on('broadcast', { event: 'item-gift' }, ({ payload }) => { if (payload && payload.to === currentCharacterId) _collectIncomingItems(); })
     // A player with no token on the active map asked to be added (see the

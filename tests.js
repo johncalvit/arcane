@@ -883,3 +883,18 @@ test('Walls', 'a consumable with a custom name still gets potion art', async T =
     T.eq(_itemIconUrl('Healing Potion'), 'icons/items/potion-1.png', 'name match still wins');
   } finally { CONSUMABLES.pop(); }
 });
+
+test('Walls', "a player's heal on another character is handed to the GM instead of being rolled back", async T => {
+  const ref = T.char('Pal', { damage: { toughness: 6, stamina: 0, blood: 0, quintessence: 0 } });
+  T.stub('refreshUI', () => {}); T.stub('showToast', () => {}); T.stub('_writeErrorToast', () => { throw new Error('should not toast an error'); });
+  T.stub('isGM', () => false);
+  const sent = [];
+  const savedCh = mapChannel; mapChannel = { send: m => sent.push(m.event) };
+  T.stubObj(sb, 'from', () => ({ update: () => ({ eq: () => ({ select: async () => ({ data: [], error: null }) }) }) }));
+  try {
+    const ok = await updateEntity(ref, { damage: { toughness: 1, stamina: 0, blood: 0, quintessence: 0 } });
+    T.ok(ok, 'should report success');
+    T.eq(T.row(ref).damage.toughness, 1, 'optimistic change kept');
+    T.ok(sent.includes('entity-patch-request'), 'request to GM not sent: ' + sent);
+  } finally { mapChannel = savedCh; }
+});
