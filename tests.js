@@ -991,8 +991,9 @@ test('Walls', 'a dead token shows a small skull at its upper right and hides oth
   try {
     _refreshTokenBadges('zz-dead');
     const ov = el.querySelector('.token-cond-overlay'), img = ov && ov.querySelector('img');
-    T.ok(img && img.style.width === '60px', 'skull should be 60% of the token size, got ' + (img && img.style.width));
+    T.ok(img && img.style.width === '70px', 'skull should be 70% of the token size, got ' + (img && img.style.width));
     T.ok(/\+ 35px/.test(ov.style.left) && /- 35px/.test(ov.style.top), 'skull offset: ' + ov.style.left + ' / ' + ov.style.top);
+    T.ok(Number(ov.style.zIndex) > 21, 'skull should sit above the health rings');
     T.ok(!el.querySelector('.token-label-icons'), 'other condition icons should be hidden on a dead token');
     mapTokens['zz-dead'].conditions = ['prone'];
     _refreshTokenBadges('zz-dead');
