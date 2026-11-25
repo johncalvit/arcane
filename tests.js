@@ -916,3 +916,15 @@ test('Walls', 'a roller never names a player by their email', async T => {
   currentUser = { email: 'someone@example.com', user_metadata: {} }; currentCharacterId = null;
   try { T.ok(!/@/.test(_rollerWho()), 'email leaked: ' + _rollerWho()); } finally { currentUser = savedUser; currentCharacterId = savedChar; }
 });
+test('Walls', "a waivable save shows Don't resist and counts as failed", async T => {
+  T.stub('_rollerBroadcast', () => {});
+  let got = null;
+  openRoller({ label: 'T save', target: 99, waive: true, onComplete: n => { got = n; } });
+  try {
+    T.eq(document.getElementById('roller-waive').style.display, 'inline-block', 'button hidden');
+    _rollerWaive();
+    await new Promise(r => setTimeout(r, 900));
+    T.ok(got === 100, 'waived roll should be an automatic fail, got ' + got);
+    T.eq(document.getElementById('roller-result-label').textContent, 'NOT RESISTING', 'label');
+  } finally { closeRoller(); }
+});

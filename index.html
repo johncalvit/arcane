@@ -391,7 +391,7 @@
   }
   #roller-result-label.success { color: #4de080; }
   #roller-result-label.fail    { color: #e05050; }
-  #roller-close, #roller-cancel {
+  #roller-close, #roller-cancel, #roller-waive {
     margin-top: 18px; font-size: 0.75rem; color: var(--text-dim);
     background: none; border: 1px solid var(--border); border-radius: 3px;
     padding: 3px 14px; cursor: pointer; font-family:var(--ui-font);
@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123j';
+const VERSION = 'v0.1.20261125a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -13704,7 +13704,7 @@ async function _aoeResolveClick(tokenId) {
   const target = _aoeResolveSaveTarget(st.spell, ent);
   openRoller({
     label: `${st.spell.name} — ${ent.name} saves`,
-    target, targetLabel: 'roll under to resist',
+    target, targetLabel: 'roll under to resist', waive: true,
     onComplete: async (n) => {
       const saved = n <= 5 || (n < 96 && n <= target); // mirror the roller's crit rules
       const blast = _isBlastSpell(st.spell);
@@ -16643,7 +16643,7 @@ function _closeDefensePicker(reqId) {
 //   target: number — rolling <= target is success; null = no pass/fail (damage etc.)
 let _roller = null;
 
-function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null, mirror = false, by = '' }) {
+function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null, mirror = false, by = '', waive = false }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
               phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, damageContext, onComplete,
               mirror, by, mirrorResult: null };
@@ -16664,6 +16664,9 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   document.getElementById('roller-close').style.display = 'none';
   // Cancel is available while spinning (not for spectators watching a mirror)
   document.getElementById('roller-cancel').style.display = mirror ? 'none' : 'inline-block';
+  // Saves can be waived: the target chooses not to resist (a willing ally, a buff) and the save counts as failed.
+  const waiveBtn = document.getElementById('roller-waive');
+  if (waiveBtn) waiveBtn.style.display = (waive && !mirror) ? 'inline-block' : 'none';
 
   // Defense buttons
   const defSection = document.getElementById('roller-defense');
@@ -16809,10 +16812,18 @@ function _rollerTick(interval) {
   _roller.timeoutId = setTimeout(() => _rollerTick(interval), interval);
 }
 
+function _rollerWaive() {
+  if (!_roller || _roller.mirror || _roller.phase !== 'spinning') return;
+  _roller.waived = true;
+  _roller.finalNum = 100; // an automatic fail
+  _rollerBeginStop();
+}
+
 function _rollerBeginStop() {
   _roller.phase = 'stopping';
   clearTimeout(_roller.timeoutId);
   document.getElementById('roller-cancel').style.display = 'none'; // roll is committed
+  const wv = document.getElementById('roller-waive'); if (wv) wv.style.display = 'none';
   // Choose the final number now — timing the click cannot influence it.
   // A mirror already has finalNum set from the broadcast; keep it.
   if (_roller.finalNum == null) _roller.finalNum = _rollerRand();
@@ -16869,6 +16880,7 @@ function _rollerShowResult() {
             : critFail    ? (isAttack ? `${atk} Critical Miss!` : 'CRITICAL FAIL')
             : success     ? (isAttack ? `${atk} Hits!`          : 'SUCCESS')
                           : (isAttack ? `${atk} Misses`         : 'FAIL');
+    if (_roller.waived) bcLabel = 'NOT RESISTING';
     bcClass = success ? 'success' : 'fail';
     numEl.className      = bcClass;
     resultEl.textContent = bcLabel;
@@ -16903,7 +16915,7 @@ function _rollerShowResult() {
         if (critFail && dc.melee && !dc.spell) _rollerCloseCbs.push(() => { _meleeCritMiss(dc, n); });
       }
     } else if (!_roller.locContext) {
-      logCombat(`${_roller.label}: rolled ${n} — ${bcLabel}`, success ? 'good' : 'roll');
+      logCombat(_roller.waived ? `${_roller.label}: chooses not to resist` : `${_roller.label}: rolled ${n} — ${bcLabel}`, success ? 'good' : 'roll');
     }
   } else {
     document.getElementById('roller-status').textContent = '';
@@ -16976,6 +16988,7 @@ function closeRoller() {
   _roller = null;
   document.getElementById('roller-overlay').style.display = 'none';
   document.getElementById('roller-cancel').style.display = 'none';
+  const wvc = document.getElementById('roller-waive'); if (wvc) wvc.style.display = 'none';
   clearStrayRay(true);
   if (!wasMirror) _rollerBroadcast('roller-close'); // dismiss everyone's mirror
   if (!wasMirror) {
@@ -25503,6 +25516,7 @@ async function _deleteMapPin(pinId) {
       <input type="checkbox" id="roller-quick" onchange="_rollerQuickChanged(this)" style="vertical-align:-2px;"> Quick roll
     </label>
     <button id="roller-cancel" onclick="event.stopPropagation(); cancelRoller()" style="display:none;">Cancel</button>
+    <button id="roller-waive" onclick="event.stopPropagation(); _rollerWaive()" style="display:none;" title="Don't resist: the save counts as failed">Don't resist</button>
     <button id="roller-close" onclick="closeRoller()">Close</button>
   </div>
 </div>
