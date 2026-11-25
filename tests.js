@@ -556,21 +556,23 @@ test('Techniques', 'Whirlwind exists for exactly the five weapon types and is fo
   T.eq(_techniqueWhirlwind([], 'Greatsword'), null, 'not owned');
   T.eq(_techniqueWhirlwind([sword.id], 'Dagger'), null, 'wrong weapon type');
 });
-test('Techniques', 'Whirlwind: targets in reach (allies too, not self, not the dead), stamina up front, one swing each', async T => {
+test('Techniques', 'Whirlwind: targets in reach (allies too, not self, not anyone on the ground), stamina up front, one swing each', async T => {
   T.map();
   const me = T.token('T_me', 50, 50, 'character', 'T_me');
   const a = T.token('T_a', 51, 50, 'character', 'T_a');       // an ally, in reach
   const b = T.token('T_b', 50, 51, 'creature', 'T_b');        // a monster, in reach
   const far = T.token('T_far', 90, 90, 'creature', 'T_far');  // out of reach
   const dead = T.token('T_dead', 50, 49, 'creature', 'T_dead');
+  const prone = T.token('T_prone', 49, 50, 'creature', 'T_prone'), out = T.token('T_out', 49, 49, 'creature', 'T_out');
   T.stub('getTokenSize', () => 0);
   T.stub('_pathFindToken', () => me);
-  T.stub('getConditions', id => id === dead.id ? new Set(['dead']) : new Set());
+  T.stub('getConditions', id => id === dead.id ? new Set(['dead']) : id === prone.id ? new Set(['prone']) : id === out.id ? new Set(['unconscious']) : new Set());
   T.stub('_pctDistFt', () => 3);
   const reachFt = 6 * 0 + 1000 / (mapScalePPF || 1); // wide enough for the near tokens, nothing like 90% away
   const ids = _whirlTargets('char::T_me', 12);
   T.ok(ids.includes(a.id) && ids.includes(b.id), 'ally and monster are swept');
   T.ok(!ids.includes(me.id) && !ids.includes(dead.id) && !ids.includes(far.id), 'not self, the dead, or the far');
+  T.ok(!ids.includes(prone.id) && !ids.includes(out.id), 'bodies that are prone or unconscious are skipped');
   // stamina check and the swing chain
   const swings = [];
   T.stub('showToast', () => {});

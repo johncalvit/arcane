@@ -6066,7 +6066,7 @@ for (const type of HEAVY_BLOW_TYPES)
   for (const n of [1, 2, 3])
     HEAVY_BLOW_TECHNIQUES.push({ id: _techSlug(type) + '-heavy-blow-' + n, name: type + ' Heavy Blow ' + _ROMAN[n], weaponType: type,
       minLevel: n + 2, hit: 0, damage: 0, parry: 0, heavyStam: n, heavyDmg: n * 2 });
-// Whirlwind (level 4): a melee attack on EVERY living body within the weapon's reach - allies and bystanders
+// Whirlwind (level 4): a melee attack on EVERY standing body within the weapon's reach - allies and bystanders
 // included, the attacker excepted - at 1 Stamina per target attacked. The damage cap of every swing drops by 1
 // for each target attacked. See startWhirlwind.
 const WHIRLWIND_TYPES = ['Flail', 'Greatsword', 'Polearm', 'Scimitar', 'Staff'];
@@ -18851,7 +18851,8 @@ function _whirlTargets(combId, reachFt) {
   const half = getTokenSize(me) / 2;
   return Object.values(mapTokens || {}).filter(t => {
     if (t.id === me.id || (t.entity_type !== 'character' && t.entity_type !== 'creature')) return false;
-    if (getConditions(t.id).has('dead')) return false;
+    const tc = getConditions(t.id); // a body already on the ground (prone, unconscious, dead) is not swung at
+    if (tc.has('dead') || tc.has('unconscious') || tc.has('prone')) return false;
     const dx = (t.x_pct - me.x_pct) / 100 * mapImgW, dy = (t.y_pct - me.y_pct) / 100 * mapImgH;
     return (Math.hypot(dx, dy) - half) / mapScalePPF <= reachFt;
   }).map(t => t.id);
