@@ -34,6 +34,8 @@ A melee critical miss (an attack roll of 96 or more always misses) can go wrong:
 
 **Seeing a monster (players).** When a monster is the active combatant, or you click its token, you see its name, its health bars (never its Quintessence), its conditions and what it is holding. Its stats, skills, armor and the rest of its sheet stay with the GM.
 
+**Target needs a ranged weapon.** A Target stance guards a narrow cone as far as the longest ranged weapon in hand reaches (15 times its range increment), for characters and monsters alike. With no ranged weapon in hand the action is refused.
+
 **Sentinel and Target reactions.** When a mover crosses into several Sentinel or Target zones, each watcher is asked in the order the mover reaches them, and a watcher's attack is rolled on the watcher's own screen (the GM for monsters). The mover waits until that attack is finished before the next watcher is asked. If a reaction knocks the mover out, they stay where they fell.
 
 **Passing a character to another owner (GM).** In the Tokens panel, each campaign character has a **⇄** button. Choose who gets it: any player in the campaign, or you (which turns it into an NPC). The character keeps everything (XP, gear, storage, purse, token); the new owner finds it in their character list, and the old owner loses access. Only the GM can do this, so there is no export/import and no duplicate.

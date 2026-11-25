@@ -32,7 +32,7 @@ test('Sentinel', 'a token without the stance has no zone; no map scale means no 
   T.ok(!_sentinelZoneCheck(w, 51, 50, m));
 });
 test('Sentinel', 'Target watches a narrow cone along its facing, out to weapon range', async T => {
-  T.geo();
+  T.geo(); T.stub('_targetWeaponRangeFt', () => 30);
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['target', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
   const at = (deg, ft) => [50 + ft * Math.cos(deg * Math.PI / 180), 50 + ft * Math.sin(deg * Math.PI / 180)];
   T.ok(_sentinelZoneCheck(w, ...at(0, 20), m), 'straight ahead');
@@ -544,4 +544,19 @@ test('Sentinel', 'an Attack answer runs the reaction on the answering screen and
   released = 'none'; _sentinelCheckPending = pend('c2'); _sentinelPromptData.c2 = { checkId: 'c2' };
   _answerSentinelCheck('c2', false); await wait();
   T.eq(released, false, 'Let it pass frees the mover at once');
+});
+test('Sentinel', 'the Target range comes from the held ranged weapon, for monsters too; none held means nothing to guard', async T => {
+  T.map(); T.stub('getTokenSize', () => 0); T.stub('_sentinelLineOfSight', () => true); // (T.geo would stub the range itself)
+  const m = T.token('m', 0, 0, 'creature', 'Em', []);
+  const c = T.token('c', 50, 50, 'creature', 'Ec', ['target', 'facing:0']);
+  sessionCreatureCache[c.entity_id] = { held_items: { right: 'Javelin', left: '' } };
+  const inc = n => Math.max(...RANGED_WEAPONS.filter(r => r.weapon === n).map(r => r.rangeIncrement || 0));
+  T.ok(inc('Javelin') > inc('Dart'), 'the Javelin outranges the Dart');
+  T.eq(_targetWeaponRangeFt(c), inc('Javelin') * TARGET_RANGE_INCREMENTS, 'a monster holding a Javelin');
+  sessionCreatureCache[c.entity_id] = { held_items: { right: 'Dart', left: 'Javelin' } };
+  T.eq(_targetWeaponRangeFt(c), inc('Javelin') * TARGET_RANGE_INCREMENTS, 'the longest held weapon wins');
+  sessionCreatureCache[c.entity_id] = { held_items: { right: 'Longsword', left: '' } };
+  T.eq(_targetWeaponRangeFt(c), 0, 'no ranged weapon: no range');
+  T.ok(!_sentinelZoneCheck(c, 60, 50, m), 'and so nothing is guarded');
+  delete sessionCreatureCache[c.entity_id];
 });

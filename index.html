@@ -8640,7 +8640,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125k';
+const VERSION = 'v0.1.20261125l';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19578,18 +19578,21 @@ function _sentinelMeleeReachFt(t) {
 // enough it's not really a meaningful threat zone any more.
 const TARGET_RANGE_INCREMENTS = 15;
 function _targetWeaponRangeFt(t) {
+  // The longest-ranged weapon actually HELD, for characters and monsters alike. 0 = no ranged weapon in hand, so
+  // there is nothing to guard with (the Target action is refused up front, and an old stance guards nothing).
+  const row = t.entity_type === 'character' ? playCharCache[t.entity_id]
+            : t.entity_type === 'creature' ? sessionCreatureCache[t.entity_id] : null;
   let bestIncrement = 0;
-  if (t.entity_type === 'character' && playCharCache[t.entity_id]) {
-    const held = playCharCache[t.entity_id].held_items || {};
+  if (row) {
+    const held = row.held_items || {};
     for (const side of ['right', 'left']) {
       const itemName = held[side];
       if (!itemName) continue;
       const norm = normalizeWeaponName(itemName);
-      const rows = RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm);
-      for (const r of rows) bestIncrement = Math.max(bestIncrement, r.rangeIncrement || 0);
+      for (const r of RANGED_WEAPONS.filter(r => normalizeWeaponName(r.weapon) === norm)) bestIncrement = Math.max(bestIncrement, r.rangeIncrement || 0);
     }
   }
-  return bestIncrement > 0 ? bestIncrement * TARGET_RANGE_INCREMENTS : 30;
+  return bestIncrement * TARGET_RANGE_INCREMENTS;
 }
 
 const TARGET_CONE_DEG = 15;
@@ -20224,7 +20227,7 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
   }
   if (conds.has('target')) {
     const rangeFt = _targetWeaponRangeFt(watcherTok);
-    if (distFt <= rangeFt) {
+    if (rangeFt > 0 && distFt <= rangeFt) {
       const facingDeg = _tokenFacingDeg(watcherTok);
       const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
       let diff = Math.abs(pointDeg - facingDeg);

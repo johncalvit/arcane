@@ -2105,6 +2105,11 @@ async function _dlgAct(d, id, body) {
       _dlgRender(body);
       break;
     case 'aimtarget': {
+      const tTok = typeof _pathFindToken === 'function' ? _pathFindToken(id) : null;
+      if (tTok && _targetWeaponRangeFt(tTok) <= 0) {
+        showToast('Target needs a ranged weapon in hand.', 'warn');
+        _dlgRender(body); break;
+      }
       const ok = await styledConfirm('Selecting this action will end your round.');
       if (!ok) { _dlgRender(body); break; }
       atCloseModal();
