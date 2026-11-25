@@ -1483,7 +1483,7 @@
         <thead>
           <tr>
             <th>Name</th><th>Height</th><th>Power</th><th>Speed</th>
-            <th>Toughness</th><th>Quintessence</th><th>Night Vision</th><th></th>
+            <th>Toughness</th><th title="Multiplier on the Blood pool (Blood pool = max Toughness x this)">Blood</th><th>Quintessence</th><th>Night Vision</th><th></th>
           </tr>
         </thead>
         <tbody id="speciesmgr-list"></tbody>
@@ -7875,6 +7875,7 @@ function buildSpeciesManagerTable() {
       <td>${d.Power ?? 1}</td>
       <td>${d.Speed ?? 1}</td>
       <td>${d.Toughness ?? 1}</td>
+      <td>${d.Blood ?? 1}</td>
       <td>${d.Quintessence ?? 1}</td>
       <td>${d.NightVision ?? 1}</td>
       <td style="white-space:nowrap;">
@@ -8640,7 +8641,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125l';
+const VERSION = 'v0.1.20261125m';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
