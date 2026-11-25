@@ -119,13 +119,17 @@ function _paViewEquipment(ent, attrs) {
 
 // ── Section builders ──────────────────────────────────────────────────────────
 
+// A player looking at a monster (not a character): only its name, health, conditions and held items are shown.
+function _paFoeView(ent) { return !!ent && ent.type !== 'char' && !isGM(); }
+
 function _paSecHealth(ent, canEdit) {
-  // Players never see monster health (original design rule)
-  if (ent.type !== 'char' && !isGM()) return '';
+  // A player looking at a monster sees its health (a visual assessment) but not its Quintessence.
+  const foe = _paFoeView(ent);
   const entityType = ent.type === 'char' ? 'character' : 'creature';
-  const html = canEdit
-    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id, ent.attrs.Quintessence, ent.attrs._bloodMult)
-    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, null, null, ent.attrs.Quintessence, ent.attrs._bloodMult);
+  const quint = foe ? 0 : ent.attrs.Quintessence;
+  const html = canEdit && !foe
+    ? healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, entityType, ent.id, quint, ent.attrs._bloodMult)
+    : healthBarsHtml(ent.attrs.Toughness, ent.attrs.Stamina, ent.damage, null, null, quint, ent.attrs._bloodMult);
   return _paSection('Health', html);
 }
 
@@ -354,7 +358,7 @@ function _paSecEquip(ent, attrs, canEdit, loadoutOverride) {
           + rowFor(_paIcon('shield'), 'Left', `<span class="pa-val">${_itemNameSpan(held.left)}</span>`);
   }
   // HIT/DMG rows moved behind "View All" (with the carried items) to keep the panel short.
-  html += `<div style="display:flex;justify-content:flex-end;margin-top:4px;"><button class="pa-view-btn" data-pa="view-equipment">View All ${_paIcon('right')}</button></div>`;
+  if (!_paFoeView(ent)) html += `<div style="display:flex;justify-content:flex-end;margin-top:4px;"><button class="pa-view-btn" data-pa="view-equipment">View All ${_paIcon('right')}</button></div>`;
   return _paSection('Equipment', html);
 }
 
@@ -591,7 +595,14 @@ function renderEntityPanel(ref, opts = {}) {
   } else if (opts.header === 'mini') {
     headerHtml = `
       <div class="pa-id-sub" style="margin-bottom:6px;">${_paEsc(ent.type === 'char' ? `Level ${ent.level ?? 1} • ${ent.species}` : sub)}</div>
-      ${tilesHtml}`;
+      ${_paFoeView(ent) ? '' : tilesHtml}`;
+  }
+
+  // A monster seen by a player: name (in the banner), health, conditions and what it holds. Nothing else.
+  if (_paFoeView(ent)) {
+    el.innerHTML = `${opts.prefixHtml || ''}<div class="pa-id-name" style="margin-bottom:8px;">${_paEsc(name)}</div>${_paSecHealth(ent, false)}${_paSecConditions(ent)}${_paSecEquip(ent, attrs, false, undefined)}`;
+    _paBind(el, { ent, isOwnSheet, skills, attrs });
+    return;
   }
 
   el.innerHTML = `

@@ -1005,3 +1005,18 @@ test('Walls', 'a dead token shows a small skull at its upper right and hides oth
     T.ok(el.querySelector('.token-label-icons'), 'icons come back when the token is revived');
   } finally { mapTokens = saved; el.remove(); }
 });
+test('Walls', "a player looking at a monster sees its name, health, conditions and held items only", async T => {
+  T.stub('isGM', () => false);
+  T.token('zzfoe', 10, 10, 'creature', 'ZZE1', ['prone']);
+  sessionCreatureCache['ZZE1'] = { id: 'ZZE1', name: 'Zz Foe', species: 'Goblin', body_type: 'Humanoid', stats: {}, skills: {}, features: {},
+    damage: { toughness: 2, stamina: 0, blood: 0, quintessence: 0 }, weapons: [], equipment: [], armor: {}, held_items: { right: 'Axe, Hatchet' } };
+  const el = document.createElement('div');
+  const saved = currentCharacterId; currentCharacterId = 'someone-else';
+  try {
+    renderEntityPanel('creature::zzfoe', { container: el, header: 'mini' });
+    const t = el.innerText;
+    T.ok(/Zz Foe/.test(t) && /Toughness/.test(t) && /Prone/.test(t) && /Axe, Hatchet/.test(t), 'name, health, condition and held item should show: ' + t.slice(0, 200));
+    T.ok(!/Quintessence/.test(t), 'no Quintessence');
+    T.ok(!/Power|Day Vision|Education|Language|View All|Height|Weight/i.test(t), 'no stat sheet: ' + t.slice(0, 300));
+  } finally { currentCharacterId = saved; delete sessionCreatureCache['ZZE1']; }
+});
