@@ -8640,7 +8640,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125i';
+const VERSION = 'v0.1.20261125j';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -21092,8 +21092,79 @@ function renderTokensCharList() {
       ${already
         ? `<span style="font-size:0.7rem;color:var(--text-dim);font-style:italic;">on map</span>`
         : `<button class="token-add-btn" onclick="addCharacterToken('${c.id}','${c.name.replace(/'/g,"\\'")}','${c.avatar_url || ''}')">+ Add</button>`}
+      <button class="token-add-btn" title="Pass this character to another player (or back to the GM)" style="margin-left:4px;" onclick="openTransferOwnerModal('${c.id}')">⇄</button>
     </div>`;
   }).join('');
+}
+
+// ── Passing a character to another owner (GM only) ───────────────────────────
+// Ownership is characters.user_id, so a transfer just changes it: the character keeps its XP, gear, storage, purse
+// and token (no export/import, no copies). Only the campaign's GM may do it, and only to a member of the campaign.
+// The GM's own NPCs can be passed to a player the same way, and a player's character can be passed back.
+async function transferCharacter(charId, newUserId, newOwnerName) {
+  if (!isGM()) { showToast('Only the GM can pass a character to another owner.', 'error'); return false; }
+  const c = _tokensCharsCache.find(x => x.id === charId);
+  const isGmRecipient = newUserId === currentCampaignGmId;
+  const stats = Object.assign({}, c ? c.stats : (playCharCache[charId] || {}).stats || {}, { PlayerName: isGmRecipient ? '' : (newOwnerName || '') });
+  const { data, error } = await sb.from('characters').update({ user_id: newUserId, stats }).eq('id', charId).select('id, user_id');
+  if (error || !data || !data.length) {
+    showToast("Couldn't pass the character on: " + (error ? error.message : 'the database refused the change.'), 'error');
+    return false;
+  }
+  if (c) { c.user_id = newUserId; c.stats = stats; }
+  const row = playCharCache[charId];
+  if (row) { row.user_id = newUserId; row.stats = stats; }
+  logCombat(`${(c && c.name) || 'A character'} now belongs to ${isGmRecipient ? 'the GM' : (newOwnerName || 'another player')}.`, 'roll');
+  showToast(`${(c && c.name) || 'Character'} passed to ${isGmRecipient ? 'the GM' : (newOwnerName || 'the player')}.`, 'info');
+  buildTokensCharFilters();
+  return true;
+}
+
+async function openTransferOwnerModal(charId) {
+  if (!isGM() || !currentCampaignId) return;
+  const c = _tokensCharsCache.find(x => x.id === charId);
+  if (!c) return;
+  const { data: members } = await sb.from('campaign_members').select('user_id, role').eq('campaign_id', currentCampaignId);
+  // Recipients: campaign members, plus anyone who already owns a character in this campaign (a player can be in
+  // play through a linked character without a membership row). Players' names are not readable for other users,
+  // so each is named by the "Player" name on their sheets, with the characters they own to tell them apart.
+  const owned = {}, names = {};
+  _tokensCharsCache.forEach(ch => {
+    (owned[ch.user_id] = owned[ch.user_id] || []).push(ch.name);
+    if (ch.stats && ch.stats.PlayerName && !names[ch.user_id]) names[ch.user_id] = ch.stats.PlayerName;
+  });
+  const ids = [...new Set([...(members || []).map(m => m.user_id), ...Object.keys(owned)])];
+  const options = ids.filter(id => id !== c.user_id).map(id => {
+    const isGm = id === currentCampaignGmId;
+    const mine = (owned[id] || []).join(', ');
+    const label = isGm ? 'The GM (makes it an NPC)' : ((names[id] || ('Player ' + String(id).slice(0, 6))) + (mine ? ' (has ' + mine + ')' : ''));
+    return { id, label, name: names[id] || '' };
+  });
+  document.getElementById('transfer-owner-modal')?.remove();
+  const o = document.createElement('div');
+  o.id = 'transfer-owner-modal';
+  o.style.cssText = 'position:fixed;inset:0;z-index:5200;background:rgba(0,0,0,0.78);display:flex;align-items:center;justify-content:center;';
+  o.onclick = e => { if (e.target === o) o.remove(); };
+  const curOwner = c.user_id === currentCampaignGmId ? 'the GM' : ((c.stats && c.stats.PlayerName) || names[c.user_id] || ('player ' + String(c.user_id).slice(0, 6)));
+  o.innerHTML = `<div style="background:var(--bg2);border:1px solid var(--gold);border-radius:8px;padding:20px 24px;min-width:300px;max-width:92vw;font-family:var(--ui-font);">
+    <div style="font-size:1rem;font-weight:bold;color:var(--gold2);margin-bottom:4px;">Pass ${_escWeaponType(c.name)} to…</div>
+    <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px;">Currently belongs to ${_escWeaponType(curOwner)}. Everything stays with the character; the new owner sees it in their character list.</div>
+    ${options.length ? options.map((op, i) => `<label style="display:block;padding:5px 0;font-size:0.85rem;cursor:pointer;"><input type="radio" name="xfer-owner" value="${i}" ${i === 0 ? 'checked' : ''}> ${_escWeaponType(op.label)}</label>`).join('')
+      : '<div style="font-size:0.8rem;color:var(--text-dim);font-style:italic;">No other members have joined this campaign yet.</div>'}
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+      <button class="btn" onclick="document.getElementById('transfer-owner-modal').remove()">Cancel</button>
+      ${options.length ? '<button class="btn primary" id="xfer-owner-go">Pass it on</button>' : ''}
+    </div></div>`;
+  document.body.appendChild(o);
+  const go = document.getElementById('xfer-owner-go');
+  if (go) go.onclick = async () => {
+    const sel = o.querySelector('input[name="xfer-owner"]:checked');
+    const op = sel ? options[Number(sel.value)] : null;
+    if (!op) return;
+    go.disabled = true;
+    const ok = await transferCharacter(charId, op.id, op.name);
+    if (ok) o.remove(); else go.disabled = false;
+  };
 }
 
 // ── Wire token drag into existing mouse/touch handlers ────────────────────────

@@ -1020,3 +1020,23 @@ test('Walls', "a player looking at a monster sees its name, health, conditions a
     T.ok(!/Power|Day Vision|Education|Language|View All|Height|Weight/i.test(t), 'no stat sheet: ' + t.slice(0, 300));
   } finally { currentCharacterId = saved; delete sessionCreatureCache['ZZE1']; }
 });
+test('Walls', 'only the GM can pass a character on; the change sets the owner and the Player name', async T => {
+  const sent = [];
+  T.stubObj(sb, 'from', () => ({ update: p => ({ eq: () => ({ select: async () => { sent.push(p); return { data: [{ id: 'zzc', user_id: p.user_id }], error: null }; } }) }) }));
+  T.stub('showToast', () => {}); T.stub('logCombat', () => {}); T.stub('buildTokensCharFilters', () => {});
+  const savedCache = _tokensCharsCache, savedGm = currentCampaignGmId;
+  _tokensCharsCache = [{ id: 'zzc', name: 'Zz Char', user_id: 'old', stats: { PlayerName: 'Old', Power: 5 } }];
+  currentCampaignGmId = 'gmid';
+  try {
+    T.stub('isGM', () => false);
+    T.eq(await transferCharacter('zzc', 'new', 'New Player'), false, 'a player must be refused');
+    T.eq(sent.length, 0, 'nothing should be written for a player');
+    T.stub('isGM', () => true);
+    T.eq(await transferCharacter('zzc', 'new', 'New Player'), true, 'GM transfer');
+    T.eq(sent[0].user_id, 'new', 'owner changed');
+    T.eq(sent[0].stats.PlayerName, 'New Player', 'Player name follows the owner');
+    T.eq(sent[0].stats.Power, 5, 'the rest of the stats are kept');
+    await transferCharacter('zzc', 'gmid', 'ignored');
+    T.eq(sent[1].stats.PlayerName, '', 'passing back to the GM clears the Player name');
+  } finally { _tokensCharsCache = savedCache; currentCampaignGmId = savedGm; }
+});
