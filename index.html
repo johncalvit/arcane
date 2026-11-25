@@ -8637,7 +8637,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125d';
+const VERSION = 'v0.1.20261125e';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10523,9 +10523,17 @@ function _refreshTokenBadges(tokenId) {
       const img = document.createElement('img');
       img.alt = def.label;
       img.className = 'token-cond-overlay-img';
-      const px = Math.round(getTokenSize(mapTokens[tokenId]) * 0.85);
+      const tokSize = getTokenSize(mapTokens[tokenId]);
+      // The dead skull is a half-size marker at the 1:30 position so the token's own art stays readable.
+      const isDead = topCrit === 'dead';
+      const px = Math.round(tokSize * (isDead ? 0.5 : 0.85));
       img.style.width = px + 'px';
       img.style.height = px + 'px';
+      if (isDead) {
+        const off = Math.round(tokSize * 0.354); // centre of the skull on the token's rim, up and to the right
+        overlay.style.left = `calc(50% + ${off}px)`;
+        overlay.style.top = `calc(50% - ${off}px)`;
+      }
       img.onerror = () => { overlay.textContent = def.icon; };
       img.src = def.art;
       overlay.appendChild(img);
@@ -10558,7 +10566,8 @@ function _refreshTokenBadges(tokenId) {
 
   // All other active conditions: a leading icon group INSIDE the label, so
   // they read before the name rather than in a separate strip below it.
-  const others = CONDITION_DEFS.filter(d => !CRIT_ORDER.includes(d.key) && conds.has(d.key));
+  // A dead token shows only the skull; its other conditions stay on the token (a revival brings them back).
+  const others = conds.has('dead') ? [] : CONDITION_DEFS.filter(d => !CRIT_ORDER.includes(d.key) && conds.has(d.key));
   const label = el.querySelector('.token-label');
   let iconsEl = label?.querySelector('.token-label-icons');
   if (others.length) {

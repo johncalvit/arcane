@@ -979,3 +979,23 @@ test('Walls', 'Character Mode warns a GM when the loaded character is not the on
     nameEl.value = savedName; if (nav) nav.style.display = navDisp; updateCharMapBanner();
   }
 });
+test('Walls', 'a dead token shows a small skull at its upper right and hides other condition icons', async T => {
+  T.stub('getTokenSize', () => 100);
+  T.stub('_dlgRefreshIfOpenFor', () => {}); T.stub('_updateTokenRing', () => {}); T.stub('scheduleLights', () => {});
+  T.stub('_fogApplyTokenVisibility', () => {});
+  const el = document.createElement('div');
+  el.id = 'token-zz-dead'; el.innerHTML = '<span class="token-label">Zz</span>';
+  document.body.appendChild(el);
+  const saved = mapTokens;
+  mapTokens = { 'zz-dead': { id: 'zz-dead', entity_type: 'item', conditions: ['dead', 'prone'] } };
+  try {
+    _refreshTokenBadges('zz-dead');
+    const ov = el.querySelector('.token-cond-overlay'), img = ov && ov.querySelector('img');
+    T.ok(img && img.style.width === '50px', 'skull should be half the token size, got ' + (img && img.style.width));
+    T.ok(/\+ 35px/.test(ov.style.left) && /- 35px/.test(ov.style.top), 'skull offset: ' + ov.style.left + ' / ' + ov.style.top);
+    T.ok(!el.querySelector('.token-label-icons'), 'other condition icons should be hidden on a dead token');
+    mapTokens['zz-dead'].conditions = ['prone'];
+    _refreshTokenBadges('zz-dead');
+    T.ok(el.querySelector('.token-label-icons'), 'icons come back when the token is revived');
+  } finally { mapTokens = saved; el.remove(); }
+});
