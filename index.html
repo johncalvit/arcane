@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123i';
+const VERSION = 'v0.1.20261123j';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16099,7 +16099,7 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
 
   if (mapChannel)
     mapChannel.send({ type: 'broadcast', event: 'at-set-slot',
-      payload: { combatantId, slot, label, startRound: atRound, durationRounds, locksAll: !!locksAll } });
+      payload: { combatantId, slot, label, startRound: _atSharedRound(), durationRounds, locksAll: !!locksAll } });
 
   const staminaCost = _staminaCostForLabel(label);
   if (staminaCost) _deductStamina(combatantId, staminaCost);
@@ -16151,7 +16151,7 @@ function atSetDropped(combatantId, dropped) {
 }
 
 function renderAtList() {
-  document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + atRound : 'Not In Combat';
+  document.getElementById('at-clock-display').textContent = atCombatActive ? 'Round ' + _atSharedRound() : 'Not In Combat';
   document.getElementById('at-next-btn').disabled = atCombatants.length === 0;
   const startBtn = document.getElementById('at-start-combat-btn');
   if (startBtn) {
@@ -17386,7 +17386,7 @@ function subscribeMapRealtime() {
       if (typeof drawFog === 'function') drawFog();
     })
     .on('broadcast', { event: 'at-state' }, ({ payload }) => {
-      if (!isGM()) { _atStateFromGM = payload; _atUpdateBlink(); renderPlayCharacter(); }
+      if (!isGM()) { _atStateFromGM = payload; if (payload && payload.round) atRound = payload.round; _atUpdateBlink(); renderAtList(); renderPlayCharacter(); }
     })
     .on('broadcast', { event: 'at-done' }, ({ payload }) => {
       if (isGM()) atAcceptAction(payload.combatantId);
