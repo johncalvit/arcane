@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125a';
+const VERSION = 'v0.1.20261125b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -13378,6 +13378,7 @@ async function _resolveAoeFlagged(casterEnt, spell, targets, center) {
   if (isGM()) {
     return new Promise(resolve => {
       aoeResolveState = { casterEnt, spell, remaining: [...targets], resolve, center, pushes: [] };
+      _aoeBroadcastFlags(); // again, now that the spell is known: players see whose save they owe
       _renderAoeResolvePanel();
     });
   }
@@ -13393,7 +13394,62 @@ let _aoePendingCastResolve = null;
 
 function _aoeBroadcastFlags() {
   Object.keys(mapTokens).forEach(_refreshTokenBadges);
-  mapChannel?.send({ type: 'broadcast', event: 'aoe-flags', payload: { ids: [...aoeFlaggedIds] } });
+  mapChannel?.send({ type: 'broadcast', event: 'aoe-flags', payload: { ids: [...aoeFlaggedIds], spellName: aoeResolveState?.spell?.name || null } });
+}
+
+// Player-initiated area saves: a flagged token that belongs to the local player's own character is clicked by THAT
+// player, who rolls (or enters) their own save; the GM's client applies the result. The GM can still click any
+// flagged token to roll for it (an absent player, a creature).
+let _aoeSpellName = null, _aoeMySaving = new Set();
+function _aoeMyFlaggedToken(tokenId) {
+  const t = mapTokens[tokenId];
+  return !isGM() && !!t && t.entity_type === 'character' && t.entity_id === currentCharacterId && aoeFlaggedIds.has(tokenId) && !!_aoeSpellName;
+}
+async function _aoePlayerSave(tokenId) {
+  if (_aoeMySaving.has(tokenId) || !_aoeMyFlaggedToken(tokenId)) return;
+  const spell = SPELLS.find(s => s.name === _aoeSpellName) || _grenadeByName(_aoeSpellName);
+  const ent = getEntity(_tokenCid(mapTokens[tokenId]));
+  if (!spell || !ent) return;
+  _aoeMySaving.add(tokenId);
+  const target = _aoeResolveSaveTarget(spell, ent);
+  openRoller({
+    label: `${spell.name} — ${ent.name} saves`,
+    target, targetLabel: 'roll under to resist', waive: true,
+    onComplete: (n) => { mapChannel?.send({ type: 'broadcast', event: 'aoe-save-result', payload: { tokenId, n } }); },
+  });
+}
+// GM side: a player rolled their own save.
+async function _aoeReceiveSaveResult(payload) {
+  const st = aoeResolveState;
+  if (!st || !isGM() || !payload) return;
+  const n = Number(payload.n);
+  const idx = st.remaining.findIndex(t => t.id === payload.tokenId);
+  if (idx === -1 || !Number.isInteger(n) || n < 1 || n > 100) return;
+  const [token] = st.remaining.splice(idx, 1);
+  aoeFlaggedIds.delete(token.id);
+  _aoeBroadcastFlags();
+  _renderAoeResolvePanel();
+  const ref = _tokenCid(token);
+  if (token.entity_type === 'character') await ensureEntityLoaded(ref);
+  const ent = getEntity(ref);
+  if (ent) {
+    const target = _aoeResolveSaveTarget(st.spell, ent);
+    const saved = n <= 5 || (n < 96 && n <= target);
+    const blast = _isBlastSpell(st.spell);
+    const effectText = blast ? await _applyBlast(st, ent, token, saved) : (saved ? '' : await _applyAoeFailure(st.casterEnt, st.spell, ent, token));
+    logCombat(`${ent.name} rolls ${n} vs ${target}% - ${saved ? 'saves' : 'fails'}${effectText ? ' (' + effectText + ')' : ''}.`, saved && !blast ? 'roll' : 'hit');
+    mapChannel?.send({ type: 'broadcast', event: 'aoe-save-effect', payload: { tokenId: token.id, text: effectText || '', saved, blast } });
+  }
+  if (!st.remaining.length) _aoeResolveFinish();
+}
+function _aoeShowSaveEffect(p) {
+  _aoeMySaving.delete(p.tokenId);
+  const dmgEl = document.getElementById('roller-damage-display');
+  if (!dmgEl || !_roller || _roller.mirror) return;
+  dmgEl.style.display = 'block';
+  dmgEl.innerHTML = p.saved && !p.blast
+    ? `<div style="font-size:0.9rem;color:var(--gold2);">Resisted - no effect.</div>`
+    : `<div style="font-size:0.9rem;color:#e05555;">${_paEsc(p.text || 'Failed the save.')}</div>`;
 }
 
 // ═══ EXPLOSIONS: distance-scaled damage + blowback ═══════════════════════════
@@ -13676,11 +13732,12 @@ function _renderAoeResolvePanel() {
     document.body.appendChild(el);
   }
   const names = st.remaining.map(t => _paEsc(getEntity(_tokenCid(t))?.name || t.label || '?')).join(', ');
-  el.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:4px;">${_paEsc(st.spell.name)} — click a highlighted target to resolve its save</div>
+  const hasPc = st.remaining.some(t => t.entity_type === 'character'), hasCreature = st.remaining.some(t => t.entity_type !== 'character');
+  const btnCss = 'padding:5px 14px;border-radius:5px;cursor:pointer;font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);margin:0 3px;';
+  el.innerHTML = `<div style="color:var(--gold2);font-weight:bold;margin-bottom:4px;">${_paEsc(st.spell.name)} — players click their own token to roll; click any other highlighted target to roll for it</div>
     <div style="color:var(--text-dim);margin-bottom:6px;">${st.remaining.length} remaining: ${names || '—'}</div>
-    <button onclick="_aoeResolveRemainingFast()" style="padding:5px 14px;border-radius:5px;cursor:pointer;
-      font-family:var(--ui-font);font-size:0.75rem;border:1px solid var(--border);background:var(--bg3);color:var(--text-dim);">
-      Resolve Remaining Automatically</button>`;
+    ${hasCreature ? `<button onclick="_aoeResolveRemainingFast(false)" style="${btnCss}">Roll Creatures Automatically</button>` : ''}
+    ${hasPc ? `<button onclick="_aoeResolveRemainingFast(true)" style="${btnCss}" title="Players click their own token to roll; use this for anyone who is away.">Roll for Players Too</button>` : ''}`;
 }
 
 // Called when the GM clicks a still-flagged token on the map. Opens its save
@@ -13725,12 +13782,13 @@ async function _aoeResolveClick(tokenId) {
 // staggered auto-rolls for whoever's still flagged, same feel as the old
 // monster-bundle screen, rather than forcing every single one through the
 // click-a-token flow.
-async function _aoeResolveRemainingFast() {
+async function _aoeResolveRemainingFast(includePlayers = true) {
   const st = aoeResolveState;
   if (!st || !st.remaining.length) return;
-  const toResolve = [...st.remaining];
-  st.remaining = [];
-  aoeFlaggedIds.clear();
+  const toResolve = st.remaining.filter(t => includePlayers || t.entity_type !== 'character');
+  if (!toResolve.length) return;
+  st.remaining = st.remaining.filter(t => !toResolve.includes(t));
+  toResolve.forEach(t => aoeFlaggedIds.delete(t.id));
   _aoeBroadcastFlags();
   _renderAoeResolvePanel();
   for (const token of toResolve) {
@@ -13746,7 +13804,7 @@ async function _aoeResolveRemainingFast() {
     logCombat(`${ent.name} rolls ${n} vs ${target}% — ${saved ? 'saves' : 'fails'}${effectText ? ' (' + effectText + ')' : ''}.`, saved && !blast ? 'roll' : 'hit');
     await new Promise(res => setTimeout(res, 180));
   }
-  _aoeResolveFinish();
+  if (!st.remaining.length) _aoeResolveFinish();
 }
 
 async function _aoeResolveFinish() {
@@ -13772,6 +13830,8 @@ function _aoeReceiveResolveStart(payload) {
   const targets = (payload.targetIds || []).map(id => mapTokens[id]).filter(Boolean);
   if (!spell || !casterEnt || !targets.length) return;
   aoeResolveState = { casterEnt, spell, remaining: targets, remoteCasterCid: payload.casterCid, resolve: () => {}, center: payload.center || null, pushes: [] };
+  aoeFlaggedIds = new Set(targets.map(t => t.id));
+  _aoeBroadcastFlags();
   _renderAoeResolvePanel();
 }
 
@@ -16693,6 +16753,9 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   _rollerUpdateTarget();
   const quickCb = document.getElementById('roller-quick');
   if (quickCb) quickCb.checked = _rollerQuick();
+  const manualCb = document.getElementById('roller-manual');
+  if (manualCb) manualCb.checked = _rollerManualOn;
+  _rollerHideManual();
   document.getElementById('roller-overlay').style.display = 'flex';
   _rollerStartSpin();
   if (mirror) document.getElementById('roller-status').textContent = (by || 'Someone') + ' is rolling…';
@@ -16775,8 +16838,40 @@ function _rollerRand() {
 // it still waits for the click (so a defense can be picked first), then reveals at once.
 function _rollerQuick() { return _prefGet('quick_roll'); }
 function _rollerQuickChanged(cb) { _prefSet('quick_roll', cb.checked); } // the checkbox in the roller changes the same preference
+
+// Enter roll: type the number instead of rolling (a physical die, or a ruling for special conditions). Per page
+// load, not saved: it is easy to leave on by accident. Works on any roller, so the result flows through the same
+// success/fail, damage and broadcast code as a rolled number.
+let _rollerManualOn = false;
+function _rollerManualChanged(cb) {
+  _rollerManualOn = cb.checked;
+  if (!_roller || _roller.mirror) return;
+  if (_rollerManualOn && _roller.phase === 'spinning') { clearTimeout(_roller.timeoutId); _rollerEnterManual(); }
+  else if (!_rollerManualOn && _roller.phase === 'manual') { _rollerHideManual(); _rollerStartSpin(); }
+}
+function _rollerHideManual() { const e = document.getElementById('roller-manual-entry'); if (e) e.style.display = 'none'; }
+function _rollerEnterManual() {
+  _roller.phase = 'manual';
+  const entry = document.getElementById('roller-manual-entry'), inp = document.getElementById('roller-manual-val');
+  document.getElementById('roller-status').textContent = `Enter the roll (${_roller.min} - ${_roller.max})`;
+  document.getElementById('roller-number').textContent = '—';
+  if (entry) entry.style.display = 'inline';
+  if (inp) { inp.min = _roller.min; inp.max = _roller.max; inp.value = ''; setTimeout(() => inp.focus(), 0); }
+}
+function _rollerManualSubmit() {
+  if (!_roller || _roller.mirror || _roller.phase !== 'manual') return;
+  const v = Number(document.getElementById('roller-manual-val')?.value);
+  if (!Number.isInteger(v) || v < _roller.min || v > _roller.max) {
+    document.getElementById('roller-status').textContent = `Whole number from ${_roller.min} to ${_roller.max}, please`;
+    return;
+  }
+  _rollerHideManual();
+  _roller.finalNum = v;
+  _rollerBeginStop();
+}
 function _rollerStartSpin() {
   _roller.phase = 'spinning';
+  if (_rollerManualOn && !_roller.mirror) { _rollerEnterManual(); return; }
   const quick = _rollerQuick();
   const hasDefense = document.getElementById('roller-defense')?.style.display === 'block';
   document.getElementById('roller-status').textContent = quick ? (hasDefense ? 'Click to roll' : 'Rolling…') : 'Click to stop';
@@ -16813,7 +16908,8 @@ function _rollerTick(interval) {
 }
 
 function _rollerWaive() {
-  if (!_roller || _roller.mirror || _roller.phase !== 'spinning') return;
+  if (!_roller || _roller.mirror || (_roller.phase !== 'spinning' && _roller.phase !== 'manual')) return;
+  _rollerHideManual();
   _roller.waived = true;
   _roller.finalNum = 100; // an automatic fail
   _rollerBeginStop();
@@ -16989,6 +17085,7 @@ function closeRoller() {
   document.getElementById('roller-overlay').style.display = 'none';
   document.getElementById('roller-cancel').style.display = 'none';
   const wvc = document.getElementById('roller-waive'); if (wvc) wvc.style.display = 'none';
+  _rollerHideManual();
   clearStrayRay(true);
   if (!wasMirror) _rollerBroadcast('roller-close'); // dismiss everyone's mirror
   if (!wasMirror) {
@@ -17259,9 +17356,18 @@ function subscribeMapRealtime() {
     // _resolveAoeFlagged) — broadcast so the pulsing .aoe-flagged highlight
     // shows on every client, not just the GM driving the resolution.
     .on('broadcast', { event: 'aoe-flags' }, ({ payload }) => {
+      const before = new Set(aoeFlaggedIds);
       aoeFlaggedIds = new Set(payload.ids || []);
+      if (payload.spellName) _aoeSpellName = payload.spellName;
+      if (!aoeFlaggedIds.size) { _aoeSpellName = null; _aoeMySaving.clear(); }
       Object.keys(mapTokens).forEach(_refreshTokenBadges);
+      if (!isGM() && _aoeSpellName) {
+        const mine = [...aoeFlaggedIds].find(id => !before.has(id) && _aoeMyFlaggedToken(id));
+        if (mine) showToast(`${_aoeSpellName}: click your token to roll your save.`, 'warn');
+      }
     })
+    .on('broadcast', { event: 'aoe-save-result' }, ({ payload }) => { _aoeReceiveSaveResult(payload); })
+    .on('broadcast', { event: 'aoe-save-effect' }, ({ payload }) => { if (payload) _aoeShowSaveEffect(payload); })
     // A player (not the GM) cast an area spell — see _resolveAoeFlagged's
     // remote branch. Only the GM's own client acts on this.
     .on('broadcast', { event: 'aoe-resolve-start' }, ({ payload }) => {
@@ -18337,6 +18443,7 @@ function startTokenDrag(e, tokenId) {
   // Mid-AOE-resolution, clicking a still-flagged token resolves ITS save
   // instead of dragging it — see _resolveAoeFlagged/_aoeResolveClick.
   if (aoeResolveState && isGM() && aoeFlaggedIds.has(tokenId)) { e.preventDefault(); _aoeResolveClick(tokenId); return; }
+  if (_aoeMyFlaggedToken(tokenId)) { e.preventDefault(); _aoePlayerSave(tokenId); return; }
   // In attack mode a token click selects the target
   if (attackMode) { e.preventDefault(); attackTokenClick(tokenId); return; }
 
@@ -25512,9 +25619,18 @@ async function _deleteMapPin(pinId) {
     <div id="roller-result-label"></div>
     <div id="roller-hit-location" style="font-size:1.05rem;font-weight:bold;margin-top:4px;min-height:1.4em;"></div>
     <div id="roller-damage-display" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;text-align:center;"></div>
-    <label onclick="event.stopPropagation()" style="display:block;margin-top:12px;font-size:0.7rem;color:var(--text-dim);cursor:pointer;font-family:var(--ui-font);" title="Skip the slot-machine spin: show the number after a short delay. Saved on this device.">
-      <input type="checkbox" id="roller-quick" onchange="_rollerQuickChanged(this)" style="vertical-align:-2px;"> Quick roll
-    </label>
+    <div onclick="event.stopPropagation()" style="margin-top:12px;font-size:0.7rem;color:var(--text-dim);font-family:var(--ui-font);">
+      <label style="cursor:pointer;" title="Skip the slot-machine spin: show the number after a short delay. Saved on this device.">
+        <input type="checkbox" id="roller-quick" onchange="_rollerQuickChanged(this)" style="vertical-align:-2px;"> Quick roll
+      </label>
+      <label style="cursor:pointer;margin-left:12px;" title="Type in the number rolled (a physical die, a special condition) instead of rolling here. Stays on until you reload.">
+        <input type="checkbox" id="roller-manual" onchange="_rollerManualChanged(this)" style="vertical-align:-2px;"> Enter roll
+      </label>
+      <span id="roller-manual-entry" style="display:none;margin-left:8px;">
+        <input type="number" id="roller-manual-val" style="width:58px;font-size:0.8rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:1px 4px;" onkeydown="event.stopPropagation(); if (event.key === 'Enter') _rollerManualSubmit();">
+        <button type="button" onclick="_rollerManualSubmit()" style="font-size:0.7rem;background:none;border:1px solid var(--border);border-radius:3px;color:var(--text-dim);cursor:pointer;padding:1px 8px;">OK</button>
+      </span>
+    </div>
     <button id="roller-cancel" onclick="event.stopPropagation(); cancelRoller()" style="display:none;">Cancel</button>
     <button id="roller-waive" onclick="event.stopPropagation(); _rollerWaive()" style="display:none;" title="Don't resist: the save counts as failed">Don't resist</button>
     <button id="roller-close" onclick="closeRoller()">Close</button>

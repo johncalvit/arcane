@@ -923,8 +923,38 @@ test('Walls', "a waivable save shows Don't resist and counts as failed", async T
   try {
     T.eq(document.getElementById('roller-waive').style.display, 'inline-block', 'button hidden');
     _rollerWaive();
-    await new Promise(r => setTimeout(r, 900));
+    await new Promise(r => setTimeout(r, 1700));
     T.ok(got === 100, 'waived roll should be an automatic fail, got ' + got);
     T.eq(document.getElementById('roller-result-label').textContent, 'NOT RESISTING', 'label');
   } finally { closeRoller(); }
+});
+test('Walls', 'Enter roll: a typed number becomes the roll, bad numbers are refused', async T => {
+  T.stub('_rollerBroadcast', () => {});
+  const savedOn = _rollerManualOn; _rollerManualOn = true;
+  let got = null;
+  openRoller({ label: 'T manual', target: 50, onComplete: n => { got = n; } });
+  try {
+    T.eq(_roller.phase, 'manual', 'should wait for a typed number');
+    const inp = document.getElementById('roller-manual-val');
+    inp.value = '150'; _rollerManualSubmit();
+    T.eq(_roller.phase, 'manual', 'out-of-range number should be refused');
+    inp.value = '42'; _rollerManualSubmit();
+    await new Promise(r => setTimeout(r, 1700));
+    T.eq(got, 42, 'typed value should be the roll');
+    T.eq(document.getElementById('roller-result-label').textContent, 'SUCCESS', '42 vs 50 should succeed');
+  } finally { closeRoller(); _rollerManualOn = savedOn; }
+});
+test('Walls', "area saves: a player may roll only their own flagged token; the auto button leaves players waiting", async T => {
+  T.stub('isGM', () => false);
+  const savedTok = mapTokens, savedFlags = aoeFlaggedIds, savedName = _aoeSpellName, savedChar = currentCharacterId;
+  mapTokens = { a: { id: 'a', entity_type: 'character', entity_id: 'me' }, b: { id: 'b', entity_type: 'character', entity_id: 'other' } };
+  aoeFlaggedIds = new Set(['a', 'b']); _aoeSpellName = 'Fireball'; currentCharacterId = 'me';
+  try {
+    T.ok(_aoeMyFlaggedToken('a'), 'own flagged token should be rollable');
+    T.ok(!_aoeMyFlaggedToken('b'), "someone else's token should not");
+  } finally { mapTokens = savedTok; aoeFlaggedIds = savedFlags; _aoeSpellName = savedName; currentCharacterId = savedChar; }
+  const savedSt = aoeResolveState;
+  aoeResolveState = { spell: {}, remaining: [{ id: 'p', entity_type: 'character', entity_id: 'x' }], pushes: [] };
+  try { await _aoeResolveRemainingFast(false); T.eq(aoeResolveState.remaining.length, 1, 'player should still be waiting'); }
+  finally { aoeResolveState = savedSt; }
 });
