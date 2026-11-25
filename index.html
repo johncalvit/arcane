@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123h';
+const VERSION = 'v0.1.20261123i';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -15309,6 +15309,11 @@ async function atNext() {
       const after = getEntity(c.id);
       if (after.conditions.has('unconscious') || after.conditions.has('dead')) {
         await atStopMaintaining(c.id, { silent: true });
+      } else if (info.targetRef && !/regenerat/i.test(info.spell.setsCondition || '') && (info.spell.restoreToughness || info.spell.restoreStamina || info.spell.restoreBlood)) {
+        // A maintained healing spell (Regenerate: "heals over time") restores its amount again every round it is
+        // sustained, not just at the cast. Only the restore repeats - buffs and conditions were set once already.
+        await _applySpellEffectToTarget({ ...info.spell, clears: '', setsCondition: '', buffAttr: '', buffAmount: 0 }, info.targetRef, { casterEnt: after, skipCondition: true });
+        logCombat(`${info.spell.name} heals ${getEntity(info.targetRef)?.name || 'its target'} (${casterEnt.name} sustains it).`, 'good');
       }
     }
     atRound++;
@@ -17388,8 +17393,30 @@ function subscribeMapRealtime() {
     })
     // Late-joiner sync: a player asks for state on connect; GM answers with
     // the full tracker so refreshing mid-combat self-heals.
-    .on('broadcast', { event: 'at-sync-request' }, () => {
-      _atBroadcastFullState();
+    .on('broadcast', { event: 'at-sync-request' }, ({ payload }) => {
+      if (isGM()) { _atBroadcastFullState(); return; }
+      // A GM who refreshed mid-combat has lost the tracker (it lives in their browser); any player still holds a
+      // copy from the last broadcast, so hand it back.
+      if (payload && payload.gm && _atStateFromGM && _atStateFromGM.active && atCombatants.length && mapChannel) {
+        mapChannel.send({ type: 'broadcast', event: 'at-full-state-for-gm', payload: {
+          round: atRound, activeId: _atStateFromGM.activeId || null, active: true,
+          combatants: atCombatants.map(c => ({
+            id: c.id, name: c.name, avatar: c.avatar, type: c.type, initiative: c.initiative, tieBreak: c.tieBreak,
+            slots: c.slots, dropped: !!c.dropped, inactive: !!c.inactive,
+          })),
+        }});
+      }
+    })
+    .on('broadcast', { event: 'at-full-state-for-gm' }, ({ payload }) => {
+      if (!isGM() || atCombatActive || !payload || !payload.active || !Array.isArray(payload.combatants)) return;
+      atCombatants = payload.combatants.map(c => ({ ...c, slots: c.slots || _newSlots() }));
+      atRound = payload.round || 1;
+      atCombatActive = true;
+      const idx = atSortedCombatants().findIndex(c => c.id === payload.activeId);
+      atActiveIdx = idx >= 0 ? idx : 0;
+      renderAtList();
+      renderPlayCharacter();
+      showToast('Combat restored from the players\' view after the refresh.', 'warn');
     })
     .on('broadcast', { event: 'at-full-state' }, ({ payload }) => {
       if (!isGM()) {
@@ -17482,8 +17509,8 @@ function subscribeMapRealtime() {
       renderTokensCharList();
     })
     .subscribe(status => {
-      if (status === 'SUBSCRIBED' && !isGM() && mapChannel)
-        mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: {} });
+      if (status === 'SUBSCRIBED' && mapChannel)
+        mapChannel.send({ type: 'broadcast', event: 'at-sync-request', payload: isGM() ? { gm: true } : {} });
     });
 
   _armVisibilityResync();
