@@ -34,6 +34,8 @@ A melee critical miss (an attack roll of 96 or more always misses) can go wrong:
 
 **Seeing a monster (players).** When a monster is the active combatant, or you click its token, you see its name, its health bars (never its Quintessence), its conditions and what it is holding. Its stats, skills, armor and the rest of its sheet stay with the GM.
 
+**Sentinel and Target reactions.** When a mover crosses into several Sentinel or Target zones, each watcher is asked in the order the mover reaches them, and a watcher's attack is rolled on the watcher's own screen (the GM for monsters). The mover waits until that attack is finished before the next watcher is asked. If a reaction knocks the mover out, they stay where they fell.
+
 **Passing a character to another owner (GM).** In the Tokens panel, each campaign character has a **⇄** button. Choose who gets it: any player in the campaign, or you (which turns it into an NPC). The character keeps everything (XP, gear, storage, purse, token); the new owner finds it in their character list, and the old owner loses access. Only the GM can do this, so there is no export/import and no duplicate.
 
 **Entering a roll by hand.** Every roller has a small **Enter roll** box. Tick it, type the number from a physical die (or whatever the situation calls for) and press Enter; it is treated exactly like a rolled number. It stays on until you reload the page. Saves that can be refused (area spells) also have a **Don't resist** button, which counts as a failed save, for a willing ally or a buff.

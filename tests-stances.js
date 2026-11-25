@@ -510,3 +510,38 @@ test('Hidden', 'a sprung trap calls every other living party member to react, wi
     T.eq(calls.length, 1, 'the GM is not asked');
   } finally { currentCharacterId = savedCid; }
 });
+test('Sentinel', 'a reaction that drops the mover ends the move where it fell, and the other watchers are not asked', async T => {
+  T.geo();
+  const m = T.token('m', 10, 50, 'creature', 'Em', ['foe']);
+  T.token('a', 20, 50, 'creature', 'Ea', ['sentinel']); T.token('b', 30, 50, 'creature', 'Eb', ['sentinel']);
+  const moves = [], asked = [];
+  T.stub('_moveTokenTo', async (t, x, y) => { moves.push([x, y]); t.x_pct = x; t.y_pct = y; });
+  T.stub('_findSentinelCrossings', () => [{ sentinelCid: 'creature::a', x_pct: 15, y_pct: 50, frac: 0.25 }, { sentinelCid: 'creature::b', x_pct: 25, y_pct: 50, frac: 0.75 }]);
+  T.stub('_resolveSentinelCheck', async sc => { asked.push(sc); m.conditions = ['foe', 'unconscious']; });
+  await _executeMoveWithSentinelChecks('creature::m', [{ x_pct: 10, y_pct: 50 }, { x_pct: 40, y_pct: 50 }]);
+  T.eq(asked, ['creature::a'], 'the second watcher must not be asked');
+  T.eq(moves, [[15, 50]], 'the body stays where it fell');
+  // a mover still on its feet is asked by both and ends at the destination
+  m.conditions = ['foe']; moves.length = 0; asked.length = 0;
+  T.stub('_resolveSentinelCheck', async sc => { asked.push(sc); });
+  await _executeMoveWithSentinelChecks('creature::m', [{ x_pct: 10, y_pct: 50 }, { x_pct: 40, y_pct: 50 }]);
+  T.eq(asked, ['creature::a', 'creature::b']);
+  T.eq(moves[moves.length - 1], [40, 50]);
+});
+test('Sentinel', 'an Attack answer runs the reaction on the answering screen and frees the mover only when it has finished', async T => {
+  const wait = () => new Promise(r => setTimeout(r, 20));
+  let attacked = null, released = 'none';
+  T.stub('_resolveSentinelAttack', async p => { attacked = p; return true; });
+  const pend = id => ({ checkId: id, sentinelCid: 'creature::w', moverCid: 'creature::m', resolve: v => { released = v; } });
+  _sentinelCheckPending = pend('c1'); _sentinelPromptData.c1 = { checkId: 'c1', sentinelCid: 'creature::w', moverCid: 'creature::m' };
+  _answerSentinelCheck('c1', true); await wait();
+  T.eq(attacked && attacked.sentinelCid, 'creature::w', 'the attack starts on the answering client');
+  T.eq(released, 'none', 'the mover keeps waiting while the attack is in flight');
+  T.ok(_sentinelReactionWait, 'the reaction is tracked');
+  _dlgMaybeReopen(); await wait(); // the attack roller closing
+  T.eq(released, true, 'the mover is freed');
+  T.eq(_sentinelReactionWait, null);
+  released = 'none'; _sentinelCheckPending = pend('c2'); _sentinelPromptData.c2 = { checkId: 'c2' };
+  _answerSentinelCheck('c2', false); await wait();
+  T.eq(released, false, 'Let it pass frees the mover at once');
+});

@@ -860,6 +860,12 @@ let _dlgReopenId = null;
 let _dlgRoundEndPendingId = null;
 
 function _dlgMaybeReopen() {
+  // A Sentinel/Target reaction attack launched from this client has now finished (hit, miss or cancelled): release
+  // the mover, who is waiting to carry on with the rest of its move.
+  if (typeof _sentinelReactionWait !== 'undefined' && _sentinelReactionWait) {
+    const w = _sentinelReactionWait;
+    setTimeout(() => { if (_sentinelReactionWait && _sentinelReactionWait.checkId === w.checkId) _sentinelReactionFinished(w.checkId, true); }, 0);
+  }
   if (!_dlgReopenId) return;
   const id = _dlgReopenId;
   _dlgReopenId = null;

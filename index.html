@@ -8640,7 +8640,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125j';
+const VERSION = 'v0.1.20261125k';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -17460,6 +17460,9 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'sentinel-check-answer' }, ({ payload }) => {
       _applySentinelAnswer(payload.checkId, payload.attack);
     })
+    .on('broadcast', { event: 'sentinel-check-done' }, ({ payload }) => {
+      _applySentinelDone(payload.checkId, payload.started);
+    })
     .on('broadcast', { event: 'at-initiative' }, ({ payload }) => {
       const c = atCombatants.find(x => x.id === payload.combatantId);
       if (c) { c.initiative = payload.initiative; c.tieBreak = payload.tieBreak; renderAtList(); renderPlayCharacter(); }
@@ -20456,16 +20459,10 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
     // another monster's watch, or solo testing, with no network round trip.
     _maybeShowSentinelPrompt({ checkId, sentinelCid, moverCid, x_pct: xPct, y_pct: yPct, vigilantSense });
   }).then((reactionStarted) => {
-    // A reaction shot is now mid-resolution (Called Shot modal, then the roller): hand the mover's dialog
-    // to _dlgMaybeReopen so it comes back after that attack - whether or not it was open when the move
-    // began. The move-commit code that runs right after this checks _dlgReopenId and stays out of the way.
-    if (reactionStarted && _atIsCombatActive() && _atSharedActive()?.id === moverCid && typeof _dlgReopenId !== 'undefined') { _dlgReopenId = moverCid; return; }
-    if (!wasOpen || !_atIsCombatActive() || _atSharedActive()?.id !== moverCid) return;
-    // A reaction shot is mid-resolution (Called Shot modal, then the roller) — don't
-    // throw the mover's action dialog up in front of it. Hand it to _dlgMaybeReopen,
-    // which reopens it once that attack's roller closes or it's cancelled.
-    if (reactionStarted && typeof _dlgReopenId !== 'undefined') _dlgReopenId = moverCid;
-    else atOpenActionDialog(moverCid);
+    // The reaction (if any) has been fully resolved on the watcher's screen before this runs. A move that still has
+    // legs to go does not reopen the action dialog; the move-commit code reopens it when the whole move is done.
+    if (reactionStarted || !wasOpen || !_atIsCombatActive() || _atSharedActive()?.id !== moverCid) return;
+    atOpenActionDialog(moverCid);
   });
 }
 
@@ -20476,6 +20473,7 @@ function _maybeShowSentinelPrompt(payload) {
   const watcherTok = _pathFindToken(payload.sentinelCid);
   if (!watcherTok || !_controlsToken(watcherTok)) return;
   if (document.getElementById('sentinel-check-modal-' + payload.checkId)) return; // already showing
+  _sentinelPromptData[payload.checkId] = payload;
   const moverTok  = _pathFindToken(payload.moverCid);
   const moverName = moverTok?.label || 'An enemy';
   const isTargetAction = getConditions(watcherTok.id).has('target');
@@ -20515,26 +20513,59 @@ function _closeSentinelPrompt(checkId) {
   document.getElementById('sentinel-check-modal-' + checkId)?.remove();
 }
 
+// The prompt payloads shown on THIS client, and the reaction attack (if any) this client is mid-way through.
+var _sentinelPromptData = {};
+var _sentinelReactionWait = null; // { checkId, timer }
+
+// Whoever answers a prompt is on the WATCHER's side (the GM for a monster, the owner for a character), so a reaction
+// attack runs right here, on the attacker's own screen: they choose the called shot, they roll, and the mover's
+// player only gets a normal defense prompt. The mover's client waits (see _applySentinelDone) until the attack has
+// finished, so a second Sentinel never prompts while the first reaction is still being resolved.
 function _answerSentinelCheck(checkId, attack) {
   _closeSentinelPrompt(checkId);
+  const payload = _sentinelPromptData[checkId];
+  delete _sentinelPromptData[checkId];
   mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-answer', payload: { checkId, attack } });
-  _applySentinelAnswer(checkId, attack); // resolve locally too, if this client is also the mover
+  if (attack && payload) _runSentinelReaction(checkId, payload);
+  else _applySentinelAnswer(checkId, false); // resolve locally too, if this client is also the mover
 }
 
-// Applies an answer for checkId — a no-op unless THIS client is the one
-// actually awaiting it (the mover). Also closes the prompt here in case a
-// DIFFERENT client (e.g. the GM, answering on the real owner's behalf, or
-// vice versa) answered first — whichever responds first wins, the other
-// prompt just closes.
+async function _runSentinelReaction(checkId, payload) {
+  let started = false;
+  try { started = !!(await _resolveSentinelAttack(payload)); } catch (e) { console.error('sentinel reaction', e); }
+  if (!started) return _sentinelReactionFinished(checkId, false);
+  // The attack is in flight; its roller closing (or its called-shot menu being cancelled) ends it - see _dlgMaybeReopen.
+  clearTimeout(_sentinelReactionWait && _sentinelReactionWait.timer);
+  _sentinelReactionWait = { checkId, timer: setTimeout(() => _sentinelReactionFinished(checkId, true), 180000) };
+}
+
+function _sentinelReactionFinished(checkId, started) {
+  if (_sentinelReactionWait && _sentinelReactionWait.checkId === checkId) { clearTimeout(_sentinelReactionWait.timer); _sentinelReactionWait = null; }
+  mapChannel?.send({ type: 'broadcast', event: 'sentinel-check-done', payload: { checkId, started } });
+  _applySentinelDone(checkId, started);
+}
+
+// Applies a "don't attack" answer for checkId - a no-op unless THIS client is the one actually awaiting it (the
+// mover). Also closes the prompt here in case a DIFFERENT client answered first. An Attack answer only closes the
+// prompt: the mover keeps waiting for the reaction to finish (sentinel-check-done).
 async function _applySentinelAnswer(checkId, attack) {
+  _closeSentinelPrompt(checkId);
+  delete _sentinelPromptData[checkId];
+  if (attack) return;
+  if (!_sentinelCheckPending || _sentinelCheckPending.checkId !== checkId) return;
+  const pending = _sentinelCheckPending;
+  _sentinelCheckPending = null;
+  if (pending.vigilantSense) await _vigilantCallOut(pending);
+  pending.resolve(false);
+}
+
+// The reaction attack for checkId has finished (or never started): the mover carries on with its move.
+function _applySentinelDone(checkId, started) {
   _closeSentinelPrompt(checkId);
   if (!_sentinelCheckPending || _sentinelCheckPending.checkId !== checkId) return;
   const pending = _sentinelCheckPending;
   _sentinelCheckPending = null;
-  let reactionStarted = false;
-  if (attack) reactionStarted = !!(await _resolveSentinelAttack(pending));
-  else if (pending.vigilantSense) await _vigilantCallOut(pending);
-  pending.resolve(reactionStarted);
+  pending.resolve(!!started);
 }
 
 // The Vigilant player chose Call Out instead of (or couldn't) Attack —
@@ -20605,6 +20636,7 @@ async function _resolveSentinelAttack(pending) {
     : `${sentinelTok.label} reacts to ${moverTok.label} entering ${isTargetAction ? 'their guarded sector' : 'melee range'}!`, 'roll');
   enterAttackMode(sentinelCid, weaponName, actionLabel, isTargetAction, rangeFt);
   attackTokenClick(moverTok.id);
+  if (attackMode) { exitAttackMode(); return false; } // refused (e.g. out of reach): nothing is in flight
   return true; // the reaction attack is now in flight (its modal/roller will follow)
 }
 
@@ -20631,6 +20663,9 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
     for (const cross of _findSentinelCrossings(combId, from, to, true)) {
       await _moveTokenTo(moverTok, cross.x_pct, cross.y_pct);
       await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct);
+      // A reaction that drops the mover (dead, unconscious, stunned, paralyzed) ends the move right where it fell:
+      // no more prompts from the other watchers, and the body does not walk on to the planned destination.
+      if (!_sentinelCanReact(moverTok)) { _vigMoveGait = 0; return; }
     }
   }
   _vigMoveGait = 0;
