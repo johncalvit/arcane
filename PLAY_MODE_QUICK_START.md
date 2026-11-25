@@ -30,6 +30,8 @@ A melee critical miss (an attack roll of 96 or more always misses) can go wrong:
 
 **Preferences.** Open the menu (☰) and choose Profile: *Quick roll by default* swaps the spinning roller for a short pause before the number appears (the Quick roll box in the roller changes the same setting), and *Center the map on the active character in combat* turns the automatic slide to whoever's turn it is on or off. They are saved to your account as you tick them.
 
+**Character Mode and the right character (GM).** During combat, the ✎ Character Mode button opens the *active combatant's* own record, so you edit the character who is actually in play. If the character loaded in Character Mode is not the one on the map (two records can share a name), a banner at the top says so and offers **Open the one on the map**.
+
 **Entering a roll by hand.** Every roller has a small **Enter roll** box. Tick it, type the number from a physical die (or whatever the situation calls for) and press Enter; it is treated exactly like a rolled number. It stays on until you reload the page. Saves that can be refused (area spells) also have a **Don't resist** button, which counts as a failed save, for a willing ally or a buff.
 
 **Area spell saves.** When an area spell catches people, each caught token pulses. A player clicks their own pulsing token to roll their own save (the GM's screen applies the result); the GM clicks any other token to roll for it. The panel's **Roll Creatures Automatically** handles monsters in one go, and **Roll for Players Too** covers anyone who is away.

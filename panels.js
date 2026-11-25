@@ -434,7 +434,7 @@ function _paBind(el, ctx) {
       case 'view-skills': _paViewSkills(ctx.ent, ctx.skills, ctx.attrs); break;
       case 'view-techniques': _paViewTechniques(ctx.ent); break;
       case 'view-equipment': _paViewEquipment(ctx.ent, ctx.attrs); break;
-      case 'edit-char': if (typeof exitPlayMode === 'function') exitPlayMode(); break;
+      case 'edit-char': if (typeof openCharacterMode === 'function') openCharacterMode(); else if (typeof exitPlayMode === 'function') exitPlayMode(); break;
       case 'figure': openFigureLightbox(t.querySelector('img')?.src, d.name); break;
       case 'back': backToMyCharacter(); break;
       case 'cond': setCondition(d.token, d.key, d.on === '1'); break;

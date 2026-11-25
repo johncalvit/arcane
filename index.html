@@ -39,6 +39,9 @@
     min-height: 100vh;
     font-size: 15px;
   }
+  #char-map-banner { padding: 7px 16px; font-size: 0.8rem; font-family: var(--ui-font); border-bottom: 1px solid var(--border); background: rgba(201,168,76,0.12); color: var(--gold2); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  #char-map-banner.dim { background: var(--bg3); color: var(--text-dim); }
+  #char-map-banner button { font-size: 0.75rem; padding: 3px 10px; border-radius: 4px; cursor: pointer; background: var(--bg2); color: var(--text); border: 1px solid var(--gold); font-family: var(--ui-font); }
   header {
     background: linear-gradient(180deg, #1a0a0a 0%, var(--bg2) 100%);
     border-bottom: 2px solid var(--gold);
@@ -1149,6 +1152,7 @@
     </div>
   </div>
 </header>
+<div id="char-map-banner" style="display:none;"></div>
 
 <div class="app-layout">
   <nav class="sidebar">
@@ -7707,7 +7711,50 @@ function _updateNavCharCard(name) {
 // more. Only meaningful in builder mode itself; enterConfigMode/
 // enterPlayMode below set their own titles so this never lingers stale once
 // the user switches away.
+// GM safety net: Character Mode edits whichever character is loaded, which may not be the one on the map (two
+// records can share a name). Say so when it is not, and offer the one that is.
+function updateCharMapBanner() {
+  const el = document.getElementById('char-map-banner');
+  if (!el) return;
+  const hide = () => { el.style.display = 'none'; el.innerHTML = ''; };
+  const nav = document.getElementById('gm-config-nav');
+  if ((nav && nav.style.display !== 'none') || document.getElementById('play-mode')?.classList.contains('active')) return hide();
+  if (!isGM() || !currentCharacterId || !currentCampaignId || !activeMapId) return hide();
+  const toks = Object.values(mapTokens).filter(t => t.entity_type === 'character');
+  if (!toks.length || toks.some(t => t.entity_id === currentCharacterId)) return hide();
+  const name = (document.getElementById('char-name')?.value || '').trim();
+  const nm = s => String(s || '').trim().toLowerCase();
+  const twin = name && toks.find(t => nm(t.label) === nm(name) || nm(playCharCache[t.entity_id]?.name) === nm(name));
+  el.className = twin ? '' : 'dim';
+  if (twin) {
+    const xp = playCharCache[twin.entity_id]?.stats?.XP || 0;
+    el.innerHTML = `<span>⚠ A different <b>${_paEsc(name)}</b> (${xp} XP) is on this map. You are editing another record, so changes here will not show in play.</span>` +
+      `<button onclick="_openOnMapCharacter('${_paEsc(twin.entity_id)}')">Open the one on the map</button>`;
+  } else {
+    el.innerHTML = `<span><b>${_paEsc(name || 'This character')}</b> is not on this map, so changes here will not show in play until it is added.</span>`;
+  }
+  el.style.display = 'flex';
+}
+async function _openOnMapCharacter(id) { if (id) { await loadCharacter(id); updateCharMapBanner(); } }
+
+// The ✎ Character Mode button: a GM mid-combat lands on the active combatant's own record instead of whichever
+// character happened to be loaded last.
+async function openCharacterMode() {
+  let target = null;
+  if (isGM() && typeof atCombatActive !== 'undefined' && atCombatActive) {
+    const ac = _atActiveCombatant();
+    if (ac && String(ac.id).startsWith('char::')) target = ac.id.slice(6);
+  }
+  exitPlayMode();
+  if (target && target !== currentCharacterId) {
+    await loadCharacter(target);
+    showToast('Opened ' + (document.getElementById('char-name')?.value || 'the active character') + ', the character in play.', 'info');
+  }
+  updateCharMapBanner();
+}
+
 function _updateBuilderTitle() {
+  updateCharMapBanner();
   const name = document.getElementById('char-name')?.value?.trim();
   const suffix = name ? ` — ${name}` : '';
   document.title = `Grim Toll${suffix}`;
@@ -8590,7 +8637,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125c';
+const VERSION = 'v0.1.20261125d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10038,6 +10085,7 @@ function enterPlayMode() {
   _collectIncomingItems();
   document.querySelector('.app-layout').style.display = 'none';
   document.querySelector('header').style.display = 'none';
+  { const b = document.getElementById('char-map-banner'); if (b) b.style.display = 'none'; }
   const pm = document.getElementById('play-mode');
   pm.classList.add('active');
   document.getElementById('play-mode-btn').style.display = 'none';
@@ -25847,7 +25895,7 @@ async function _deleteMapPin(pinId) {
     <div id="play-actions" style="margin-left:auto;display:flex;gap:8px;align-items:center;">
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
       <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
-      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Mode</button>
+      <button class="play-btn" style="margin-left:0;" onclick="openCharacterMode()">✎ Character Mode</button>
       <button id="play-config-btn" class="play-btn" style="margin-left:0;" onclick="if(isGM()){exitPlayMode();enterConfigMode();}">⚙ GM Config Mode</button>
     </div>
   </div>

@@ -958,3 +958,24 @@ test('Walls', "area saves: a player may roll only their own flagged token; the a
   try { await _aoeResolveRemainingFast(false); T.eq(aoeResolveState.remaining.length, 1, 'player should still be waiting'); }
   finally { aoeResolveState = savedSt; }
 });
+test('Walls', 'Character Mode warns a GM when the loaded character is not the one on the map', async T => {
+  T.stub('isGM', () => true);
+  const s = { cc: currentCharacterId, camp: currentCampaignId, map: activeMapId, toks: mapTokens, cache: playCharCache };
+  const nav = document.getElementById('gm-config-nav'), navDisp = nav && nav.style.display; if (nav) nav.style.display = 'none';
+  const nameEl = document.getElementById('char-name'), savedName = nameEl.value;
+  try {
+    currentCharacterId = 'lv4'; currentCampaignId = 'c'; activeMapId = 'm'; nameEl.value = 'Fez';
+    mapTokens = { t1: { id: 't1', entity_type: 'character', entity_id: 'lv1', label: 'Fez' } };
+    playCharCache = { lv1: { name: 'Fez', stats: { XP: 0 } } };
+    updateCharMapBanner();
+    const el = document.getElementById('char-map-banner');
+    T.ok(el.style.display !== 'none' && /different/.test(el.textContent), 'twin warning missing: ' + el.textContent);
+    T.ok(/Open the one on the map/.test(el.innerHTML), 'button missing');
+    mapTokens = { t1: { id: 't1', entity_type: 'character', entity_id: 'lv4', label: 'Fez' } };
+    updateCharMapBanner();
+    T.eq(el.style.display, 'none', 'no banner when the loaded character is on the map');
+  } finally {
+    currentCharacterId = s.cc; currentCampaignId = s.camp; activeMapId = s.map; mapTokens = s.toks; playCharCache = s.cache;
+    nameEl.value = savedName; if (nav) nav.style.display = navDisp; updateCharMapBanner();
+  }
+});
