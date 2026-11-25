@@ -898,3 +898,21 @@ test('Walls', "a player's heal on another character is handed to the GM instead 
     T.ok(sent.includes('entity-patch-request'), 'request to GM not sent: ' + sent);
   } finally { mapChannel = savedCh; }
 });
+
+test('Walls', "a player's wall change is flagged for the GM to save when the database refuses it", async T => {
+  T.stub('isGM', () => false); T.stub('scheduleLights', () => {});
+  const savedMap = activeMapId; activeMapId = 'T_map';
+  const sent = [];
+  const savedCh = mapChannel; mapChannel = { send: m => sent.push(m) };
+  T.stubObj(sb, 'from', () => ({ update: () => ({ eq: () => ({ select: async () => ({ data: [], error: null }) }) }) }));
+  try {
+    await saveMapWalls();
+    T.ok(sent.length && sent[0].payload.persist === true, 'persist flag missing');
+  } finally { mapChannel = savedCh; activeMapId = savedMap; }
+});
+test('Walls', 'a roller never names a player by their email', async T => {
+  T.stub('isGM', () => false);
+  const savedUser = currentUser, savedChar = currentCharacterId;
+  currentUser = { email: 'someone@example.com', user_metadata: {} }; currentCharacterId = null;
+  try { T.ok(!/@/.test(_rollerWho()), 'email leaked: ' + _rollerWho()); } finally { currentUser = savedUser; currentCharacterId = savedChar; }
+});

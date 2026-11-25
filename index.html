@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261123g';
+const VERSION = 'v0.1.20261123h';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10059,6 +10059,8 @@ function enterPlayMode() {
   // (part of gmPanel, already gated below); players get a separate read-only
   // entry point instead, since they never see gmPanel at all.
   const playerNotesBtn = document.getElementById('player-notes-btn');
+  const playCfgBtn = document.getElementById('play-config-btn'); // players never get the GM's configuration button
+  if (playCfgBtn) playCfgBtn.style.display = isGM() ? '' : 'none';
   if (isGM()) {
     gmPanel.style.display = 'flex';
     resizeRight.style.display = '';
@@ -16689,7 +16691,12 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
 }
 
 function _rollerWho() {
-  return (currentUser && (currentUser.user_metadata?.display_name || currentUser.email)) || 'Someone';
+  // A player shows as their character (never their sign-in email, which every other screen would then see).
+  const charName = !isGM() && currentCharacterId ? (document.getElementById('char-name')?.value || '').trim() : '';
+  if (charName) return charName;
+  const dn = currentUser?.user_metadata?.display_name;
+  if (dn) return dn;
+  return isGM() ? 'GM' : 'A player';
 }
 function _rollerBroadcast(event, payload) {
   if (mapChannel) mapChannel.send({ type: 'broadcast', event, payload: payload || {} });
@@ -17307,6 +17314,7 @@ function subscribeMapRealtime() {
     .on('broadcast', { event: 'walls-sync' }, ({ payload }) => {
       mapWalls = Array.isArray(payload.walls) ? payload.walls : [];
       _wallsReadyMapId = activeMapId; // a walls-sync carries the full list
+      if (isGM() && payload.persist && activeMapId) sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId).then(() => {});
       if (typeof drawWalls === 'function') drawWalls();
       if (typeof drawFog === 'function') drawFog();
       scheduleLights();
@@ -22639,12 +22647,15 @@ async function _hiddenEdit(id, field, value) {
 async function saveMapWalls() {
   if (!activeMapId) return;
   scheduleLights(); // lit areas live in this array too
-  await sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId);
+  const { data: saved, error: saveErr } = await sb.from('maps').update({ walls: mapWalls }).eq('id', activeMapId).select('id');
+  // Only the GM can write the map row. A player's wall change (an Ice Shield they cast, a door they opened, a hidden
+  // thing they found) is sent flagged, and the GM's screen saves it - otherwise it showed live but vanished on reload.
+  const needsGm = !isGM() && (!!saveErr || !(saved && saved.length));
   // Walls had no live sync at all before fog of war needed one — other
   // clients only ever saw a change on their next loadMapWalls (a fresh map
   // load). Broadcasting the whole (small) array is simplest and safest;
   // no diffing to get wrong.
-  mapChannel?.send({ type: 'broadcast', event: 'walls-sync', payload: { walls: mapWalls } });
+  mapChannel?.send({ type: 'broadcast', event: 'walls-sync', payload: { walls: mapWalls, persist: needsGm } });
 }
 
 // The map whose walls have actually been loaded. drawFog needs the real walls to
@@ -25677,7 +25688,7 @@ async function _deleteMapPin(pinId) {
       <button id="player-notes-btn" class="play-btn" style="margin-left:0;display:none;" onclick="openCampaignNotesPanel()" title="Notes the GM has shared with the party">📓 Notes</button>
       <button class="play-btn" style="margin-left:0;padding:5px 12px;" onclick="openHelpPanel()" title="Help">?</button>
       <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode()">✎ Character Mode</button>
-      <button class="play-btn" style="margin-left:0;" onclick="exitPlayMode();enterConfigMode();">⚙ GM Config Mode</button>
+      <button id="play-config-btn" class="play-btn" style="margin-left:0;" onclick="if(isGM()){exitPlayMode();enterConfigMode();}">⚙ GM Config Mode</button>
     </div>
   </div>
 
