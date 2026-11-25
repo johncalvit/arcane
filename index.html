@@ -7713,6 +7713,7 @@ function _updateNavCharCard(name) {
 // the user switches away.
 // GM safety net: Character Mode edits whichever character is loaded, which may not be the one on the map (two
 // records can share a name). Say so when it is not, and offer the one that is.
+var _offPlayCharTokens = []; // [{entity_id, label}] on the map when Play Mode was last left
 function updateCharMapBanner() {
   const el = document.getElementById('char-map-banner');
   if (!el) return;
@@ -7720,7 +7721,9 @@ function updateCharMapBanner() {
   const nav = document.getElementById('gm-config-nav');
   if ((nav && nav.style.display !== 'none') || document.getElementById('play-mode')?.classList.contains('active')) return hide();
   if (!isGM() || !currentCharacterId || !currentCampaignId || !activeMapId) return hide();
-  const toks = Object.values(mapTokens).filter(t => t.entity_type === 'character');
+  // Leaving Play Mode empties mapTokens, so fall back to the character tokens it had when Play Mode was left.
+  const live = Object.values(mapTokens).filter(t => t.entity_type === 'character');
+  const toks = live.length ? live : _offPlayCharTokens;
   if (!toks.length || toks.some(t => t.entity_id === currentCharacterId)) return hide();
   const name = (document.getElementById('char-name')?.value || '').trim();
   const nm = s => String(s || '').trim().toLowerCase();
@@ -8637,7 +8640,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125g';
+const VERSION = 'v0.1.20261125h';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16767,7 +16770,7 @@ let _roller = null;
 function openRoller({ label, min = 1, max = 100, target = null, targetLabel = '', defenseOptions = [], strayContext = null, locContext = null, damageContext = null, onComplete = null, mirror = false, by = '', waive = false }) {
   _roller = { label, min, max, baseTarget: target, target, targetLabel, defenseReduction: 0,
               phase: 'idle', finalNum: null, timeoutId: null, strayContext, locContext, damageContext, onComplete,
-              mirror, by, mirrorResult: null };
+              mirror, by, mirrorResult: null, waive: !!waive && !mirror };
 
   // Broadcast the roll to the rest of the campaign (unless this IS the mirror)
   if (!mirror) _rollerBroadcast('roller-open', { by: _rollerWho(), label, min, max, target, targetLabel });
@@ -16934,7 +16937,8 @@ function _rollerStartSpin() {
   _roller.phase = 'spinning';
   if (_rollerManualOn && !_roller.mirror) { _rollerEnterManual(); return; }
   const quick = _rollerQuick();
-  const hasDefense = document.getElementById('roller-defense')?.style.display === 'block';
+  // A roll with a choice to make first (defense buttons, or Don't resist on a save) waits for the click even in quick mode.
+  const hasDefense = document.getElementById('roller-defense')?.style.display === 'block' || !!_roller.waive;
   document.getElementById('roller-status').textContent = quick ? (hasDefense ? 'Click to roll' : 'Rolling…') : 'Click to stop';
   if (quick && !_roller.mirror && !hasDefense) {
     const r = _roller;
@@ -21152,6 +21156,7 @@ exitPlayMode = function() {
   if (lightMode)    exitLightMode();
   if (itemMode)     exitItemMode();
   if (pathMode)     exitPathMode();
+  _offPlayCharTokens = Object.values(mapTokens).filter(t => t.entity_type === 'character').map(t => ({ entity_id: t.entity_id, label: t.label }));
   tokenChannel?.unsubscribe();
   tokenChannel = null;
   mapTokens    = {};

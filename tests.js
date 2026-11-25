@@ -974,6 +974,11 @@ test('Walls', 'Character Mode warns a GM when the loaded character is not the on
     mapTokens = { t1: { id: 't1', entity_type: 'character', entity_id: 'lv4', label: 'Fez' } };
     updateCharMapBanner();
     T.eq(el.style.display, 'none', 'no banner when the loaded character is on the map');
+    // after leaving Play Mode the live tokens are gone; the snapshot taken at exit is used instead
+    mapTokens = {}; _offPlayCharTokens = [{ entity_id: 'lv1', label: 'Fez' }];
+    updateCharMapBanner();
+    T.ok(el.style.display !== 'none' && /different/.test(el.textContent), 'banner should use the exit snapshot');
+    _offPlayCharTokens = [];
   } finally {
     currentCharacterId = s.cc; currentCampaignId = s.camp; activeMapId = s.map; mapTokens = s.toks; playCharCache = s.cache;
     nameEl.value = savedName; if (nav) nav.style.display = navDisp; updateCharMapBanner();
