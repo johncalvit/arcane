@@ -19295,7 +19295,7 @@ function attackTokenClick(tokenId) {
     // Whirlwind: once this swing's roll lands, the next target follows as soon as the roller is dismissed; after
     // the last one the action dialog comes back. (A cancelled swing never registers, so the sweep just stops.)
     : whirl ? (rolled) => {
-        if (whirl.last) { if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid; }
+        if (whirl.last) { _whirl = null; if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid; }
         else if (rolled >= 96) { // a critical miss breaks the spin: no more swings (its slip / fumble / self-hit rolls follow)
           _whirl = null;
           logCombat(`${_logName(throwerCid)}'s Whirlwind is thrown off by a critical miss - the rest of the sweep is lost.`, 'bad');
