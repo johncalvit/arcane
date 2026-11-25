@@ -1081,9 +1081,10 @@ function _dlgRender(body) {
   // held_items (skipping the Loadout tab entirely) doesn't lose the ability
   // to show, or re-select, the very weapon it's already holding.
   const isOwn = ent?.type === 'char' && ent.id === currentCharacterId;
-  const handItems = isOwn && typeof getLoadoutItemNames === 'function'
-    ? getLoadoutItemNames()
-    : [...new Set([...(ent?.loadout || []), ent?.held?.right, ent?.held?.left].filter(Boolean))];
+  // Own sheet: the live builder tables AND the saved loadout, so a drift between the two (a stale table after a
+  // reload, a drop or pickup) can never hide something Fez is actually carrying.
+  const handItems = [...new Set([...(isOwn && typeof getLoadoutItemNames === 'function' ? getLoadoutItemNames() : []),
+    ...(ent?.loadout || []), ent?.held?.right, ent?.held?.left].filter(Boolean))];
 
   // Natural weapons available for a given body-plan slot (Fangs/Claws/... —
   // same MELEE_WEAPONS table as hand weapons, just filtered to rows tagged
@@ -1765,9 +1766,8 @@ function _exploreRender(body) {
   // Gear: swap what's in each hand - free, no stow/drop choice out of combat
   const plan = _paBodyPlan(ent.bodyType);
   const isOwn = ent.type === 'char' && ent.id === currentCharacterId;
-  const handItems = isOwn && typeof getLoadoutItemNames === 'function'
-    ? getLoadoutItemNames()
-    : [...new Set([...(ent.loadout || []), ent.held?.right, ent.held?.left].filter(Boolean))];
+  const handItems = [...new Set([...(isOwn && typeof getLoadoutItemNames === 'function' ? getLoadoutItemNames() : []),
+    ...(ent.loadout || []), ent.held?.right, ent.held?.left].filter(Boolean))];
   const selStyle = 'width:100%;font-size:0.78rem;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:4px 6px;font-family:var(--ui-font);';
   const gearRows = plan.filter(ch => ch.key === 'right' || ch.key === 'left').map(ch => {
     const held = ent.held?.[ch.key] || '';

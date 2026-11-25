@@ -8590,7 +8590,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125b';
+const VERSION = 'v0.1.20261125c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16392,6 +16392,9 @@ function _syncHandSelectsFromCache() {
 async function _playSetHand(side, value) {
   _syncHandSelectsFromCache();
   const sel = document.getElementById('ps-hand-' + side);
+  if (sel && value && ![...sel.options].some(o => o.value === value)) { // carried (saved) but not in the builder's list yet
+    const o = document.createElement('option'); o.value = o.textContent = value; sel.appendChild(o);
+  }
   if (sel) { sel.value = value; recalc(); }
   // keep the cache current immediately (loadPlayCharCache after the save is async) so a quick
   // follow-up change doesn't re-sync from a stale row
