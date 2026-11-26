@@ -866,6 +866,16 @@ test('Spells', 'the spell book learn list has an (i) button that expands the ful
   } finally { statValues.Quintessence = savedQ; spellBookFilter = savedF; _spellBookOpen.clear(); }
 });
 
+test('Import', 'an exported character file keeps its spells, quick spells and purse (top-level fields)', async T => {
+  const saved = { k: [...characterKnownSpells], q: [...characterQuickSpells], p: characterPence, id: currentCharacterId };
+  try {
+    applyCharacterData({ name: 'Imported', knownSpells: ['Fire Rose', 'Misted Form'], quickSpells: ['Fire Rose', 'Nope'], pence: 42, stats: { Strength: 10, Endurance: 10, Agility: 10, Memory: 10, Intellect: 10, Senses: 10, Quintessence: 5 } });
+    T.eq(characterKnownSpells, ['Fire Rose', 'Misted Form'], 'known spells survive an import');
+    T.eq(characterQuickSpells, ['Fire Rose'], 'quick spells survive (only known ones)');
+    T.eq(characterPence, 42, 'the purse survives');
+  } finally { characterKnownSpells = saved.k; characterQuickSpells = saved.q; characterPence = saved.p; currentCharacterId = saved.id; }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

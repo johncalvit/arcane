@@ -8770,7 +8770,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126f';
+const VERSION = 'v0.1.20261126g';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10007,12 +10007,15 @@ function applyCharacterData(data) {
   if (xpDisplay) xpDisplay.textContent = characterXP;
   // Purse — same stats piggyback as XP (see characterPence's own comment for
   // when this actually gets its real starting value).
-  characterPence = Math.round(data.stats?.Pence || 0);
+  characterPence = Math.round(data.stats?.Pence ?? data.pence ?? 0); // exported files carry pence top-level
   updatePurseDisplay();
   // Known spells — same stats piggyback as XP/Level (see saveCharacter);
   // permanent once bought, so this is a straight restore, never merged.
-  characterKnownSpells = Array.isArray(data.stats?.KnownSpells) ? [...data.stats.KnownSpells] : [];
-  characterQuickSpells = Array.isArray(data.stats?.QuickSpells) ? data.stats.QuickSpells.filter(n => characterKnownSpells.includes(n)) : [];
+  // Exported files carry knownSpells / quickSpells top-level (the stats copy only exists on rows saved to the database).
+  const _ks = Array.isArray(data.stats?.KnownSpells) ? data.stats.KnownSpells : data.knownSpells;
+  const _qs = Array.isArray(data.stats?.QuickSpells) ? data.stats.QuickSpells : data.quickSpells;
+  characterKnownSpells = Array.isArray(_ks) ? [..._ks] : [];
+  characterQuickSpells = Array.isArray(_qs) ? _qs.filter(n => characterKnownSpells.includes(n)) : [];
   // Storage + given-away log (stats.Storage / stats.Given; exported files carry them top-level)
   characterStorage = Array.isArray(data.storage || data.stats?.Storage) ? [...(data.storage || data.stats.Storage)] : [];
   characterGiven   = Array.isArray(data.given   || data.stats?.Given)   ? [...(data.given   || data.stats.Given)]   : [];
