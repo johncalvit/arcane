@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126n';
+const VERSION = 'v0.1.20261126o';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -25738,6 +25738,7 @@ enterPlayMode = function() {
          ${LIGHT_SOURCES.map(l => `<option value="${l.label}">${l.label} (${l.ft}ft)</option>`).join('')}
          <option value="__area">▭ Lit Area (draw room/region)</option>
          ${CONCEAL_PRESETS.map(c => `<option value="__conceal:${c.name}:${c.hide}">🌿 Concealment: ${c.name} (${c.hide})</option>`).join('')}
+         <option value="__erase">✖ Erase (click a lit area, cover or light)</option>
        </select>`);
   }
 };
@@ -25786,6 +25787,18 @@ function lightMouseDown(e) {
   const rect = vp.getBoundingClientRect();
   const x = e.clientX - rect.left, y = e.clientY - rect.top;
   const _ltv = document.getElementById('light-type-sel')?.value || '';
+  if (_ltv === '__erase') {
+    if (e.button !== 0) return true;
+    const tokEl = e.target.closest?.('.map-token');
+    const t = tokEl && mapTokens[tokEl.id.replace(/^token-/, '')];
+    if (t && t.entity_type === 'item' && _lightEntryFor(t.label)) { removeToken(t.id); showToast('Light removed.'); return true; }
+    const pt = _wallVpToPct(x, y);
+    const hits = _litAreas().concat(_concealAreas()).filter(w => _pointInPoly(pt.x_pct, pt.y_pct, w.points.map(p => ({ x: p.x_pct, y: p.y_pct }))));
+    const hit = hits[hits.length - 1]; // the most recently drawn one under the click
+    if (hit) { mapWalls = mapWalls.filter(w => w !== hit); saveMapWalls(); drawLightAreaPreview(); showToast(hit.type === 'conceal' ? `Erased ${hit.name || 'concealment'}.` : 'Erased lit area.'); }
+    else showToast('Nothing to erase there - click inside a lit area, cover or on a light.');
+    return true;
+  }
   if (_ltv === '__area' || _ltv.startsWith('__conceal:')) {
     const first = _lightAreaPts[0];
     if (e.button === 2 || (_lightAreaPts.length >= 3 && (e.detail === 2 || Math.hypot(x - first.x, y - first.y) < 10))) {
