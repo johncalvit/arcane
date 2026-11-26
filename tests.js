@@ -838,6 +838,17 @@ test('Scout', 'the Scout class, its allowance, and the techniques manager class 
   } finally { TECHNIQUES.length = 0; TECHNIQUES.push(...saved); }
 });
 
+test('Scout', 'class-dependent level bonuses: three class stats plus one chosen stat per level', async T => {
+  T.eq(_levelBonusMap('Scout', 1, []), {}, 'level 1 has no bonus');
+  T.eq(_levelBonusMap('Scout', 3, ['Strength', 'Memory']), { Endurance: 2, Agility: 2, Senses: 2, Strength: 1, Memory: 1 }, 'Scout level 3 with two picks');
+  T.eq(_levelBonusMap('Warrior', 2, ['Senses']), { Endurance: 1, Strength: 1, Agility: 1, Senses: 1 }, 'Warrior level 2');
+  T.eq(_levelBonusMap('Caster', 2, ['Endurance']), { Endurance: 1, Quintessence: 1, Intellect: 1 }, 'a pick of a class stat is ignored');
+  T.eq(_levelBonusMap('Monk', 3, ['Senses', 'Senses']).Senses, 2, 'the same stat can be picked on different levels');
+  T.eq(_levelBonusMap('Scout', 3, ['Strength']).Strength, 1, 'an unchosen pick adds nothing yet');
+  T.eq(_levelPickChoices('Disciple').length, 4, 'four stats are left to choose from');
+  for (const c of TECHNIQUE_CLASSES) T.eq(_classLevelStats(c).length, 3, c + ' has three class stats');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

@@ -2588,8 +2588,55 @@ function _refreshLevelFromXp() {
 // a pure read of the point-buy base in statValues). Applied on top of the
 // point-buy base wherever a raw stat feeds Final Attributes; the base
 // itself is what buildStatRows' inputs/+-buttons edit.
-function _levelStatBonus() {
-  return Math.max(0, characterLevel - 1);
+// Class-dependent now: each level above 1 gives +1 to each of the class's three raw stats, plus +1 to a fourth stat the
+// player chooses (characterLevelPicks, one per level above 1; it must differ from the class's three).
+const CLASS_LEVEL_STATS = {
+  Warrior:  ['Endurance', 'Strength', 'Agility'],
+  Disciple: ['Endurance', 'Quintessence', 'Strength'],
+  Caster:   ['Endurance', 'Quintessence', 'Intellect'],
+  Scout:    ['Endurance', 'Agility', 'Senses'],
+  Monk:     ['Endurance', 'Quintessence', 'Agility'],
+};
+var characterLevelPicks = []; // raw stat chosen at level 2, 3, ... (index = level - 2); '' = not chosen yet
+function _classLevelStats(cls) { return CLASS_LEVEL_STATS[cls] || CLASS_LEVEL_STATS.Warrior; }
+function _levelPickChoices(cls) { return RAW_STATS.map(r => r.key).filter(k => !_classLevelStats(cls).includes(k)); }
+// Level bonus per raw stat: {Strength: n, ...} for a class, level and list of picks (pure).
+function _levelBonusMap(cls, level, picks) {
+  const out = {}, n = Math.max(0, (level || 1) - 1);
+  if (!n) return out;
+  const own = _classLevelStats(cls);
+  for (const k of own) out[k] = n;
+  const ok = _levelPickChoices(cls);
+  for (let i = 0; i < n; i++) { const k = (picks || [])[i]; if (k && ok.includes(k)) out[k] = (out[k] || 0) + 1; }
+  return out;
+}
+function _levelStatBonus(key) {
+  return _levelBonusMap(characterClass, characterLevel, characterLevelPicks)[key] || 0;
+}
+function _levelPicksPending() {
+  let n = 0; const ok = _levelPickChoices(characterClass);
+  for (let i = 0; i < Math.max(0, characterLevel - 1); i++) if (!ok.includes(characterLevelPicks[i])) n++;
+  return n;
+}
+function setLevelPick(i, key) {
+  characterLevelPicks[i] = key;
+  buildStatRows(); recalc();
+}
+// The "choose your +1" selectors under the raw stats.
+function _levelPicksHTML() {
+  const n = Math.max(0, characterLevel - 1);
+  if (!n) return '';
+  const ok = _levelPickChoices(characterClass), own = _classLevelStats(characterClass);
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const cur = ok.includes(characterLevelPicks[i]) ? characterLevelPicks[i] : '';
+    rows.push(`<label style="display:inline-flex;gap:4px;align-items:center;margin:2px 10px 2px 0;font-size:0.8rem;">Lv ${i + 2}
+      <select onchange="setLevelPick(${i}, this.value)"><option value="">- choose -</option>${ok.map(k => `<option ${k === cur ? 'selected' : ''}>${k}</option>`).join('')}</select></label>`);
+  }
+  const pend = _levelPicksPending();
+  return `<div style="margin-top:8px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;">
+    <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:4px;">Each level: +1 ${own.join(', ')} (${_escWeaponType(characterClass)}), plus +1 to a stat you choose.
+      ${pend ? `<b style="color:#e0a040;">${pend} level-up pick${pend === 1 ? '' : 's'} still to choose.</b>` : ''}</div>${rows.join('')}</div>`;
 }
 // Same piggyback as Level (stats.XP), tracked as its own variable rather than
 // left to round-trip through statValues — read-only here, only ever changed
@@ -2665,7 +2712,7 @@ function calcAttributes() {
 
   const results = {};
   for (const attr of ATTRIBUTES) {
-    const rawVal = (statValues[attr.rawStat] || 0) + _levelStatBonus();
+    const rawVal = (statValues[attr.rawStat] || 0) + _levelStatBonus(attr.rawStat);
     // ?? not || — a species with an explicit 0 (or, for Fly/Swim, no entry
     // at all — see raceDefault) must compute to 0, not silently fall back to
     // a 1× "same as everyone else" modifier. Most attributes have no
@@ -3386,8 +3433,8 @@ function getHeldItems() {
 function buildStatRows() {
   const container = document.getElementById('stat-rows');
   container.innerHTML = '';
-  const bonus = _levelStatBonus();
   for (const stat of RAW_STATS) {
+    const bonus = _levelStatBonus(stat.key);
     const row = document.createElement('div');
     row.className = 'stat-row';
     row.innerHTML = `
@@ -3396,11 +3443,14 @@ function buildStatRows() {
         <button class="btn-sm" onclick="adjustStat('${stat.key}',-1)">−</button>
         <input type="number" class="stat-input" id="si-${stat.key}" value="${statValues[stat.key]}" min="${stat.min}" onchange="setStat('${stat.key}',this.value)">
         <button class="btn-sm" onclick="adjustStat('${stat.key}',1)">+</button>
-        ${bonus ? `<span class="stat-level-bonus" id="sb-${stat.key}" title="+1 per level above 1">+${bonus} lvl</span>` : ''}
+        ${bonus ? `<span class="stat-level-bonus" id="sb-${stat.key}" title="From your class and level-up picks">+${bonus} lvl</span>` : ''}
       </div>
       <div class="stat-value-display" id="sv-${stat.key}" title="${bonus ? `Base ${statValues[stat.key]} + ${bonus} level bonus` : ''}">${statValues[stat.key] + bonus}</div>`;
     container.appendChild(row);
   }
+  const picks = document.createElement('div');
+  picks.innerHTML = _levelPicksHTML();
+  container.appendChild(picks);
 }
 
 function adjustStat(key, delta) {
@@ -3408,7 +3458,7 @@ function adjustStat(key, delta) {
   const newVal = (statValues[key]||0) + delta;
   if (newVal < (stat ? stat.min : 0)) return;
   statValues[key] = newVal;
-  document.getElementById('sv-'+key).textContent = newVal + _levelStatBonus();
+  document.getElementById('sv-'+key).textContent = newVal + _levelStatBonus(key);
   document.getElementById('si-'+key).value = newVal;
   recalc();
 }
@@ -3417,7 +3467,7 @@ function setStat(key, val) {
   const stat = RAW_STATS.find(s=>s.key===key);
   const n = Math.max(parseInt(val)||0, stat ? stat.min : 0);
   statValues[key] = n;
-  document.getElementById('sv-'+key).textContent = n + _levelStatBonus();
+  document.getElementById('sv-'+key).textContent = n + _levelStatBonus(key);
   recalc();
 }
 
@@ -6269,6 +6319,9 @@ function _techAllowanceTotal() {
 function setCharacterClass(cls) {
   characterClass = cls;
   characterTechniques = characterTechniques.filter(id => _techAvailableToClass(TECHNIQUES.find(x => x.id === id), cls));
+  const ok = _levelPickChoices(cls);
+  characterLevelPicks = characterLevelPicks.map(k => ok.includes(k) ? k : ''); // a pick that is now a class stat must be re-chosen
+  buildStatRows();
   recalc();
 }
 function toggleTechnique(id) {
@@ -8160,6 +8213,7 @@ function gatherCharacterData() {
     storage: characterStorage.map(x => ({ ...x })),
     given: characterGiven.slice(-50),
     charClass: characterClass,
+    levelPicks: [...characterLevelPicks],
     techniques: [...characterTechniques],
     notes:   document.getElementById('char-notes')?.value || '',
     stats:   { ...statValues },
@@ -8271,7 +8325,7 @@ async function saveCharacter() {
     social:      data.social || '',
     mental:      data.mental || '',
     stats:       { ...data.stats, Level: data.level, XP: data.xp, Pence: data.pence, KnownSpells: data.knownSpells, QuickSpells: data.quickSpells,
-                   CharClass: data.charClass, Techniques: data.techniques,
+                   CharClass: data.charClass, LevelPicks: data.levelPicks, Techniques: data.techniques,
                    Storage: data.storage, Given: data.given,
                    ArmorOwned: data.armorOwned, ArmorEquipped: data.armorEquipped, Worn: data.worn, Language: data.language,
                    PlayerName: (currentUser?.user_metadata?.display_name || '').trim() || data.stats?.PlayerName || '' },
@@ -8700,7 +8754,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126c';
+const VERSION = 'v0.1.20261126d';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9949,6 +10003,7 @@ function applyCharacterData(data) {
   // Class + chosen techniques — same stats piggyback (older characters: Warrior, none chosen yet).
   const _cls = data.charClass || data.stats?.CharClass;
   characterClass = TECHNIQUE_CLASSES.includes(_cls) ? _cls : 'Warrior';
+  characterLevelPicks = Array.isArray(data.levelPicks || data.stats?.LevelPicks) ? [...(data.levelPicks || data.stats.LevelPicks)] : [];
   characterTechniques = Array.isArray(data.techniques || data.stats?.Techniques) ? [...(data.techniques || data.stats.Techniques)] : [];
   spellBookFilter = 'All';
   // Set BEFORE the Stats block below: buildStatRows() reads characterLevel
@@ -20868,11 +20923,11 @@ function calcAttributesFromData(data) {
   const mental = data.mental || '';
   const stats  = data.stats  || {};
   const results = {};
-  // Level bonus: +1 to every raw stat per level above 1, same as the Character Builder's calcAttributes
+  // Level bonus: class stats +1 per level above 1 plus the player's picks, same as the Character Builder's calcAttributes
   // (_levelStatBonus). Without this, play mode showed the un-leveled stats. Only characters carry stats.XP.
-  const lvlBonus = Math.max(0, _levelFromXp(Math.round(stats.XP || 0)) - 1);
+  const lvlBonus = _levelBonusMap(TECHNIQUE_CLASSES.includes(stats.CharClass) ? stats.CharClass : 'Warrior', _levelFromXp(Math.round(stats.XP || 0)), stats.LevelPicks);
   for (const attr of ATTRIBUTES) {
-    const rawVal = (stats[attr.rawStat] || 0) + lvlBonus;
+    const rawVal = (stats[attr.rawStat] || 0) + (lvlBonus[attr.rawStat] || 0);
     const rM = (RACE_DATA[race] || {})[attr.raceKey] ?? (attr.raceDefault ?? 1);
     const gM = getModifier(GENDER_DATA, gender, attr.key);
     const aM = getModifier(AGE_DATA,    age,    attr.key);
@@ -25107,7 +25162,7 @@ Start in **Character Mode** (top right). Everything you set here is saved to you
 
 ## 1. Name, Species & Traits
 
-On the Traits & Attributes page: character name, Species, Sex, Age, Height, Build, Social and Mental Disposition, Native Language, and **Class** (Warrior, Disciple, Caster, Monk, or Scout). Species and Body Type drive a lot of the math later (size, speed, natural attributes), so pick those first. **Class** sets how many techniques you earn per level (see Techniques below). Everything else is flavor you can freely change.
+On the Traits & Attributes page: character name, Species, Sex, Age, Height, Build, Social and Mental Disposition, Native Language, and **Class** (Warrior, Disciple, Caster, Monk, or Scout). Species and Body Type drive a lot of the math later (size, speed, natural attributes), so pick those first. **Class** sets how many techniques you earn per level (see Techniques below). Your class also decides which raw stats grow when you level: each level adds +1 to the class's three stats (Warrior: Endurance, Strength, Agility; Disciple: Endurance, Quintessence, Strength; Caster: Endurance, Quintessence, Intellect; Scout: Endurance, Agility, Senses; Monk: Endurance, Quintessence, Agility), plus +1 to a fourth stat you choose for that level (not one of the three) under the raw stats. Everything else is flavor you can freely change.
 
 ## 2. Raw Stats
 
