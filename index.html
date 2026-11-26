@@ -1302,7 +1302,7 @@
         <div class="field field-inline">
           <label>Class</label>
           <select id="sel-charclass" onchange="setCharacterClass(this.value)" title="Sets how many techniques you get per level (set in Game Config → Techniques).">
-            <option>Warrior</option><option>Disciple</option><option>Caster</option><option>Monk</option>
+            <option>Warrior</option><option>Disciple</option><option>Caster</option><option>Monk</option><option>Scout</option>
           </select>
         </div>
         <div class="field field-inline" id="is-template-row" style="display:none;" title="Mark this character as a reusable monster/NPC template (GM)">
@@ -2303,7 +2303,7 @@
         <button class="btn" onclick="addTechniqueRow()">+ Add Technique</button>
         <button class="btn" onclick="addMissingTechniques()" title="Adds Technique I (and Parry) for every weapon type that doesn't have them yet.">Add missing for all weapon types</button>
       </div>
-      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Multiplier on the armor's gap % for stabs (2 = doubled; 1 = none)">Gap x</th><th title="Heavy Blow: Stamina spent before the hit roll (0 = not a Heavy Blow)">Heavy Stam</th><th title="Heavy Blow: damage added if the attack hits">Heavy Dmg</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
+      <table class="loadout-table"><thead><tr><th>Name</th><th>Weapon Type</th><th title="Classes that may choose it (none ticked = every class)">Classes</th><th>Min Lvl</th><th>Hit</th><th>Damage</th><th>Parry</th><th title="Added to a Block made with a shield of this weapon type">Block</th><th title="Multiplier on the armor's gap % for stabs (2 = doubled; 1 = none)">Gap x</th><th title="Heavy Blow: Stamina spent before the hit roll (0 = not a Heavy Blow)">Heavy Stam</th><th title="Heavy Blow: damage added if the attack hits">Heavy Dmg</th><th title="Extra seconds to aim an Aimed shot (0 = none)">Aim (s)</th><th title="Multiplier on the range penalty for an Aimed shot (0.5 = half)">Range x</th><th></th></tr></thead>
       <tbody id="techmgr-list"></tbody></table>
     </div>
 
@@ -6044,8 +6044,9 @@ let editingSpellIndex = null;
 //   parry  — added to the reduction of a Parry made with that weapon type
 // Config data (TECHNIQUES, TECHNIQUE_ALLOWANCE) — edited in Game Config →
 // Techniques, saved with the config and merged by Core Rules.
-const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster', 'Monk'];
-const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1, Monk: 2 };
+// Scout: a Ranger / Rogue blend - light armor, hit and run.
+const TECHNIQUE_CLASSES = ['Warrior', 'Disciple', 'Caster', 'Monk', 'Scout'];
+const DEFAULT_TECHNIQUE_ALLOWANCE = { Warrior: 3, Disciple: 2, Caster: 1, Monk: 2, Scout: 3 };
 function _techSlug(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, ''); }
 // Technique I / II / III (unlock at levels 1 / 2 / 3, each +10 hit and +1 damage — they
 // stack) for every weapon type, plus a Parry technique (+10 parry, level 2) for every type
@@ -6297,9 +6298,30 @@ function buildTechniqueManager() {
   tb.innerHTML = TECHNIQUES.map((t, i) => `<tr>
     <td><input type="text" value="${_escWeaponType(t.name)}" style="width:100%;min-width:150px;" onchange="editTechnique(${i},'name',this.value)"></td>
     <td><input type="text" list="weapon-type-list" value="${_escWeaponType(t.weaponType || '')}" style="width:130px;" onchange="editTechnique(${i},'weaponType',this.value)"></td>
+    <td>${_techClassPicker(i, t)}</td>
     <td>${num(i, 'minLevel')}</td><td>${num(i, 'hit')}</td><td>${num(i, 'damage')}</td><td>${num(i, 'parry')}</td><td>${num(i, 'block')}</td><td>${numf(i, 'gapMult', 1)}</td><td>${num(i, 'heavyStam')}</td><td>${num(i, 'heavyDmg')}</td><td>${numf(i, 'aimSec', 0)}</td><td>${numf(i, 'rangeMult', 1)}</td>
     <td><button class="btn" onclick="deleteTechnique(${i})">✕</button></td></tr>`).join('');
   _refreshWeaponTypeList();
+}
+// Which classes may choose a technique: a checkbox list (none ticked = every class). Written to t.classes.
+function _techClassSummary(t) {
+  return Array.isArray(t.classes) && t.classes.length ? t.classes.join(', ') : 'All classes';
+}
+function _techClassPicker(i, t) {
+  const on = Array.isArray(t.classes) ? t.classes : [];
+  return `<details class="tech-classes"><summary style="cursor:pointer;white-space:nowrap;">${_escWeaponType(_techClassSummary(t))}</summary>`
+    + TECHNIQUE_CLASSES.map(c => `<label style="display:block;font-size:0.8rem;white-space:nowrap;"><input type="checkbox" ${on.includes(c) ? 'checked' : ''} onchange="setTechniqueClass(${i},'${c}',this.checked,this)"> ${c}</label>`).join('')
+    + `</details>`;
+}
+function setTechniqueClass(i, cls, on, el) {
+  const t = TECHNIQUES[i]; if (!t) return;
+  const set = new Set(Array.isArray(t.classes) ? t.classes : []);
+  if (on) set.add(cls); else set.delete(cls);
+  const list = TECHNIQUE_CLASSES.filter(c => set.has(c));
+  if (list.length && list.length < TECHNIQUE_CLASSES.length) t.classes = list; else delete t.classes; // all or none = open to everybody
+  const sum = el && el.closest('details') && el.closest('details').querySelector('summary');
+  if (sum) sum.textContent = _techClassSummary(t);
+  writeConfigToDisk();
 }
 function setTechniqueAllowance(cls, v) {
   TECHNIQUE_ALLOWANCE[cls] = Math.max(0, parseFloat(v) || 0);
@@ -8678,7 +8700,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126b';
+const VERSION = 'v0.1.20261126c';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9745,6 +9767,9 @@ function applyConfigData(data) {
       data.meleeWeapons = [...data.meleeWeapons, { ...DEFAULT_MELEE_WEAPONS.find(d => d.weapon === 'Bare Handed' && d.action === 'Block') }];
     if (data.techniqueAllowance && Object.keys(data.techniqueAllowance).length && data.techniqueAllowance.Monk == null) data.techniqueAllowance = Object.assign({}, data.techniqueAllowance, { Monk: DEFAULT_TECHNIQUE_ALLOWANCE.Monk });
   }
+  // Configs saved before the Scout class: give it its technique allowance (a GM who edits it later keeps their value).
+  if (data.techniqueAllowance && Object.keys(data.techniqueAllowance).length && data.techniqueAllowance.Scout == null)
+    data.techniqueAllowance = Object.assign({}, data.techniqueAllowance, { Scout: DEFAULT_TECHNIQUE_ALLOWANCE.Scout });
   // Configs saved before Stealth Kill: add its rows (for the Knife / Short Sword weapons the config has) and the
   // Camouflage enchantment once. A GM who later edits or deletes them keeps their version.
   if (data.stealthKill !== 1) {
@@ -25082,7 +25107,7 @@ Start in **Character Mode** (top right). Everything you set here is saved to you
 
 ## 1. Name, Species & Traits
 
-On the Traits & Attributes page: character name, Species, Sex, Age, Height, Build, Social and Mental Disposition, Native Language, and **Class** (Warrior, Disciple, or Caster). Species and Body Type drive a lot of the math later (size, speed, natural attributes), so pick those first. **Class** sets how many techniques you earn per level (see Techniques below). Everything else is flavor you can freely change.
+On the Traits & Attributes page: character name, Species, Sex, Age, Height, Build, Social and Mental Disposition, Native Language, and **Class** (Warrior, Disciple, Caster, Monk, or Scout). Species and Body Type drive a lot of the math later (size, speed, natural attributes), so pick those first. **Class** sets how many techniques you earn per level (see Techniques below). Everything else is flavor you can freely change.
 
 ## 2. Raw Stats
 
@@ -25112,7 +25137,7 @@ At least 1 point in Quintessence makes you eligible to memorize any spell — ma
 
 ## 8. Techniques
 
-Techniques are fighting skills tied to a weapon type (Axe, Longsword, Bow, and so on). Each weapon type has **Technique I, II, and III**, unlocking at levels 1, 2, and 3, plus a **Parry** technique. You choose techniques from the Techniques page, up to your class's allowance per level × your Level (the GM sets the allowance — by default Warriors get 3 per level, Disciples 2, Casters 1). A technique only applies while you use a weapon of that type: it adds to your hit chance and damage (or to your Parry), and it's called out in the hit roll and damage readout so you can see it counted. You can respec (clear and re-choose) freely while the game is in development.
+Techniques are fighting skills tied to a weapon type (Axe, Longsword, Bow, and so on). Each weapon type has **Technique I, II, and III**, unlocking at levels 1, 2, and 3, plus a **Parry** technique. You choose techniques from the Techniques page, up to your class's allowance per level × your Level (the GM sets the allowance — by default Warriors and Scouts get 3 per level, Disciples and Monks 2, Casters 1). Some techniques are limited to certain classes: anybody can pick up any weapon, but the higher tiers and special moves belong to the classes that specialize in it. A technique only applies while you use a weapon of that type: it adds to your hit chance and damage (or to your Parry), and it's called out in the hit roll and damage readout so you can see it counted. You can respec (clear and re-choose) freely while the game is in development.
 
 ## 9. Save
 

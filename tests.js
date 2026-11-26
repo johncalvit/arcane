@@ -818,6 +818,26 @@ test('Figure', 'a full-body figure shows to the GM and owner always, to others o
   T.ok(_paFigureHtml(mk(), false).includes('pa-figure'), 'a visible token renders the figure card');
 });
 
+// ── Scout / class-limited techniques ────────────────────────────────────────
+test('Scout', 'the Scout class, its allowance, and the techniques manager class picker', async T => {
+  T.ok(TECHNIQUE_CLASSES.includes('Scout'), 'Scout is a class');
+  T.eq(DEFAULT_TECHNIQUE_ALLOWANCE.Scout, 3, 'a Scout gets 3 techniques per level');
+  T.ok([...document.querySelectorAll('#sel-charclass option')].some(o => o.value === 'Scout'), 'the class picker offers Scout');
+  const saved = TECHNIQUES.map(t => JSON.parse(JSON.stringify(t)));
+  try {
+    const i = TECHNIQUES.findIndex(t => t.id === 'bow-1'); T.ok(i >= 0, 'bow-1 exists');
+    delete TECHNIQUES[i].classes;
+    T.ok(_techAvailableToClass(TECHNIQUES[i], 'Caster'), 'no classes = open to everybody');
+    T.stub('writeConfigToDisk', () => {});
+    setTechniqueClass(i, 'Scout', true, null); setTechniqueClass(i, 'Warrior', true, null);
+    T.eq(TECHNIQUES[i].classes, ['Warrior', 'Scout'], 'ticking classes writes them in class order');
+    T.ok(_techAvailableToClass(TECHNIQUES[i], 'Scout') && !_techAvailableToClass(TECHNIQUES[i], 'Caster'), 'limited to the ticked classes');
+    setTechniqueClass(i, 'Scout', false, null); setTechniqueClass(i, 'Warrior', false, null);
+    T.ok(TECHNIQUES[i].classes === undefined, 'unticking every class opens it to everybody again');
+    T.ok(_techClassPicker(i, TECHNIQUES[i]).includes('Scout'), 'the picker lists Scout');
+  } finally { TECHNIQUES.length = 0; TECHNIQUES.push(...saved); }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
