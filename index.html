@@ -2798,13 +2798,14 @@ function recalc() {
   document.getElementById('disp-target').textContent = attrs._targetAdj;
   document.getElementById('disp-blood').textContent = _bloodMax(Math.round(attrs.Toughness), attrs._bloodMult);
 
-  // Attribute cards
+  // Attribute cards (with worn / held enchantments applied)
+  const shown = calcAttributesWithEnchants(attrs);
   for (const group of ['physical','movement','cognitive','senses']) {
     const container = document.getElementById('attrs-' + group);
     if (!container) continue;
     container.innerHTML = '';
     for (const attr of ATTRIBUTES.filter(a=>a.group===group)) {
-      const val = attrs[attr.key];
+      const val = shown[attr.key];
       const card = document.createElement('div');
       card.className = 'attr-card ' + (attr.cssClass||'');
       card.title = attr.desc;
@@ -7151,6 +7152,23 @@ function _entityEnchantItems(row, isChar) {
   return out;
 }
 
+// The builder's own Final Attributes with worn / held enchantments applied (Night Eyes' Night Vision +10 and so on) -
+// the same effects getEntity applies in play, read from the builder's live state. Does not touch the points-based
+// calcs (Memory Points, skill points), which stay on the plain attributes.
+function calcAttributesWithEnchants(attrs) {
+  attrs = attrs || calcAttributes();
+  if (!ENCHANTMENTS.length) return attrs;
+  const equipment = [...document.querySelectorAll('#equip-list tr')].map(tr => ({ name: tr.cells[0].textContent, qty: parseInt(tr.cells[1].textContent) || 1 }));
+  const row = { equipment, held_items: getHeldItems(), stats: { ArmorOwned: _ownedArmorPieces(), ArmorEquipped: getEquippedArmorIds(), Worn: { ...characterWorn } } };
+  const out = Object.assign({}, attrs), seen = new Set();
+  for (const x of _entityEnchantItems(row, true)) {
+    if (x.ench.kind === 'active' || seen.has(x.ench.name)) continue;
+    seen.add(x.ench.name);
+    for (const a of _parseEnchantEffects(x.ench.effects).attrs) out[a.key] = a.pct ? (out[a.key] || 0) * Math.max(0, 1 + a.amt / 100) : (out[a.key] || 0) + a.amt;
+  }
+  return out;
+}
+
 // Activated enchantments this entity can use right now (item worn or in hand, spell still exists).
 function _entityActivations(ent) {
   return (ent?.enchants || []).filter(x => x.ench.kind === 'active' && SPELLS.some(s => s.name === x.ench.spell));
@@ -8770,7 +8788,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126g';
+const VERSION = 'v0.1.20261126h';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not

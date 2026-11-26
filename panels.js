@@ -760,7 +760,7 @@ function renderPlayPanel(el) {
   // Live builder attrs when the sheet is loaded (it edits this character)
   let attrs = null, carried = 0;
   try {
-    attrs = calcAttributes();
+    attrs = calcAttributesWithEnchants();
     carried = getCarriedWeight(attrs).total || 0;
   } catch (e) { attrs = null; }
 

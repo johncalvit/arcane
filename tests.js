@@ -876,6 +876,21 @@ test('Import', 'an exported character file keeps its spells, quick spells and pu
   } finally { characterKnownSpells = saved.k; characterQuickSpells = saved.q; characterPence = saved.p; currentCharacterId = saved.id; }
 });
 
+test('Enchantments', "the builder's Final Attributes include a worn ring's passive effect (Night Eyes: Night Vision +10)", async T => {
+  const list = document.getElementById('equip-list');
+  const savedWorn = { ...characterWorn };
+  const tr = document.createElement('tr'); tr.innerHTML = '<td>Ring of Night Eyes</td><td>1</td><td>0</td>';
+  try {
+    const base = calcAttributes();
+    list.appendChild(tr);
+    characterWorn = {};
+    T.eq(Math.round(calcAttributesWithEnchants(base).NightVision), Math.round(base.NightVision), 'carried but not worn: no effect');
+    characterWorn = { ringR: 'Ring of Night Eyes' };
+    T.near(calcAttributesWithEnchants(base).NightVision, base.NightVision + 10, 0.01, 'worn: Night Vision +10');
+    T.near(calcAttributesWithEnchants(base).DayVision, base.DayVision, 0.01, 'other attributes unchanged');
+  } finally { tr.remove(); characterWorn = savedWorn; }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
