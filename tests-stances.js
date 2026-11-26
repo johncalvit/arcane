@@ -115,13 +115,6 @@ test('Sentinel', 'moving ends Sentinel, Evade, Target and Vigilant - but not Blo
 });
 
 // ── Vigilant & Infiltrate (noticing movement) ────────────────────────────────
-test('Vigilant', 'sense chance: silent is never heard, the pivot gives half the stat, and it never exceeds the stat', async T => {
-  T.eq(_vigilantSenseChance(50, 0, 20), 0);
-  T.eq(_vigilantSenseChance(50, 20, 20), 25);
-  T.eq(_vigilantSenseChance(50, 1e9, 20), 50);
-  T.eq(_vigilantSenseChance(250, 1e9, 20), 100);
-  T.eq(_vigilantSenseChance(0, 1e9, 20), 0, 'a deaf watcher hears nothing');
-});
 test('Vigilant', 'sight range follows Day Vision by day and Night Vision in the dark', async T => {
   const ent = { attrs: { DayVision: 10, NightVision: 2 } };
   mapIsDark = false; T.eq(_vigilantVisionRangeFt(ent), 10 * VIGILANT_VISION_FT_PER_POINT);
@@ -149,53 +142,79 @@ test('Vigilant', 'unlike Sentinel, a mover already inside the watched area still
   mapTokens.m.conditions = ['friendly'];
   T.eq(_findSentinelCrossings('creature::m', { x_pct: 60, y_pct: 50 }, { x_pct: 62, y_pct: 50 }), [], 'allies are not checked');
 });
-test('Vigilant', 'walking openly into the cone is always seen; a sneaker has to be rolled for', async T => {
-  T.geo(); T.senses(); T.fakeWrites(); mapIsDark = false;
-  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
+test('Vigilant', 'in the open a sneaker is simply seen; screened by concealment it is rolled for (sight over hiding, doubled)', async T => {
+  T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
+  T.senses({ 'creature::w': { Hearing: 0, Smell: 0 } }); // sight only
   T.random(0.999);
-  T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'in plain view, even on the worst roll');
-  m.conditions = ['infiltrating'];
-  T.eq(_vigilantDetects(w, m, 80, 50), { detected: false, sense: null }, 'sneaking, watcher rolls badly');
-  T.random(0);
-  T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'sneaking, watcher rolls well');
+  T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'sneaking in the open and the light gives no sight benefit');
+  mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: [{ x_pct: 70, y_pct: 40 }, { x_pct: 90, y_pct: 40 }, { x_pct: 90, y_pct: 60 }, { x_pct: 70, y_pct: 60 }] }];
+  _detectStage = {}; T.random(0.79);
+  T.eq(_vigilantDetects(w, m, 80, 50).sense, 'sight', 'Day Vision 10 / thicket 25 x2 = 80%: a roll of 79 sees');
+  _detectStage = {}; T.random(0.81);
+  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'a roll of 81 does not');
+  m.conditions = [];
+  _detectStage = {}; T.random(0.999);
+  T.eq(_vigilantDetects(w, m, 80, 50).sense, 'sight', 'standing in the thicket without sneaking hides nothing');
 });
-test('Vigilant', 'behind the watcher it comes down to hearing, then smell up close', async T => {
-  T.geo(); T.fakeWrites(); mapIsDark = false;
+test('Vigilant', 'each ring is rolled once per approach: far at half chance, near at full, and leaving resets', async T => {
+  T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
+  mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: [{ x_pct: 0, y_pct: 0 }, { x_pct: 100, y_pct: 0 }, { x_pct: 100, y_pct: 100 }, { x_pct: 0, y_pct: 100 }] }];
+  const w = T.token('w', 10, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
+  T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0, Hearing: 0 } }); // only sight is in play
+  T.random(0.41);
+  T.eq(_vigilantDetects(w, m, 60, 50).detected, false, '50 ft: far ring, 10/25 x2 x0.5 = 40%, a roll of 41 misses');
+  T.random(0);
+  T.eq(_vigilantDetects(w, m, 60, 50).detected, false, 'same ring again: not rolled twice');
+  T.eq(_vigilantDetects(w, m, 45, 50).detected, true, '35 ft: near ring (80%) is a new roll');
+  _detectStage = {};
+  T.eq(_vigilantDetects(w, m, 60, 50).detected, true, 'far ring, rolled on 0: seen');
+  T.eq(_vigilantDetects(w, m, 95, 50).detected, false, 'past the reach: nothing, and the memory is cleared');
+  T.eq(_vigilantDetects(w, m, 60, 50).detected, true, 'back in: rolled afresh');
+});
+test('Vigilant', 'behind the watcher it comes down to hearing, then smell up close; a quiet sneaker is harder to hear than a walker', async T => {
+  T.geo(); T.map(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
   T.senses(); T.random(0);
-  T.eq(_vigilantDetects(w, m, 20, 50).sense, 'hearing', '30 ft behind, a normal mover is heard');
+  T.eq(_vigilantDetects(w, m, 30, 50).sense, 'hearing', '20 ft behind, a normal mover is heard');
+  _detectStage = {};
   T.senses({ 'creature::m': { Speed: 0 } }); // makes no noise at all
   T.eq(_vigilantDetects(w, m, 20, 50), { detected: false, sense: null }, 'silent and 30 ft behind: unnoticed');
+  _detectStage = {};
   T.eq(_vigilantDetects(w, m, 35, 50).sense, 'smell', 'silent but 15 ft behind: smelled');
+  _detectStage = {};
   T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0 } });
   T.eq(_vigilantDetects(w, m, 35, 50).detected, false, 'a watcher with no sense of smell');
+  // louder is easier to hear: Hearing 10 against hiding 40 (sneaking) is 25%, against 20 (walking openly) 50%
+  const p = T.token('p', 50, 50, 'creature', 'Ep', ['facing:0']); // passive: not doubled
+  T.senses({ 'creature::p': { Hearing: 10, Smell: 0 } }); T.random(0.3);
+  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).detected, false, 'sneaking, 25%, a roll of 30');
+  m.conditions = [];
+  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).sense, 'hearing', 'walking openly, 50%');
 });
 test('Vigilant', 'a wall blocks sight, so an open walker behind it can only be heard', async T => {
-  T.geo(); T.senses(); T.fakeWrites(); mapIsDark = false;
+  T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
   T.stub('_sentinelLineOfSight', () => false);
-  T.random(0.999);
-  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'not seen through the wall, and not heard on a bad roll');
-  T.random(0);
+  T.senses({ 'creature::w': { Hearing: 1 } }); T.random(0.999);
+  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'not seen through the wall, and a deaf ear on a bad roll');
+  _detectStage = {}; T.senses(); T.random(0);
   T.eq(_vigilantDetects(w, m, 80, 50).sense, 'hearing');
 });
-test('Vigilant', 'noise: walking openly is twice as loud as sneaking, faster gaits are louder, Silent Step halves it', async T => {
-  T.geo(); T.fakeWrites(); mapIsDark = false; T.random(0.999);
-  const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
-  let mult = 1;
-  T.stub('getEntity', ref => ({ ref, attrs: { DayVision: 10, Hearing: 50, Smell: 50, Speed: 10, _targetAdj: 1 }, armorNoise: 0, noiseMult: ref === 'creature::m' ? mult : 1 }));
-  const scores = [];
-  T.stub('_vigilantSenseChance', (stat, score, pivot) => { if (pivot === VIGILANT_HEARING_PIVOT) scores.push(score); return 0; });
-  const noise = () => { scores.length = 0; _vigilantDetects(w, m, 20, 50); return scores[0]; }; // 30 ft behind
-  m.conditions = ['infiltrating']; _vigMoveGait = 0;
-  const sneak = noise();
-  T.near(sneak, 10, 0.001, 'Speed 10, size 1, no armor');
-  m.conditions = [];
-  T.near(noise(), sneak * VIGILANT_OPEN_NOISE_MULT, 0.001, 'walking openly');
-  m.conditions = ['infiltrating']; _vigMoveGait = 3;
-  T.near(noise(), sneak * VIGILANT_GAIT_NOISE[3], 0.001, 'sprinting');
-  _vigMoveGait = 0; mult = 0.5;
-  T.near(noise(), sneak * 0.5, 0.001, 'Silent Step boots');
+test('Vigilant', 'passive noticing: any awake enemy rolls against a sneaker (not doubled, sees all round); the stance ends with no prompt', async T => {
+  T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
+  T.random(0);
+  T.token('g', 50, 50, 'creature', 'Eg', []); T.token('m', 60, 50, 'creature', 'Em', ['friendly', 'infiltrating']);
+  mapTokens.g.conditions = ['foe']; // enemy of the (friendly) mover; no stance of its own
+  const seg = [{ x_pct: 60, y_pct: 50 }, { x_pct: 62, y_pct: 50 }];
+  const hits = _findSentinelCrossings('creature::m', seg[0], seg[1]);
+  T.eq(hits.length, 1); T.ok(hits[0].passive, 'flagged passive'); T.ok(['sight', 'hearing', 'smell'].includes(hits[0].sense));
+  mapTokens.m.conditions = ['friendly'];
+  _detectStage = {}; T.eq(_findSentinelCrossings('creature::m', seg[0], seg[1]), [], 'a mover who is not sneaking is not rolled for passively');
+  mapTokens.m.conditions = ['friendly', 'infiltrating']; mapTokens.g.conditions = ['foe', 'unconscious'];
+  _detectStage = {}; T.eq(_findSentinelCrossings('creature::m', seg[0], seg[1]), [], 'an unconscious body notices nothing');
+  mapTokens.g.conditions = ['friendly'];
+  _detectStage = {}; T.eq(_findSentinelCrossings('creature::m', seg[0], seg[1]), [], 'an ally does not give a sneaker away');
 });
 test('Vigilant', 'an unnoticed mover passes silently: no prompt, nothing pending', async T => {
   T.geo(); T.senses();

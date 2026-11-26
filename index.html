@@ -8641,7 +8641,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125n';
+const VERSION = 'v0.1.20261125o';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19614,16 +19614,7 @@ const VIGILANT_CONE_DEG = 120;
 // easily tunable here if a GM's table wants a quieter or louder world.
 const VIGILANT_HEARING_RANGE_FT = 60;
 const VIGILANT_SMELL_RANGE_FT   = 20;
-const VIGILANT_OPEN_NOISE_MULT  = 2; // noise multiplier for a mover who is NOT sneaking
-// Pivot for the hearing/smell "chance" curve below — roughly the noise/odor
-// score of an average, unarmored, average-speed, human-sized target. Below
-// it a watcher's real chance stays well under their raw Hearing/Smell stat;
-// well above it (heavy noisy armor, a fast sprint, or a giant) it climbs
-// toward that stat's full value, but never past it. Sensible starting
-// points, not measured — easy to retune here once this has actually been
-// played with.
-const VIGILANT_HEARING_PIVOT = 20;
-const VIGILANT_SMELL_PIVOT   = 20;
+// Hearing and smell hiding values, Stealth, concealment and the roll itself live in stealth.js (see STEALTH_SPEC.md).
 // Smell is a placeholder per the design discussion — no real per-species or
 // per-armor-piece odor data exists yet, just a flat baseline scaled by size
 // (a bigger body gives off more scent) and halved by a manually-toggled
@@ -19652,8 +19643,8 @@ function _refForToken(t) {
 // stat, used only as the sight detection CHANCE (see _vigilantDetects);
 // _vigilantVisionRangeFt below is the separate, scaled-up FEET version used
 // everywhere the cone's actual reach on the map matters.
-function _vigilantVisionStat(watcherEnt) {
-  const v = mapIsDark ? watcherEnt.attrs.NightVision : watcherEnt.attrs.DayVision;
+function _vigilantVisionStat(watcherEnt, dark) {
+  const v = (dark === undefined ? mapIsDark : dark) ? watcherEnt.attrs.NightVision : watcherEnt.attrs.DayVision;
   return Math.max(0, Math.min(100, v || 0));
 }
 
@@ -19663,8 +19654,8 @@ function _vigilantVisionStat(watcherEnt) {
 const VIGILANT_VISION_FT_PER_POINT = 8;
 // Night Vision showing the map in the dark: feet of map per point (the Vigilant cone keeps its own scale above).
 const NIGHT_VISION_FT_PER_POINT = 5;
-function _vigilantVisionRangeFt(watcherEnt) {
-  return _vigilantVisionStat(watcherEnt) * VIGILANT_VISION_FT_PER_POINT;
+function _vigilantVisionRangeFt(watcherEnt, dark) {
+  return _vigilantVisionStat(watcherEnt, dark) * VIGILANT_VISION_FT_PER_POINT;
 }
 
 // How much noise an Infiltrating character makes: their equipped armor's own
@@ -19691,16 +19682,6 @@ function _infiltratorOdorScore(moverTok, moverEnt) {
   return SMELL_BASE_ODOR * size * (bathed ? SMELL_BATHED_MULT : 1);
 }
 
-// Shared saturating curve for both hearing and smell: 0 score → 0% chance
-// no matter how sharp the watcher's ear/nose is; well above `pivot` the
-// chance climbs toward the watcher's own raw stat (capped 0-100), never
-// past it — a deaf watcher never hears anything no matter how loud.
-function _vigilantSenseChance(watcherStat, score, pivot) {
-  const stat = Math.max(0, Math.min(100, watcherStat || 0));
-  if (score <= 0) return 0;
-  return Math.round(stat * score / (score + pivot));
-}
-
 // Edge-to-edge distance in feet between two tokens' centers, at a specific
 // point along the mover's path — same convention _sentinelZoneCheck already
 // computes inline; pulled out for the new Vigilant call sites below rather
@@ -19722,13 +19703,13 @@ function _vigilantMeleeReachOk(watcherTok, moverTok, xPct, yPct) {
   return _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct) <= _sentinelMeleeReachFt(watcherTok);
 }
 
-// The actual probability roll for one Vigilant/Infiltrate crossing — called
-// exactly once, by whichever client's own move triggered it (see
-// _resolveSentinelCheck), so every client agrees on the same outcome without
-// re-rolling independently. Only ever reached after _sentinelZoneCheck's
-// vigilant branch has already confirmed the position falls within at least
-// one of the three sense zones; this re-checks which one(s) specifically
-// apply at this exact point and rolls only those, sight first.
+// Noticing a sneaker: the shared stealth model (stealth.js). For each sense the watcher has two rings - the sense's
+// reach (half chance) and half the reach (full chance) - and rolls ONCE per ring per approach (_detectStage remembers
+// the ring last rolled, and forgets it when the mover leaves the reach). The chance is the watcher's sense score over
+// the mover's hiding value for that sense; a Vigilant watcher doubles it. Anyone awake can notice (passive noticing,
+// not doubled); only a Vigilant watcher is held to a 120 degree sight cone, a passive one sees all round unless it has
+// been given a facing. Walkers in the open and light are simply seen (sight hiding 1).
+var _detectStage = {}; // 'watcherTokId|moverTokId|sense' -> ring last rolled (1 far, 2 near)
 function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const watcherEnt = getEntity(_refForToken(watcherTok));
   const moverEnt   = getEntity(_refForToken(moverTok));
@@ -19737,44 +19718,45 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
   const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
   const distFt = _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct);
+  const boosted  = getConditions(watcherTok.id).has('vigilant');
   const sneaking = getConditions(moverTok.id).has('infiltrating');
-
-  const visionFt = _vigilantVisionRangeFt(watcherEnt);
-  if (distFt <= visionFt) {
-    const facingDeg = _tokenFacingDeg(watcherTok);
-    const pointDeg  = Math.atan2(dy, dx) * 180 / Math.PI;
-    let diff = Math.abs(pointDeg - facingDeg);
-    if (diff > 180) diff = 360 - diff;
-    if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) {
-      // Not sneaking = not hiding: walking into the cone in plain view is
-      // simply seen. Sneakers still have to beat the watcher's sight chance.
-      if (!sneaking) return { detected: true, sense: 'sight' };
-      if (Math.random() * 100 < _vigilantVisionStat(watcherEnt)) return { detected: true, sense: 'sight' };
-    }
-  }
-  // Hearing/smell are omnidirectional and ignore line of sight — this game
-  // has no acoustic wall-blocking model, so sound and scent are treated as
-  // carrying around corners freely, unlike vision. They apply to every mover, not only Infiltrators: someone
-  // walking openly in heavy armor makes MORE noise than one sneaking, so their Noise counts double.
-  // Faster movement is louder (walk x1 ... sprint x2); _vigMoveGait is set for the move being resolved.
+  const px = (xPct / 100) * mapImgW, py = (yPct / 100) * mapImgH;
+  const dark = !!mapIsDark && !_litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(px, py, poly));
   const gaitMult = VIGILANT_GAIT_NOISE[_vigMoveGait] || 1;
+  const hid = personHiding({
+    hiding: sneaking, moving: true, stealth: stealthScore(moverEnt.attrs),
+    screen: concealmentAt(xPct, yPct), dark,
+    noise: _infiltratorNoiseScore(moverEnt), gaitMult, odor: _infiltratorOdorScore(moverTok, moverEnt),
+  });
+
+  let inSight = false;
+  const facing = (Array.isArray(watcherTok.conditions) ? watcherTok.conditions : []).some(c => c.startsWith('facing:'));
+  const coneDeg = (boosted || facing) ? VIGILANT_CONE_DEG : 360;
+  const pointDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+  let diff = Math.abs(pointDeg - _tokenFacingDeg(watcherTok));
+  if (diff > 180) diff = 360 - diff;
+  if (diff <= coneDeg / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) inSight = true;
+
+  const senses = [
+    { k: 'sight',   name: 'SEEN',     reach: _vigilantVisionRangeFt(watcherEnt, dark), stat: _vigilantVisionStat(watcherEnt, dark), hiding: hid.sight,   ok: inSight },
+    { k: 'hearing', name: 'HEARD',    reach: VIGILANT_HEARING_RANGE_FT, stat: watcherEnt.attrs.Hearing, hiding: hid.hearing, ok: true },
+    { k: 'smell',   name: 'SMELLED',  reach: VIGILANT_SMELL_RANGE_FT,   stat: watcherEnt.attrs.Smell,   hiding: hid.smell,   ok: true },
+  ];
   const tries = []; // what was rolled, for the one Journal line below (so a miss isn't silent)
   const log = res => {
-    if (tries.length) logCombat(`[vigilant] ${watcherTok.label} vs ${moverTok.label}${sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
+    if (tries.length) logCombat(`[${boosted ? 'vigilant' : 'notice'}] ${watcherTok.label} vs ${moverTok.label}${sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
     return res;
   };
-  if (distFt <= VIGILANT_HEARING_RANGE_FT) {
-    const noise = _infiltratorNoiseScore(moverEnt) * (sneaking ? 1 : VIGILANT_OPEN_NOISE_MULT) * gaitMult;
-    const chance = _vigilantSenseChance(watcherEnt.attrs.Hearing, noise, VIGILANT_HEARING_PIVOT);
+  for (const sn of senses) {
+    const key = watcherTok.id + '|' + moverTok.id + '|' + sn.k;
+    const stage = sn.ok ? detectionStage(distFt, sn.reach / 2) || (distFt <= sn.reach ? 1 : 0) : 0;
+    if (!stage) { delete _detectStage[key]; continue; }
+    if (stage <= (_detectStage[key] || 0)) continue; // this ring was already rolled on this approach
+    _detectStage[key] = stage;
+    const chance = Math.round(detectionChance(sn.stat, sn.hiding, { stage, boosted }));
     const hit = Math.random() * 100 < chance;
-    tries.push(`hearing ${chance}% (noise ${Math.round(noise)}) ${hit ? 'HEARD' : 'missed'}`);
-    if (hit) return log({ detected: true, sense: 'hearing' });
-  }
-  if (distFt <= VIGILANT_SMELL_RANGE_FT) {
-    const chance = _vigilantSenseChance(watcherEnt.attrs.Smell, _infiltratorOdorScore(moverTok, moverEnt), VIGILANT_SMELL_PIVOT);
-    const hit = Math.random() * 100 < chance;
-    tries.push(`smell ${chance}% ${hit ? 'SMELLED' : 'missed'}`);
-    if (hit) return log({ detected: true, sense: 'smell' });
+    tries.push(`${sn.k} ${chance}% (${stage === 2 ? 'near' : 'far'}, hiding ${Math.round(sn.hiding * 10) / 10}) ${hit ? sn.name : 'missed'}`);
+    if (hit) return log({ detected: true, sense: sn.k });
   }
   return log({ detected: false, sense: null });
 }
@@ -20355,25 +20337,40 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   const found = new Map(); // sentinelCid -> {sentinelCid, x_pct, y_pct, frac}
   const notes = [];
   const lunging = _isLunging(moverCombId);
+  const moverSneaking = getConditions(moverTok.id).has('infiltrating');
   for (const t of Object.values(mapTokens)) {
     if (t.id === moverTok.id) continue;
     const conds = getConditions(t.id);
-    if (!conds.has('sentinel') && !conds.has('target') && !conds.has('vigilant')) continue;
+    const watching = conds.has('sentinel') || conds.has('target') || conds.has('vigilant');
+    // Anyone else who is awake notices a sneaker too (passive noticing), but only a mover who is sneaking is rolled for.
+    const passive = !watching && moverSneaking;
+    if (!watching && !passive) continue;
     let why = null;
     if (!_isEnemyOf(moverTok, t)) why = `mover is${_isTokenFoe(moverTok) ? '' : ' not'} a Foe, this token is${_isTokenFoe(t) ? '' : ' not'} — same side, not an enemy (set the Foe flag in the Tokens tab if that's wrong)`;
     else if (!_sentinelCanReact(t)) why = 'dead/unconscious/stunned/paralyzed — cannot react';
     // "Fresh entry only" suits Sentinel/Target (a trigger when someone steps into reach). Vigilant is a sense
     // check with a long range (the vision cone can cover a whole room), so nobody ever enters it fresh: a mover
     // already inside still gets a notice roll when it moves (see _resolveSentinelCheck/_vigilantDetects).
-    else if (!conds.has('vigilant') && _sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
-    if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/')}): SKIPPED — ${why}`); continue; }
+    else if (!conds.has('vigilant') && !passive && _sentinelZoneCheck(t, fromPct.x_pct, fromPct.y_pct, moverTok)) why = 'mover already inside this zone before the move started — not a fresh entry';
+    if (why) { notes.push(`${t.label} (${[...conds].filter(c=>c==='sentinel'||c==='target'||c==='vigilant').join('/') || 'passive'}): SKIPPED — ${why}`); continue; }
     let hit = false;
     for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
       const frac = i / _SENTINEL_CHECK_SAMPLES;
       const xPct = fromPct.x_pct + (toPct.x_pct - fromPct.x_pct) * frac;
       const yPct = fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac;
+      const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
+      if (conds.has('vigilant') || passive) {
+        // Noticing is rolled here, at the sample where a new ring is first entered (see _vigilantDetects).
+        const r = _vigilantDetects(t, moverTok, xPct, yPct);
+        if (r.detected) {
+          found.set(sentinelCid, { sentinelCid, x_pct: xPct, y_pct: yPct, frac, sense: r.sense, passive });
+          notes.push(`${t.label}: NOTICED (${r.sense}) at ${Math.round(frac*100)}% along the segment`);
+          hit = true;
+          break;
+        }
+        continue;
+      }
       if (_sentinelZoneCheck(t, xPct, yPct, moverTok)) {
-        const sentinelCid = t.entity_type === 'character' ? 'char::' + t.entity_id : 'creature::' + t.id;
         // Lunge: slip in past a Sentinel - no reaction attack (its stance ends once the lunger attacks it).
         if (lunging && conds.has('sentinel')) {
           const rec = _lungedPast[moverCombId] && _lungedPast[moverCombId].round === atRound ? _lungedPast[moverCombId] : (_lungedPast[moverCombId] = { round: atRound, sentinels: new Set() });
@@ -20427,7 +20424,7 @@ function _controlsToken(t) {
 // combatant's own move is ever mid-check at a time.
 let _sentinelCheckPending = null;
 
-function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
+function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct, preSense) {
   // Vigilant's "crossing" (see _sentinelZoneCheck) is only a geometric
   // possibility — the actual probability roll happens here, once, on
   // whichever client's own move triggered it, so every client agrees on the
@@ -20436,8 +20433,8 @@ function _resolveSentinelCheck(sentinelCid, moverCid, xPct, yPct) {
   // if this watcher didn't exist, exactly like it never noticed at all.
   const watcherTok = _pathFindToken(sentinelCid);
   const moverTok   = _pathFindToken(moverCid);
-  let vigilantSense = null;
-  if (watcherTok && moverTok && getConditions(watcherTok.id).has('vigilant')) {
+  let vigilantSense = preSense || null; // _findSentinelCrossings already rolled the notice and says by which sense
+  if (!vigilantSense && watcherTok && moverTok && getConditions(watcherTok.id).has('vigilant')) {
     const result = _vigilantDetects(watcherTok, moverTok, xPct, yPct);
     if (!result.detected) return Promise.resolve();
     vigilantSense = result.sense;
@@ -20666,8 +20663,15 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
   for (let i = 1; i < waypoints.length; i++) {
     const from = waypoints[i - 1], to = waypoints[i];
     for (const cross of _findSentinelCrossings(combId, from, to, true)) {
+      if (cross.passive && !getConditions(moverTok.id).has('infiltrating')) continue; // already given away by an earlier watcher
       await _moveTokenTo(moverTok, cross.x_pct, cross.y_pct);
-      await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct);
+      if (cross.passive) {
+        // Passive noticing: no prompt. The sneaker is simply spotted, and the stance ends.
+        logCombat(`${_pathFindToken(cross.sentinelCid)?.label || 'Someone'} notices ${moverTok.label} sneaking (by ${cross.sense})!`, 'roll');
+        await setCondition(moverTok.id, 'infiltrating', false);
+        continue;
+      }
+      await _resolveSentinelCheck(cross.sentinelCid, combId, cross.x_pct, cross.y_pct, cross.sense);
       // A reaction that drops the mover (dead, unconscious, stunned, paralyzed) ends the move right where it fell:
       // no more prompts from the other watchers, and the body does not walk on to the planned destination.
       if (!_sentinelCanReact(moverTok)) { _vigMoveGait = 0; return; }
