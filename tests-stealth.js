@@ -291,7 +291,7 @@ test('Cover', 'ground cover draws a hatched, named area for everyone', async T =
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   const pts = [{ x_pct: 1, y_pct: 1 }, { x_pct: 9, y_pct: 1 }, { x_pct: 5, y_pct: 8 }];
   _concealDraw(svg, [{ type: 'conceal', name: 'Thicket', hide: 25, points: pts }, { type: 'conceal', name: 'Tall grass', hide: 8, points: pts }]);
-  T.eq(svg.querySelectorAll('polygon').length, 4, 'a wash and a hatch per area');
+  T.eq(svg.querySelectorAll('polygon').length, 6, 'a wash, a hatch and an edge per area');
   T.eq(svg.querySelectorAll('pattern').length, 2, 'a heavier hatch for the thicker cover');
   T.ok(/Thicket/.test(svg.textContent), 'named');
   const empty = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); _concealDraw(empty, []);
