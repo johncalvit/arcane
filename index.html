@@ -8641,7 +8641,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125m';
+const VERSION = 'v0.1.20261125n';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -22960,7 +22960,7 @@ function _openHiddenModal(shape, points) {
 
 async function _hiddenEdit(id, field, value) {
   const w = mapWalls.find(x => x.id === id);
-  if (!w || (w.type !== 'hidden' && !(w.door && w.secret))) return;
+  if (!w || (w.type !== 'hidden' && w.type !== 'conceal' && !(w.door && w.secret))) return;
   w[field] = field === 'found' ? !!value : field === 'clue' ? String(value || '') : Math.max(0, parseFloat(value) || 0);
   if (field === 'found' && !w.found) delete w.foundBy;
   await saveMapWalls();
@@ -23679,7 +23679,7 @@ function drawWalls(mouseX, mouseY) {
   const color = '#e0a040', fill = 'rgba(224,160,64,0.15)';
   const obColor = '#8fd8ff', obFill = 'rgba(143,216,255,0.28)';
   mapWalls.forEach((w, i) => {
-    if (w.type === 'litarea' || w.type === 'hidden') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
+    if (w.type === 'litarea' || w.type === 'hidden' || w.type === 'conceal') return; // drawn by the Lights tool / _hiddenDrawShape, not a wall
     if (w.door) {  // open or closed, but only where the viewer has seen
       if (w.secret && !w.found && !_gmSeesAll()) return; // an unnoticed secret door is just wall to a player
       if (_doorKnown(w)) _doorDraw(svg, w);
@@ -23871,6 +23871,7 @@ async function _openManageWallsModal() {
       : w.door && w.secret ? `#${i + 1} 🚪🕵 ${_paEsc(w.name || 'Secret door')} <span style="color:var(--text-dim);font-size:0.74rem;">${_secretDoorState(w)}</span>`
       : w.door ? `#${i + 1} 🚪 Door <span style="color:var(--text-dim);font-size:0.74rem;">${w.open ? 'open' : 'closed'}</span>`
       : w.type === 'litarea' ? `#${i + 1} 💡 lit area`
+      : w.type === 'conceal' ? `#${i + 1} 🌿 ${_paEsc(w.name || 'Concealment')} <span style="color:var(--text-dim);font-size:0.74rem;">hides from sight</span>`
       : w.type === 'hidden' ? `#${i + 1} 🕵 ${_paEsc(w.name || 'hidden object')} <span style="color:var(--text-dim);font-size:0.74rem;">${w.shape === 'poly' ? 'area' : 'line'}${w.found ? ' · found' : ''}</span>`
       : `#${i + 1} ${_paEsc(w.type)}`;
     // Obstacles get a damage-entry control instead of the vision/movement
@@ -23898,6 +23899,9 @@ async function _openManageWallsModal() {
          <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.type === 'litarea'
       ? `<button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
+      : w.type === 'conceal'
+      ? `<span title="Sight hiding rating - higher is harder to see into (a person hiding here is spotted with chance: watcher's sight / this)" style="font-size:0.7rem;color:var(--text-dim);">👁</span>${hidNum('hide', 'Sight hiding rating')}
+         <button onclick="deleteWall('${safeId}')" style="border:none;background:none;color:#e05555;cursor:pointer;font-size:0.9rem;">✕</button>`
       : w.maxHp
       ? `<input type="number" id="wall-dmg-${safeId}" min="0" step="1" placeholder="dmg" style="width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 4px;font-family:var(--ui-font);font-size:0.78rem;">
          <button onclick="applyWallDamage('${safeId}', parseFloat(document.getElementById('wall-dmg-${safeId}').value) || 0)" style="border:1px solid var(--border);background:var(--bg);color:var(--text-dim);border-radius:3px;padding:2px 8px;cursor:pointer;font-family:var(--ui-font);font-size:0.74rem;">Apply</button>
@@ -23972,10 +23976,10 @@ initMapInteraction = function() {
         // Right-click inside a lit area (and not on a token) offers to delete it.
         const rect = vp.getBoundingClientRect();
         const pt = _wallVpToPct(e.clientX - rect.left, e.clientY - rect.top);
-        const hit = _litAreas().find(w => _pointInPoly(pt.x_pct, pt.y_pct, w.points.map(p => ({ x: p.x_pct, y: p.y_pct }))));
+        const hit = _litAreas().concat(_concealAreas()).find(w => _pointInPoly(pt.x_pct, pt.y_pct, w.points.map(p => ({ x: p.x_pct, y: p.y_pct }))));
         if (hit) {
           e.preventDefault();
-          if (confirm('Delete this lit area?')) { mapWalls = mapWalls.filter(w => w !== hit); saveMapWalls(); }
+          if (confirm(hit.type === 'conceal' ? `Delete this concealment area (${hit.name || 'concealment'})?` : 'Delete this lit area?')) { mapWalls = mapWalls.filter(w => w !== hit); saveMapWalls(); }
         }
       }
     }
@@ -25216,6 +25220,17 @@ function _litAreas() {
   return mapWalls.filter(w => w.type === 'litarea' && (w.points || []).length >= 3);
 }
 
+// Concealment areas (type 'conceal', stored in the walls array like lit areas): underbrush, tall grass, fog... A person
+// hiding inside one is screened from sight; `hide` is the sight hiding rating (see stealth.js and STEALTH_SPEC.md).
+const CONCEAL_PRESETS = [
+  { name: 'Tall grass', hide: 8 },
+  { name: 'Underbrush', hide: 15 },
+  { name: 'Thicket',    hide: 25 },
+];
+function _concealAreas() {
+  return mapWalls.filter(w => w.type === 'conceal' && (w.points || []).length >= 3);
+}
+
 function _lightEmitters() {
   const out = [];
   for (const t of Object.values(mapTokens)) {
@@ -25376,9 +25391,10 @@ enterPlayMode = function() {
     if (tb) tb.insertAdjacentHTML('beforeend',
       `<div class="tb-sep"></div>
        <button class="btn-sm btn-text" id="light-btn" onclick="toggleLightMode()">💡 Lights</button>
-       <select id="light-type-sel" class="btn-sm" onchange="_lightAreaPts=[];drawLightAreaPreview();" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}. Lit Area: click corners, click the first corner / double-click / right-click to close." style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.74rem;padding:2px 4px;">
+       <select id="light-type-sel" class="btn-sm" onchange="_lightAreaPts=[];drawLightAreaPreview();" title="Radius: ${LIGHT_SOURCES.map(l => l.label + ' ' + l.ft + 'ft').join(', ')}. Lit Area or Concealment (underbrush, grass...: hiders in it are screened from sight): click corners, click the first corner / double-click / right-click to close." style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.74rem;padding:2px 4px;">
          ${LIGHT_SOURCES.map(l => `<option value="${l.label}">${l.label} (${l.ft}ft)</option>`).join('')}
          <option value="__area">▭ Lit Area (draw room/region)</option>
+         ${CONCEAL_PRESETS.map(c => `<option value="__conceal:${c.name}:${c.hide}">🌿 Concealment: ${c.name} (${c.hide})</option>`).join('')}
        </select>`);
   }
 };
@@ -25426,7 +25442,8 @@ function lightMouseDown(e) {
   const vp   = document.getElementById('map-viewport');
   const rect = vp.getBoundingClientRect();
   const x = e.clientX - rect.left, y = e.clientY - rect.top;
-  if (document.getElementById('light-type-sel')?.value === '__area') {
+  const _ltv = document.getElementById('light-type-sel')?.value || '';
+  if (_ltv === '__area' || _ltv.startsWith('__conceal:')) {
     const first = _lightAreaPts[0];
     if (e.button === 2 || (_lightAreaPts.length >= 3 && (e.detail === 2 || Math.hypot(x - first.x, y - first.y) < 10))) {
       _litAreaCommit();
@@ -25446,12 +25463,16 @@ var _lightAreaPts = [];
 
 function _litAreaCommit() {
   if (_lightAreaPts.length < 3) { _lightAreaPts = []; drawLightAreaPreview(); return; }
-  mapWalls.push({
+  // The Lights tool's choice decides what the outline becomes: a lit area, or a concealment area
+  // (value "__conceal:<name>:<sight hiding rating>") that screens hiders from sight.
+  const _kind = (document.getElementById('light-type-sel')?.value || '').split(':');
+  const _isConceal = _kind[0] === '__conceal';
+  mapWalls.push(Object.assign({
     id: 'wall-' + Date.now() + '-' + Math.round(Math.random() * 9999),
-    type: 'litarea',
+    type: _isConceal ? 'conceal' : 'litarea',
     points: _lightAreaPts.map(p => _wallVpToPct(p.x, p.y)),
     blocksVision: false, blocksMovement: false,
-  });
+  }, _isConceal ? { name: _kind[1] || 'Concealment', hide: Math.max(0, parseFloat(_kind[2]) || 0) } : {}));
   _lightAreaPts = [];
   saveMapWalls(); // also schedules a light redraw and broadcasts to players
   drawLightAreaPreview();
@@ -25478,6 +25499,15 @@ function drawLightAreaPreview(mx, my) {
   _litAreas().forEach(w => {
     add('polygon', { points: w.points.map(_wallPctToVp).map(p => `${p.x},${p.y}`).join(' '),
       fill: 'rgba(255,200,120,0.12)', stroke: '#ffc878', 'stroke-width': 2 });
+  });
+  _concealAreas().forEach(w => {
+    const vp = w.points.map(_wallPctToVp);
+    add('polygon', { points: vp.map(p => `${p.x},${p.y}`).join(' '), fill: 'rgba(80,180,90,0.16)', stroke: '#5cb85c', 'stroke-width': 2 });
+    const cx = vp.reduce((n, p) => n + p.x, 0) / vp.length, cy = vp.reduce((n, p) => n + p.y, 0) / vp.length;
+    const t = document.createElementNS(ns, 'text');
+    t.setAttribute('x', cx); t.setAttribute('y', cy); t.setAttribute('fill', '#9be09b'); t.setAttribute('font-size', '11'); t.setAttribute('text-anchor', 'middle');
+    t.textContent = `🌿 ${w.name || 'Concealment'} (${w.hide || 0})`;
+    svg.appendChild(t);
   });
   if (_lightAreaPts.length) {
     const pts = mx != null ? [..._lightAreaPts, { x: mx, y: my }] : _lightAreaPts;
@@ -26414,5 +26444,6 @@ async function _deleteMapPin(pinId) {
 <!-- keep id alias so any lingering references don't break -->
 <div id="modal-campaign" style="display:none;"></div>
 <script>document.write('<script src="panels.js?v=' + encodeURIComponent(VERSION) + '"><\/script>');</script>
+<script>document.write('<script src="stealth.js?v=' + encodeURIComponent(VERSION) + '"><\/script>');</script>
 </body>
 </html>
