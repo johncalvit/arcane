@@ -1,15 +1,17 @@
 // Smoke tests for the shared stealth / detection model (stealth.js) and the concealment map object. Loaded by
 // tests.html after tests-stances.js - see tests.js for how tests run and what the helper object T offers.
 
-test('Stealth', 'a detection roll is sense / hiding, half at the far ring, doubled by Searching or Vigilant, never above 100', async T => {
-  T.eq(detectionChance(10, 20), 50, 'near ring: 10 against 20');
-  T.eq(detectionChance(10, 20, { stage: 1 }), 25, 'far ring is half');
-  T.eq(detectionChance(10, 20, { boosted: true }), 100, 'doubled');
-  T.eq(detectionChance(10, 20, { stage: 1, boosted: true }), 50, 'doubled, far ring');
+test('Stealth', 'a detection roll is ((sense - 7) / hiding) ^ 1.5, half at the far ring, doubled by Searching or Vigilant, never above 100', async T => {
+  T.near(detectionChance(10, 20), 5.81, 0.01, 'near ring: (10-7)/20 to the 1.5');
+  T.near(detectionChance(10, 20, { stage: 1 }), 2.905, 0.01, 'far ring is half');
+  T.near(detectionChance(10, 20, { boosted: true }), 11.62, 0.01, 'doubled');
+  T.near(detectionChance(10, 20, { stage: 1, boosted: true }), 5.81, 0.01, 'doubled, far ring');
+  T.near(detectionChance(20, 20), 52.4, 0.1, '(20-7)/20 to the 1.5');
   T.eq(detectionChance(30, 10), 100, 'capped at 100');
   T.eq(detectionChance(10, 0), 0, 'hiding 0 cannot be sensed');
   T.eq(detectionChance(0, 5), 0, 'a blind watcher senses nothing');
-  T.eq(detectionChance(10, 1), 100, 'hiding 1 (the open) is always seen by a watcher with any sense');
+  T.eq(detectionChance(7, 1), 0, 'a sense of 7 or less is as good as none (a bad eye, ear or nose)');
+  T.eq(detectionChance(10, 1), 100, 'hiding 1 (the open) is always seen by a watcher with a decent sense');
 });
 
 test('Stealth', 'a watcher is in the far ring within twice its reach and the near ring within its reach', async T => {
@@ -32,9 +34,9 @@ test('Stealth', 'only a screen hides someone from sight: darkness or concealment
   const base = { stealth: 10, noise: 20, odor: 30 };
   T.eq(personHiding({ ...base, hiding: true }).sight, 1, 'hiding in the open and in the light: simply seen');
   T.eq(personHiding({ ...base, hiding: false, screen: 15 }).sight, 1, 'standing in underbrush without hiding is not hiding');
-  T.eq(personHiding({ ...base, hiding: true, screen: 15 }).sight, 25, 'underbrush 15 + Stealth 10');
-  T.eq(personHiding({ ...base, hiding: true, dark: true }).sight, 20, 'darkness ' + STEALTH_DARK_HIDING + ' + Stealth 10');
-  T.eq(personHiding({ ...base, hiding: true, dark: true, screen: 25 }).sight, 35, 'the better screen counts, they do not add');
+  T.eq(personHiding({ ...base, hiding: true, screen: 15 }).sight, 52.5, 'underbrush 15 x (1 + Stealth 10 / 4)');
+  T.eq(personHiding({ ...base, hiding: true, dark: true }).sight, 35, 'darkness ' + STEALTH_DARK_HIDING + ' x 3.5');
+  T.eq(personHiding({ ...base, hiding: true, dark: true, screen: 25 }).sight, 87.5, 'the better screen counts, they do not add');
 });
 
 test('Stealth', 'hearing: a still hider is silent; louder walkers are easier to hear; Stealth only helps a sneaker; smell ignores Stealth', async T => {
@@ -42,7 +44,7 @@ test('Stealth', 'hearing: a still hider is silent; louder walkers are easier to 
   T.eq(personHiding({ ...b, hiding: true, moving: false }).hearing, 0, 'a hider who does not move makes no sound');
   const sneak = personHiding({ ...b, hiding: true, moving: true }).hearing;
   const open = personHiding({ ...b, hiding: false, moving: true }).hearing;
-  T.eq(sneak, HEARING_HIDING_K / 20 + 10, 'sneaking: 400/20 + Stealth');
+  T.eq(sneak, HEARING_HIDING_K / 20 * 3.5, 'sneaking: 400/20 x (1 + Stealth/4)');
   T.eq(open, HEARING_HIDING_K / 40, 'walking openly is twice as loud and gets no Stealth');
   T.ok(sneak > open, 'so a sneaker is harder to hear');
   const run = personHiding({ ...b, hiding: true, moving: true, gaitMult: 2 }).hearing;
@@ -96,7 +98,7 @@ test('Stealth', 'a hider makes no sound: only sight (past the cover) or smell ca
   T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: _sqPct(0, 0, 100, 100) }];
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), h = T.token('h', 60, 50, 'creature', 'Eh', ['hiding']);
-  T.senses({ 'creature::w': { Smell: 0 } }); T.random(0.9);
+  T.senses({ 'creature::w': { Smell: 0, DayVision: 17 } }); T.random(0.9); // sight 17-7 = 10 against thicket 25: 51% doubled
   T.eq(_vigilantDetects(w, h, 60, 50).detected, false, 'sight 80%, a roll of 90 misses; and no hearing roll at all');
   _detectStage = {}; h.conditions = ['infiltrating']; T.random(0.9);
   T.eq(_vigilantDetects(w, h, 60, 50).sense, 'hearing', 'the same spot sneaking instead of hiding: heard');

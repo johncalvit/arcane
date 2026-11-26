@@ -145,14 +145,14 @@ test('Vigilant', 'unlike Sentinel, a mover already inside the watched area still
 test('Vigilant', 'in the open a sneaker is simply seen; screened by concealment it is rolled for (sight over hiding, doubled)', async T => {
   T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
-  T.senses({ 'creature::w': { Hearing: 0, Smell: 0 } }); // sight only
+  T.senses({ 'creature::w': { Hearing: 0, Smell: 0, DayVision: 17 } }); // sight only; 17 - 7 = 10
   T.random(0.999);
   T.eq(_vigilantDetects(w, m, 80, 50), { detected: true, sense: 'sight' }, 'sneaking in the open and the light gives no sight benefit');
   mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: [{ x_pct: 70, y_pct: 40 }, { x_pct: 90, y_pct: 40 }, { x_pct: 90, y_pct: 60 }, { x_pct: 70, y_pct: 60 }] }];
-  _detectStage = {}; T.random(0.79);
-  T.eq(_vigilantDetects(w, m, 80, 50).sense, 'sight', 'Day Vision 10 / thicket 25 x2 = 80%: a roll of 79 sees');
-  _detectStage = {}; T.random(0.81);
-  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'a roll of 81 does not');
+  _detectStage = {}; T.random(0.50);
+  T.eq(_vigilantDetects(w, m, 80, 50).sense, 'sight', '(17-7) / thicket 25, to the 1.5, doubled = 51%: a roll of 50 sees');
+  _detectStage = {}; T.random(0.52);
+  T.eq(_vigilantDetects(w, m, 80, 50).detected, false, 'a roll of 52 does not');
   m.conditions = [];
   _detectStage = {}; T.random(0.999);
   T.eq(_vigilantDetects(w, m, 80, 50).sense, 'sight', 'standing in the thicket without sneaking hides nothing');
@@ -161,12 +161,12 @@ test('Vigilant', 'each ring is rolled once per approach: far at half chance, nea
   T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: [{ x_pct: 0, y_pct: 0 }, { x_pct: 100, y_pct: 0 }, { x_pct: 100, y_pct: 100 }, { x_pct: 0, y_pct: 100 }] }];
   const w = T.token('w', 10, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', ['infiltrating']);
-  T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0, Hearing: 0 } }); // only sight is in play
-  T.random(0.41);
-  T.eq(_vigilantDetects(w, m, 60, 50).detected, false, '50 ft: far ring, 10/25 x2 x0.5 = 40%, a roll of 41 misses');
+  T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0, Hearing: 0 } }); // only sight is in play (Day Vision 10: 80 ft, 3 after the penalty)
+  T.random(0.26);
+  T.eq(_vigilantDetects(w, m, 60, 50).detected, false, '50 ft: far ring, (3/25)^1.5 doubled x0.5 = 4%, a roll of 26 misses');
   T.random(0);
   T.eq(_vigilantDetects(w, m, 60, 50).detected, false, 'same ring again: not rolled twice');
-  T.eq(_vigilantDetects(w, m, 45, 50).detected, true, '35 ft: near ring (80%) is a new roll');
+  T.eq(_vigilantDetects(w, m, 45, 50).detected, true, '35 ft: near ring (8%) is a new roll, rolled on 0');
   _detectStage = {};
   T.eq(_vigilantDetects(w, m, 60, 50).detected, true, 'far ring, rolled on 0: seen');
   T.eq(_vigilantDetects(w, m, 95, 50).detected, false, 'past the reach: nothing, and the memory is cleared');
@@ -185,12 +185,12 @@ test('Vigilant', 'behind the watcher it comes down to hearing, then smell up clo
   _detectStage = {};
   T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 0 } });
   T.eq(_vigilantDetects(w, m, 35, 50).detected, false, 'a watcher with no sense of smell');
-  // louder is easier to hear: Hearing 10 against hiding 40 (sneaking) is 25%, against 20 (walking openly) 50%
+  // louder is easier to hear: Hearing 20 (13 after the penalty) against hiding 40 (sneaking) is 19%, against 20 (walking openly) 52%
   const p = T.token('p', 50, 50, 'creature', 'Ep', ['facing:0']); // passive: not doubled
-  T.senses({ 'creature::p': { Hearing: 10, Smell: 0 } }); T.random(0.3);
-  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).detected, false, 'sneaking, 25%, a roll of 30');
+  T.senses({ 'creature::p': { Hearing: 20, Smell: 0 } }); T.random(0.3);
+  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).detected, false, 'sneaking, 19%, a roll of 30');
   m.conditions = [];
-  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).sense, 'hearing', 'walking openly, 50%');
+  _detectStage = {}; T.eq(_vigilantDetects(p, m, 30, 50).sense, 'hearing', 'walking openly, 52%');
 });
 test('Vigilant', 'a wall blocks sight, so an open walker behind it can only be heard', async T => {
   T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
