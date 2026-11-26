@@ -8678,7 +8678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125s';
+const VERSION = 'v0.1.20261126a';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19685,8 +19685,12 @@ const VIGILANT_CONE_DEG = 120;
 // far could you possibly hear/smell" stat — vision's range comes straight
 // off DayVision/NightVision instead (see _vigilantVisionRangeFt). Both
 // easily tunable here if a GM's table wants a quieter or louder world.
-const VIGILANT_HEARING_RANGE_FT = 60;
-const VIGILANT_SMELL_RANGE_FT   = 20;
+// Hearing and smell reach scale with the watcher's own score (sight already does, at VIGILANT_VISION_FT_PER_POINT):
+// a sharper ear or nose notices from farther away. The far ring is this reach, the near ring half of it.
+const HEARING_FT_PER_POINT = 4;   // Hearing 15 -> 60 ft
+const SMELL_FT_PER_POINT   = 1.5; // Smell 13 -> 20 ft, an orc's 19 -> 29 ft
+function _vigilantHearingRangeFt(ent) { return Math.max(0, (ent && ent.attrs && ent.attrs.Hearing) || 0) * HEARING_FT_PER_POINT; }
+function _vigilantSmellRangeFt(ent)   { return Math.max(0, (ent && ent.attrs && ent.attrs.Smell)   || 0) * SMELL_FT_PER_POINT; }
 // Hearing and smell hiding values, Stealth, concealment and the roll itself live in stealth.js (see STEALTH_SPEC.md).
 // Smell is a placeholder per the design discussion — no real per-species or
 // per-armor-piece odor data exists yet, just a flat baseline scaled by size
@@ -19842,8 +19846,8 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
 
   const senses = [
     { k: 'sight',   name: 'SEEN',     reach: _vigilantVisionRangeFt(watcherEnt, dark), stat: _vigilantVisionStat(watcherEnt, dark), hiding: hid.sight,   ok: inSight },
-    { k: 'hearing', name: 'HEARD',    reach: VIGILANT_HEARING_RANGE_FT, stat: watcherEnt.attrs.Hearing, hiding: hid.hearing, ok: true },
-    { k: 'smell',   name: 'SMELLED',  reach: VIGILANT_SMELL_RANGE_FT,   stat: watcherEnt.attrs.Smell,   hiding: hid.smell,   ok: true },
+    { k: 'hearing', name: 'HEARD',    reach: _vigilantHearingRangeFt(watcherEnt), stat: watcherEnt.attrs.Hearing, hiding: hid.hearing, ok: true },
+    { k: 'smell',   name: 'SMELLED',  reach: _vigilantSmellRangeFt(watcherEnt),   stat: watcherEnt.attrs.Smell,   hiding: hid.smell,   ok: true },
   ];
   const tries = []; // what was rolled, for the one Journal line below (so a miss isn't silent)
   const log = res => {
@@ -20089,7 +20093,7 @@ function drawSentinelRanges() {
       // game has no acoustic wall-blocking model, so sound/scent carry
       // around corners freely, unlike vision) kept low-key so they don't
       // clutter the map the way a filled shape would.
-      for (const [radiusFt, dash, opacity] of [[VIGILANT_HEARING_RANGE_FT, '3,5', 0.35], [VIGILANT_SMELL_RANGE_FT, '1,4', 0.5]]) {
+      for (const [radiusFt, dash, opacity] of [[_vigilantHearingRangeFt(watcherEnt), '3,5', 0.35], [_vigilantSmellRangeFt(watcherEnt), '1,4', 0.5]]) {
         const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         circle.setAttribute('cx', vpX); circle.setAttribute('cy', vpY);
         circle.setAttribute('r', radiusFt * mapScalePPF * mapScale);
@@ -20346,8 +20350,8 @@ function _sentinelZoneCheck(watcherTok, xPct, yPct, moverTok) {
       if (diff <= VIGILANT_CONE_DEG / 2 && _sentinelLineOfSight(watcherTok.x_pct, watcherTok.y_pct, xPct, yPct)) return true;
     }
     // Hearing and smell apply to everyone, sneaking or not (a loud walker is heard even more readily).
-    if (distFt <= VIGILANT_HEARING_RANGE_FT) return true;
-    if (distFt <= VIGILANT_SMELL_RANGE_FT) return true;
+    if (distFt <= _vigilantHearingRangeFt(watcherEnt)) return true;
+    if (distFt <= _vigilantSmellRangeFt(watcherEnt)) return true;
   }
   return false;
 }

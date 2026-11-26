@@ -120,8 +120,8 @@ test('Vigilant', 'sight range follows Day Vision by day and Night Vision in the 
   mapIsDark = false; T.eq(_vigilantVisionRangeFt(ent), 10 * VIGILANT_VISION_FT_PER_POINT);
   mapIsDark = true;  T.eq(_vigilantVisionRangeFt(ent), 2 * VIGILANT_VISION_FT_PER_POINT);
 });
-test('Vigilant', 'zone: a 120 degree sight cone ahead, hearing all around to 60 ft; walls stop sight but not sound', async T => {
-  T.geo(); T.senses(); mapIsDark = false; // Day Vision 10 -> 80 ft of sight
+test('Vigilant', 'zone: a 120 degree sight cone ahead, hearing all around to 4 ft per point (60 ft here); walls stop sight but not sound', async T => {
+  T.geo(); T.senses({ 'creature::w': { Hearing: 15, Smell: 13 } }); mapIsDark = false; // Day Vision 10 -> 80 ft of sight, Hearing 15 -> 60 ft
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 0, 0, 'creature', 'Em', []);
   const at = (deg, ft) => [50 + ft * Math.cos(deg * Math.PI / 180), 50 + ft * Math.sin(deg * Math.PI / 180)];
   T.ok(_sentinelZoneCheck(w, ...at(0, 70), m), 'ahead at 70 ft: seen');
@@ -178,7 +178,7 @@ test('Vigilant', 'behind the watcher it comes down to hearing, then smell up clo
   T.senses(); T.random(0);
   T.eq(_vigilantDetects(w, m, 30, 50).sense, 'hearing', '20 ft behind, a normal mover is heard');
   _detectStage = {};
-  T.senses({ 'creature::m': { Speed: 0 } }); // makes no noise at all
+  T.senses({ 'creature::m': { Speed: 0 }, 'creature::w': { Smell: 13 } }); // makes no noise at all; smell reaches 19.5 ft
   T.eq(_vigilantDetects(w, m, 20, 50), { detected: false, sense: null }, 'silent and 30 ft behind: unnoticed');
   _detectStage = {};
   T.eq(_vigilantDetects(w, m, 35, 50).sense, 'smell', 'silent but 15 ft behind: smelled');
@@ -578,4 +578,12 @@ test('Sentinel', 'the Target range comes from the held ranged weapon, for monste
   T.eq(_targetWeaponRangeFt(c), 0, 'no ranged weapon: no range');
   T.ok(!_sentinelZoneCheck(c, 60, 50, m), 'and so nothing is guarded');
   delete sessionCreatureCache[c.entity_id];
+});
+
+test('Vigilant', 'hearing and smell reach scale with the watcher: 4 ft per Hearing point, 1.5 ft per Smell point', async T => {
+  const ent = { attrs: { Hearing: 15, Smell: 19 } };
+  T.eq(_vigilantHearingRangeFt(ent), 60);
+  T.near(_vigilantSmellRangeFt(ent), 28.5, 0.001, 'an orc (Smell 19) smells from farther than a human (10 -> 15 ft)');
+  T.eq(_vigilantSmellRangeFt({ attrs: { Smell: 10 } }), 15);
+  T.eq(_vigilantHearingRangeFt({ attrs: {} }), 0, 'no hearing, no reach');
 });

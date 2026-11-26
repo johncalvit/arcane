@@ -103,6 +103,8 @@ yet.
 
 **Tuning (v0.1.20261125s):** after simulating a scout sneaking up on a group, the numbers were changed: a watcher's sense is cut by 7, the chance is (sense / hiding)^1.5, and Stealth multiplies cover and hearing hiding (x (1 + Stealth/4)) instead of adding. Constants `SENSE_PENALTY`, `DETECT_POWER`, `STEALTH_DIVISOR` in stealth.js.
 
+**Reach (v0.1.20261126a):** hearing and smell reach now scale with the watcher's score: `HEARING_FT_PER_POINT` 4 and `SMELL_FT_PER_POINT` 1.5 (sight is Day/Night Vision x 8). Far ring = the reach, near ring = half.
+
 ## Open decisions (defaults in brackets)
 
 - Does an unaware target get a defense roll against a stealth attack? [No: it did not see it coming.]
