@@ -8641,7 +8641,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125o';
+const VERSION = 'v0.1.20261125p';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10192,6 +10192,8 @@ const CONDITION_DEFS = [
     desc:'Watching a 120° sector and listening/smelling all around it for anyone Infiltrating nearby. A successful spot ends their Infiltrate and offers a melee Attack if they’re in reach.' },
   { key:'infiltrating',label:'Infiltrating',icon:'🥷', color:'#4a6a4a',
     desc:'Sneaking — eligible to go unnoticed past a Vigilant watcher (see Vigilant). Noisier armor, higher Speed, and bigger Target Size all make this harder; ends automatically the moment a Vigilant actually spots you.' },
+  { key:'hiding',      label:'Hiding',      icon:'🫥', color:'#3f5f4f',
+    desc:'Lying still in concealment or darkness. A hider makes no sound, and only sight (screened by the cover plus your Stealth) or smell can find you. Ends when you move, attack, or someone notices you.' },
   { key:'searching',   label:'Searching',   icon:'🔍', color:'#d8c060',
     desc:'Actively looking, listening and sniffing around — doubles the chance of noticing hidden objects (traps, secret doors, switches) nearby. Ends when you take another action.' },
   { key:'bathed',      label:'Bathed',      icon:'🛁', color:'#5fa8d3',
@@ -10272,6 +10274,7 @@ function _defCondFromLabel(label) {
   if (label === 'Target')   return 'target';
   if (label === 'Vigilant') return 'vigilant';
   if (label === 'Infiltrate') return 'infiltrating';
+  if (label === 'Hide')     return 'hiding';
   if (label === 'Search')   return 'searching';
   return null;
 }
@@ -10283,7 +10286,7 @@ function _defCondFromLabel(label) {
 async function _clearDefConds(token) {
   if (!token) return;
   const conds = getConditions(token.id);
-  for (const c of ['blocking', 'parrying', 'lunging', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating', 'searching']) {
+  for (const c of ['blocking', 'parrying', 'lunging', 'evading', 'sentinel', 'target', 'vigilant', 'infiltrating', 'hiding', 'searching']) {
     if (conds.has(c)) await setCondition(token.id, c, false);
   }
 }
@@ -15193,6 +15196,7 @@ const AT_FULLBODY = [
   { label: 'Target',         dur: 99 }, // ranged cousin of Sentinel — see enterTargetAimMode
   { label: 'Vigilant',       dur: 99 }, // watches a sector for Infiltrators — see enterVigilantAimMode
   { label: 'Infiltrate',     dur: 99 }, // sneaking stance a Vigilant watcher can spot — see _vigilantDetects
+  { label: 'Hide',           dur: 99 }, // lie still in concealment or darkness — see _hideCheck
   { label: 'Search',         dur: 99 }, // looks for hidden objects — see _hiddenDetectionCheck
   { label: 'Go Prone',       dur: 1 },
   { label: 'Charge',         dur: 3 },
@@ -15314,7 +15318,7 @@ function _atBroadcastFullState() {
 // tracker slot is empty, so the action dialog showed no active stance and offered no way to drop it. Rebuild the
 // stance slot from the token's condition: a lock-on stance with no end, exactly as the Explore dialog sets it.
 const _STANCE_BY_COND = [['sentinel', 'Sentinel'], ['target', 'Target'], ['vigilant', 'Vigilant'], ['evading', 'Evade'],
-                         ['infiltrating', 'Infiltrate'], ['searching', 'Search']];
+                         ['infiltrating', 'Infiltrate'], ['hiding', 'Hide'], ['searching', 'Search']];
 function _atRestoreStanceSlot(c) {
   if (!c) return false;
   if (!c.slots) c.slots = _newSlots();
@@ -16216,6 +16220,7 @@ async function atSetSlot(combatantId, slot, label, dur, locksAll = false) {
   if (token) {
     const newCond = _defCondFromLabel(label);
     await _clearDefConds(token);
+    if (label === 'Hide' || label === 'Infiltrate') await _clearNoticedBy(token); // starting afresh: nobody has noticed you yet
     if (newCond) await setCondition(token.id, newCond, true);
   }
 
@@ -19703,6 +19708,35 @@ function _vigilantMeleeReachOk(watcherTok, moverTok, xPct, yPct) {
   return _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct) <= _sentinelMeleeReachFt(watcherTok);
 }
 
+// An unlit spot on a dark map (the only darkness that screens a hider).
+function _darkAt(xPct, yPct) {
+  const px = (xPct / 100) * mapImgW, py = (yPct / 100) * mapImgH;
+  return !!mapIsDark && !_litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(px, py, poly));
+}
+// Hide needs something to hide in: a concealment area or darkness where the token stands.
+function _canHideAt(tok) {
+  return !!tok && (concealmentAt(tok.x_pct, tok.y_pct) > 0 || _darkAt(tok.x_pct, tok.y_pct));
+}
+// Called before the Hide stance is set; says why not and returns false when there is nothing to hide in.
+function _hideCheck(combId) {
+  const tok = _pathFindToken(combId);
+  if (_canHideAt(tok)) return true;
+  showToast('Nothing to hide in - stand in concealment (underbrush, tall grass) or in the dark.');
+  return false;
+}
+// "Noticed by": a watcher who has noticed a hider/sneaker is recorded on the hider as noticedby:<watcher token id>
+// (shared with every client). It stays until the hider starts a fresh Hide / Infiltrate. A watcher who has noticed
+// you stops rolling against you, and (step 4) cannot be taken by surprise.
+function _hasNoticed(watcherTok, moverTok) {
+  return getConditions(moverTok.id).has('noticedby:' + watcherTok.id);
+}
+async function _markNoticed(watcherTok, moverTok) {
+  if (!_hasNoticed(watcherTok, moverTok)) await setCondition(moverTok.id, 'noticedby:' + watcherTok.id, true);
+}
+async function _clearNoticedBy(token) {
+  for (const c of [...getConditions(token.id)]) if (c.startsWith('noticedby:')) await setCondition(token.id, c, false);
+}
+
 // Noticing a sneaker: the shared stealth model (stealth.js). For each sense the watcher has two rings - the sense's
 // reach (half chance) and half the reach (full chance) - and rolls ONCE per ring per approach (_detectStage remembers
 // the ring last rolled, and forgets it when the mover leaves the reach). The chance is the watcher's sense score over
@@ -19714,17 +19748,18 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const watcherEnt = getEntity(_refForToken(watcherTok));
   const moverEnt   = getEntity(_refForToken(moverTok));
   if (!watcherEnt || !moverEnt) return { detected: false, sense: null };
+  if (_hasNoticed(watcherTok, moverTok)) return { detected: false, sense: null }; // already aware: nothing more to roll
 
   const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
   const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
   const distFt = _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct);
   const boosted  = getConditions(watcherTok.id).has('vigilant');
-  const sneaking = getConditions(moverTok.id).has('infiltrating');
-  const px = (xPct / 100) * mapImgW, py = (yPct / 100) * mapImgH;
-  const dark = !!mapIsDark && !_litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(px, py, poly));
+  const hidden   = getConditions(moverTok.id).has('hiding'); // lying still: makes no sound
+  const sneaking = hidden || getConditions(moverTok.id).has('infiltrating');
+  const dark = _darkAt(xPct, yPct);
   const gaitMult = VIGILANT_GAIT_NOISE[_vigMoveGait] || 1;
   const hid = personHiding({
-    hiding: sneaking, moving: true, stealth: stealthScore(moverEnt.attrs),
+    hiding: sneaking, moving: !hidden, stealth: stealthScore(moverEnt.attrs),
     screen: concealmentAt(xPct, yPct), dark,
     noise: _infiltratorNoiseScore(moverEnt), gaitMult, odor: _infiltratorOdorScore(moverTok, moverEnt),
   });
@@ -19744,7 +19779,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   ];
   const tries = []; // what was rolled, for the one Journal line below (so a miss isn't silent)
   const log = res => {
-    if (tries.length) logCombat(`[${boosted ? 'vigilant' : 'notice'}] ${watcherTok.label} vs ${moverTok.label}${sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
+    if (tries.length) logCombat(`[${boosted ? 'vigilant' : 'notice'}] ${watcherTok.label} vs ${moverTok.label}${hidden ? ' (hiding)' : sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
     return res;
   };
   for (const sn of senses) {
@@ -20392,6 +20427,25 @@ function _findSentinelCrossings(moverCombId, fromPct, toPct, _debug) {
   return [...found.values()].sort((a, b) => a.frac - b.frac);
 }
 
+// The other half of noticing: a mover walking toward someone who is lying hidden. Each enemy hider is rolled against
+// as the mover's own position passes along the segment (same rings and memory as everything else), so a stationary
+// hider is noticed by the watcher's sight/smell as it approaches. Returns [{ hider, sense }].
+function _findHiderNotices(moverCombId, fromPct, toPct) {
+  const moverTok = _pathFindToken(moverCombId);
+  if (!moverTok || !_sentinelCanReact(moverTok)) return [];
+  const out = [];
+  for (const h of Object.values(mapTokens)) {
+    if (h.id === moverTok.id || !getConditions(h.id).has('hiding') || !_isEnemyOf(moverTok, h)) continue;
+    for (let i = 1; i <= _SENTINEL_CHECK_SAMPLES; i++) {
+      const frac = i / _SENTINEL_CHECK_SAMPLES;
+      const at = { ...moverTok, x_pct: fromPct.x_pct + (toPct.x_pct - fromPct.x_pct) * frac, y_pct: fromPct.y_pct + (toPct.y_pct - fromPct.y_pct) * frac };
+      const r = _vigilantDetects(at, h, h.x_pct, h.y_pct); // the watcher is the mover, the target the hider
+      if (r.detected) { out.push({ hider: h, sense: r.sense }); break; }
+    }
+  }
+  return out;
+}
+
 // Shared position-commit — extracted so a normal drag/Path drop and a
 // Sentinel-interrupted step-by-step move land the same way (DOM + local
 // state + broadcast + DB write + borne-group follow).
@@ -20665,9 +20719,11 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
     for (const cross of _findSentinelCrossings(combId, from, to, true)) {
       if (cross.passive && !getConditions(moverTok.id).has('infiltrating')) continue; // already given away by an earlier watcher
       await _moveTokenTo(moverTok, cross.x_pct, cross.y_pct);
+      const noticer = _pathFindToken(cross.sentinelCid);
+      if (cross.sense && noticer) await _markNoticed(noticer, moverTok);
       if (cross.passive) {
         // Passive noticing: no prompt. The sneaker is simply spotted, and the stance ends.
-        logCombat(`${_pathFindToken(cross.sentinelCid)?.label || 'Someone'} notices ${moverTok.label} sneaking (by ${cross.sense})!`, 'roll');
+        logCombat(`${noticer?.label || 'Someone'} notices ${moverTok.label} sneaking (by ${cross.sense})!`, 'roll');
         await setCondition(moverTok.id, 'infiltrating', false);
         continue;
       }
@@ -20675,6 +20731,13 @@ async function _executeMoveWithSentinelChecks(combId, waypoints) {
       // A reaction that drops the mover (dead, unconscious, stunned, paralyzed) ends the move right where it fell:
       // no more prompts from the other watchers, and the body does not walk on to the planned destination.
       if (!_sentinelCanReact(moverTok)) { _vigMoveGait = 0; return; }
+    }
+    // Someone lying hidden along the way may notice the mover walking up to them.
+    for (const h of _findHiderNotices(combId, from, to)) {
+      logCombat(`${moverTok.label} notices ${h.hider.label} hiding (by ${h.sense})!`, 'roll');
+      await _markNoticed(moverTok, h.hider);
+      await setCondition(h.hider.id, 'hiding', false);
+      await setCondition(h.hider.id, 'infiltrating', false);
     }
   }
   _vigMoveGait = 0;
@@ -22066,9 +22129,9 @@ function _pctDistFt(x1Pct, y1Pct, x2Pct, y2Pct) {
 }
 
 // Moving breaks a held stance: Sentinel, Evade, Target and Vigilant all stop when the combatant moves
-// (Block/Parry and Infiltrate are untouched - sneaking IS moving). Clears just those stances' slots and
+// (Block/Parry and Infiltrate are untouched - sneaking IS moving; Hide, lying still, ends). Clears just those stances' slots and
 // their condition badges, and says so in the Journal. `feet` null means unknown distance (uncalibrated map).
-const MOVE_CANCELS_STANCE = ['Sentinel', 'Evade', 'Target', 'Vigilant'];
+const MOVE_CANCELS_STANCE = ['Sentinel', 'Evade', 'Target', 'Vigilant', 'Hide'];
 var _dragStanceDropped = false; // set once the current drag has already ended its stance (see onTokenMouseMove)
 async function _cancelStancesOnMove(combId, feet, reason) {
   if (feet != null && feet < 0.5) return; // a nudge, not a move
@@ -22083,9 +22146,10 @@ async function _cancelStancesOnMove(combId, feet, reason) {
     c.slots[slot] = null;
     if (mapChannel) mapChannel.send({ type: 'broadcast', event: 'at-clear-slot', payload: { combatantId: combId, slot } });
   }
+  if (token && getConditions(token.id).has('hiding')) ended.add('Hide'); // the condition outlives the tracker slot after a refresh
   if (!ended.size) return;
   if (token) {
-    const badge = { Sentinel: 'sentinel', Evade: 'evading', Target: 'target', Vigilant: 'vigilant' };
+    const badge = { Sentinel: 'sentinel', Evade: 'evading', Target: 'target', Vigilant: 'vigilant', Hide: 'hiding' };
     for (const label of ended) if (getConditions(token.id).has(badge[label])) await setCondition(token.id, badge[label], false);
   }
   logCombat(`${getEntity(combId)?.name || token?.label || 'Someone'} ${reason || 'moves'} — ${[...ended].join(' / ')} ends.`, 'roll');

@@ -890,7 +890,7 @@ function _dlgMaybeReopen() {
 // (_openSpellPickerModal's row click; enterTargetAimMode's endsRound flag)
 // since neither goes through this dialog's generic 'set'/'attack' dispatch.
 function _isRoundEndingLabel(label) {
-  return label === 'Sentinel' || label === 'Evade' || label === 'Go Prone' || label === 'Infiltrate' || label.startsWith('Load — ');
+  return label === 'Sentinel' || label === 'Evade' || label === 'Go Prone' || label === 'Infiltrate' || label === 'Hide' || label.startsWith('Load — ');
 }
 
 // closeRoller is defined in index.html, loaded before this file — wrap it
@@ -1532,6 +1532,7 @@ async function _dlgChange(e) {
 // anything: stances stay until changed, spells are cast from the same picker, and gear swaps are free.
 const EXPLORE_STANCES = [
   { label: 'Infiltrate', title: 'Move quietly - a watchful Vigilant character may still spot you' },
+  { label: 'Hide',       title: 'Lie still in concealment or darkness - silent, and only sight and smell can find you' },
   { label: 'Search',     title: 'Look carefully for hidden objects - doubles your chance to notice them' },
   { label: 'Vigilant',   title: 'Watch a sector of the map (you aim the cone on the map)' },
   { label: 'Sentinel',   title: 'Guard everything within reach' },
@@ -1871,6 +1872,7 @@ async function _exploreClick(e) {
   try {
     switch (d.dact) {
       case 'xset':
+        if (d.label === 'Hide' && !_hideCheck(id)) { _exploreRender(body); break; }
         await atSetSlot(id, 'full', d.label, 99, true); // lock-on stance, free
         _exploreRender(body);
         break;
@@ -2038,6 +2040,7 @@ async function _dlgClick(e) {
 async function _dlgAct(d, id, body) {
   switch (d.dact) {
     case 'set': {
+      if (d.label === 'Hide' && !_hideCheck(id)) { _dlgRender(body); break; }
       // Sentinel/Evade/Go Prone/Load end the round outright — see
       // _isRoundEndingLabel. Evade additionally cancels an in-progress cast
       // (windup or maintained), so it gets its own confirm wording and a
