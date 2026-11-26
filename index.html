@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126m';
+const VERSION = 'v0.1.20261126n';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -23988,18 +23988,19 @@ function _concealDraw(svg, areas) {
   const defs = mk('defs', {});
   const dens = new Set(areas.map(w => (w.hide || 0) >= 20 ? 3 : (w.hide || 0) >= 12 ? 2 : 1));
   dens.forEach(d => {
-    const gap = d === 3 ? 5 : d === 2 ? 8 : 12;
+    const gap = d === 3 ? 6 : d === 2 ? 9 : 13;
     const pat = mk('pattern', { id: 'conceal-hatch-' + d, width: gap, height: gap, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
-    mk('line', { x1: 0, y1: 0, x2: 0, y2: gap, stroke: '#3f9a4a', 'stroke-width': d === 3 ? 2 : 1.5, 'stroke-opacity': 0.55 }, pat);
+    mk('line', { x1: 0, y1: 0, x2: 0, y2: gap, stroke: '#0b2e14', 'stroke-width': d === 3 ? 3 : 2.5, 'stroke-opacity': 0.7 }, pat);
   });
   areas.forEach(w => {
     const vp = w.points.map(_wallPctToVp), pts = vp.map(p => `${p.x},${p.y}`).join(' ');
     const d = (w.hide || 0) >= 20 ? 3 : (w.hide || 0) >= 12 ? 2 : 1;
-    mk('polygon', { points: pts, fill: 'rgba(70,160,80,0.14)', stroke: 'none' });
-    mk('polygon', { points: pts, fill: `url(#conceal-hatch-${d})`, stroke: '#5cb85c', 'stroke-width': 1.5, 'stroke-dasharray': '7,4', 'stroke-opacity': 0.8 });
+    mk('polygon', { points: pts, fill: 'rgba(10,50,25,0.28)', stroke: 'none' });
+    mk('polygon', { points: pts, fill: `url(#conceal-hatch-${d})`, stroke: '#000', 'stroke-width': 5, 'stroke-opacity': 0.75, 'stroke-linejoin': 'round' });
+    mk('polygon', { points: pts, fill: 'none', stroke: '#e6ff5a', 'stroke-width': 2.5, 'stroke-dasharray': '9,5', 'stroke-linejoin': 'round' });
     const cx = vp.reduce((n, p) => n + p.x, 0) / vp.length, cy = vp.reduce((n, p) => n + p.y, 0) / vp.length;
-    const t = mk('text', { x: cx, y: cy, fill: '#bff0bf', 'font-size': 11, 'text-anchor': 'middle', 'pointer-events': 'none',
-      style: 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;' });
+    const t = mk('text', { x: cx, y: cy, fill: '#e6ff5a', 'font-size': 13, 'font-weight': 'bold', 'text-anchor': 'middle', 'pointer-events': 'none',
+      style: 'paint-order:stroke;stroke:#000;stroke-width:4;stroke-linejoin:round;' });
     t.textContent = '🌿 ' + (w.name || 'Cover');
   });
 }
