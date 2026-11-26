@@ -8678,7 +8678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125q';
+const VERSION = 'v0.1.20261125r';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -23229,6 +23229,12 @@ function _fogOccluderSegments() {
       for (let i = 0; i < N; i++) { const a = (i / N) * 2 * Math.PI; ring.push({ x: pts[0].x + Math.cos(a) * r, y: pts[0].y + Math.sin(a) * r }); }
       for (let i = 0; i < N; i++) segs.push([ring[i], ring[(i + 1) % N]]);
     }
+  }
+  // Concealment areas (underbrush, tall grass...) block sight like a wall: nobody sees into, out of or through one.
+  // Sight inside the same patch is clear. They never block movement.
+  for (const w of _concealAreas()) {
+    const ring = w.points.map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH }));
+    for (let i = 0; i < ring.length; i++) segs.push([ring[i], ring[(i + 1) % ring.length]]);
   }
   return segs;
 }

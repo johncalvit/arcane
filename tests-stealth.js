@@ -67,7 +67,10 @@ test('Stealth', 'concealment areas: the best covering rating wins, outside is no
   T.eq(concealmentAt(90, 10), 0, 'outside everything');
   T.eq(_concealAreas().length, 2);
   T.eq(_moveBlockers().length, 0, 'concealment never blocks movement');
-  T.eq(_fogOccluderSegments().length, 0, 'or sight');
+  T.eq(_fogOccluderSegments().length, 8, 'but they block sight like a wall (4 edges each)');
+  T.ok(!_sentinelLineOfSight(90, 10, 10, 10), 'no sight from outside into the grass');
+  T.ok(_sentinelLineOfSight(10, 10, 15, 15), 'sight inside one patch is clear');
+  T.ok(!_sentinelLineOfSight(10, 10, 90, 10), 'and none out of it');
 });
 
 // ── Step 3: Hide, "noticed by" ──
