@@ -242,3 +242,28 @@ test('Core Rules', 'the Publish button follows the core_rules_owners table, not 
     if (savedLs === null) localStorage.removeItem(lsKey); else localStorage.setItem(lsKey, savedLs);
   }
 });
+
+// Design target (v0.1.20261126): an above-average Scout in light armor slips past a group of four average guards through
+// cover about 80% of the time; noisy armor, keen senses (orc smell) or a big body make it much harder. This pins the
+// tuning so a later change to the numbers is a deliberate one.
+test('Stealth', 'a level 4 Scout sneaks past four average guards about 80% of the time; noisy armor and keen noses cut that sharply', async T => {
+  const mk = race => calcAttributesFromData({ race, bodyType: 'Humanoid', sex: 'Male', age: 'Adult', height: 'Average', build: 'Average', social: 'Balanced', mental: 'Balanced',
+    stats: { XP: _xpForLevel(4), CharClass: 'Scout', LevelPicks: ['Intellect', 'Intellect', 'Memory'], Strength: 8, Endurance: 10, Agility: 14, Memory: 10, Intellect: 12, Senses: 12, Quintessence: 0 } });
+  const through = (att, watcher, armorNoise, n, vigilant) => {
+    const hid = personHiding({ hiding: true, moving: true, stealth: stealthScore(att), screen: 15, dark: false,
+      noise: (armorNoise + att.Speed) * att._targetAdj, gaitMult: 1, odor: 8 * (att._targetAdj / 6) });
+    let p = 1;
+    for (const [stat, h] of [[watcher.Day, hid.sight], [watcher.Hear, hid.hearing], [watcher.Smell, hid.smell]])
+      p *= (1 - detectionChance(stat, h, { stage: 1, boosted: vigilant }) / 100) * (1 - detectionChance(stat, h, { stage: 2, boosted: vigilant }) / 100);
+    return Math.pow(p, n) * 100;
+  };
+  const guard = { Day: 10, Hear: 10, Smell: 10 }, orc = { Day: 12, Hear: 14, Smell: 25 };
+  const human = mk('Human');
+  const base = through(human, guard, 0, 4, false);
+  T.ok(base >= 72 && base <= 88, 'light armor, four average guards: ' + Math.round(base) + '%');
+  T.ok(through(human, guard, 30, 4, false) < 50, 'a full suit of mail (Noise +30) drops it below half');
+  T.ok(through(human, guard, 0, 4, true) < base, 'Vigilant guards are harder to pass');
+  T.ok(through(human, orc, 0, 4, false) < base - 30, 'orcs, with their noses, are far harder');
+  T.ok(through(mk('Halfling'), guard, 0, 4, false) > base, 'a small body is quieter');
+  T.ok(through(mk('Ogre'), guard, 0, 4, false) < base, 'a big body is louder');
+});
