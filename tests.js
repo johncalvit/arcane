@@ -849,6 +849,23 @@ test('Scout', 'class-dependent level bonuses: three class stats plus one chosen 
   for (const c of TECHNIQUE_CLASSES) T.eq(_classLevelStats(c).length, 3, c + ' has three class stats');
 });
 
+test('Spells', 'the spell book learn list has an (i) button that expands the full spell card', async T => {
+  const savedQ = statValues.Quintessence, savedF = spellBookFilter;
+  try {
+    statValues.Quintessence = 5; spellBookFilter = 'All'; _spellBookOpen.clear();
+    T.stub('buildSpellBookFilters', () => {});
+    buildSpellBookPanel();
+    const box = document.getElementById('spellbook-list');
+    T.ok(box.querySelector('button[onclick^="toggleSpellBookDetail"]'), 'every spell has an (i) button');
+    T.ok(!box.querySelector('.ps-row'), 'details start collapsed');
+    toggleSpellBookDetail(SPELLS[0].name);
+    T.ok(box.querySelectorAll('.ps-row').length > 3, 'the card opens with the spell details');
+    T.ok(box.innerHTML.includes('Range'), 'the card shows the range');
+    toggleSpellBookDetail(SPELLS[0].name);
+    T.ok(!box.querySelector('.ps-row'), 'and closes again');
+  } finally { statValues.Quintessence = savedQ; spellBookFilter = savedF; _spellBookOpen.clear(); }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

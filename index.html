@@ -3833,6 +3833,12 @@ function _spellDetailCardHTML(spell) {
       <div class="ps-row"><span class="ps-label">Area Size</span><span class="ps-val">${_paEsc(areaSize)}</span></div>
       <div class="ps-row"><span class="ps-label">Damage Type</span><span class="ps-val">${_paEsc(String(damageType))}</span></div>
       <div class="ps-row"><span class="ps-label">Max Damage</span><span class="ps-val">${_paEsc(String(maxDamage))}</span></div>
+      ${spell.castingTime ? `<div class="ps-row"><span class="ps-label">Casting Time</span><span class="ps-val">${_paEsc(String(spell.castingTime))} s</span></div>` : ''}
+      ${spell.targetType ? `<div class="ps-row"><span class="ps-label">Target</span><span class="ps-val">${_paEsc(spell.targetType)}</span></div>` : ''}
+      ${spell.saveFormula ? `<div class="ps-row"><span class="ps-label">Save</span><span class="ps-val">${_paEsc(spell.saveFormula)}</span></div>` : ''}
+      ${spell.restoreToughness || spell.restoreStamina || spell.restoreBlood ? `<div class="ps-row"><span class="ps-label">Restores</span><span class="ps-val">${[['Toughness', spell.restoreToughness], ['Stamina', spell.restoreStamina], ['Blood', spell.restoreBlood]].filter(r => r[1]).map(r => r[0] + ' ' + r[1]).join(', ')}</span></div>` : ''}
+      ${spell.setsCondition ? `<div class="ps-row"><span class="ps-label">Condition</span><span class="ps-val">${_paEsc(spell.setsCondition)}</span></div>` : ''}
+      ${spell.buffAttr ? `<div class="ps-row"><span class="ps-label">Buff</span><span class="ps-val">${_paEsc(spell.buffAttr)} +${_paEsc(String(spell.buffAmount))}${spell.buffMinutes ? ' for ' + _paEsc(String(spell.buffMinutes)) + ' min' : ''}</span></div>` : ''}
     </div>`;
 }
 
@@ -3849,6 +3855,11 @@ function _builderKnownSpells() {
 // default, but only whichever ones exist so a GM's custom set doesn't show
 // empty buttons).
 let spellBookFilter = 'All';
+var _spellBookOpen = new Set(); // spells whose detail card is expanded in the learn list
+function toggleSpellBookDetail(name) {
+  if (_spellBookOpen.has(name)) _spellBookOpen.delete(name); else _spellBookOpen.add(name);
+  buildSpellBookPanel();
+}
 function buildSpellBookFilters() {
   const container = document.getElementById('spellbook-filters');
   if (!container) return;
@@ -3948,9 +3959,10 @@ function buildSpellBookPanel(attrs) {
       background:${sufficient ? '#4de080' : '#e05555'};margin-right:5px;flex-shrink:0;"
       title="${sufficient ? 'Meets' : 'Falls short of'} the required ${_paEsc(spell.difficultyStat)} ${spell.difficultyValue}"></span>`;
     return `
-      <div class="ps-block" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;">
+      <div class="ps-block" style="margin-bottom:8px;display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;">
         <div>
-          <div style="font-weight:bold;">${_paEsc(spell.name)}
+          <div style="font-weight:bold;"><button type="button" onclick="toggleSpellBookDetail('${qs}')" title="${_spellBookOpen.has(spell.name) ? 'Hide' : 'Show'} spell details" aria-expanded="${_spellBookOpen.has(spell.name)}"
+            style="width:18px;height:18px;padding:0;margin-right:6px;border-radius:50%;border:1px solid var(--gold);background:${_spellBookOpen.has(spell.name) ? 'var(--gold)' : 'transparent'};color:${_spellBookOpen.has(spell.name) ? 'var(--bg)' : 'var(--gold2)'};font:italic bold 0.7rem serif;line-height:1;cursor:pointer;vertical-align:middle;">i</button>${_paEsc(spell.name)}
             <span style="font-size:0.68rem;color:var(--text-dim);font-weight:normal;text-transform:uppercase;letter-spacing:0.04em;">${_paEsc(spell.magicClass)} · ${_paEsc(spell.spellType)}</span>
           </div>
           <div style="font-size:0.75rem;color:var(--text-dim);display:flex;align-items:center;">${dot}${_paEsc(spell.difficultyStat)} ${spell.difficultyValue} · ${quick ? quickPct + '% cast (Quick)' : castPct + '% cast'} · ${cost} memory${defNote}${quick ? '' : ' · Quick ' + quickPct + '% for ' + qCost}</div>
@@ -3958,6 +3970,7 @@ function buildSpellBookPanel(attrs) {
         ${known
           ? `<span style="color:var(--gold2);font-weight:bold;white-space:nowrap;">✓ Known${quick ? ' ⚡ Quick' : ''}</span>${quick ? '' : ` <button class="btn-sm" ${upCost <= left ? '' : 'disabled'} onclick="upgradeSpellQuick('${qs}')" title="Learn the Quick Cast form: double the success odds (within the armor cap) for ${upCost} more Memory Points">⚡ Quick (+${upCost})</button>`}${SPELL_LEARNING_PERMANENT ? '' : ` <button class="btn-sm" onclick="unlearnSpell('${spell.name.replace(/'/g, "\'")}')" title="Forget this spell and get its Memory Points back">Unlearn</button>`}`
           : `<button class="btn-sm" ${canAfford ? '' : 'disabled'} onclick="learnSpell('${qs}')" title="${canAfford ? '' : 'Not enough Memory Points left'}">Learn (${cost})</button> <button class="btn-sm" ${qCost <= left ? '' : 'disabled'} onclick="learnSpell('${qs}', true)" title="Quick Cast: double the success odds (within the armor cap), costs 3x">⚡ Quick (${qCost})</button>`}
+        ${_spellBookOpen.has(spell.name) ? `<div style="flex-basis:100%;">${_spellDetailCardHTML(spell)}</div>` : ''}
       </div>`;
   }).join('');
 }
@@ -8757,7 +8770,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126e';
+const VERSION = 'v0.1.20261126f';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
