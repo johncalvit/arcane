@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126j';
+const VERSION = 'v0.1.20261126k';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19852,6 +19852,7 @@ const VIGILANT_CONE_DEG = 120;
 // a sharper ear or nose notices from farther away. The far ring is this reach, the near ring half of it.
 const HEARING_FT_PER_POINT = 4;   // Hearing 15 -> 60 ft
 const SMELL_FT_PER_POINT   = 1.5; // Smell 13 -> 20 ft, an orc's 19 -> 29 ft
+const QUINT_FT_PER_POINT   = 4;   // Quintessence 12 -> 48 ft (seeing hidden magic)
 function _vigilantHearingRangeFt(ent) { return Math.max(0, (ent && ent.attrs && ent.attrs.Hearing) || 0) * HEARING_FT_PER_POINT; }
 function _vigilantSmellRangeFt(ent)   { return Math.max(0, (ent && ent.attrs && ent.attrs.Smell)   || 0) * SMELL_FT_PER_POINT; }
 // Hearing and smell hiding values, Stealth, concealment and the roll itself live in stealth.js (see STEALTH_SPEC.md).
@@ -23087,15 +23088,15 @@ document.addEventListener('dblclick', e => {
 // that only the GM sees until a character notices them. Stored in mapWalls as type 'hidden' (like lit
 // areas), so they save and sync with the walls; they never block sight or movement.
 //   { type:'hidden', shape:'line'|'poly', points, name, vis, hear, smell, found }
-// vis/hear/smell/quint are HIDING factors (0 = that sense can't detect it; quint is hidden magic, seen with Quintessence). For each sense the character's matching
-// stat is both its chance and its reach: chance = stat / hiding factor. Sight (Day Vision, or Night Vision in
-// an unlit dark spot; needs line of sight), hearing and smell (both ignore walls) each work the same way:
-// the first roll comes when the character gets within 2 x stat feet (at HALF the chance), the second when
-// they get within 1 x stat feet (full chance). Each stage is rolled once per approach: walking away past
-// 2 x stat feet resets it. Searching doubles every chance and, when it starts, gives a fresh roll for the
-// stages the character is already inside. There are no timed re-rolls.
+// vis/hear/smell/quint are HIDING factors (0 = that sense can't detect it; quint is hidden magic, seen with Quintessence).
+// The same model as noticing people (stealth.js): the chance for a sense is ((stat - 7) / hiding factor) ^ 1.5, and the
+// reach is the stat x feet per point (sight 8, hearing 4, smell 1.5, Quintessence 4). Sight (Day Vision, or Night Vision
+// in an unlit dark spot) and Quintessence need a clear line; hearing and smell ignore walls. The first roll comes when
+// the character gets within the reach (at HALF the chance), the second within half the reach (full chance). Each ring is
+// rolled once per approach: walking out of the reach resets it. Searching doubles every chance and, when it starts,
+// gives a fresh roll for the rings the character is already inside. There are no timed re-rolls.
 var SEARCH_DETECT_MULT  = 2;
-var HIDDEN_FAR_FACTOR   = 0.5;    // the far (2 x stat) roll is this share of the full chance
+var HIDDEN_FAR_FACTOR   = 0.5;    // the far-ring roll is this share of the full chance
 var _hiddenStage        = {};     // 'tokenId|objectId|sense' → 0 none / 1 far / 2 near, already rolled
 
 // Fog reset also makes everyone forget what they had found: every hidden object is hidden again and can be
@@ -23140,21 +23141,22 @@ function _hiddenSenses(w, viewerTok, attrs) {
   const out = [];
   if (w.vis > 0) {
     const lit = _litShapes.some(poly => poly.length > 2 && _fogPointInPolygon(near.x, near.y, poly));
-    out.push({ k: 'visual', stat: stat((mapIsDark && !lit) ? attrs.NightVision : attrs.DayVision), hiding: w.vis, distFt,
+    const dark = !!(mapIsDark && !lit), vs = stat(dark ? attrs.NightVision : attrs.DayVision);
+    out.push({ k: 'visual', stat: vs, reachFt: vs * VIGILANT_VISION_FT_PER_POINT, hiding: w.vis, distFt,
       los: _sentinelLineOfSight(viewerTok.x_pct, viewerTok.y_pct, (near.x / mapImgW) * 100, (near.y / mapImgH) * 100) });
   }
-  if (w.hear > 0)  out.push({ k: 'hearing', stat: stat(attrs.Hearing), hiding: w.hear,  distFt, los: true });
+  if (w.hear > 0)  out.push({ k: 'hearing', stat: stat(attrs.Hearing), reachFt: stat(attrs.Hearing) * HEARING_FT_PER_POINT, hiding: w.hear,  distFt, los: true });
   // Quintessence: casters perceive magic (enchantments, illusions, spells on the ground) with their own Quintessence
   // score, like sight: it needs a clear line, and the score is both the chance and the reach. 0 Quintessence sees nothing.
-  if (w.quint > 0) out.push({ k: 'quint', stat: stat(attrs.Quintessence), hiding: w.quint, distFt,
+  if (w.quint > 0) out.push({ k: 'quint', stat: stat(attrs.Quintessence), reachFt: stat(attrs.Quintessence) * QUINT_FT_PER_POINT, hiding: w.quint, distFt,
     los: _sentinelLineOfSight(viewerTok.x_pct, viewerTok.y_pct, (near.x / mapImgW) * 100, (near.y / mapImgH) * 100) });
-  if (w.smell > 0) out.push({ k: 'smell',   stat: stat(attrs.Smell),   hiding: w.smell, distFt, los: true });
+  if (w.smell > 0) out.push({ k: 'smell',   stat: stat(attrs.Smell),   reachFt: stat(attrs.Smell) * SMELL_FT_PER_POINT,   hiding: w.smell, distFt, los: true });
   return out;
 }
-// Percent chance for one roll: stage 1 = far (half), stage 2 = near (full); Searching doubles it.
+// Percent chance for one roll: stage 1 = far ring (half), stage 2 = near ring (full); Searching doubles it. The shared
+// detection curve (stealth.js), the same one used for noticing people.
 function _hiddenRollChance(sense, stage, searching) {
-  const full = sense.hiding > 0 ? (sense.stat / sense.hiding) * 100 * (searching ? SEARCH_DETECT_MULT : 1) : 0;
-  return Math.min(100, full * (stage === 1 ? HIDDEN_FAR_FACTOR : 1));
+  return detectionChance(sense.stat, sense.hiding, { stage, boosted: !!searching });
 }
 
 // Runs on the player's own client for their own character: whenever the fog is redrawn after a move, and when
@@ -23174,9 +23176,9 @@ function _hiddenDetectionCheck(force) {
     for (const sn of _hiddenSenses(w, viewer, ent.attrs)) {
       const key = viewer.id + '|' + w.id + '|' + sn.k;
       if (force) delete _hiddenStage[key];
-      if (!(sn.stat > 0) || sn.distFt > sn.stat * 2) { delete _hiddenStage[key]; continue; } // out of reach: resets
+      const reached = sn.stat > 0 ? (detectionStage(sn.distFt, sn.reachFt / 2) || (sn.distFt <= sn.reachFt ? 1 : 0)) : 0; // 2 = within half the reach, 1 = within the reach
+      if (!reached) { delete _hiddenStage[key]; continue; } // out of reach: resets
       if (!sn.los) continue; // can't see it from here - nothing rolled yet
-      const reached = sn.distFt <= sn.stat ? 2 : 1;
       for (let st = (_hiddenStage[key] || 0) + 1; st <= reached; st++) {
         _hiddenStage[key] = st;
         if (Math.random() * 100 < _hiddenRollChance(sn, st, searching)) { _hiddenReveal(w, ent.name); break; }
@@ -23231,7 +23233,7 @@ function _openHiddenModal(shape, points) {
     <div style="font-size:1rem;font-weight:bold;color:var(--gold);text-align:center;">🕵 Hidden ${shape === 'poly' ? 'Area' : 'Line'}</div>
     <label style="font-size:0.78rem;color:var(--text-dim);">What is it? <span style="font-size:0.68rem;">(shown to players once found)</span>
       <input id="hid-name" type="text" placeholder="e.g. Pit trap, Secret door" style="width:100%;box-sizing:border-box;margin-top:3px;background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:5px 7px;font-family:var(--ui-font);"></label>
-    <div style="font-size:0.72rem;color:var(--text-dim);">Hiding factors — the higher, the harder to notice. A character's chance for a sense is their stat ÷ the factor (Vision 10 vs 40 = 25%), and the stat is also its reach: one roll at half chance within 2 x stat feet, a second at full chance within 1 x stat feet. 0 = that sense can't detect it. Searching doubles the chances and rolls again.</div>
+    <div style="font-size:0.72rem;color:var(--text-dim);">Hiding factors — the higher, the harder to notice. A character's chance for a sense is ((stat - 7) ÷ factor) ^ 1.5 (Vision 14 vs 40 = 7% a roll; vs 20 = 20%; Vision 18 vs 20 = 41%). The reach is the stat x feet per point (sight 8, hearing 4, smell 1.5, Quintessence 4): one roll at half chance inside the reach, a second at full chance inside half of it. 0 = that sense can't detect it. Searching doubles the chances and rolls again.</div>
     <div style="display:flex;gap:12px;align-items:center;justify-content:space-between;font-size:0.8rem;">
       <label>👁 Visual<br><input id="hid-vis" type="number" min="0" value="40" style="${inp}"></label>
       <label>👂 Hearing<br><input id="hid-hear" type="number" min="0" value="0" style="${inp}"></label>

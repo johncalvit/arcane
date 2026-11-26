@@ -232,7 +232,7 @@ test('Vigilant', 'an unnoticed mover passes silently: no prompt, nothing pending
 
 // ── Hidden objects: two rolls per approach (2x stat ft at half chance, 1x stat ft at full), none repeated ──
 test('Hidden', 'one roll at the far ring, one at the near ring, none while standing still; leaving resets', async T => {
-  const sn = { k: 'visual', stat: 10, hiding: 100, distFt: 30, los: true };
+  const sn = { k: 'visual', stat: 10, reachFt: 20, hiding: 100, distFt: 30, los: true };
   const w = { id: 'h1', found: false };
   T.map();
   const savedCid = currentCharacterId; currentCharacterId = 'T_me';
@@ -259,10 +259,11 @@ test('Hidden', 'one roll at the far ring, one at the near ring, none while stand
     T.eq(revealed, 0);
   } finally { currentCharacterId = savedCid; delete _hiddenStage['tok1|h1|visual']; }
 });
-test('Hidden', 'chance is stat / hiding factor, half at the far ring, doubled by Searching', async T => {
-  const sn = { stat: 10, hiding: 40 };
-  T.near(_hiddenRollChance(sn, 2, false), 25); T.near(_hiddenRollChance(sn, 1, false), 12.5);
-  T.near(_hiddenRollChance(sn, 2, true), 50);  T.near(_hiddenRollChance(sn, 1, true), 25);
+test('Hidden', 'chance is the shared curve ((stat - 7) / hiding) ^ 1.5, half at the far ring, doubled by Searching', async T => {
+  const sn = { stat: 12, hiding: 20 }; // ((12 - 7) / 20) ^ 1.5 = 12.5%
+  T.near(_hiddenRollChance(sn, 2, false), 12.5); T.near(_hiddenRollChance(sn, 1, false), 6.25);
+  T.near(_hiddenRollChance(sn, 2, true), 25);    T.near(_hiddenRollChance(sn, 1, true), 12.5);
+  T.eq(_hiddenRollChance({ stat: 7, hiding: 20 }, 2, true), 0, 'a sense of 7 or less finds nothing');
   T.eq(_hiddenRollChance({ stat: 10, hiding: 0 }, 2, false), 0);
 });
 
@@ -472,7 +473,7 @@ test('Critical miss', 'melee critical miss: slip (96-97), fumble (98-99) and sel
   T.ok(!/dmg:/.test(r), 'a passed save on 100 avoids it');
 });
 
-test('Hidden', 'hidden magic: Quintessence is its own sense, reaching as far as the score, blocked by walls, nothing for a non-caster', async T => {
+test('Hidden', 'hidden magic: Quintessence is its own sense, reaching 4 ft per point, blocked by walls, nothing for a non-caster', async T => {
   T.map();
   const me = T.token('me', 50, 50, 'character', 'Me', []);
   const w = { id: 'q1', type: 'hidden', shape: 'line', points: [{ x_pct: 60, y_pct: 50 }, { x_pct: 60, y_pct: 55 }], vis: 0, hear: 0, smell: 0, quint: 40 };
@@ -480,9 +481,10 @@ test('Hidden', 'hidden magic: Quintessence is its own sense, reaching as far as 
   const caster = _hiddenSenses(w, me, { Quintessence: 12 });
   T.eq(caster.length, 1, 'only the Quintessence sense applies to a magic-only object');
   T.eq(caster[0].k, 'quint'); T.eq(caster[0].stat, 12); T.eq(caster[0].hiding, 40);
-  T.eq(Math.round(_hiddenRollChance(caster[0], 2, false)), 30, 'stat / hiding at full chance (12 / 40)');
-  T.eq(Math.round(_hiddenRollChance(caster[0], 2, true)), 60, 'Searching doubles it');
-  T.eq(Math.round(_hiddenRollChance(caster[0], 1, false)), 15, 'the far roll is half');
+  T.near(_hiddenRollChance(caster[0], 2, false), 4.42, 0.01, '((12 - 7) / 40) ^ 1.5 at full chance');
+  T.near(_hiddenRollChance(caster[0], 2, true), 8.84, 0.01, 'Searching doubles it');
+  T.near(_hiddenRollChance(caster[0], 1, false), 2.21, 0.01, 'the far roll is half');
+  T.eq(caster[0].reachFt, 12 * QUINT_FT_PER_POINT, 'Quintessence reaches 4 ft per point');
   T.eq(_hiddenSenses(w, me, { Quintessence: 0 })[0].stat, 0, 'no Quintessence, no chance (the check skips a zero stat)');
   T.stub('_sentinelLineOfSight', () => false);
   T.eq(_hiddenSenses(w, me, { Quintessence: 12 })[0].los, false, 'a wall blocks seeing magic, like sight');

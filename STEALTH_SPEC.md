@@ -107,6 +107,8 @@ yet.
 
 **Search and smell (v0.1.20261126j):** a Searching watcher now doubles its chance against sneakers and hiders, like Vigilant (but with no sight cone). `SMELL_HIDING_K` raised from 600 to 1200 so smell finds people less often.
 
+**Hidden objects on the same model (v0.1.20261126k):** traps, secret doors and hidden magic now use the same curve (`detectionChance`, sense - 7, ^1.5) and the same reach per point (sight 8, hearing 4, smell 1.5, Quintessence 4 ft). The old plain `stat / hiding` is gone.
+
 ## Open decisions (defaults in brackets)
 
 - Does an unaware target get a defense roll against a stealth attack? [No: it did not see it coming.]
