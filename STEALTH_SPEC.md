@@ -105,6 +105,8 @@ yet.
 
 **Reach (v0.1.20261126a):** hearing and smell reach now scale with the watcher's score: `HEARING_FT_PER_POINT` 4 and `SMELL_FT_PER_POINT` 1.5 (sight is Day/Night Vision x 8). Far ring = the reach, near ring = half.
 
+**Search and smell (v0.1.20261126j):** a Searching watcher now doubles its chance against sneakers and hiders, like Vigilant (but with no sight cone). `SMELL_HIDING_K` raised from 600 to 1200 so smell finds people less often.
+
 ## Open decisions (defaults in brackets)
 
 - Does an unaware target get a defense roll against a stealth attack? [No: it did not see it coming.]

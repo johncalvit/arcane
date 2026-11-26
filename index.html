@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126i';
+const VERSION = 'v0.1.20261126j';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19988,7 +19988,9 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const dx = ((xPct - watcherTok.x_pct) / 100) * mapImgW;
   const dy = ((yPct - watcherTok.y_pct) / 100) * mapImgH;
   const distFt = _edgeToEdgeDistFt(watcherTok, moverTok, xPct, yPct);
-  const boosted  = getConditions(watcherTok.id).has('vigilant');
+  const wConds   = getConditions(watcherTok.id);
+  const vigil    = wConds.has('vigilant'), searching = wConds.has('searching');
+  const boosted  = vigil || searching; // Vigilant or Searching doubles the chance (Search looks all round: no cone)
   const hidden   = getConditions(moverTok.id).has('hiding'); // lying still: makes no sound
   const sneaking = hidden || getConditions(moverTok.id).has('infiltrating');
   const dark = _darkAt(xPct, yPct);
@@ -20001,7 +20003,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
 
   let inSight = false;
   const facing = (Array.isArray(watcherTok.conditions) ? watcherTok.conditions : []).some(c => c.startsWith('facing:'));
-  const coneDeg = (boosted || facing) ? VIGILANT_CONE_DEG : 360;
+  const coneDeg = (vigil || facing) ? VIGILANT_CONE_DEG : 360;
   const pointDeg = Math.atan2(dy, dx) * 180 / Math.PI;
   let diff = Math.abs(pointDeg - _tokenFacingDeg(watcherTok));
   if (diff > 180) diff = 360 - diff;
@@ -20014,7 +20016,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   ];
   const tries = []; // what was rolled, for the one Journal line below (so a miss isn't silent)
   const log = res => {
-    if (tries.length) logCombat(`[${boosted ? 'vigilant' : 'notice'}] ${watcherTok.label} vs ${moverTok.label}${hidden ? ' (hiding)' : sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
+    if (tries.length) logCombat(`[${vigil ? 'vigilant' : searching ? 'search' : 'notice'}] ${watcherTok.label} vs ${moverTok.label}${hidden ? ' (hiding)' : sneaking ? ' (sneaking)' : ''}${GAITS[_vigMoveGait] && _vigMoveGait ? ' ' + GAITS[_vigMoveGait].name.toLowerCase() : ''}: ${tries.join(', ')}`, 'roll');
     return res;
   };
   for (const sn of senses) {

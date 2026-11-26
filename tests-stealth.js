@@ -106,6 +106,24 @@ test('Stealth', 'a hider makes no sound: only sight (past the cover) or smell ca
   T.eq(_vigilantDetects(w, h, 60, 50).sense, 'sight', 'a roll of 50 sees the hider');
 });
 
+test('Stealth', 'a Searching watcher doubles its chance against a sneaker or hider, like Vigilant, but looks all round (no cone)', async T => {
+  T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
+  const _sq = (x0, y0, x1, y1) => [{ x_pct: x0, y_pct: y0 }, { x_pct: x1, y_pct: y0 }, { x_pct: x1, y_pct: y1 }, { x_pct: x0, y_pct: y1 }];
+  mapWalls = [{ id: 'c', type: 'conceal', name: 'Thicket', hide: 25, points: _sq(0, 0, 100, 100) }];
+  const w = T.token('w', 50, 50, 'creature', 'Ew', ['searching']), h = T.token('h', 60, 50, 'creature', 'Eh', ['hiding']);
+  T.senses({ 'creature::w': { Smell: 0, DayVision: 17 } }); // sight 17-7 = 10 against thicket 25: 51% doubled
+  T.random(0.30); // below the doubled 51% (and the far-ring half of it) but above the undoubled 20%
+  T.eq(_vigilantDetects(w, h, 60, 50).sense, 'sight', 'a Searching watcher sees the hider on a roll of 30');
+  _detectStage = {}; w.conditions = [];
+  T.eq(_vigilantDetects(w, h, 60, 50).detected, false, 'the same watcher not searching misses on that roll');
+  // behind the watcher: Vigilant is held to its cone, Searching is not
+  mapTokens.h.x_pct = 40; mapTokens.h.conditions = ['hiding']; // west of the watcher; its default facing is east
+  _detectStage = {}; w.conditions = ['searching']; T.random(0.30);
+  T.eq(_vigilantDetects(w, mapTokens.h, 40, 50).sense, 'sight', 'Searching sees behind it');
+  _detectStage = {}; w.conditions = ['vigilant']; T.random(0.30);
+  T.eq(_vigilantDetects(w, mapTokens.h, 40, 50).detected, false, 'Vigilant, with the hider behind it, does not');
+});
+
 test('Stealth', 'noticed by: recorded on the hider, stops further rolls, cleared when they start afresh', async T => {
   T.geo(); T.map(); T.senses(); T.fakeWrites(); mapIsDark = false; _detectStage = {};
   const w = T.token('w', 50, 50, 'creature', 'Ew', ['vigilant', 'facing:0']), m = T.token('m', 60, 50, 'creature', 'Em', ['infiltrating']);

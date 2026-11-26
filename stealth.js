@@ -14,7 +14,7 @@ var STEALTH_SKILL = { stats: ['PhysCoord', 'Logic'], mult: 0.5 }; // fallback if
 var STEALTH_FORMULA = (typeof STEALTH_FORMULA === 'string' && STEALTH_FORMULA) ? STEALTH_FORMULA : '(Physical Coordination + Logic) * 0.5';
 var STEALTH_ATTACK_HIT = 20;           // a stealth attack is this many points easier to land (and does double damage)
 var HEARING_HIDING_K = 400;            // hearing hiding = this / noise (a louder walker is easier to hear)
-var SMELL_HIDING_K   = 600;            // smell hiding   = this / odor
+var SMELL_HIDING_K   = 1200;            // smell hiding   = this / odor
 // Tuning knobs (playtest 2026-11-25): a watcher's sense score is cut by SENSE_PENALTY before it is compared (a low score
 // is a bad ear, eye or nose), the chance is (sense / hiding) raised to DETECT_POWER, and Stealth multiplies the cover and
 // hearing hiding values: hiding x (1 + Stealth / STEALTH_DIVISOR).
