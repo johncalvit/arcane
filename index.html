@@ -8678,7 +8678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126a';
+const VERSION = 'v0.1.20261126b';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9285,11 +9285,26 @@ function isConfigOwner() {
   return currentUser && (!ownerId || currentUser.id === ownerId);
 }
 
+var _corePublisher = null;   // true / false once core_rules_owners has been read for the signed-in user, else null
+var _corePublisherFor = null; // the user id that value belongs to
+async function _refreshCorePublisher() {
+  if (!currentUser || _corePublisherFor === currentUser.id) return;
+  _corePublisherFor = currentUser.id;
+  try {
+    const { data, error } = await sb.from('core_rules_owners').select('user_id').eq('user_id', currentUser.id).limit(1);
+    _corePublisher = error ? null : !!(data && data.length);
+  } catch (e) { _corePublisher = null; }
+  const pubBtn = document.getElementById('core-publish-btn');
+  if (pubBtn) pubBtn.style.display = (_corePublisher === null ? isConfigOwner() : _corePublisher) ? '' : 'none';
+}
 function updateOwnerButtonVisibility() {
   const btn = document.getElementById('save-owner-default-btn');
   if (btn) btn.style.display = isConfigOwner() ? '' : 'none';
+  // Publish Core Rules follows the database (core_rules_owners), not the browser's saved owner id; if that table
+  // can't be read (not set up yet) it falls back to the old config-owner check.
   const pubBtn = document.getElementById('core-publish-btn');
-  if (pubBtn) pubBtn.style.display = isConfigOwner() ? '' : 'none';
+  if (pubBtn) pubBtn.style.display = (_corePublisher === null ? isConfigOwner() : _corePublisher) ? '' : 'none';
+  _refreshCorePublisher();
   const tmplRow = document.getElementById('is-template-row');
   if (tmplRow) tmplRow.style.display = currentUser ? 'flex' : 'none';
 }
@@ -9606,7 +9621,7 @@ async function checkCoreRulesUpdate(manual) {
 }
 
 async function publishCoreRules() {
-  if (!isConfigOwner()) { setConfigStatus('Only the config owner can publish Core Rules.', false); return; }
+  if (!currentUser) { setConfigStatus('Sign in to publish Core Rules.', false); return; } // the database decides who may (core_rules_owners)
   const notes = prompt('Publish your current config as the next Core Rules version.\n\nWhat changed? (shown to GMs in the update dialog)');
   if (notes === null) return;
   const { data: latest, error: e1 } = await sb.from('core_rules').select('version').order('version', { ascending: false }).limit(1);

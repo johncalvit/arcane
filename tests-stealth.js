@@ -216,3 +216,29 @@ test('Stealth', 'a stealth attack: +20 to hit, no defense, double damage flagged
     delete sessionCreatureCache['Ea'];
   }
 });
+
+test('Core Rules', 'the Publish button follows the core_rules_owners table, not the id saved in the browser', async T => {
+  let made = false, btn = document.getElementById('core-publish-btn');
+  if (!btn) { made = true; btn = document.createElement('button'); btn.id = 'core-publish-btn'; document.body.appendChild(btn); }
+  const savedDisplay = btn.style.display; btn.style.display = 'none';
+  const lsKey = OWNER_USER_LS_KEY, savedLs = localStorage.getItem(lsKey), savedUser = currentUser, savedPub = [_corePublisher, _corePublisherFor];
+  try {
+    currentUser = { id: 'u1' };
+    localStorage.setItem(lsKey, 'someone-else'); // a different account saved as the browser's owner
+    T.ok(!isConfigOwner(), 'the old check would hide it');
+    const answer = (data, error) => T.stubObj(sb, 'from', () => ({ select: () => ({ eq: () => ({ limit: async () => ({ data, error }) }) }) }));
+    answer([{ user_id: 'u1' }], null); _corePublisher = null; _corePublisherFor = null;
+    await _refreshCorePublisher();
+    T.eq(btn.style.display, '', 'an owner in the table sees it');
+    answer([], null); _corePublisher = null; _corePublisherFor = null;
+    await _refreshCorePublisher();
+    T.eq(btn.style.display, 'none', 'someone not in the table does not');
+    answer(null, { message: 'no such table' }); _corePublisher = null; _corePublisherFor = null;
+    await _refreshCorePublisher();
+    T.eq(btn.style.display, 'none', 'table unreadable: falls back to the old check (hidden here)');
+  } finally {
+    if (made) btn.remove(); else btn.style.display = savedDisplay;
+    currentUser = savedUser; [_corePublisher, _corePublisherFor] = savedPub;
+    if (savedLs === null) localStorage.removeItem(lsKey); else localStorage.setItem(lsKey, savedLs);
+  }
+});
