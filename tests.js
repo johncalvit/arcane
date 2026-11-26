@@ -891,6 +891,24 @@ test('Enchantments', "the builder's Final Attributes include a worn ring's passi
   } finally { tr.remove(); characterWorn = savedWorn; }
 });
 
+test('Armor', 'worn armor Dexterity / Coordination modifiers apply by slot and add up', async T => {
+  const owned = [
+    { id: 'a', dexMod: -10, coordMod: -4, visionMod: 0, hearingMod: 0 },
+    { id: 'b', dexMod: -10, coordMod: -4 },
+    { id: 'c', dexMod: -10, coordMod: -4 },
+    { id: 'd', dexMod: -10, coordMod: -4, visionMod: -20 },
+  ];
+  const tot = _armorModTotals(owned, { rarm: 'a', larm: 'b', torso: 'c', head: 'd' });
+  T.eq(tot.dex, -20, 'Dexterity counts only on the two arm slots');
+  T.eq(tot.coord, -12, 'Coordination counts on torso and arms, not the head');
+  T.eq(tot.vision, -20, 'vision still counts on the head');
+  const out = _applyArmorMods({ ManualDex: 20, PhysCoord: 50, DayVision: 10, NightVision: 10, Hearing: 10 }, tot);
+  T.near(out.ManualDex, 16, 0.001, 'Manual Dexterity -20%');
+  T.near(out.PhysCoord, 44, 0.001, 'Physical Coordination -12%');
+  T.near(out.NightVision, 8, 0.001, 'Night Vision -20%');
+  T.ok(!_armorModsAny(_armorModTotals([], {})), 'no armor, no modifiers');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

@@ -1646,6 +1646,14 @@
             <input type="text" id="apf-hearingmod" placeholder="0" title="Applied to the wearer's Hearing while equipped.">
           </div>
           <div class="field">
+            <label>Dexterity Modifier %</label>
+            <input type="text" id="apf-dexmod" placeholder="0" title="Applied to the wearer's Manual Dexterity, but only while the piece is worn on an ARM slot (heavy gauntlets and sleeves clumsy the hands). Negative reduces it. Pieces add up.">
+          </div>
+          <div class="field">
+            <label>Coordination Modifier %</label>
+            <input type="text" id="apf-coordmod" placeholder="0" title="Applied to the wearer's Physical Coordination while the piece is worn on the torso, an arm or a leg (not the head). Negative reduces it. Pieces add up, so keep it small per piece. Not scaled by the piece's size.">
+          </div>
+          <div class="field">
             <label>Arcane Impedance</label>
             <input type="text" id="apf-impedance" placeholder="0" title="How much this piece hinders spellcasting, per point of the piece's size. A worn piece lowers the wearer's maximum casting success by Impedance × the piece's size (in %); every worn piece adds up, subtracted from the 95% ceiling. Applies to every kind of spell except Deific — a prayer asks for the effect rather than casting it.">
           </div>
@@ -1665,7 +1673,7 @@
       </div>
 
       <table class="loadout-table">
-        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th title="Per point of piece size; lowers the wearer's max casting success">Impedance</th><th title="Crowns per point of piece size, before the body-area factor: price = area weight × size × this">Price/Size</th><th></th></tr></thead>
+        <thead><tr><th>Piece</th><th>Slot</th><th>Material</th><th>Gap</th><th>Noise</th><th>Vision%</th><th>Hearing%</th><th title="Manual Dexterity %, worn on an arm slot">Dex%</th><th title="Physical Coordination %, worn on torso, arm or leg">Coord%</th><th title="Per point of piece size; lowers the wearer's max casting success">Impedance</th><th title="Crowns per point of piece size, before the body-area factor: price = area weight × size × this">Price/Size</th><th></th></tr></thead>
         <tbody id="armorpiecemgr-list"></tbody>
       </table>
     </div>
@@ -4461,7 +4469,7 @@ function addArmorPiece() {
   const id = 'armorpc-' + Date.now() + '-' + Math.round(Math.random() * 9999);
 
   _appendArmorRow({ id, name: piece.name, slot: piece.slot || null, material: piece.material, size, gap: piece.gap,
-    noise: piece.noise || 0, visionMod: piece.visionMod || 0, hearingMod: piece.hearingMod || 0,
+    noise: piece.noise || 0, visionMod: piece.visionMod || 0, hearingMod: piece.hearingMod || 0, dexMod: piece.dexMod || 0, coordMod: piece.coordMod || 0,
     impedance: piece.impedance || 0, weight, cost });
   buildArmorFields();
   recalc();
@@ -4477,6 +4485,7 @@ function _ownedArmorPieces() {
     material: tr.dataset.material, size: parseFloat(tr.dataset.size) || 0,
     gap: parseFloat(tr.dataset.gap) || 0, noise: parseFloat(tr.dataset.noise) || 0,
     visionMod: parseFloat(tr.dataset.visionmod) || 0, hearingMod: parseFloat(tr.dataset.hearingmod) || 0,
+    dexMod: parseFloat(tr.dataset.dexmod) || 0, coordMod: parseFloat(tr.dataset.coordmod) || 0,
     impedance: parseFloat(tr.dataset.impedance) || 0,
     weight: parseFloat(tr.dataset.weight) || 0, cost: parseFloat(tr.dataset.cost) || 0,
   }));
@@ -4531,6 +4540,7 @@ function _appendArmorRow(o) {
   tr.dataset.id = o.id; tr.dataset.name = o.name; tr.dataset.slot = o.slot || '';
   tr.dataset.material = o.material; tr.dataset.size = o.size; tr.dataset.gap = o.gap;
   tr.dataset.noise = o.noise || 0; tr.dataset.visionmod = o.visionMod || 0; tr.dataset.hearingmod = o.hearingMod || 0;
+  tr.dataset.dexmod = o.dexMod || 0; tr.dataset.coordmod = o.coordMod || 0;
   tr.dataset.impedance = o.impedance || 0; // frozen with the instance, like noise/vision/hearing
   tr.dataset.weight = o.weight || 0; tr.dataset.cost = o.cost || 0;
   tr.innerHTML = `<td>${_paEsc(o.name)}</td><td>${o.slot ? _paEsc(o.slot) : 'any'}</td><td>${_paEsc(o.material)}</td><td>${o.size}</td><td>${Math.round((o.weight || 0) * 10) / 10}</td><td>${formatMoney(o.cost)}</td>
@@ -5339,6 +5349,8 @@ function _fillArmorPieceForm(row) {
   document.getElementById('apf-noise').value      = row ? (row.noise || 0) : 0;
   document.getElementById('apf-visionmod').value  = row ? (row.visionMod || 0) : 0;
   document.getElementById('apf-hearingmod').value = row ? (row.hearingMod || 0) : 0;
+  document.getElementById('apf-dexmod').value     = row ? (row.dexMod || 0) : 0;
+  document.getElementById('apf-coordmod').value   = row ? (row.coordMod || 0) : 0;
   document.getElementById('apf-impedance').value  = row ? (row.impedance || 0) : 0;
   document.getElementById('apf-costpermod').value = row ? (row.costPerMod || 0) : 0;
   document.getElementById('apf-enchant').innerHTML = _enchantOptionsHTML(row ? row.enchant : '');
@@ -5408,6 +5420,8 @@ function saveArmorPiece() {
     noise: parseFloat(document.getElementById('apf-noise').value) || 0,
     visionMod: parseFloat(document.getElementById('apf-visionmod').value) || 0,
     hearingMod: parseFloat(document.getElementById('apf-hearingmod').value) || 0,
+    dexMod: parseFloat(document.getElementById('apf-dexmod').value) || 0,
+    coordMod: parseFloat(document.getElementById('apf-coordmod').value) || 0,
     impedance: parseFloat(document.getElementById('apf-impedance').value) || 0,
     costPerMod: parseFloat(document.getElementById('apf-costpermod').value) || 0,
     enchant: document.getElementById('apf-enchant').value || '',
@@ -5439,7 +5453,7 @@ function buildArmorPieceManagerTable() {
   ARMOR_PIECES.forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${p.name}${p.enchant ? ' <span title="Enchantment: ' + _paEsc(p.enchant) + '">✨</span>' : ''}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
-      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.impedance || 0}</td><td>${p.costPerMod || 0}cr</td>
+      <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.dexMod || 0}</td><td>${p.coordMod || 0}</td><td>${p.impedance || 0}</td><td>${p.costPerMod || 0}cr</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openArmorPieceForm(${i})">Edit</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPiece(${i})" title="Duplicate this row into a new entry">Copy</button>
       <button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="copyArmorPieceAsSuit(${i})" title="Add a matching piece for every other slot (named e.g. &quot;${p.name} (R Arm)&quot;)">Copy As Suit</button>
@@ -7152,11 +7166,39 @@ function _entityEnchantItems(row, isChar) {
   return out;
 }
 
-// The builder's own Final Attributes with worn / held enchantments applied (Night Eyes' Night Vision +10 and so on) -
+// Worn armor modifiers (all in %, summed over the equipped pieces): Vision (Day + Night), Hearing, Manual Dexterity
+// (only on an arm slot) and Physical Coordination (torso / arm / leg, not the head). Not scaled by piece size.
+const _DEX_SLOTS = ['rarm', 'larm'], _COORD_SLOTS = ['torso', 'rarm', 'larm', 'rleg', 'lleg'];
+function _armorModTotals(owned, equipped) {
+  const t = { vision: 0, hearing: 0, dex: 0, coord: 0 };
+  for (const slotKey of Object.keys(equipped || {})) {
+    const inst = (owned || []).find(o => o.id === equipped[slotKey]);
+    if (!inst) continue;
+    t.vision += inst.visionMod || 0;
+    t.hearing += inst.hearingMod || 0;
+    if (_DEX_SLOTS.includes(slotKey)) t.dex += inst.dexMod || 0;
+    if (_COORD_SLOTS.includes(slotKey)) t.coord += inst.coordMod || 0;
+  }
+  return t;
+}
+function _armorModsAny(t) { return !!(t.vision || t.hearing || t.dex || t.coord); }
+// Applies the totals to an attribute object IN PLACE and returns it (callers pass a copy).
+function _applyArmorMods(attrs, t) {
+  const mult = pct => Math.max(0, 1 + pct / 100);
+  if (t.vision)  { attrs.DayVision = (attrs.DayVision || 0) * mult(t.vision); attrs.NightVision = (attrs.NightVision || 0) * mult(t.vision); }
+  if (t.hearing) attrs.Hearing = (attrs.Hearing || 0) * mult(t.hearing);
+  if (t.dex)     attrs.ManualDex = (attrs.ManualDex || 0) * mult(t.dex);
+  if (t.coord)   attrs.PhysCoord = (attrs.PhysCoord || 0) * mult(t.coord);
+  return attrs;
+}
+
+// The builder's own Final Attributes with worn armor modifiers and worn / held enchantments applied (Night Eyes' Night Vision +10 and so on) -
 // the same effects getEntity applies in play, read from the builder's live state. Does not touch the points-based
 // calcs (Memory Points, skill points), which stay on the plain attributes.
 function calcAttributesWithEnchants(attrs) {
   attrs = attrs || calcAttributes();
+  const mods = _armorModTotals(_ownedArmorPieces(), getEquippedArmorIds());
+  if (_armorModsAny(mods)) attrs = _applyArmorMods(Object.assign({}, attrs), mods); // worn armor: vision, hearing, dexterity, coordination
   if (!ENCHANTMENTS.length) return attrs;
   const equipment = [...document.querySelectorAll('#equip-list tr')].map(tr => ({ name: tr.cells[0].textContent, qty: parseInt(tr.cells[1].textContent) || 1 }));
   const row = { equipment, held_items: getHeldItems(), stats: { ArmorOwned: _ownedArmorPieces(), ArmorEquipped: getEquippedArmorIds(), Worn: { ...characterWorn } } };
@@ -8788,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126h';
+const VERSION = 'v0.1.20261126i';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -10961,28 +11003,17 @@ function getEntity(ref) {
   // visionMod/hearingMod (see Game Config → Armor Pieces) are affected.
   const armorOwned = Array.isArray(row.stats?.ArmorOwned) ? row.stats.ArmorOwned : [];
   const armorEquipped = row.stats?.ArmorEquipped || {};
-  let visionPct = 0, hearingPct = 0, armorNoise = 0, arcaneImpedance = 0;
+  let armorNoise = 0, arcaneImpedance = 0;
+  const modTotals = _armorModTotals(armorOwned, armorEquipped);
   for (const slotKey of Object.keys(armorEquipped)) {
     const inst = armorOwned.find(o => o.id === armorEquipped[slotKey]);
     if (!inst) continue;
     // Arcane Impedance: each worn piece costs impedance × ITS size, in % off the
     // wearer's maximum casting success (see _spellSuccessCap); pieces sum.
     arcaneImpedance += _pieceImpedance(inst) * (inst.size || 0);
-    visionPct += inst.visionMod || 0;
-    hearingPct += inst.hearingMod || 0;
     armorNoise += inst.noise || 0; // see Vigilant/Infiltrate's _infiltratorNoiseScore
   }
-  if (visionPct || hearingPct) {
-    if (attrs === row._attrs) attrs = Object.assign({}, row._attrs);
-    if (visionPct) {
-      const mult = Math.max(0, 1 + visionPct / 100);
-      attrs.DayVision = (attrs.DayVision || 0) * mult;
-      attrs.NightVision = (attrs.NightVision || 0) * mult;
-    }
-    if (hearingPct) {
-      attrs.Hearing = (attrs.Hearing || 0) * Math.max(0, 1 + hearingPct / 100);
-    }
-  }
+  if (_armorModsAny(modTotals)) attrs = _applyArmorMods(attrs === row._attrs ? Object.assign({}, row._attrs) : attrs, modTotals);
 
   // Enchanted items: passive ones adjust attributes / noise for as long as they're worn or held; the list
   // is also what offers Activate actions (see _entityActivations).
