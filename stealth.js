@@ -9,7 +9,10 @@
 
 // ── Tunables (the numbers are on the same scale as sense scores, which run about 5-30) ──
 var STEALTH_DARK_HIDING = 10;          // hiding value of an unlit spot on a dark map
-var STEALTH_SKILL = { stats: ['PhysCoord', 'Logic'], mult: 0.5 }; // Stealth = (Physical Coordination + Logic) x 0.5
+var STEALTH_SKILL = { stats: ['PhysCoord', 'Logic'], mult: 0.5 }; // fallback if the formula below is blank or broken
+// The Stealth skill formula, editable in Game Config (Economy page). Written like a weapon hit formula.
+var STEALTH_FORMULA = (typeof STEALTH_FORMULA === 'string' && STEALTH_FORMULA) ? STEALTH_FORMULA : '(Physical Coordination + Logic) * 0.5';
+var STEALTH_ATTACK_HIT = 20;           // a stealth attack is this many points easier to land (and does double damage)
 var HEARING_HIDING_K = 400;            // hearing hiding = this / noise (a louder walker is easier to hear)
 var SMELL_HIDING_K   = 600;            // smell hiding   = this / odor
 var STEALTH_OPEN_NOISE_MULT = 2;       // a walker who is not sneaking makes this much more noise
@@ -38,7 +41,14 @@ function detectionStage(distFt, reachFt) {
 // Stealth score: the skill from attributes plus whatever gear and magic add.
 function stealthScore(attrs, bonus) {
   const a = attrs || {};
-  const base = STEALTH_SKILL.stats.reduce((n, k) => n + (a[k] || 0), 0) * STEALTH_SKILL.mult;
+  let base = null;
+  try {
+    let expr = STEALTH_FORMULA;
+    for (const [label, key] of HIT_ATTR_MAP) expr = expr.replace(new RegExp(label, 'gi'), String(a[key] || 0));
+    const v = Function('"use strict"; return (' + expr + ')')();
+    if (isFinite(v)) base = v;
+  } catch (e) { base = null; }
+  if (base === null) base = STEALTH_SKILL.stats.reduce((n, k) => n + (a[k] || 0), 0) * STEALTH_SKILL.mult;
   return Math.max(0, base + (bonus || 0));
 }
 

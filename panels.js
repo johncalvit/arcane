@@ -1188,10 +1188,14 @@ function _dlgRender(body) {
       const ammoInfo = ranged && r.damageMax > 0 && !/^Throw\b/i.test(r.action) && r.reload !== 'N/A' && typeof _ammoInfoForRef === 'function'
         ? _ammoInfoForRef(combatantId, itemName) : null;
       const noAmmo = !!ammoInfo && ammoInfo.count < 1;
+      // Stealth Kill (a row marked stealthOnly) is offered only while the attacker is hiding or sneaking.
+      const _aTok = typeof _pathFindToken === 'function' ? _pathFindToken(combatantId) : null;
+      const _aConds = _aTok ? getConditions(_aTok.id) : new Set();
+      const stealthLocked = !!r.stealthOnly && !(_aConds.has('hiding') || _aConds.has('infiltrating'));
       const normalChip = _dlgChip({
         label: r.action, sub: ammoInfo ? `${sub} · ${_ammoLabel(ammoInfo)}` : sub,
-        disabled: noAmmo,
-        title: noAmmo ? `Out of ${ammoInfo.type.unit}` : kb > 0 ? `Knocks the target back (up to ~${kb} ft at full damage; lighter targets fly further, and hitting a wall or another body hurts)` : '',
+        disabled: noAmmo || stealthLocked,
+        title: stealthLocked ? 'Only while you are hiding or sneaking' : noAmmo ? `Out of ${ammoInfo.type.unit}` : kb > 0 ? `Knocks the target back (up to ~${kb} ft at full damage; lighter targets fly further, and hitting a wall or another body hurts)` : '',
         data: defensive
           ? { dact: 'set', slot: chKey, label: lbl, dur: 99, locks: 0 } // lock-on stance
           : { dact: 'attack', slot: chKey, label: lbl, dur: dur * 3,

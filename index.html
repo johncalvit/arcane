@@ -1702,6 +1702,14 @@
             </select>
           </div>
           <div class="field">
+            <label>Armor Gap ×</label>
+            <input type="text" id="mf-gapmult" placeholder="1" title="Multiplies the armor's gap chance (the to-hit roll that skips its protection) for this action. Stealth Kill uses 3. Blank or 1 = none.">
+          </div>
+          <div class="field">
+            <label>Stealth only</label>
+            <select id="mf-stealthonly" title="Offered only while the attacker is hiding or sneaking (shown dimmed otherwise)."><option value="">No</option><option value="1">Yes</option></select>
+          </div>
+          <div class="field">
             <label>Material</label>
             <input type="text" id="mf-material" placeholder="e.g. Steel; Iron; Bronze">
           </div>
@@ -2001,6 +2009,16 @@
           <label>Urchin/Underclass Multiplier</label>
           <input type="text" id="econ-urchin-mult" placeholder="0.2" oninput="saveEconomySettings()">
         </div>
+      </div>
+      <h3 style="margin-top:20px;">Stealth</h3>
+      <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">
+        A character's Stealth skill is added to their sight and hearing hiding value while hiding or sneaking. Write it like a weapon hit
+        formula, from attribute names (Physical Coordination, Manual Dexterity, Logic, Intuition...). Gear and magic add on top through an
+        enchantment with an effect such as <b>Stealth +4</b> (see Camouflage under Enchantments; put it on an armor piece for a camouflage outfit).
+      </p>
+      <div class="field" style="max-width:420px;">
+        <label>Stealth formula</label>
+        <input type="text" id="stealth-formula" placeholder="(Physical Coordination + Logic) * 0.5" oninput="saveEconomySettings()">
       </div>
       <h3 style="margin-top:20px;">Catalog Prices</h3>
       <p style="color:var(--text-dim);font-size:0.82rem;margin-bottom:12px;font-style:italic;">
@@ -5536,6 +5554,7 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Javelin",               action:"Parry",         minReach:0.5, reach:3,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Wood",                       minStr:12, damageMax:0,  maxPowerMod:0   },
 
   { weapon:"Knife",                 action:"Stab",          minReach:0.5, reach:1,    hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:3,  maxPowerMod:0.4 },
+  { weapon:"Knife",                 action:"Stealth Kill",  minReach:0.5, reach:1,    hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:3,  maxPowerMod:0.4, reqTechnique:"knife-stealth-kill", damageType:"pierce", gapMult:3, stealthOnly:true },
   { weapon:"Knife",                 action:"Slash",         minReach:0,   reach:0.5,  hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:5,  maxPowerMod:0.4 },
   { weapon:"Knife",                 action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Manual Dexterity*3",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:2,  maxPowerMod:0.2 },
   { weapon:"Knife",                 action:"Parry",         minReach:0,   reach:0.5,  hitFormula:"Manual Dexterity*2",                          material:"Steel; Iron; Bronze; Stone", minStr:4,  damageMax:0,  maxPowerMod:0   },
@@ -5581,6 +5600,7 @@ const DEFAULT_MELEE_WEAPONS = [
   { weapon:"Sword, Long",           action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron",                minStr:12, damageMax:0,  maxPowerMod:0   },
 
   { weapon:"Sword, Short",          action:"Stab",          minReach:1.5, reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:6,  maxPowerMod:0.7 },
+  { weapon:"Sword, Short",          action:"Stealth Kill",  minReach:1.5, reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:6,  maxPowerMod:0.7, reqTechnique:"short-sword-stealth-kill", damageType:"pierce", gapMult:3, stealthOnly:true },
   { weapon:"Sword, Short",          action:"Slash",         minReach:0,   reach:2,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:6,  maxPowerMod:0.7 },
   { weapon:"Sword, Short",          action:"Smash (Pommel)",minReach:0,   reach:0,    hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:2,  maxPowerMod:0.3 },
   { weapon:"Sword, Short",          action:"Parry",         minReach:0,   reach:1.5,  hitFormula:"Physical Coordination + Manual Dexterity",    material:"Steel; Iron; Bronze",        minStr:7,  damageMax:0,  maxPowerMod:0   },
@@ -5683,6 +5703,8 @@ function _fillMeleeForm(row) {
   if (row && row.reqTechnique && !TECHNIQUES.some(t => t.id === row.reqTechnique)) rtSel.insertAdjacentHTML('beforeend', `<option value="${_escWeaponType(row.reqTechnique)}">${_escWeaponType(row.reqTechnique)} (missing)</option>`);
   rtSel.value = row ? (row.reqTechnique || '') : '';
   document.getElementById('mf-damagetype').value = row ? (row.damageType || '') : '';
+  document.getElementById('mf-gapmult').value = row && row.gapMult > 1 ? row.gapMult : '';
+  document.getElementById('mf-stealthonly').value = row && row.stealthOnly ? '1' : '';
   _refreshWeaponTypeList();
 }
 
@@ -5742,6 +5764,8 @@ function saveMeleeWeapon() {
   if (webs > 0) row.webs = webs;
   const reqTech = document.getElementById('mf-reqtech').value; if (reqTech) row.reqTechnique = reqTech;
   const dmgType = document.getElementById('mf-damagetype').value; if (dmgType) row.damageType = dmgType;
+  const gapMultV = parseFloat(document.getElementById('mf-gapmult').value) || 0; if (gapMultV > 1) row.gapMult = gapMultV;
+  if (document.getElementById('mf-stealthonly').value === '1') row.stealthOnly = true;
   if (editingMeleeIndex !== null) {
     MELEE_WEAPONS[editingMeleeIndex] = row;
   } else {
@@ -6047,7 +6071,7 @@ function _techniquesForTypes(types, existing, tiers) {
 // Marksmen: an optional AIMED shot (aimSec extra seconds to aim - rounds up to whole rounds, since
 // action slots are per round) that takes rangeMult x the usual range penalty. The dialog offers the
 // aimed variant only to a character who has chosen the technique for the weapon's type.
-const TECHNIQUE_EXTRAS_VERSION = 7; // 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind, 6 = + Numb, Lunge, 7 = + Monk set
+const TECHNIQUE_EXTRAS_VERSION = 8; // 8 = + Stealth Kill, 2 = + Shield Block I-III, 3 = + Gap Target, 4 = + Heavy Blow, 5 = + Whirlwind, 6 = + Numb, Lunge, 7 = + Monk set
 const MARKSMEN_TECHNIQUES = [
   { id: 'crossbow-marksmen', name: 'Crossbow Marksmen', weaponType: 'Crossbow', minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
   { id: 'bow-marksmen',      name: 'Bow Marksmen',      weaponType: 'Bow',      minLevel: 1, hit: 0, damage: 0, parry: 0, aimSec: 1, rangeMult: 0.5 },
@@ -6094,7 +6118,13 @@ const MONK_TECHNIQUES = [1, 2, 3].map(n => ({ id: 'monk-block-' + n, name: 'Monk
     { id: 'monk-soul-armor',  name: 'Soul Armor',  weaponType: 'Unarmed', minLevel: 3, hit: 0, damage: 0, parry: 0, classes: ['Monk'], soulArmor: true },
     { id: 'monk-tornado',     name: 'Tornado',     weaponType: 'Unarmed', minLevel: 4, hit: 0, damage: 0, parry: 0, classes: ['Monk'], whirlwind: true, whirlReach: 5 },
   ]);
-const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES, NUMB_TECHNIQUES, LUNGE_TECHNIQUES, MONK_TECHNIQUES);
+// Stealth Kill (level 4): unlocks the Stealth Kill action on a Knife / Short Sword weapon - its own weapon row (so its
+// damage, reach and hit can be tuned in Game Config > Melee Weapons), offered only while hiding or sneaking, with the
+// row's own armor-gap multiplier (x3). Used on someone who has not noticed you it is also a stealth attack.
+const STEALTH_KILL_TYPES = ['Knife', 'Short Sword'];
+const STEALTH_KILL_TECHNIQUES = STEALTH_KILL_TYPES.map(type => ({ id: _techSlug(type) + '-stealth-kill', name: type + ' Stealth Kill', weaponType: type,
+  minLevel: 4, hit: 0, damage: 0, parry: 0, stealthKill: true }));
+const TECHNIQUE_EXTRAS = MARKSMEN_TECHNIQUES.concat(SHIELD_TECHNIQUES, GAP_TARGET_TECHNIQUES, HEAVY_BLOW_TECHNIQUES, WHIRLWIND_TECHNIQUES, NUMB_TECHNIQUES, LUNGE_TECHNIQUES, MONK_TECHNIQUES, STEALTH_KILL_TECHNIQUES);
 
 // A technique with a `classes` list is open only to those classes; without one it is open to everybody.
 function _techAvailableToClass(t, cls) { return !t || !Array.isArray(t.classes) || !t.classes.length || t.classes.includes(cls); }
@@ -6221,6 +6251,7 @@ function _techniqueSummary(t) {
   if (t.numb) parts.push('Numb: arm/leg hits roll Fumble / Slow as if a d10 of damage was dealt');
   if (t.grantsBlock) parts.push('Block with an empty hand');
   if (t.ironFist) parts.push('unlocks the Iron Fist strike');
+  if (t.stealthKill) parts.push('unlocks the Stealth Kill strike (only while hiding or sneaking; x3 armor gap)');
   if (t.soulArmor) parts.push('unarmored body areas gain Soul Armor protection');
   if (t.lunge) parts.push('Lunge: slip past a longer-reach Sentinel without its reaction attack');
   if (t.aimSec) parts.push(`aimed shot: ${t.aimSec}s to aim, ${Math.round((t.rangeMult ?? 1) * 100)}% range penalty`);
@@ -6935,6 +6966,7 @@ function buildConsumablesManagerTable() {
 //            Quintessence pays ENCHANT_STAMINA_PER_QUINT Stamina per missing point unless `quintOnly`.
 const DEFAULT_ENCHANTMENTS = [
   { name:'Silent Step', kind:'passive', effects:'Noise -50%', description:'Muffles every footfall: the wearer makes half the noise when moving.' },
+  { name:'Camouflage', kind:'passive', effects:'Stealth +4', description:'Blends into the surroundings: +4 Stealth while hiding or sneaking. Put it on an armor piece for a camouflage outfit.' },
   { name:'Night Eyes',  kind:'passive', effects:'Night Vision +10', description:'The wearer sees far better in the dark (+10 Night Vision).' },
   { name:'Fire Rose',   kind:'active',  spell:'Fire Rose', successPct:80, cost:1, quintOnly:false, description:'Casts Fire Rose on demand (80%). A failure can miscast.' },
   { name:'Webspinning', kind:'active',  spell:'Web',       successPct:75, cost:1, quintOnly:false, description:'Casts Web on demand (75%). A failure can miscast.' },
@@ -6971,12 +7003,13 @@ const _enchFxCache = {};
 function _parseEnchantEffects(str) {
   str = String(str || '');
   if (_enchFxCache[str]) return _enchFxCache[str];
-  const out = { attrs: [], noisePct: 0, bad: [] };
+  const out = { attrs: [], noisePct: 0, stealth: 0, bad: [] };
   for (const part of str.split(',').map(p => p.trim()).filter(Boolean)) {
     const m = part.match(/^(.+?)\s*([+-]\s*\d+(?:\.\d+)?)\s*(%?)$/);
     if (!m) { out.bad.push(part); continue; }
     const label = m[1].trim().toLowerCase(), amt = parseFloat(m[2].replace(/\s/g, '')), pct = !!m[3];
     if (label === 'noise') { if (pct) out.noisePct += amt; else out.bad.push(part); continue; }
+    if (label === 'stealth') { if (pct) out.bad.push(part); else out.stealth += amt; continue; }
     const a = ATTRIBUTES.find(x => x.label.toLowerCase() === label || x.key.toLowerCase() === label.replace(/\s/g, ''));
     if (!a) { out.bad.push(part); continue; }
     out.attrs.push({ key: a.key, amt, pct });
@@ -7318,12 +7351,14 @@ function _loadEconomySettingsUI() {
   document.getElementById('econ-starting-crowns').value = STARTING_CROWNS;
   document.getElementById('econ-noble-mult').value      = NOBLE_WEALTH_MULT;
   document.getElementById('econ-urchin-mult').value     = URCHIN_WEALTH_MULT;
+  document.getElementById('stealth-formula').value      = STEALTH_FORMULA;
 }
 
 function saveEconomySettings() {
   STARTING_CROWNS    = parseFloat(document.getElementById('econ-starting-crowns').value) || 0;
   NOBLE_WEALTH_MULT   = parseFloat(document.getElementById('econ-noble-mult').value) || 0;
   URCHIN_WEALTH_MULT  = parseFloat(document.getElementById('econ-urchin-mult').value) || 0;
+  { const f = document.getElementById('stealth-formula').value.trim(); if (f) STEALTH_FORMULA = f; }
   writeConfigToDisk();
 }
 
@@ -8608,6 +8643,8 @@ function gatherConfigData() {
     webContent: 1,
     monkContent: 1,
     reqTech: 1,
+    stealthKill: 1,
+    stealthFormula: STEALTH_FORMULA,
     blastItems: 1,
     defaultsFilled: 1,
     coreDefaultsFilled: _coreDefaultsFilled,
@@ -8641,7 +8678,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261125p';
+const VERSION = 'v0.1.20261125q';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -9693,6 +9730,15 @@ function applyConfigData(data) {
       data.meleeWeapons = [...data.meleeWeapons, { ...DEFAULT_MELEE_WEAPONS.find(d => d.weapon === 'Bare Handed' && d.action === 'Block') }];
     if (data.techniqueAllowance && Object.keys(data.techniqueAllowance).length && data.techniqueAllowance.Monk == null) data.techniqueAllowance = Object.assign({}, data.techniqueAllowance, { Monk: DEFAULT_TECHNIQUE_ALLOWANCE.Monk });
   }
+  // Configs saved before Stealth Kill: add its rows (for the Knife / Short Sword weapons the config has) and the
+  // Camouflage enchantment once. A GM who later edits or deletes them keeps their version.
+  if (data.stealthKill !== 1) {
+    if (data.meleeWeapons && data.meleeWeapons.length)
+      data.meleeWeapons = [...data.meleeWeapons, ...DEFAULT_MELEE_WEAPONS.filter(d => d.action === 'Stealth Kill' && data.meleeWeapons.some(m => m.weapon === d.weapon)
+        && !data.meleeWeapons.some(m => m.weapon === d.weapon && m.action === 'Stealth Kill')).map(d => ({ ...d }))];
+    if (Array.isArray(data.enchantments) && !data.enchantments.some(x => x.name === 'Camouflage'))
+      data.enchantments = [...data.enchantments, { ...DEFAULT_ENCHANTMENTS.find(x => x.name === 'Camouflage') }];
+  }
   // Configs saved before weapon rows had a Req. Technique: put it on the default Monk rows (rows a GM already set up
   // differently are left alone).
   if (data.reqTech !== 1 && data.meleeWeapons && data.meleeWeapons.length) {
@@ -9766,6 +9812,7 @@ function applyConfigData(data) {
   replaceObjectContents(ARMOR_AREA_WEIGHTS, data.armorAreaWeights && Object.keys(data.armorAreaWeights).length ? data.armorAreaWeights : DEFAULT_ARMOR_AREA_WEIGHTS);
   replaceObjectContents(ARMOR_TYPE_DATA,    data.armorTypes       && Object.keys(data.armorTypes).length       ? data.armorTypes       : DEFAULT_ARMOR_TYPE_DATA);
   replaceArrayContents(ARMOR_PIECES,        data.armorPieces      && data.armorPieces.length                   ? data.armorPieces      : DEFAULT_ARMOR_PIECES);
+  if (typeof data.stealthFormula === 'string' && data.stealthFormula.trim()) STEALTH_FORMULA = data.stealthFormula;
   STARTING_CROWNS    = data.startingCrowns    ?? 5;
   NOBLE_WEALTH_MULT  = data.nobleWealthMult   ?? 4;
   URCHIN_WEALTH_MULT = data.urchinWealthMult  ?? 0.2;
@@ -10808,19 +10855,20 @@ function getEntity(ref) {
   // Enchanted items: passive ones adjust attributes / noise for as long as they're worn or held; the list
   // is also what offers Activate actions (see _entityActivations).
   const enchants = _entityEnchantItems(row, isChar);
-  let noiseMult = 1;
+  let noiseMult = 1, stealthBonus = 0;
   const _seenEnch = new Set();
   for (const x of enchants) {
     if (x.ench.kind === 'active' || _seenEnch.has(x.ench.name)) continue; // copies of one enchantment don't stack
     _seenEnch.add(x.ench.name);
     const fx = _parseEnchantEffects(x.ench.effects);
     if (fx.noisePct) noiseMult *= Math.max(0, 1 + fx.noisePct / 100);
+    stealthBonus += fx.stealth || 0;
     if (fx.attrs.length && attrs === row._attrs) attrs = Object.assign({}, row._attrs);
     for (const a of fx.attrs) attrs[a.key] = a.pct ? (attrs[a.key] || 0) * Math.max(0, 1 + a.amt / 100) : (attrs[a.key] || 0) + a.amt;
   }
 
   return {
-    ref, type, enchants, noiseMult,
+    ref, type, enchants, noiseMult, stealthBonus,
     id:        row.id,
     tokenId:   token?.id || null,
     name:      row.name || token?.label || '',
@@ -15056,7 +15104,9 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   const baseGap   = equippedPiece?.gap ?? armorMat?.gap ?? 5;
   // Gap Target technique: a stab with a matching weapon type multiplies the armor's gap chance.
   const gapTech   = (category === 'pierce' && weaponRow.weapon) ? _combatantTechBonus(ctx.attackerCombatantId, weaponRow.weapon) : null;
-  const gapMult   = gapTech && gapTech.gapMult > 1 && armorType !== 'None' ? gapTech.gapMult : 1;
+  // A weapon row can carry its own gap multiplier (Stealth Kill: x3); it and Gap Target do not stack - the better one counts.
+  const rowGap    = weaponRow.gapMult > 1 ? weaponRow.gapMult : 1;
+  const gapMult   = armorType !== 'None' ? Math.max(rowGap, gapTech && gapTech.gapMult > 1 ? gapTech.gapMult : 1) : 1;
   const armorGap  = baseGap * gapMult;
   const gapHit    = hitRoll != null && hitRoll <= armorGap && armorType !== 'None';
   const dr        = gapHit ? 0 : getArmorDR(armorType, category);
@@ -15091,6 +15141,9 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   const _tgtBody  = getEntity(_entityRef(targetEntityType, targetEntityId))?.bodyType || 'Humanoid';
   const isHeadHit = finalDamage > 0 && _partRole(_tgtBody, hitPart) === 'head';
   if (isHeadHit) finalDamage *= 2;
+  // A stealth attack (made unseen from hiding or sneaking) does double damage, on top of everything above.
+  const isStealthHit = finalDamage > 0 && !!ctx.stealth;
+  if (isStealthHit) finalDamage *= 2;
 
   // Show result in roller
   const dmgEl = document.getElementById('roller-damage-display');
@@ -15114,7 +15167,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
             ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
             : `Roll ${rawDisplay}${capNote}`;
       dmgEl.innerHTML = `
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${whirlCut ? ` · 🌀 Whirlwind (max dmg -${whirlCut})` : ''}${techDmg ? ` · 🥋 +${techDmg} ${[...(techDmgB ? techDmgB.dmgNames : []), ...(heavyDmg ? [ctx.heavy.name] : [])].join(', ')}` : ''}</div>
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${isStealthHit ? ' · 🗡 stealth ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${whirlCut ? ` · 🌀 Whirlwind (max dmg -${whirlCut})` : ''}${techDmg ? ` · 🥋 +${techDmg} ${[...(techDmgB ? techDmgB.dmgNames : []), ...(heavyDmg ? [ctx.heavy.name] : [])].join(', ')}` : ''}</div>
         <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
@@ -19144,6 +19197,14 @@ function attackTokenClick(tokenId) {
       _resolveHitValue(atkAttrs);
     }
   }
+  // Stealth attack: made while hiding or sneaking against someone who has not noticed you (nobody recorded as
+  // 'noticedby'). +STEALTH_ATTACK_HIT to hit, double damage, and no defense roll - they did not see it coming.
+  const _atkTokS = _pathFindToken(attackCombatantId);
+  const _atkConds = _atkTokS ? getConditions(_atkTokS.id) : new Set();
+  const _sneaky = _atkConds.has('hiding') || _atkConds.has('infiltrating');
+  if (attackWeaponRow && attackWeaponRow.stealthOnly && !_sneaky) { showToast(`${attackActionLabel} needs you to be hiding or sneaking.`, 'warn'); return true; }
+  const stealthAttack = _sneaky && !_atkConds.has('noticedby:' + target.id);
+  const stealthHit = stealthAttack ? STEALTH_ATTACK_HIT : 0;
   const whirl = attackWhirl; // a swing of a Whirlwind (captured before exitAttackMode clears it)
   // Build damage context — captured before exitAttackMode clears attack state
   const damageContext = {
@@ -19156,6 +19217,7 @@ function attackTokenClick(tokenId) {
     attackerCombatantId: attackCombatantId,
     heavy: attackHeavy,
     whirl: whirl ? whirl.n : 0,
+    stealth: stealthAttack, // double damage, see applyDamage
     melee: !attackIsRanged, // a swing (not a shot or a throw): a critical miss has consequences, see _meleeCritMiss
   };
 
@@ -19209,7 +19271,7 @@ function attackTokenClick(tokenId) {
   // Techniques chosen for this weapon type add flat hit points on top of the size-adjusted chance.
   const techB   = _combatantTechBonus(attackCombatantId, attackWeaponName);
   const techHit = techB.hit;
-  const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult + techHit : null;
+  const rawThreshold = hitValue != null ? hitValue * targetAdj * proneMeleeMult + techHit + stealthHit : null;
   const threshold    = rawThreshold != null ? Math.round(rawThreshold) : null; // before range — the modal subtracts it
 
   // Heavy Blow: the Stamina is committed now, before the roll, and is gone whether the swing hits or misses.
@@ -19314,10 +19376,16 @@ function attackTokenClick(tokenId) {
   exitAttackMode();
 
   const { defenseOptions, targetBodyType } = _buildDefenseOptions(target, wasRanged, rawThreshold);
+  if (stealthAttack) {
+    defenseOptions.length = 0; // unaware: no Block / Parry / Evade
+    logCombat(`${_logName(throwerCid)} strikes ${target.label} unseen - a stealth attack: +${STEALTH_ATTACK_HIT} to hit, double damage, no defense.`, 'roll');
+    // The stance ends with the attack (the tracker does it when this combatant is in it; otherwise do it here).
+    if (_atkTokS && !atCombatants.find(x => x.id === throwerCid)) { setCondition(_atkTokS.id, 'hiding', false); setCondition(_atkTokS.id, 'infiltrating', false); }
+  }
 
   // ── Open called-shot picker, then hit roller ─────────────────────────────
   const proneNote     = proneMeleeMult > 1 ? ' × 2 (prone target)' : '';
-  const techNote = techHit ? ` + ${techHit} (${techB.hitNames.join(', ')})` : '';
+  const techNote = (techHit ? ` + ${techHit} (${techB.hitNames.join(', ')})` : '') + (stealthHit ? ` + ${stealthHit} (stealth attack)` : '');
   const subtitle = hitValue != null ? `HIT ${hitValue} × Size ${targetAdj}${proneNote}${techNote}` : '';
   const rangeNote = (attackIsRanged && rangeIncrements > 0)
     ? `${rangeIncrements} inc × ${attackRangeFt}ft, ${Math.round(distanceFt)}ft away${targetObscured ? ', ×2 obscured' : ''}${aimTech ? ', ×' + aimTech.rangeMult + ' aimed (' + aimTech.name + ')' : ''}` : '';
@@ -19759,7 +19827,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   const dark = _darkAt(xPct, yPct);
   const gaitMult = VIGILANT_GAIT_NOISE[_vigMoveGait] || 1;
   const hid = personHiding({
-    hiding: sneaking, moving: !hidden, stealth: stealthScore(moverEnt.attrs),
+    hiding: sneaking, moving: !hidden, stealth: stealthScore(moverEnt.attrs, moverEnt.stealthBonus),
     screen: concealmentAt(xPct, yPct), dark,
     noise: _infiltratorNoiseScore(moverEnt), gaitMult, odor: _infiltratorOdorScore(moverTok, moverEnt),
   });

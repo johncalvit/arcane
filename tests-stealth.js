@@ -143,3 +143,71 @@ test('Stealth', 'moving ends Hide even after a refresh has emptied the tracker s
   T.ok(!getConditions('h').has('hiding'), 'a real move does');
   T.eq(_defCondFromLabel('Hide'), 'hiding');
 });
+
+// ── Step 4: stealth attack, Stealth Kill, Stealth from gear and the formula ──
+test('Stealth', 'the Stealth formula is editable; a broken one falls back to the default; gear and magic add on top', async T => {
+  const saved = STEALTH_FORMULA;
+  try {
+    T.eq(stealthScore({ PhysCoord: 10, Logic: 20 }), 15);
+    STEALTH_FORMULA = 'Logic';
+    T.eq(stealthScore({ PhysCoord: 10, Logic: 20 }, 3), 23, 'a custom formula plus a +3 bonus');
+    STEALTH_FORMULA = 'not a formula (';
+    T.eq(stealthScore({ PhysCoord: 10, Logic: 20 }), 15, 'broken: the default skill');
+  } finally { STEALTH_FORMULA = saved; }
+  const fx = _parseEnchantEffects('Stealth +4, Noise -50%');
+  T.eq(fx.stealth, 4); T.eq(fx.noisePct, -50); T.eq(fx.bad, []);
+  T.eq(_parseEnchantEffects('Stealth +10%').bad.length, 1, 'a percentage Stealth is not understood');
+  T.ok(DEFAULT_ENCHANTMENTS.some(e => e.name === 'Camouflage' && /Stealth \+/.test(e.effects)), 'a Camouflage enchantment ships');
+});
+
+test('Stealth', 'Stealth Kill: its own Knife and Short Sword rows, x3 armor gap, hiding/sneaking only, unlocked by a level 4 technique', async T => {
+  for (const [weapon, tech] of [['Knife', 'knife-stealth-kill'], ['Sword, Short', 'short-sword-stealth-kill']]) {
+    const r = DEFAULT_MELEE_WEAPONS.find(x => x.weapon === weapon && x.action === 'Stealth Kill');
+    T.ok(r, weapon + ' has a Stealth Kill row');
+    T.eq(r.reqTechnique, tech); T.eq(r.gapMult, 3); T.ok(r.stealthOnly); T.eq(r.damageType, 'pierce');
+    T.ok(!_rowUnlocked([], r) && _rowUnlocked([tech], r), 'locked until the technique is chosen');
+    const t = DEFAULT_TECHNIQUES.find(x => x.id === tech);
+    T.ok(t && t.minLevel === 4 && t.stealthKill, 'a level 4 technique');
+  }
+});
+
+test('Stealth', 'a stealth attack: +20 to hit, no defense, double damage flagged; not when already noticed; Stealth Kill needs a stance', async T => {
+  T.geo(); T.fakeWrites(); mapIsDark = false;
+  atCombatants = [];
+  sessionCreatureCache['Ea'] = { species: 'Human', stats: {}, held_items: { right: 'Knife' }, weapons: [{ name: 'Knife' }] };
+  const a = T.token('a', 50, 50, 'creature', 'Ea', ['friendly']); T.token('t', 51, 50, 'creature', 'Et', ['foe']);
+  const added = !MELEE_WEAPONS.some(r => r.weapon === 'Knife' && r.action === 'Stealth Kill');
+  if (added) MELEE_WEAPONS.push({ ...DEFAULT_MELEE_WEAPONS.find(r => r.weapon === 'Knife' && r.action === 'Stealth Kill') });
+  const seen = [], logs = [], toasts = [];
+  T.stub('_openCalledShotModal', o => seen.push(o)); T.stub('atSetSlot', () => {}); T.stub('switchGmTab', () => {});
+  T.stub('logCombat', m => logs.push(m)); T.stub('showToast', m => toasts.push(m));
+  const saved = [attackMode, attackIsRanged, attackRangeFt, attackCombatantId, attackWeaponName, attackActionLabel];
+  const swing = (conds, action) => {
+    a.conditions = conds; seen.length = 0;
+    attackMode = true; attackIsRanged = false; attackRangeFt = 5; attackCombatantId = 'creature::a'; attackWeaponName = 'Knife'; attackActionLabel = action || 'Stab';
+    attackTokenClick('t');
+    return seen[0];
+  };
+  try {
+    const plain = swing(['friendly']);
+    T.ok(plain && plain.baseThreshold > 0 && !plain.damageContext.stealth, 'an open attack is made: ' + JSON.stringify(plain && { t: plain.baseThreshold, d: plain.defenseOptions.length }) + ' ' + logs.join('|') + toasts.join('|'));
+    const stealth = swing(['friendly', 'infiltrating']);
+    T.eq(stealth.baseThreshold, plain.baseThreshold + STEALTH_ATTACK_HIT, '+20 to hit');
+    T.eq(stealth.defenseOptions.length, 0, 'no defense roll');
+    T.ok(stealth.damageContext.stealth, 'flagged for double damage');
+    T.ok(logs.some(m => /stealth attack/.test(m)));
+    const hid = swing(['friendly', 'hiding']);
+    T.ok(hid.damageContext.stealth && hid.defenseOptions.length === 0, 'from hiding too');
+    const noticed = swing(['friendly', 'infiltrating', 'noticedby:t']);
+    T.eq(noticed.baseThreshold, plain.baseThreshold, 'the target has noticed you: no bonus');
+    T.ok(!noticed.damageContext.stealth);
+    const refused = swing(['friendly'], 'Stealth Kill');
+    T.ok(!refused && toasts.some(m => /hiding or sneaking/.test(m)), 'Stealth Kill is refused unless hiding or sneaking');
+    const kill = swing(['friendly', 'hiding'], 'Stealth Kill');
+    T.ok(kill && kill.damageContext.weaponRow.gapMult === 3, 'Stealth Kill goes through with its x3 gap row');
+  } finally {
+    [attackMode, attackIsRanged, attackRangeFt, attackCombatantId, attackWeaponName, attackActionLabel] = saved;
+    if (added) MELEE_WEAPONS.splice(MELEE_WEAPONS.findIndex(r => r.weapon === 'Knife' && r.action === 'Stealth Kill'), 1);
+    delete sessionCreatureCache['Ea'];
+  }
+});

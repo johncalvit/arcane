@@ -94,6 +94,8 @@ Hiding (and Infiltrate's sight benefit) only works where something screens the e
 yet.
 
 
+**Steps 2, 3 and 4 are built** (v0.1.20261125o / p / q). Camouflage outfits are done with an enchantment effect `Stealth +N` on an armor piece (no separate armor field).
+
 1. The shared detection function (pure, with tests); concealment object type in the map tools and its drawing.
 2. Move Vigilant and Infiltrate onto it; add passive noticing; Journal lines for each roll (as Vigilant logs now).
 3. Hide action; "noticed by" tracking.
