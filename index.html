@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126k';
+const VERSION = 'v0.1.20261126l';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -15281,14 +15281,16 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // Whirlwind: the damage cap drops by 1 for every target the sweep attacks (never below 1 on a damaging attack).
   const whirlCut    = rawCap > 0 && ctx.whirl > 0 ? ctx.whirl : 0;
   const baseCap     = whirlCut ? Math.max(1, rawCap - whirlCut) : rawCap;
-  // Technique damage (techniques chosen for this weapon type) raises the roll and the cap alike, before armor.
+  // Technique damage (techniques chosen for this weapon type) is added flat after the weapon cap (never capped by it).
   const techDmgB    = baseCap > 0 ? _combatantTechBonus(ctx.attackerCombatantId, weaponRow.weapon) : null;
   // Heavy Blow: its damage bonus rides along only because this runs on a hit (the Stamina was spent before the roll).
   const heavyDmg    = baseCap > 0 && ctx.heavy ? ctx.heavy.dmg : 0;
   const techDmg     = (techDmgB ? techDmgB.damage : 0) + heavyDmg;
   const dmgCap      = baseCap + techDmg;
   const powerMod    = weaponRow.maxPowerMod ?? 0.5;
-  const maxRoll     = Math.max(1, (atkPower || 1) * powerMod) + techDmg;
+  // The weapon's own roll (and its max-damage cap) is separate from technique damage: techniques are added flat,
+  // never capped by the weapon, so a skilled knife fighter out-damages a novice with a sword.
+  const maxRoll     = Math.max(1, (atkPower || 1) * powerMod);
   // A precise hit — the attack's own to-hit roll came in at 3 or below —
   // always lands at the weapon's max damage, PLUS a second ordinary damage
   // roll stacked on top. Unlike a normal hit, this one isn't capped at the
@@ -15296,17 +15298,17 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
   // a called-shot-precise one.
   const isPreciseHit = hitRoll != null && hitRoll <= 3 && dmgCap > 0;
   const bonusRoll   = Math.random() * (maxRoll - 1) + 1;
-  const rawRoll     = isPreciseHit ? dmgCap + bonusRoll : bonusRoll;
-  const afterArmor  = Math.max(0, rawRoll - dr);
-  let   finalDamage = dmgCap <= 0 ? 0 : Math.round(isPreciseHit ? afterArmor : Math.min(afterArmor, dmgCap));
-  // Head hits double — applied AFTER armor and the weapon cap, so a solid
-  // headshot punches past the normal max (a lethal called shot).
+  const rawRoll     = isPreciseHit ? baseCap + bonusRoll : bonusRoll;
+  // Head hits and stealth attacks double the damage BEFORE armor is subtracted (so armor matters less against them).
   const _tgtBody  = getEntity(_entityRef(targetEntityType, targetEntityId))?.bodyType || 'Humanoid';
-  const isHeadHit = finalDamage > 0 && _partRole(_tgtBody, hitPart) === 'head';
-  if (isHeadHit) finalDamage *= 2;
-  // A stealth attack (made unseen from hiding or sneaking) does double damage, on top of everything above.
-  const isStealthHit = finalDamage > 0 && !!ctx.stealth;
-  if (isStealthHit) finalDamage *= 2;
+  const isHeadHit = dmgCap > 0 && _partRole(_tgtBody, hitPart) === 'head';
+  const isStealthHit = dmgCap > 0 && !!ctx.stealth;
+  const mult        = (isHeadHit ? 2 : 1) * (isStealthHit ? 2 : 1);
+  const afterArmor  = Math.max(0, rawRoll * mult - dr);
+  // The weapon part is capped at its max damage (doubled too); technique damage rides on top once armor is penetrated.
+  const weaponDmg   = isPreciseHit ? afterArmor : Math.min(afterArmor, baseCap * mult);
+  const techAdd     = weaponDmg > 0 ? techDmg * mult : 0;
+  const finalDamage = dmgCap <= 0 ? 0 : Math.round(weaponDmg + techAdd);
 
   // Show result in roller
   const dmgEl = document.getElementById('roller-damage-display');
@@ -15315,7 +15317,7 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
     const rawDisplay  = Math.round(rawRoll);
     // Precise hits deliberately exceed dmgCap — that's not a "cap" note,
     // it's the whole point, so only ordinary hits get the capped-at note.
-    const capNote     = !isPreciseHit && dmgCap > 0 && afterArmor > dmgCap ? ` (capped at ${dmgCap})` : '';
+    const capNote     = !isPreciseHit && baseCap > 0 && afterArmor > baseCap * mult ? ` (capped at ${baseCap * mult})` : '';
     if (dmgCap <= 0) {
       // Non-damaging control action (e.g. Grab) — no damage line, just the hit.
       dmgEl.innerHTML = `
@@ -15323,15 +15325,15 @@ async function _applyDamageAfterHit(ctx, hitPart, partLabel, hitRoll) {
         <div style="font-size:1.1rem;font-weight:bold;color:var(--text);">Connects — no damage</div>`;
     } else {
       const rollLine  = isPreciseHit
-        ? `Precise hit! Max ${dmgCap} + roll ${Math.round(bonusRoll)} = ${rawDisplay}${dr > 0 ? ` − ${dr} armor = ${Math.round(afterArmor)}` : ''}`
+        ? `Precise hit! Max ${baseCap} + roll ${Math.round(bonusRoll)} = ${rawDisplay}${mult > 1 ? ` ×${mult} = ${Math.round(rawRoll * mult)}` : ''}${dr > 0 ? ` − ${dr} armor = ${Math.round(afterArmor)}` : ''}${techAdd ? ` + ${techAdd} technique` : ''}`
         : gapHit
-          ? `Roll ${rawDisplay} — found a gap in the armor!${capNote}`
+          ? `Roll ${rawDisplay}${mult > 1 ? ` ×${mult}` : ''} — found a gap in the armor!${capNote}${techAdd ? ` + ${techAdd} technique` : ''}`
           : dr > 0
-            ? `Roll ${rawDisplay} − ${dr} armor = ${Math.round(afterArmor)}${capNote}`
-            : `Roll ${rawDisplay}${capNote}`;
+            ? `Roll ${rawDisplay}${mult > 1 ? ` ×${mult} = ${Math.round(rawRoll * mult)}` : ''} − ${dr} armor = ${Math.round(afterArmor)}${capNote}${techAdd ? ` + ${techAdd} technique` : ''}`
+            : `Roll ${rawDisplay}${mult > 1 ? ` ×${mult} = ${Math.round(rawRoll * mult)}` : ''}${capNote}${techAdd ? ` + ${techAdd} technique` : ''}`;
       dmgEl.innerHTML = `
         <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:2px;">${partLabel} · ${armorType} · ${category}${isHeadHit ? ' · 🎯 headshot ×2' : ''}${isStealthHit ? ' · 🗡 stealth ×2' : ''}${gapHit ? ' · 🗡 gap!' : ''}${gapMult > 1 ? ` · 🎯 ${gapTech.gapNames.join(', ')} (gap ${baseGap}→${armorGap})` : ''}${isPreciseHit ? ' · ⚡ precise!' : ''}${whirlCut ? ` · 🌀 Whirlwind (max dmg -${whirlCut})` : ''}${techDmg ? ` · 🥋 +${techDmg} ${[...(techDmgB ? techDmgB.dmgNames : []), ...(heavyDmg ? [ctx.heavy.name] : [])].join(', ')}` : ''}</div>
-        <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}${isHeadHit ? ' → ×2 head' : ''}</div>
+        <div style="font-size:0.68rem;color:var(--text-dim);margin-bottom:6px;">${rollLine}</div>
         <div style="font-size:1.7rem;font-weight:bold;color:${finalDamage > 0 ? '#e05555' : 'var(--text-dim)'};">${finalDamage > 0 ? '−' + finalDamage : 'Absorbed'}</div>
         <div style="font-size:0.7rem;color:var(--text-dim);margin-top:2px;">damage to Toughness</div>`;
     }

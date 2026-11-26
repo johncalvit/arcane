@@ -909,6 +909,30 @@ test('Armor', 'worn armor Dexterity / Coordination modifiers apply by slot and a
   T.ok(!_armorModsAny(_armorModTotals([], {})), 'no armor, no modifiers');
 });
 
+test('Damage', 'doubling happens before armor; technique damage is added after the weapon cap', async T => {
+  T.random(0.99);
+  T.stub('applyDamage', async (ty, id, d) => { got = d; });
+  T.stub('getArmorDR', () => 3);
+  T.stub('getEntity', () => ({ bodyType: 'Humanoid' }));
+  T.stub('_combatantTechBonus', () => ({ damage: 2, dmgNames: ['Knife'] }));
+  let got = null, role = 'torso';
+  T.stub('_partRole', () => role);
+  const ctx = { targetEntityType: 'creature', targetEntityId: 'x', targetTokenId: null, atkPower: 8,
+    weaponRow: { weapon: 'Knife', action: 'Stab', damageMax: 5, maxPowerMod: 0.5 }, actionLabel: 'Stab', attackerCombatantId: 'a' };
+  await _applyDamageAfterHit(Object.assign({}, ctx), 'Torso', 'Torso', 50);
+  T.eq(got, 3, 'torso: roll ~4 - 3 armor, +2 technique');
+  role = 'head'; got = null;
+  await _applyDamageAfterHit(Object.assign({}, ctx), 'Head', 'Head', 50);
+  T.eq(got, 9, 'head: (roll ~4 x2 - 3 armor) + 2 x2 technique');
+  role = 'torso'; got = null;
+  await _applyDamageAfterHit(Object.assign({}, ctx, { stealth: true }), 'Torso', 'Torso', 50);
+  T.eq(got, 9, 'stealth doubles before armor too');
+  T.stub('_combatantTechBonus', () => ({ damage: 10, dmgNames: ['x'] }));
+  got = null;
+  await _applyDamageAfterHit(Object.assign({}, ctx), 'Torso', 'Torso', 50);
+  T.eq(got, 11, 'technique damage is not limited by the weapon max (1 + 10)');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
