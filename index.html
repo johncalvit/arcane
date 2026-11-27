@@ -2519,6 +2519,15 @@ function buildCharSelects() {
   }
 }
 
+// Game Config tables list their rows A-Z by default. The arrays are sorted in place (stable, case-insensitive), so
+// each row's index - which the Edit / Delete buttons use - still points at the right entry, and rows that share a name
+// (a weapon's several actions) keep their relative order.
+function _alphaSort(arr, key) {
+  const k = typeof key === 'function' ? key : (r => r && r[key]);
+  arr.sort((a, b) => String(k(a) || '').localeCompare(String(k(b) || ''), undefined, { sensitivity: 'base' }));
+  return arr;
+}
+
 // Weight base curve: [height_inches, base_weight_lbs]
 const WEIGHT_CURVE = [[30,17.04],[40,39.88],[50,72.76],[60,115.68],[70,168.64],[80,231.64],[108,461.45]];
 
@@ -4161,6 +4170,7 @@ function buildSkillManagerTable() {
   // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
   if (document.getElementById('skill-form-row')) closeSkillForm();
   tbody.innerHTML = '';
+  _alphaSort(SKILLS, 'name');
   const filtered = skillMgrFilter === 'All' ? SKILLS : SKILLS.filter(s => s.type === skillMgrFilter);
   filtered.forEach((s) => {
     const i = SKILLS.indexOf(s);
@@ -5303,7 +5313,7 @@ function buildArmorManagerTable() {
   // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
   if (document.getElementById('armor-form-row')) closeArmorForm();
   tbody.innerHTML = '';
-  Object.entries(ARMOR_TYPE_DATA).forEach(([name, mat]) => {
+  _alphaSort(Object.entries(ARMOR_TYPE_DATA), e => e[0]).forEach(([name, mat]) => {
     const tr = document.createElement('tr');
     tr.dataset.name = name;
     const protectionCells = ARMOR_PROTECTION_KEYS.map(p => `<td>${mat.protection[p.key] || 0}</td>`).join('');
@@ -5459,7 +5469,7 @@ function buildArmorPieceManagerTable() {
   if (!tbody) return;
   if (document.getElementById('armorpiece-form-row')) closeArmorPieceForm();
   tbody.innerHTML = '';
-  ARMOR_PIECES.forEach((p, i) => {
+  _alphaSort(ARMOR_PIECES, 'name').forEach((p, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${p.name}${p.enchant ? ' <span title="Enchantment: ' + _paEsc(p.enchant) + '">✨</span>' : ''}</td><td>${p.slot || '— Any (Generic) —'}</td><td>${p.material}</td>
       <td>${p.gap}</td><td>${p.noise || 0}</td><td>${p.visionMod || 0}</td><td>${p.hearingMod || 0}</td><td>${p.dexMod || 0}</td><td>${p.coordMod || 0}</td><td>${p.impedance || 0}</td><td>${p.costPerMod || 0}cr</td>
@@ -5890,7 +5900,7 @@ function buildMeleeWeaponsManagerTable() {
   // (inserted inline next to its row) doesn't get destroyed by innerHTML reset.
   if (document.getElementById('melee-form-row')) closeMeleeWeaponForm();
   tbody.innerHTML = '';
-  MELEE_WEAPONS.forEach((row, i) => {
+  _alphaSort(MELEE_WEAPONS, 'weapon').forEach((row, i) => {
     const tr = document.createElement('tr');
     const slotLabel = row.naturalSlot
       ? `<span style="font-size:0.68rem;color:var(--gold2);border:1px solid var(--gold);border-radius:3px;padding:1px 5px;">${row.naturalSlot[0].toUpperCase()}${row.naturalSlot.slice(1)}</span>`
@@ -7054,7 +7064,7 @@ function buildConsumablesManagerTable() {
   const tbody = document.getElementById('consumablesmgr-list');
   if (!tbody) return;
   tbody.innerHTML = '';
-  CONSUMABLES.forEach((row, i) => {
+  _alphaSort(CONSUMABLES, 'name').forEach((row, i) => {
     const restores = [];
     if (row.restoreToughness) restores.push(row.restoreToughness);
     const buff = row.buffAttr ? `${row.buffAttr} +${row.buffAmount}${row.buffMinutes ? ' ('+row.buffMinutes+'m)' : ''}` : '—';
@@ -7435,7 +7445,7 @@ function buildEnchantManagerTable() {
   const tbody = document.getElementById('enchantmgr-list');
   if (!tbody) return;
   tbody.innerHTML = ENCHANTMENTS.length ? '' : '<tr><td colspan="5" style="color:var(--text-dim);font-style:italic;">No enchantments yet.</td></tr>';
-  ENCHANTMENTS.forEach((e, i) => {
+  _alphaSort(ENCHANTMENTS, 'name').forEach((e, i) => {
     const items = [...EQUIPMENT, ...ARMOR_PIECES].filter(it => it.enchant === e.name).map(it => it.name);
     const tr = document.createElement('tr');
     tr.innerHTML = `<td title="${_paEsc(e.description || '')}">${_paEsc(e.name)}</td><td>${e.kind === 'active' ? 'Activated' : 'Passive'}</td><td>${_paEsc(_enchantSummary(e))}</td>
@@ -7497,7 +7507,7 @@ function buildEquipManagerTable() {
   const tbody = document.getElementById('equipmgr-list');
   if (!tbody) return;
   tbody.innerHTML = '';
-  EQUIPMENT.forEach((row, i) => {
+  _alphaSort(EQUIPMENT, 'name').forEach((row, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.name}</td><td>${row.wt}</td><td>${formatMoney(row.price)}</td><td>${row.wearSlot || '—'}</td><td>${row.enchant ? '✨ ' + _paEsc(row.enchant) : '—'}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openEquipForm(${i})">Edit</button>
@@ -7698,7 +7708,7 @@ function buildSpellManagerTable() {
   const tbody = document.getElementById('spellmgr-list');
   if (!tbody) return;
   tbody.innerHTML = '';
-  SPELLS.forEach((row, i) => {
+  _alphaSort(SPELLS, 'name').forEach((row, i) => {
     const cost = row.maintained ? `${row.cost}/round` : `${row.cost}`;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td style="display:none;">${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.memoryCost || 0}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
@@ -7713,7 +7723,7 @@ function buildRangedWeaponsManagerTable() {
   if (!tbody) return;
   if (document.getElementById('ranged-form-row')) closeRangedWeaponForm();
   tbody.innerHTML = '';
-  RANGED_WEAPONS.forEach((row, i) => {
+  _alphaSort(RANGED_WEAPONS, 'weapon').forEach((row, i) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.weapon}</td><td>${row.weaponType ? _escWeaponType(row.weaponType) : '—'}</td><td>${row.action}</td><td>${row.rangeIncrement}</td><td>${row.maxRange===null||row.maxRange===undefined ? '—' : row.maxRange}</td><td>${row.reload===null||row.reload===undefined ? 'N/A' : row.reload}</td><td>${row.hitFormula}</td><td>${row.material}</td><td>${row.minStr}</td><td>${row.damageMax}</td><td>${row.maxPowerMod}</td><td>${row.wt || 0}</td><td>${formatMoney(row.price)}</td>
       <td><button class="btn" style="padding:4px 10px;font-size:0.78rem;" onclick="openRangedWeaponForm(${i})">Edit</button>
@@ -8061,7 +8071,7 @@ function buildSpeciesManagerTable() {
   const tbody = document.getElementById('speciesmgr-list');
   if (!tbody) return;
   tbody.innerHTML = '';
-  Object.entries(RACE_DATA).filter(([,d]) => speciesMgrShowMonsters || !d.monsterOnly).forEach(([name, d]) => {
+  _alphaSort(Object.entries(RACE_DATA), e => e[0]).filter(([,d]) => speciesMgrShowMonsters || !d.monsterOnly).forEach(([name, d]) => {
     const tr = document.createElement('tr');
     const isDefault = name in DEFAULT_RACE_DATA;
     tr.innerHTML = `
@@ -8839,7 +8849,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126t';
+const VERSION = 'v0.1.20261126u';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not

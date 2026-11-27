@@ -979,6 +979,14 @@ test('Movement', 'a round is 3 seconds: three gaits, and a move never goes past 
   T.eq(VIGILANT_GAIT_NOISE.length, GAITS.length, 'one noise multiplier per gait');
 });
 
+test('Config', 'config tables sort A-Z, case-insensitively, keeping the order of rows that share a name', async T => {
+  const rows = [{ weapon: 'sword', action: 'Slash' }, { weapon: 'Axe', action: 'Chop' }, { weapon: 'Sword', action: 'Stab' }, { weapon: 'axe', action: 'Hook' }];
+  _alphaSort(rows, 'weapon');
+  T.eq(rows.map(r => r.action), ['Chop', 'Hook', 'Slash', 'Stab'], 'by name, ties keep their order');
+  T.eq(_alphaSort([['wolf', 1], ['Bat', 2], ['ogre', 3]], e => e[0]).map(e => e[1]), [2, 3, 1], 'a key function works for entries');
+  T.eq(_alphaSort([{ name: 'b' }, {}, { name: 'a' }], 'name').map(r => r.name), [undefined, 'a', 'b'], 'a missing name sorts first, no crash');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
