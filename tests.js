@@ -933,6 +933,21 @@ test('Damage', 'doubling happens before armor; technique damage is added after t
   T.eq(got, 11, 'technique damage is not limited by the weapon max (1 + 10)');
 });
 
+test('Cover', 'missile cover takes a share off the target number; 90% cover rolls hits as head shots', async T => {
+  const opts = [{ label: 'Evade', reduction: 20 }].concat(COVERAGE_OPTIONS.map(c => ({ label: c.label, reduction: 0, coverage: c.pct, coverName: c.label, locBias: c.locBias || null })));
+  const priced = _coverageOptions(opts, 60);
+  T.eq(priced[0].reduction, 20, 'other defenses are untouched');
+  T.eq(priced[1].reduction, 30, '50% of 60'); T.ok(/Half Coverage \(50%\) \(−30\)/.test(priced[1].label), priced[1].label);
+  T.eq(priced[2].reduction, 54, '90% of 60'); T.eq(priced[2].locBias, 'head');
+  T.eq(priced[1].locBias, null, 'half cover does not steer the hit');
+  T.eq(_coverageBiasPart('Humanoid', 'head'), 'head');
+  T.eq(_coverageBiasPart('Humanoid', null), null);
+  let legs = 0, heads = 0;
+  for (let i = 0; i < 400; i++) { const k = rollHitLocation('Humanoid', _coverageBiasPart('Humanoid', 'head')); if (/leg/.test(k)) legs++; if (k === 'head') heads++; }
+  T.eq(legs, 0, 'no leg hits behind 90% cover'); T.ok(heads > 160, 'mostly head hits: ' + heads + '/400');
+  T.eq(_coverageOptions(opts, null), opts, 'no number, no change');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

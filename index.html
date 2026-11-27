@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126p';
+const VERSION = 'v0.1.20261126q';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -16751,6 +16751,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
       + extraNote;
     const targetTok = damageContext ? mapTokens[damageContext.targetTokenId] : null;
     const locCtx = { bodyType, partKey: partKey || null };
+    const defOpts = _coverageOptions(defenseOptions, locThreshold); // cover shaves a share of THIS target number
 
     // Opens the hit roller once the defense is decided. `chosen` = 'LOCAL' (I
     // control the defender → pick in the roller as before) or a {label,reduction}
@@ -16758,10 +16759,12 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
     const openWith = (chosen) => {
       if (chosen === 'LOCAL') {
         openRoller({ label: actionLabel, min: 1, max: 100, target: locThreshold,
-          targetLabel: locSubtitle, defenseOptions, strayContext, locContext: locCtx, damageContext, onComplete });
+          targetLabel: locSubtitle, defenseOptions: defOpts, strayContext, locContext: locCtx, damageContext, onComplete });
         return;
       }
       const red = chosen && chosen.reduction ? chosen.reduction : 0;
+      const chosenOpt = chosen && defOpts.find(o => o.label === chosen.label);
+      if (chosenOpt && chosenOpt.locBias) locCtx.locBias = chosenOpt.locBias; // 90% cover: hits land high
       const finalTarget = locThreshold != null ? Math.max(0, Math.round(locThreshold - red)) : null;
       const sub = chosen && chosen.reduction ? `${locSubtitle} · def: ${chosen.label}` : `${locSubtitle} · no defense`;
       openRoller({ label: actionLabel, min: 1, max: 100, target: finalTarget,
@@ -16770,7 +16773,7 @@ function _openCalledShotModal({ bodyType, baseThreshold, baseSubtitle, actionLab
 
     // Reactive defense: if someone ELSE controls the target, ask them to choose.
     if (targetTok && _defenseNeedsPrompt(targetTok) && defenseOptions.length && locThreshold != null) {
-      _requestRemoteDefense(targetTok, defenseOptions, locThreshold, openWith);
+      _requestRemoteDefense(targetTok, defOpts, locThreshold, openWith);
     } else {
       openWith('LOCAL');
     }
@@ -17022,10 +17025,10 @@ function openRoller({ label, min = 1, max = 100, target = null, targetLabel = ''
   if (defenseOptions.length) {
     defBtns.innerHTML = '';
     const hasPreSelected = defenseOptions.some(o => o.preSelected);
-    const noDefBtn = _makeDefBtn('No Defense', 0, !hasPreSelected);
+    const noDefBtn = _makeDefBtn('No Defense', 0, !hasPreSelected, null, null);
     defBtns.appendChild(noDefBtn);
     defenseOptions.forEach(opt => {
-      const btn = _makeDefBtn(opt.label, opt.reduction, !!opt.preSelected, opt.onSelect);
+      const btn = _makeDefBtn(opt.label, opt.reduction, !!opt.preSelected, opt.onSelect, opt.locBias);
       defBtns.appendChild(btn);
       if (opt.preSelected) {
         _roller.defenseReduction = opt.reduction;
@@ -17070,7 +17073,7 @@ function _rollerMirrorLand(p) {
   _rollerBeginStop(); // uses the preset finalNum, decelerates, then shows the result
 }
 
-function _makeDefBtn(label, reduction, active, onSelect) {
+function _makeDefBtn(label, reduction, active, onSelect, locBias) {
   const btn = document.createElement('button');
   btn.textContent = label;
   btn.dataset.reduction = reduction;
@@ -17092,6 +17095,8 @@ function _makeDefBtn(label, reduction, active, onSelect) {
       ? Math.max(0, Math.round(_roller.baseTarget - reduction))
       : null;
     _rollerUpdateTarget();
+    // The chosen defense decides where a hit lands (90% cover steers it high); picking another one clears that.
+    if (_roller.locContext) _roller.locContext = Object.assign({}, _roller.locContext, { locBias: locBias || null });
     if (onSelect) onSelect();
   };
   return btn;
@@ -17272,8 +17277,10 @@ function _rollerShowResult() {
     resultEl.className   = bcClass;
     document.getElementById('roller-status').textContent = '';
     if (success && _roller.locContext) {
-      const { bodyType, partKey } = _roller.locContext;
-      const hitPart = _resolveCalledShotHitPart(bodyType, partKey, critSuccess);
+      const { bodyType, partKey, locBias } = _roller.locContext;
+      const biasPart = _coverageBiasPart(bodyType, locBias);
+      // Behind 90% cover every hit is rolled as a head shot (a crit does not pick the spot), whatever was aimed at.
+      const hitPart = biasPart ? rollHitLocation(bodyType, biasPart) : _resolveCalledShotHitPart(bodyType, partKey, critSuccess);
       const locData = getHitLocData(bodyType);
       const partLabel = locData.parts[hitPart]?.label || hitPart;
       bcHitLoc = `HIT: ${partLabel}`;
@@ -19772,7 +19779,36 @@ function _buildDefenseOptions(target, wasRanged, rawThreshold) {
     }
   }
 
+  // Cover against missiles: the defender is partly behind a wall, an arrow slit or a crenellation. It takes that share off
+  // the to-hit (worked out from the actual target number when the attack is rolled - see _coverageOptions) and it is
+  // chosen INSTEAD of any other defense: no shield, no prone, no evade on top. Only the target decides it.
+  if (wasRanged && (target.entity_type === 'character' || target.entity_type === 'creature')) {
+    for (const c of COVERAGE_OPTIONS) defenseOptions.push({ label: `${c.label} (−${Math.round((rawThreshold || 0) * c.pct)})`, reduction: Math.round((rawThreshold || 0) * c.pct), coverage: c.pct, coverName: c.label, locBias: c.locBias || null });
+  }
+
   return { defenseOptions, targetBodyType };
+}
+
+// Cover against missile weapons. 90% (an arrow slit, a crenellation) also steers where a hit lands: it is rolled as if the
+// attacker had aimed at the HEAD, which makes the legs nearly unreachable behind the wall.
+const COVERAGE_OPTIONS = [
+  { label: 'Half Coverage (50%)', pct: 0.5 },
+  { label: '90% Coverage',        pct: 0.9, locBias: 'head' },
+];
+// Re-prices the cover options against the real target number (after the called part's size and the range penalty).
+function _coverageOptions(options, threshold) {
+  if (threshold == null) return options;
+  return options.map(o => {
+    if (!o.coverage) return o;
+    const red = Math.round(threshold * o.coverage);
+    return Object.assign({}, o, { reduction: red, label: `${o.coverName} (−${red})` });
+  });
+}
+// The part key a locBias names for this body type (the head, for 90% cover), or null.
+function _coverageBiasPart(bodyType, bias) {
+  if (!bias) return null;
+  const parts = getHitLocData(bodyType).parts;
+  return Object.keys(parts).find(k => _partRole(bodyType, k) === bias) || null;
 }
 
 // Redraw range circle when map pans/zooms (called from mapZoom/mapFit/mapReset patches)
