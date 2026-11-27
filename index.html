@@ -2858,15 +2858,21 @@ function getCarriedWeight(attrs) {
   return { wW, wE, wA, total: attrs ? attrs._weight + wW + wE + wA : 0 };
 }
 
-// Maximum Speed = Speed − (gear weight ÷ (2 × Power + Physical Coordination)), in ft/s. totalCarried includes the
-// body's own weight (as getCarriedWeight reports it), but the body is free - only what is carried or dragged on top of
-// it slows you, so a big species is not slow just for being big (the same rule Hop Up uses).
+// Maximum Speed = Top Speed x max(0.1, 1 - Load / Capacity), in ft/s.
+//   Top Speed = attrs.Speed (Strength x species Speed x the sex / age / height / build modifiers).
+//   Load      = gear weight + SPEED_BODY_SHARE x the body's own weight (totalCarried includes the body, as
+//               getCarriedWeight reports it; grapple drag counts as gear).
+//   Capacity  = SPEED_CAPACITY_K x (2 x Power + Physical Coordination).
+// The species Speed multiplier sets how fast a species is; weight then cuts that proportionally, so a heavy body slows
+// you a little (a quarter of it counts) and a loaded one a lot, without a big species being crushed by its own size.
+const SPEED_BODY_SHARE = 0.25, SPEED_CAPACITY_K = 10, SPEED_MIN_FACTOR = 0.1;
 function calcMaxSpeed(attrs, totalCarried) {
   if (!attrs) return null;
-  const divisor = attrs.Power * 2 + attrs.PhysCoord;
-  const gear = Math.max(0, (totalCarried || 0) - (attrs._weight || 0));
-  const penalty = divisor > 0 ? gear / divisor : 0;
-  return Math.max(0, attrs.Speed - penalty);
+  const capacity = SPEED_CAPACITY_K * (attrs.Power * 2 + attrs.PhysCoord);
+  const body = Math.min(attrs._weight || 0, totalCarried || 0);
+  const load = Math.max(0, (totalCarried || 0) - body) + SPEED_BODY_SHARE * body;
+  const factor = capacity > 0 ? Math.max(SPEED_MIN_FACTOR, 1 - load / capacity) : 1;
+  return Math.max(0, attrs.Speed * factor);
 }
 
 const PRONE_SPEED_FACTOR = 0.25; // crawling — quarter speed while prone
@@ -8833,7 +8839,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126s';
+const VERSION = 'v0.1.20261126t';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
