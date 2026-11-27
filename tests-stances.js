@@ -589,3 +589,29 @@ test('Vigilant', 'hearing and smell reach scale with the watcher: 4 ft per Heari
   T.eq(_vigilantSmellRangeFt({ attrs: { Smell: 10 } }), 15);
   T.eq(_vigilantHearingRangeFt({ attrs: {} }), 0, 'no hearing, no reach');
 });
+
+test('Whirlwind', 'the next swing waits for a free screen and belongs to its own sweep; downed or distant targets are skipped', async T => {
+  T.map();
+  const me = T.token('me', 50, 50), near = T.token('near', 51, 50), far = T.token('far', 90, 50), down = T.token('down', 51, 51);
+  T.stub('_pathFindToken', () => me);
+  T.stub('getTokenSize', () => 0);
+  T.stub('getConditions', id => new Set(id === 'down' ? ['unconscious'] : []));
+  T.ok(_whirlValid(me, near, 10), 'a standing body in reach');
+  T.ok(!_whirlValid(me, far, 10), 'out of reach');
+  T.ok(!_whirlValid(me, down, 10), 'unconscious');
+  T.ok(!_whirlValid(me, me, 10), 'not itself');
+  let swings = 0; T.stub('_whirlNext', () => { swings++; });
+  const w = { combId: 'x' }; _whirl = w; _rollerCloseCbs.length = 0;
+  const modal = document.createElement('div'); modal.id = 'called-shot-modal'; document.body.appendChild(modal);
+  _whirlArmNext(w);
+  _rollerCloseCbs.splice(0).forEach(f => f());
+  T.eq(swings, 0, 'a reaction attack on screen holds the sweep back');
+  T.eq(_rollerCloseCbs.length, 1, 'and it waits for the next close');
+  modal.remove();
+  _rollerCloseCbs.splice(0).forEach(f => f());
+  T.eq(swings, 1, 'then the next swing starts');
+  _whirlArmNext(w); _whirl = { combId: 'other' };
+  _rollerCloseCbs.splice(0).forEach(f => f());
+  T.eq(swings, 1, 'a sweep that was replaced does not swing');
+  _whirl = null;
+});

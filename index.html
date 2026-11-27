@@ -8830,7 +8830,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126o';
+const VERSION = 'v0.1.20261126p';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -19069,17 +19069,29 @@ let attackWhirl       = null;  // one swing of a Whirlwind: {n: targets in the s
 // reach, one after another - allies included. Costs 1 Stamina per swing and every swing's damage cap is cut
 // by the number of targets. Needs the total Stamina up front.
 var _whirl = null; // { combId, weaponName, action, reachFt, ids, n }
+// Is this token a valid Whirlwind target right now? A body already on the ground (prone, unconscious, dead) is not
+// swung at, and it must be within reach. Checked when the sweep starts AND again before each swing, because an
+// earlier swing can drop or knock away a target that was in the list.
+function _whirlValid(me, t, reachFt) {
+  if (!me || !t || t.id === me.id || (t.entity_type !== 'character' && t.entity_type !== 'creature')) return false;
+  const tc = getConditions(t.id);
+  if (tc.has('dead') || tc.has('unconscious') || tc.has('prone')) return false;
+  const dx = (t.x_pct - me.x_pct) / 100 * mapImgW, dy = (t.y_pct - me.y_pct) / 100 * mapImgH;
+  return (Math.hypot(dx, dy) - getTokenSize(me) / 2) / mapScalePPF <= reachFt;
+}
 function _whirlTargets(combId, reachFt) {
   const me = _pathFindToken(combId);
   if (!me || !(mapScalePPF > 0)) return [];
-  const half = getTokenSize(me) / 2;
-  return Object.values(mapTokens || {}).filter(t => {
-    if (t.id === me.id || (t.entity_type !== 'character' && t.entity_type !== 'creature')) return false;
-    const tc = getConditions(t.id); // a body already on the ground (prone, unconscious, dead) is not swung at
-    if (tc.has('dead') || tc.has('unconscious') || tc.has('prone')) return false;
-    const dx = (t.x_pct - me.x_pct) / 100 * mapImgW, dy = (t.y_pct - me.y_pct) / 100 * mapImgH;
-    return (Math.hypot(dx, dy) - half) / mapScalePPF <= reachFt;
-  }).map(t => t.id);
+  return Object.values(mapTokens || {}).filter(t => _whirlValid(me, t, reachFt)).map(t => t.id);
+}
+// Starts the next swing once the current roller closes - but only for THIS sweep, and only when nothing else (a
+// Sentinel reaction's roller or called-shot menu, say) is in flight; otherwise it waits for the next close.
+function _whirlArmNext(w) {
+  _rollerCloseCbs.push(() => {
+    if (_whirl !== w) return; // the sweep ended or a new one replaced it
+    if (attackMode || _roller || document.getElementById('called-shot-modal')) { _whirlArmNext(w); return; }
+    _whirlNext();
+  });
 }
 function _whirlEnd(combId) {
   _whirl = null;
@@ -19106,12 +19118,16 @@ function startWhirlwind(combId, weaponName, action, reachFt) {
 function _whirlNext() {
   const w = _whirl;
   if (!w) return;
+  const me = _pathFindToken(w.combId);
   let id = null;
   while (w.ids.length) {
-    const cand = w.ids.shift(), t = mapTokens[cand];
-    if (t && !getConditions(cand).has('dead')) { id = cand; break; }
+    const cand = w.ids.shift();
+    if (_whirlValid(me, mapTokens[cand], w.reachFt)) { id = cand; break; }
+    logCombat(`${mapTokens[cand]?.label || 'A target'} is no longer in the Whirlwind's path - skipped.`, 'roll');
   }
   if (!id) { _whirlEnd(w.combId); return; }
+  // Drop trailing targets that are already out, so the swing flagged 'last' really is the last one.
+  while (w.ids.length && !_whirlValid(me, mapTokens[w.ids[0]], w.reachFt)) { logCombat(`${mapTokens[w.ids[0]]?.label || 'A target'} is no longer in the Whirlwind's path - skipped.`, 'roll'); w.ids.shift(); }
   enterAttackMode(w.combId, w.weaponName, w.action, false, w.reachFt);
   attackWhirl = { n: w.n, last: w.ids.length === 0 };
   if (!attackTokenClick(id)) { exitAttackMode(); _whirlEnd(w.combId); }
@@ -19534,7 +19550,7 @@ function attackTokenClick(tokenId) {
           _whirl = null;
           logCombat(`${_logName(throwerCid)}'s Whirlwind is thrown off by a critical miss - the rest of the sweep is lost.`, 'bad');
           if (typeof _dlgReopenId !== 'undefined') _dlgReopenId = throwerCid;
-        } else _rollerCloseCbs.push(() => _whirlNext());
+        } else _whirlArmNext(_whirl);
       }
     : undefined;
 
