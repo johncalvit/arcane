@@ -968,6 +968,14 @@ test('Speed', 'body weight is free; only gear slows you, and people of every siz
   }
 });
 
+test('Movement', 'a round is 3 seconds: three gaits, and a move never goes past 3 seconds of Speed', async T => {
+  T.eq(GAITS.map(g => g.name), ['Walk', 'Jog', 'Run'], 'no fourth gait');
+  T.eq(GAITS.map(g => g.cost), [0, 1, 2]);
+  T.eq(MOVE_MAX_SECS, 3);
+  T.eq([0.5, 1, 1.5, 2, 2.5, 3, 4].map(_gaitForSecs), [0, 0, 1, 1, 2, 2, 2], 'seconds map to Walk / Jog / Run and never past Run');
+  T.eq(VIGILANT_GAIT_NOISE.length, GAITS.length, 'one noise multiplier per gait');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

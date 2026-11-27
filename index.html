@@ -8833,7 +8833,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126r';
+const VERSION = 'v0.1.20261126s';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -18837,7 +18837,7 @@ function onTokenMouseMove(e) {
 
   const rawX = Math.min(100, Math.max(0, (cx - dragOffsetX) / mapImgW * 100));
   const rawY = Math.min(100, Math.max(0, (cy - dragOffsetY) / mapImgH * 100));
-  const clipped = _dragClip(dragTokenId, rawX, rawY); // walls (and the sprint limit) cut the drag short
+  const clipped = _dragClip(dragTokenId, rawX, rawY); // walls (and the 3-second limit) cut the drag short
   const x_pct = clipped.x_pct, y_pct = clipped.y_pct;
 
   // delta from the token's previous spot — its borne-group moves by the same
@@ -18932,7 +18932,7 @@ async function onTokenMouseUp(e) {
   // see its comment) is a tracked Move, not a free reposition: same
   // feet/time bookkeeping a Path-mode waypoint route gives, just for the
   // single straight segment actually dragged.
-  // The GM's move of ANY combatant in the tracker is budgeted (gait Stamina, 4 s limit), on or off its turn;
+  // The GM's move of ANY combatant in the tracker is budgeted (gait Stamina, 3 s limit), on or off its turn;
   // a player's own is budgeted on their own turn (startTokenDrag blocks off-turn drags).
   const isBudgetedMove = draggedTok && _atIsCombatActive() && _dragStartXPct != null
       && atCombatants.some(c => c.id === draggedCombId)
@@ -20090,7 +20090,7 @@ function _vigilantDetects(watcherTok, moverTok, xPct, yPct) {
   }
   return log({ detected: false, sense: null });
 }
-const VIGILANT_GAIT_NOISE = [1, 1.25, 1.5, 2]; // by gait: Walk, Jog, Run, Sprint
+const VIGILANT_GAIT_NOISE = [1, 1.25, 1.5]; // by gait: Walk, Jog, Run
 var _vigMoveGait = 0; // gait of the move currently being resolved (set in _executeMoveWithSentinelChecks)
 
 // ── Wall-aware trimming for Sentinel/Target zones ─────────────────────────
@@ -22008,17 +22008,16 @@ function pathGetSpeed(combId) {
 // ═══ MOVEMENT: WALLS AND GAITS ═══════════════════════════════════════════════════
 // Walls with blocksMovement stop a token: a move is cut off just short of the first one it would cross
 // (closed doors are walls, open doors are not). The GM can hold Shift to move through walls.
-// In combat a turn's movement is measured in seconds of Speed and falls into four gaits:
-//   up to 1 s = Walk (free), 2 s = Jog (1 Stamina), 3 s = Run (2), 4 s = Sprint (3).
-// 4 s is the most anyone can move in a turn, so a route is cut off there.
+// In combat a turn's movement is measured in seconds of Speed and falls into three gaits:
+//   up to 1 s = Walk (free), 2 s = Jog (1 Stamina), 3 s = Run (2).
+// A round is 3 seconds, and 3 s is the most anyone can move in a turn, so a route is cut off there.
 const GAITS = [
   { name: 'Walk',   cost: 0, color: '#4de080', verb: 'walks' },
   { name: 'Jog',    cost: 1, color: '#c8e04d', verb: 'jogs' },
   { name: 'Run',    cost: 2, color: '#f0a040', verb: 'runs' },
-  { name: 'Sprint', cost: 3, color: '#e06060', verb: 'sprints' },
 ];
-const MOVE_MAX_SECS = 4;
-function _gaitForSecs(secs) { return Math.max(0, Math.min(3, Math.ceil(secs - 0.02) - 1)); }
+const MOVE_MAX_SECS = 3;
+function _gaitForSecs(secs) { return Math.max(0, Math.min(2, Math.ceil(secs - 0.02) - 1)); }
 
 var _shiftDown = false;
 window.addEventListener('keydown', e => { if (e.key === 'Shift') _shiftDown = true; });
@@ -22384,7 +22383,7 @@ function _routeFeet(pts) {
   return d;
 }
 
-// Feet of movement a combatant still has this turn (4 s of Speed, minus what's already been moved this round).
+// Feet of movement a combatant still has this turn (3 s of Speed, minus what's already been moved this round).
 function _moveRemainingFeet(combId) {
   const spd = pathGetSpeed(combId);
   const c = combId ? atCombatants.find(x => x.id === combId) : null;
@@ -22392,7 +22391,7 @@ function _moveRemainingFeet(combId) {
   return Math.max(0, spd * MOVE_MAX_SECS - prior);
 }
 
-// A straight drag of a token: stopped by walls, and (own character, own combat turn) by the sprint limit.
+// A straight drag of a token: stopped by walls, and (own character, own combat turn) by the 3-second limit.
 var _dragStopNoted = false;
 function _dragClip(tokenId, xp, yp) {
   const t = mapTokens[tokenId];
@@ -22480,7 +22479,7 @@ function _commitMoveSlot(combId, feet) {
   const durationRounds = Math.max(1, Math.ceil(secs / 3));
   c.slots.move = { label, startRound: atRound, durationRounds,
                    locksAll: false, feet: Math.round(totalFeet) };
-  // Gait Stamina (Jog 1, Run 2, Sprint 3) is for the whole round's movement, so a second move this round
+  // Gait Stamina (Jog 1, Run 2) is for the whole round's movement, so a second move this round
   // only pays the difference. Only in combat - out of it there's no clock to spend against.
   if (_atIsCombatActive() && totalFeet > 0) {
     const paid = c._moveStamRound === atRound ? (c._moveStamPaid || 0) : 0;
@@ -22527,7 +22526,7 @@ function _pathPointAtDistance(pts, targetDist) {
 
 // The gait a combatant's movement this turn amounts to (see GAITS). Movement already spent this round
 // (the Move slot) counts toward the total, matching how _commitMoveSlot adds a second move onto the first.
-// `bang` is true once the 4-second sprint limit is reached (half a foot of slack for a mouse).
+// `bang` is true once the 3-second limit is reached (half a foot of slack for a mouse).
 function _moveTier(segmentFeet, combId) {
   const spd = pathGetSpeed(combId);
   const c = combId ? atCombatants.find(x => x.id === combId) : null;
@@ -22577,7 +22576,7 @@ function pathRenderSvg(mouseX, mouseY, override) {
   const pts = mouseX != null ? [...basePts, { x: mouseX, y: mouseY }] : basePts;
   if (pts.length < 1) return;
 
-  // Where the move really ends: a wall stops it, and in combat so does the 4-second sprint limit.
+  // Where the move really ends: a wall stops it, and in combat so does the 3-second limit.
   const gaitOn = !!(cid && mapScalePPF > 0 && _atIsCombatActive());
   let shown = pts, stop = null;
   if (pts.length >= 2) {
@@ -22595,7 +22594,7 @@ function pathRenderSvg(mouseX, mouseY, override) {
   const dimClr = tier ? tier.dim : 'rgba(77,224,128,0.5)';
   const lastShown = shown[shown.length - 1];
 
-  // The part of the route that won't happen (past a wall / the sprint limit)
+  // The part of the route that won't happen (past a wall / the 3-second limit)
   if (stop && pts.length >= 2) {
     mk('line', { x1: lastShown.x, y1: lastShown.y, x2: pts[pts.length - 1].x, y2: pts[pts.length - 1].y,
       stroke: 'rgba(200,200,200,0.45)', 'stroke-width': 2, 'stroke-dasharray': '3,5' });
@@ -22614,18 +22613,18 @@ function pathRenderSvg(mouseX, mouseY, override) {
   const outline = 'paint-order:stroke;stroke:#000;stroke-width:3;stroke-linejoin:round;';
   const font = 'Arial Narrow,Archivo Narrow,Liberation Sans Narrow,Arial,sans-serif';
 
-  // Where the move stops: an X at a wall, a ring at the sprint limit
+  // Where the move stops: an X at a wall, a ring at the 3-second limit
   if (stop === 'wall') {
     const s = 7;
     mk('line', { x1: lastShown.x - s, y1: lastShown.y - s, x2: lastShown.x + s, y2: lastShown.y + s, stroke: '#ff5555', 'stroke-width': 3, 'stroke-linecap': 'round' });
     mk('line', { x1: lastShown.x - s, y1: lastShown.y + s, x2: lastShown.x + s, y2: lastShown.y - s, stroke: '#ff5555', 'stroke-width': 3, 'stroke-linecap': 'round' });
   } else if (stop === 'limit') {
-    mk('circle', { cx: lastShown.x, cy: lastShown.y, r: 9, fill: 'none', stroke: GAITS[3].color, 'stroke-width': 3 });
+    mk('circle', { cx: lastShown.x, cy: lastShown.y, r: 9, fill: 'none', stroke: GAITS[2].color, 'stroke-width': 3 });
   }
 
   // Gait markers: a dot where each second of movement ends and the next gait (and its Stamina cost) begins
   if (tier && shown.length >= 2) {
-    for (let k = 1; k <= 3; k++) {
+    for (let k = 1; k <= 2; k++) {
       const distPx = (k * tier.spd - tier.prior) * mapScalePPF * mapScale;
       if (distPx <= 2 || distPx >= shownPx - 2) continue;
       const mp = _pathPointAtDistance(shown, distPx);
@@ -22652,7 +22651,7 @@ function pathRenderSvg(mouseX, mouseY, override) {
       label = `${Math.round(feet)} ft · ${secRound}s`;
     }
     if (stop === 'wall')  label += '  ·  blocked by wall';
-    if (stop === 'limit') label += '  ·  sprint limit';
+    if (stop === 'limit') label += '  ·  3 s limit';
     const tx = mk('text', { x: lastShown.x + 10, y: lastShown.y - 8, fill: fillClr, 'font-size': 12, 'font-family': font, 'font-weight': 'bold', style: outline });
     tx.textContent = label;
   } else if (pts.length >= 2) {
@@ -22694,7 +22693,7 @@ async function pathCommit() {
 
   // Move token along the recorded route, pausing at any fresh Sentinel/
   // Target crossing along the way — see _executeMoveWithSentinelChecks.
-  // The route is first cut short at a wall and, in combat, at the 4-second sprint limit.
+  // The route is first cut short at a wall and, in combat, at the 3-second limit.
   if (pathPoints.length >= 2 && combId) {
     let waypoints = pathPoints.map(p => _wallVpToPct(p.x, p.y));
     const gaitOn = mapScalePPF > 0 && _atIsCombatActive();
@@ -22708,7 +22707,7 @@ async function pathCommit() {
     waypoints = clip.points;
     feet = _routeFeet(waypoints);
     if (clip.stop === 'wall')  showToast(isGM() ? 'A wall stops the move (hold Shift to pass).' : 'A wall stops the move.', 'warn');
-    if (clip.stop === 'limit') showToast('That is as far as you can sprint in one turn - the move stops there.', 'warn');
+    if (clip.stop === 'limit') showToast('That is as far as you can move in one turn (3 seconds) - the move stops there.', 'warn');
     exitPathMode();
     await _cancelStancesOnMove(combId, feet);
     await _executeMoveWithSentinelChecks(combId, waypoints);
