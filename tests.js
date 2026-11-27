@@ -987,6 +987,18 @@ test('Config', 'config tables sort A-Z, case-insensitively, keeping the order of
   T.eq(_alphaSort([{ name: 'b' }, {}, { name: 'a' }], 'name').map(r => r.name), [undefined, 'a', 'b'], 'a missing name sorts first, no crash');
 });
 
+test('Cover', 'standing in cover you see out of it; what is outside shows only as a shape', async T => {
+  T.map();
+  const area = { type: 'conceal', name: 'Thicket', hide: 25, points: [{ x_pct: 40, y_pct: 40 }, { x_pct: 60, y_pct: 40 }, { x_pct: 60, y_pct: 60 }, { x_pct: 40, y_pct: 60 }] };
+  T.stub('_concealAreas', () => [area]);
+  const me = T.token('me', 50, 50), mate = T.token('mate', 55, 55), out = T.token('out', 80, 50);
+  T.ok(!_fogOccluderSegments({ x: 500, y: 500 }).some(s => s[0].x === 400 || s[1].x === 400), 'the viewer in the patch has no wall from its edges');
+  T.ok(_fogOccluderSegments({ x: 100, y: 100 }).length >= 4, 'from outside the patch still blocks sight');
+  T.ok(!_viewerInCoverSeesShape(mate, me), 'a token in the same patch is seen clearly');
+  T.ok(_viewerInCoverSeesShape(out, me), 'a token outside the patch is a shape');
+  T.ok(!_viewerInCoverSeesShape(me, out), 'a viewer in the open sees normally');
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

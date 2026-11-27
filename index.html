@@ -8849,7 +8849,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126u';
+const VERSION = 'v0.1.20261126v';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
@@ -23453,7 +23453,7 @@ async function applyWallDamage(wallId, amount) {
 // blocksVision walls as individual line segments in image-px — rect/circle
 // walls aren't literally line segments, so they're approximated (a rect's 4
 // edges; a circle as a many-sided polygon).
-function _fogOccluderSegments() {
+function _fogOccluderSegments(viewerPx) {
   const segs = [];
   for (const w of mapWalls) {
     if (!w.blocksVision) continue;
@@ -23473,9 +23473,11 @@ function _fogOccluderSegments() {
       for (let i = 0; i < N; i++) segs.push([ring[i], ring[(i + 1) % N]]);
     }
   }
-  // Concealment areas (underbrush, tall grass...) block sight like a wall: nobody sees into, out of or through one.
-  // Sight inside the same patch is clear. They never block movement.
+  // Concealment areas (underbrush, tall grass...) block sight like a wall: nobody sees into or through one from outside.
+  // Standing INSIDE a patch you see out of it (and clearly within it): pass the viewer's image-px point to skip the
+  // patches they stand in. They never block movement.
   for (const w of _concealAreas()) {
+    if (viewerPx && _pointInPoly(viewerPx.x / mapImgW * 100, viewerPx.y / mapImgH * 100, w.points.map(p => ({ x: p.x_pct, y: p.y_pct })))) continue;
     const ring = w.points.map(p => ({ x: (p.x_pct / 100) * mapImgW, y: (p.y_pct / 100) * mapImgH }));
     for (let i = 0; i < ring.length; i++) segs.push([ring[i], ring[(i + 1) % ring.length]]);
   }
@@ -23525,7 +23527,7 @@ function _fogVisibilityPolygon(originX, originY) {
     [{ x: mapImgW, y: mapImgH }, { x: 0, y: mapImgH }],
     [{ x: 0, y: mapImgH }, { x: 0, y: 0 }],
   ];
-  const segs = _fogOccluderSegments().concat(boundary);
+  const segs = _fogOccluderSegments({ x: originX, y: originY }).concat(boundary);
 
   const angles = new Set();
   const EPS = 0.00001;
@@ -23670,6 +23672,9 @@ function _fogVisState(t) {
   if (t.id === viewer.id) return 'full';
   const px = (t.x_pct / 100) * mapImgW, py = (t.y_pct / 100) * mapImgH;
   if (_fogLastPoly.length && !_fogPointInPolygon(px, py, _fogLastPoly)) return 'none';
+  // Looking out of cover (underbrush, tall grass...) through the foliage: what is outside the patch the viewer stands in
+  // shows only as a shape - unless it is right beside them, or shares their patch.
+  if (_viewerInCoverSeesShape(t, viewer) && !_withinTouchOf(t, viewer)) return 'shadow';
   if (!_darkActive) return 'full';
   // Close enough to touch: within TOUCH_REVEAL_FT of the other token's EDGE
   // (edge to edge, not centre to centre) you simply see it for what it is —
@@ -23685,6 +23690,13 @@ function _fogVisState(t) {
   // viewer already got close enough to know what it is.
   if (_nightVisionReaches(px, py, viewer)) return revealed.has(t.id) ? 'full' : 'shadow';
   return 'none';
+}
+
+// True when the viewer stands in a concealment area that the other token is NOT in.
+function _viewerInCoverSeesShape(t, viewer) {
+  const inArea = (tok, w) => _pointInPoly(tok.x_pct, tok.y_pct, w.points.map(p => ({ x: p.x_pct, y: p.y_pct })));
+  const mine = _concealAreas().filter(w => inArea(viewer, w));
+  return mine.length > 0 && !mine.some(w => inArea(t, w));
 }
 
 // How close, edge to edge, a token must be to a viewer on a Dark map to be seen
