@@ -948,6 +948,26 @@ test('Cover', 'missile cover takes a share off the target number; 90% cover roll
   T.eq(_coverageOptions(opts, null), opts, 'no number, no change');
 });
 
+test('Speed', 'body weight is free; only gear slows you, and people of every size land in a believable range', async T => {
+  // Real-world anchor: a sustained run is about 9-12 ft/s for an average adult, 13-16 for a fit one (see the speed research).
+  const body = w => ({ Speed: 10, Power: 11, PhysCoord: 12, _weight: w });
+  T.eq(calcMaxSpeed(body(180), 180), 10, 'an unburdened body is not slowed by its own weight');
+  T.near(calcMaxSpeed(body(180), 180 + 34), 10 - 34 / 34, 0.001, '34 lb of gear on a divisor of 2 x 11 + 12 = 34 costs 1 ft/s');
+  T.eq(calcMaxSpeed(body(180), 100), 10, 'a carried total below body weight never speeds anyone up');
+  T.eq(calcMaxSpeed({ Speed: 5, Power: 10, PhysCoord: 10 }, 400), 5 - 400 / 30 < 0 ? 0 : 5 - 400 / 30, 'no body weight known: it all counts as gear, never below 0');
+  // Human, Halfling, Ogre, Firbolg-sized bodies carrying 30 lb of gear
+  const folk = [
+    { n: 'Halfling', a: { Speed: 9, Power: 8.8, PhysCoord: 12, _weight: 25 }, lo: 6, hi: 12 },
+    { n: 'Human', a: { Speed: 10, Power: 11, PhysCoord: 12, _weight: 182 }, lo: 8, hi: 13 },
+    { n: 'Ogre', a: { Speed: 15.4, Power: 27.7, PhysCoord: 9, _weight: 722 }, lo: 12, hi: 18 },
+    { n: 'Firbolg', a: { Speed: 14, Power: 23.1, PhysCoord: 10, _weight: 531 }, lo: 11, hi: 16 },
+  ];
+  for (const f of folk) {
+    const v = calcMaxSpeed(f.a, f.a._weight + 30);
+    T.ok(v >= f.lo && v <= f.hi, `${f.n} moves ${v.toFixed(1)} ft/s, expected ${f.lo}-${f.hi}`);
+  }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');

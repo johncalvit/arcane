@@ -2858,11 +2858,14 @@ function getCarriedWeight(attrs) {
   return { wW, wE, wA, total: attrs ? attrs._weight + wW + wE + wA : 0 };
 }
 
-// Maximum Speed = Speed − (total carried weight ÷ (Power + Physical Coordination)), in ft/s.
+// Maximum Speed = Speed − (gear weight ÷ (2 × Power + Physical Coordination)), in ft/s. totalCarried includes the
+// body's own weight (as getCarriedWeight reports it), but the body is free - only what is carried or dragged on top of
+// it slows you, so a big species is not slow just for being big (the same rule Hop Up uses).
 function calcMaxSpeed(attrs, totalCarried) {
   if (!attrs) return null;
   const divisor = attrs.Power * 2 + attrs.PhysCoord;
-  const penalty = divisor > 0 ? totalCarried / divisor : 0;
+  const gear = Math.max(0, (totalCarried || 0) - (attrs._weight || 0));
+  const penalty = divisor > 0 ? gear / divisor : 0;
   return Math.max(0, attrs.Speed - penalty);
 }
 
@@ -8830,7 +8833,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126q';
+const VERSION = 'v0.1.20261126r';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not
