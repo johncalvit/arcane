@@ -2122,6 +2122,7 @@
         </div>
       </div>
 
+      <div id="spellmgr-filters" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;font-size:0.8rem;color:var(--text-dim);"></div>
       <table class="loadout-table">
         <thead><tr><th>Name</th><th>Class</th><th>Type</th><th>Target</th><th>Range</th><th style="display:none;">Cast</th><th>Cost</th><th>Memory</th><th>Difficulty</th><th></th></tr></thead>
         <tbody id="spellmgr-list"></tbody>
@@ -7704,11 +7705,37 @@ function deleteSpell(index) {
   buildSpellManagerTable();
 }
 
+// Spell list filters (Game Config): by magic class and by spell type, 'All' = no filter. In memory only.
+let spellMgrClass = 'All', spellMgrType = 'All';
+function _buildSpellMgrFilters() {
+  const box = document.getElementById('spellmgr-filters');
+  if (!box) return;
+  const opts = key => ['All', ...[...new Set(SPELLS.map(s => s[key]).filter(Boolean))].sort((a, b) => a.localeCompare(b))];
+  const sel = (id, label, key, cur, setter) => {
+    const o = opts(key);
+    const val = o.includes(cur) ? cur : 'All';
+    return `<label style="display:flex;align-items:center;gap:6px;">${label}
+      <select id="${id}" onchange="${setter}(this.value)" style="background:var(--bg3);color:var(--text);border:1px solid var(--border);border-radius:4px;font-family:var(--ui-font);font-size:0.8rem;padding:3px 6px;">
+        ${o.map(v => `<option value="${_paEsc(v)}"${v === val ? ' selected' : ''}>${_paEsc(v)}</option>`).join('')}</select></label>`;
+  };
+  if (!opts('magicClass').includes(spellMgrClass)) spellMgrClass = 'All';
+  if (!opts('spellType').includes(spellMgrType)) spellMgrType = 'All';
+  box.innerHTML = sel('spellmgr-class', 'Class', 'magicClass', spellMgrClass, '_setSpellMgrClass') + sel('spellmgr-type', 'Type', 'spellType', spellMgrType, '_setSpellMgrType');
+}
+function _setSpellMgrClass(v) { spellMgrClass = v; buildSpellManagerTable(); }
+function _setSpellMgrType(v)  { spellMgrType = v;  buildSpellManagerTable(); }
+function _spellMgrMatches(row) {
+  return (spellMgrClass === 'All' || row.magicClass === spellMgrClass) && (spellMgrType === 'All' || row.spellType === spellMgrType);
+}
+
 function buildSpellManagerTable() {
   const tbody = document.getElementById('spellmgr-list');
   if (!tbody) return;
   tbody.innerHTML = '';
-  _alphaSort(SPELLS, 'name').forEach((row, i) => {
+  _alphaSort(SPELLS, 'name');
+  _buildSpellMgrFilters();
+  SPELLS.filter(_spellMgrMatches).forEach(row => {
+    const i = SPELLS.indexOf(row); // the real index, whatever the filter hides
     const cost = row.maintained ? `${row.cost}/round` : `${row.cost}`;
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${row.name}</td><td>${row.magicClass}</td><td>${row.spellType}</td><td>${row.targetType}</td><td>${row.range}</td><td style="display:none;">${row.castingTime === 0 ? 'Instant' : row.castingTime + 'r'}</td><td>${cost}</td><td>${row.memoryCost || 0}</td><td>${row.difficultyStat} ${row.difficultyValue}</td>
@@ -8849,7 +8876,7 @@ function exportConfig() {
   URL.revokeObjectURL(url);
 }
 
-const VERSION = 'v0.1.20261126v';
+const VERSION = 'v0.1.20261126w';
 
 // ─── UPDATE PROMPT ───────────────────────────────────────────────────────────
 // A tab that has been open for a while keeps running the version it loaded (signing in as someone else does not

@@ -999,6 +999,21 @@ test('Cover', 'standing in cover you see out of it; what is outside shows only a
   T.ok(!_viewerInCoverSeesShape(me, out), 'a viewer in the open sees normally');
 });
 
+test('Config', 'the spell list filters by class and by type, and keeps real row indices', async T => {
+  const keep = [SPELLS.slice(), spellMgrClass, spellMgrType];
+  try {
+    const mk = (name, c, t) => ({ name, magicClass: c, spellType: t, cost: 1, castingTime: 0, memory: 1, difficulty: 1 });
+    SPELLS.length = 0;
+    SPELLS.push(mk('Zap', 'Fire', 'Attack'), mk('Bless', 'Light', 'Buff/Debuff'), mk('Blaze', 'Fire', 'Buff/Debuff'));
+    spellMgrClass = 'Fire'; spellMgrType = 'All';
+    T.eq(SPELLS.filter(_spellMgrMatches).map(s => s.name).sort(), ['Blaze', 'Zap']);
+    spellMgrType = 'Attack';
+    T.eq(SPELLS.filter(_spellMgrMatches).map(s => s.name), ['Zap'], 'both filters apply together');
+    spellMgrClass = 'All'; spellMgrType = 'All';
+    T.eq(SPELLS.filter(_spellMgrMatches).length, 3, 'All shows everything');
+  } finally { SPELLS.length = 0; keep[0].forEach(s => SPELLS.push(s)); spellMgrClass = keep[1]; spellMgrType = keep[2]; }
+});
+
 // ── Monk ─────────────────────────────────────────────────────────────────────
 test('Monk', 'the Monk class, its class-locked techniques, the bare-handed Block / Iron Fist unlocks and Soul Armor', async T => {
   T.ok(TECHNIQUE_CLASSES.includes('Monk'), 'Monk is a class');
